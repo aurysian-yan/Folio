@@ -47,7 +47,7 @@ fn copy_to_another_path_keeps_fingerprint_identity_and_revision() {
 
 #[test]
 fn changed_content_changes_revision_but_not_identity() {
-    // Simulates a re-export: same logical font, different binary bytes.
+    // 只验证二进制变更的不变量，不模拟字体编译器输出。
     let mut data = read_fixture("Lato-Regular.ttf");
     let dir = tempfile::tempdir().expect("tempdir");
     let original_path = write_in(dir.path(), "original.ttf", &data);
@@ -84,6 +84,7 @@ fn collection_faces_share_content_but_not_revision() {
     let path = write_in(dir.path(), "collection.ttc", font_test_data::ttc::TTC);
     let parsed = parse_font_file(&path).expect("TTC parse");
     assert_eq!(parsed.faces.len(), 2);
+    assert_eq!(parsed.faces[0].identity.id, parsed.faces[1].identity.id);
     assert_eq!(
         parsed.faces[0].revision.content_fingerprint, parsed.faces[1].revision.content_fingerprint,
         "all members share the file level fingerprint"

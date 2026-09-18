@@ -59,8 +59,7 @@ pub enum FontError {
         path: PathBuf,
     },
 
-    /// The file content does not match any known font signature and is not
-    /// associated with a known font extension.
+    /// 文件内容不符合已知字体签名；扩展名不参与判断。
     #[error("`{path}` is not a recognized font format")]
     UnknownFormat {
         /// Path of the unrecognized file.

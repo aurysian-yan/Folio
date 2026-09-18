@@ -101,7 +101,7 @@ fn parses_collection_with_multiple_faces() {
     let path = write_in(dir.path(), "collection.ttc", font_test_data::ttc::TTC);
 
     let parsed = parse_font_file(&path).expect("TTC should parse");
-    assert_eq!(parsed.format, FontFormat::TrueTypeCollection);
+    assert_eq!(parsed.format, FontFormat::Collection);
     assert_eq!(parsed.faces.len(), 2);
     assert!(parsed.problems.is_empty());
 

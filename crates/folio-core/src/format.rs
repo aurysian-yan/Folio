@@ -14,14 +14,12 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FontFormat {
-    /// Single sfnt font with TrueType outlines.
+    /// TrueType 风格的 sfnt，也可能只含位图；不推断平台安装能力。
     TrueType,
-    /// Single sfnt font with CFF/CFF2 outlines (`OTTO`).
+    /// OTTO 风格的 sfnt，通常承载 CFF/CFF2 轮廓。
     OpenType,
-    /// `ttcf` collection whose members use TrueType outlines.
-    TrueTypeCollection,
-    /// `ttcf` collection whose members use CFF/CFF2 outlines.
-    OpenTypeCollection,
+    /// ttcf 集合容器；每个成员独立记录轮廓格式。
+    Collection,
     /// WOFF 1.0. Recognized, planned for Folio v2.
     Woff,
     /// WOFF 2.0. Recognized, planned for Folio v2.
@@ -33,8 +31,7 @@ impl FontFormat {
     pub const SUPPORTED: &'static [FontFormat] = &[
         FontFormat::TrueType,
         FontFormat::OpenType,
-        FontFormat::TrueTypeCollection,
-        FontFormat::OpenTypeCollection,
+        FontFormat::Collection,
     ];
 
     /// Formats that Folio recognizes but cannot parse in the current version.
@@ -47,10 +44,7 @@ impl FontFormat {
 
     /// Returns true for collection formats (`.ttc` / `.otc`).
     pub fn is_collection(self) -> bool {
-        matches!(
-            self,
-            FontFormat::TrueTypeCollection | FontFormat::OpenTypeCollection
-        )
+        matches!(self, FontFormat::Collection)
     }
 
     /// Planned support window for recognized-but-unsupported formats.
@@ -66,8 +60,7 @@ impl FontFormat {
         match self {
             FontFormat::TrueType => "TTF",
             FontFormat::OpenType => "OTF",
-            FontFormat::TrueTypeCollection => "TTC",
-            FontFormat::OpenTypeCollection => "OTC",
+            FontFormat::Collection => "Collection (TTC/OTC)",
             FontFormat::Woff => "WOFF",
             FontFormat::Woff2 => "WOFF2",
         }
@@ -76,13 +69,12 @@ impl FontFormat {
     /// Maps a file extension to a format hint.
     ///
     /// This is a hint for candidate detection only. The actual format of a
-    /// file is determined by [`sniff_format`].
+    /// 内容签名决定实际格式。
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension.to_ascii_lowercase().as_str() {
             "ttf" => Some(FontFormat::TrueType),
             "otf" => Some(FontFormat::OpenType),
-            "ttc" => Some(FontFormat::TrueTypeCollection),
-            "otc" => Some(FontFormat::OpenTypeCollection),
+            "ttc" | "otc" => Some(FontFormat::Collection),
             "woff" => Some(FontFormat::Woff),
             "woff2" => Some(FontFormat::Woff2),
             _ => None,

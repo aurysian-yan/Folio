@@ -73,7 +73,7 @@ pub struct ParsedFace {
     pub id: FontFaceId,
     /// Index of the face inside its file (`0` for single fonts).
     pub face_index: u32,
-    /// Container format of the face.
+    /// 成员的 sfnt 格式，取 TrueType 或 OpenType，不表示外层集合。
     pub format: FontFormat,
     /// Logical identity of the face.
     pub identity: FontIdentity,
@@ -110,6 +110,7 @@ pub struct FaceProblem {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ParsedFontFile {
     /// Path the file was read from.
+    #[serde(serialize_with = "crate::source::serialize_path")]
     pub path: PathBuf,
     /// File level format.
     pub format: FontFormat,
@@ -121,18 +122,18 @@ pub struct ParsedFontFile {
     pub problems: Vec<FaceProblem>,
 }
 
-/// A catalog face: one materialized revision of a logical identity.
+/// 一个逻辑身份的具体修订条目；长期逻辑引用应使用 FontIdentityId。
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FontFace {
-    /// Stable face identifier.
+    /// 具体条目标识；修订变化时变化，移动或复制文件不变。
     pub id: FontFaceId,
-    /// Identity this face belongs to.
+    /// 长期逻辑引用所用的身份标识。
     pub identity_id: FontIdentityId,
     /// Revision this face materializes.
     pub revision_id: FontRevisionId,
     /// Family this face was grouped into.
     pub family_id: FontFamilyId,
-    /// Container format.
+    /// 成员的 sfnt 格式，不表示外层集合。
     pub format: FontFormat,
     /// Conservative system/internal classification.
     pub classification: FontClassification,

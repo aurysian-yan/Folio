@@ -6,7 +6,7 @@ members = ["crates/folio-core", "crates/folio-cli"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-rust-version = "1.82"
+rust-version = "1.85"
 
 [workspace.dependencies]
 blake3 = "1"
@@ -19,3 +19,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"
 read-fonts = "0.44"
 skrifa = "0.47"
+unicode-normalization = "0.1"

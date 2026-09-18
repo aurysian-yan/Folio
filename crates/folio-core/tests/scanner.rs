@@ -24,17 +24,18 @@ fn directory_scan_isolates_failures() {
     write_in(dir.path(), "notes.txt", b"remember to buy milk");
     write_in(dir.path(), "pixel.png", TINY_PNG);
     copy_fixture(dir.path(), "Inter-Regular.woff2", "web.woff2");
+    write_in(dir.path(), "collection.ttc", font_test_data::ttc::TTC);
 
     let result = scan_directory(dir.path(), &options()).expect("scan must succeed");
 
-    assert_eq!(result.stats.files_seen, 6);
-    assert_eq!(result.stats.candidate_font_files, 4);
-    assert_eq!(result.stats.supported_font_files, 2);
+    assert_eq!(result.stats.files_seen, 7);
+    assert_eq!(result.stats.candidate_font_files, 5);
+    assert_eq!(result.stats.supported_font_files, 3);
     assert_eq!(result.stats.unsupported_known_font_files, 1);
     assert_eq!(result.stats.failed_files, 1);
-    assert_eq!(result.stats.faces_parsed, 2);
-    assert_eq!(result.stats.families_created, 2);
-    assert_eq!(result.catalog.family_count(), 2);
+    assert_eq!(result.stats.faces_parsed, 4);
+    assert_eq!(result.stats.families_created, 3);
+    assert_eq!(result.catalog.family_count(), 3);
 
     assert_eq!(result.issues.len(), 2);
     let kinds: HashSet<IssueKind> = result.issues.iter().map(|issue| issue.kind).collect();

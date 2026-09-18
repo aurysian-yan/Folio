@@ -1,400 +1,304 @@
-# Folio — Architecture (Phase 1)
+# Folio architecture — Phase 1B
 
-Status: **Phase 1 — Rust Font Core Foundation**.
+Status: Rust Font Catalog Core, finalized within Phase 1. Verification and
+remaining limits are recorded in [PHASE1_AUDIT.md](../PHASE1_AUDIT.md).
 
-This document records the decisions that shape `folio-core`. It is
-normative: when code and document disagree, one of them is a bug.
+## 1. Scope and public boundary
 
-Scope of Phase 1 is deliberately narrow:
+The synchronous core discovers assets, reads metadata, derives IDs, groups
+faces globally, and returns a catalog with diagnostics. It does not activate,
+install, watch, sync, index, render or store fonts in a database.
 
-```text
-Font Assets
-    -> Candidate Detection
-    -> Parser
-    -> FontFace
-    -> FontIdentity
-    -> FontRevision
-    -> Family Grouping
-    -> Classification
-    -> Catalog
-    -> CLI
-```
+The public API is the explicit re-export list in `folio-core/src/lib.rs`.
+Implementation modules are private. Callers use:
 
-No UI, no platform font registration, no watchers, no database, no
-network, no FFI. See `README.md` for the user-facing summary.
+- `scan_directory`, `scan_files`, or `scan(ScanInput, &ScanOptions)` for catalogs.
+- `parse_font_file` for one file and `parse_font_data` for caller-owned bytes.
+  The latter's path, file size and modified time are source context only.
+- Owned Folio models, typed IDs, attributes, and errors. No parser-specific
+  type is required in a public signature or serialized model.
 
----
+The two parse functions are intentional import/inspection boundaries, not
+exports added for testing. Grouping, ID construction and name selection are
+private or `pub(crate)`. `classify_names` is a small, pure public policy helper.
 
-## 1. Font asset, face, identity, revision, family
+## 2. Domain model and ID lifetimes
 
-The model has five distinct concepts. Confusing any two of them produces the
-bugs Phase 1 exists to prevent.
-
-| Concept | Question it answers | Lifetime |
+| Type | Meaning | Lifetime |
 | --- | --- | --- |
-| **Font asset** | "Which file or stream did we find?" | Filesystem object |
-| **Font face** | "What is declared inside this binary?" | Function of bytes |
-| **Font identity** | "Which logical face is this?" | Survives re-exports |
-| **Font revision** | "Which exact binary is this?" | One per binary |
-| **Font family** | "Which faces belong together visually?" | Grouping of faces |
+| `FontSource` | Location of bytes and member index | Changes with location |
+| `ContentFingerprint` | Full-file BLAKE3, 256 bits | Changes with bytes |
+| `FontIdentity` / `FontIdentityId` | Best metadata-derived logical face | Survives builds with the same identity metadata |
+| `FontRevision` / `FontRevisionId` | Identity + full-file content + collection discriminator | One exact binary/member revision |
+| `FontFace` / `FontFaceId` | A materialized revision in a catalog, with all its sources | Changes when the revision changes |
+| `FontFamily` / `FontFamilyId` | Global metadata-based family group | Determined by its normalized grouping key |
 
-Concretely:
+**`FontFace` means a concrete materialized revision, not the persistent logical
+face. `FontFaceId` must change when `FontRevisionId` changes.** Two copies of
+identical bytes merge into one catalog face with multiple sources. Multiple
+revisions of the same identity remain separate catalog faces.
 
-* `FontSource` is the asset location. One file can contain many faces
-  (`.ttc` / `.otc`), so asset != face.
-* `ParsedFace` is a face as parsed from exactly one source.
-* `FontFace` is a catalog entry: one materialized revision, with all known
-  sources merged. Identical bytes found in several places are one face with
-  several sources.
-* `FontFamily` groups faces by metadata (see §10).
-* `Catalog` owns the families and therefore the faces. Classification never
-  deletes anything.
+**Long-term logical references use `FontIdentityId`.** This applies to future
+collections, favorites, recents, logical UI selection and logical WebDAV font
+entries. A future revision-history item or a selection pinned to exact bytes
+uses `FontRevisionId`; `FontFaceId` is appropriate for a specific current
+catalog row. Future hot reload should resolve the logical identity to the
+new revision rather than treat a previous FaceId as permanent. No such
+features or persistence schemas are implemented here.
 
-A face is keyed by identity + content, not by path: copying a file produces
-the same face; re-exporting the font produces a second face that shares the
-identity. Phase 1 keeps both so that duplicate detection and revision
-detection can be built on it later.
+`ParsedFace` contains the full `FontIdentity`, `FontRevision`, metadata and
+one source. `FontFace` exposes their IDs and merges sources; `Catalog` owns
+families and their faces. This phase does not introduce entity registries.
 
-## 2. `FontSource`
+Paths belong to sources. `ParsedFontFile.path` and diagnostic paths are
+operation context, not logical identifiers. Paths, filenames, directory
+layout, file size and mtime never participate in identity, fingerprint,
+revision, FaceId or family membership.
 
-```rust
-pub enum FontSource {
-    LocalFile {
-        path: PathBuf,
-        face_index: u32,
-        file_size: u64,
-        modified: Option<SystemTime>,
-    },
-}
-```
+## 3. Exact ID encoding
 
-`face_index` is `0` for single fonts and the member index for collections.
-`file_size` and `modified` are scan-time auxiliary metadata for display and
-for future fast paths. They are never used for identity.
+`H(domain, parts)` means BLAKE3 with the ASCII domain bytes followed by each
+part prefixed by its byte length as a little-endian `u64`. Take the first
+16 digest bytes; display as 32 lowercase hex characters. Domains include
+the trailing NUL byte shown below. Hash collisions remain theoretically
+possible; these are content-derived identifiers, not mathematical proofs.
 
-`FontSource` is an enum so that later phases can add WebDAV or managed
-library locations without touching identity code.
+| ID | Domain | Parts |
+| --- | --- | --- |
+| Family | `folio-family\0` | UTF-8 family key |
+| Identity | `folio-identity\0` | Strategy tag, then each input separately |
+| Revision | `folio-revision\0` | Raw 16-byte identity, raw 32-byte fingerprint, 5-byte discriminator |
+| Face | `folio-face\0` | Raw 16-byte revision |
 
-## 3. Why the path belongs to `FontSource`
+Identity parts, by first usable strategy:
 
-The path is a property of *where we happened to find bytes*, not of the
-font. It is the only piece of the model that can change without the font
-changing at all. Keeping it in `FontSource` makes that explicit and keeps
-move/rename-safe identifiers trivial to define.
+1. `["ps", PostScript name]` (name ID 6).
+2. `["typo", family, subfamily]` (16 and 17, both required).
+3. `["legacy", family, subfamily]` (1 and 2, both required).
+4. `["full", full name]` (4).
+5. `["content", raw fingerprint, little-endian u32 face index]`.
 
-## 4. Why the path is not part of `FontIdentity`
+Every input field is length-prefixed individually. Embedded NULs cannot
+make `(A\0B, C)` collide with `(A, B\0C)` through ambiguous concatenation.
+Identity strings use Unicode whitespace trimming/collapse and NFC, retaining
+case. Raw localized metadata is preserved separately.
 
-Identity answers "which logical face is this". Two copies of
-`MyFont-Regular.otf` in different directories are the same logical face, and
-a user who reorganizes their font folder must not see their library
-duplicate itself. Identity is therefore derived exclusively from internal
-metadata (§6), never from paths, file names or modification times.
+A missing typographic subfamily does not combine a typographic family with
+a legacy subfamily for identity: the complete legacy pair is tried next.
+Display fields can independently fall back from 16 to 1 and from 17 to 2.
+Content fallback is explicitly marked and emits a metadata warning; even a
+family-only record is insufficient to identify a logical face reliably.
 
-## 5. Why the path is not part of `ContentFingerprint`
+**PostScript names are not globally unique.** Equal normalized PS names
+intentionally share an IdentityId even if family/subfamily differs. Different
+bytes still produce separate revisions and faces, and family grouping remains
+independent. This is a tested limitation; IdentityId is not proof of authorship
+or a unique vendor identifier. Metadata renames may change identity.
 
-`ContentFingerprint` answers "which bytes is this". Moving or copying bytes
-does not change them. Including the path would make the fingerprint useless
-for duplicate detection and for revision comparison across machines. The
-fingerprint is the BLAKE3 hash of the complete file content only.
+Phase 1B changes identity encoding and family normalization from the baseline.
+Pre-audit IDs must be recomputed. No persisted ID compatibility is promised
+with that unfinished baseline.
 
-## 6. `FontIdentity` strategy
+## 4. Revision and collection semantics
 
-Deterministic priority order, first usable value wins:
+For standalone fonts the discriminator is five zero bytes. For a collection
+it is byte `1` followed by the member index as little-endian `u32`. Standalone
+and collection index zero are therefore distinct.
 
-1. **PostScript name** (name ID 6). Strongest single signal, and stable
-   across normal re-exports.
-2. **Typographic family + subfamily** (name IDs 16/17).
-3. **Legacy family + subfamily** (name IDs 1/2). Handles older fonts whose
-   legacy family already contains the style, e.g. `MyFont Bold Regular`.
-4. **Full name** (name ID 4).
-5. **Content fallback**: `BLAKE3(content) + face index`, marked with
-   `IdentityKind::ContentFallback`, with a `MetadataProblem` warning.
+Same identity + same content + same discriminator yields the same revision.
+Moving or copying bytes preserves revision and FaceId; changed content changes
+both. Whole-file hashing means all members share a fingerprint. Editing any
+member or changing collection order changes the file fingerprint and can
+change every member's revision. An index change also changes the discriminator.
+Extraction to a standalone sfnt is a new revision. Stable metadata can preserve
+IdentityId across these operations. Per-member semantic content hashing and
+revision history are not implemented.
 
-Rules:
+The append-byte test checks this content invariant only. A stronger test edits
+`head.fontRevision`, rebuilds table checksums and `checkSumAdjustment`, verifies
+all checksums, and parses both complete binaries. It proves equal identity and
+different revision without pretending to run a font compiler.
 
-* Names are trimmed and internal whitespace runs are collapsed to one space
-  before use, so `"  My Font  Regular "` and `"My Font Regular"` are the
-  same identity.
-* PostScript names are *not* assumed to exist, to be valid, or to be
-  unique. They are simply the first candidate; the fallbacks are defined.
-* Identity never depends on the path, the file name, `mtime`, or - except
-  for the explicit content fallback - the file hash.
-* Pathological fonts where two faces of a collection share all names will
-  share an identity but have distinct revisions (the collection index is
-  part of the revision).
+## 5. Global family aggregation
 
-## 7. `FontRevision` strategy
-
-```text
-FontRevisionId = BLAKE3("folio-revision\0" || identity_id || content_fingerprint || discriminator)
-```
-
-where `discriminator` is `None` for single fonts and the collection member
-index for collections. Consequences:
-
-* Moving or copying a file: revision unchanged.
-* Re-exporting the font: revision changed (bytes changed).
-* Two members of a collection always differ, even though they share the
-  file-level fingerprint and possibly the same identity.
-* A revision is the identity of a binary state; `FontFaceId` is a
-  domain-separated hash of the revision (see §8). Re-exporting therefore adds
-  a second face to the catalog sharing the identity, which is exactly what
-  revision and duplicate detection need later.
-
-Phase 1 stores no revision history; it only represents revisions it sees
-during a scan.
-
-## 8. Stable ID strategy
-
-All identifiers are 128-bit BLAKE3 digests (the first 16 bytes of the XOF
-output) over domain-separated, length-prefixed inputs:
+Both scan inputs converge on this sequence:
 
 ```text
-FontFamilyId   = BLAKE3("folio-family\0"   || family_key)
-FontIdentityId = BLAKE3("folio-identity\0" || identity_key)
-FontRevisionId = BLAKE3("folio-revision\0" || identity_id || fingerprint || discriminator)
-FontFaceId     = BLAKE3("folio-face\0"     || revision_id)
+all candidate files -> all parsed faces -> merge exact FaceIds
+                   -> one global family grouping -> sorted Catalog
 ```
 
-Every variable-length part is prefixed with its length as little-endian
-`u64`, so `("ab", "c")` and `("a", "bc")` can never collide. Domains are
-NUL-terminated constants, matching the documented scheme.
+There is no per-file grouping/concatenation stage. A TTC and standalone fonts
+from unrelated directories join the same family when their selected family
+metadata agrees.
 
-* No `Vec` indexes, no database autoincrement, no `DefaultHasher`.
-* IDs are printed as 32 lowercase hex characters.
-* IDs are deterministic: parsing the same font again yields the same IDs,
-  on any machine, in any filesystem order.
-* IDs are typed: a `FontFamilyId` cannot be passed where an
-  `FontIdentityId` is expected.
+Family keys use the preferred typographic family (16), else legacy family (1).
+The key is `family\0` plus Unicode whitespace trim/collapse, NFC, Unicode
+lowercase and NFC again. This groups `Inter`, `inter`, ` Inter ` and whitespace
+variants. It preserves accents, punctuation, word boundaries and compatibility
+characters: `Cafe` != `Café`, `AB` != `A B`, and fullwidth letters are not folded.
+No NFKC, accent stripping, transliteration or full case folding is used.
 
-## 9. Name table fallback strategy
+Without a usable family, use `ps\0` + trimmed PS name, then `full\0` + trimmed
+full name; these fallback keys remain case-sensitive. With neither, use
+`unnamed\0` + the hex IdentityId. Unrelated nameless faces cannot merge into a
+single universal unnamed family. No filename-prefix or style-suffix guessing.
 
-Folio tracks name IDs 1, 2, 4, 5, 6, 16, 17, 21, 22. For each it keeps
-*all* decodable localized strings as `LocalizedName { kind, language,
-value }`, so Chinese, Japanese and English names (and others) are never
-thrown away. Decoding uses `skrifa`'s localized string iterator, which
-handles UTF-16BE, MacRoman, Mac and Windows language IDs, and `name` table
-version 1 language tags.
+Localized aliases are retained, not used to infer transitive equivalence.
+Fonts whose preferred family strings differ and lack a common selected name
+can remain separate. Conversely, unrelated vendors declaring the same family
+name can group together. No authoritative family registry exists in Phase 1.
 
-Display values are chosen deterministically:
-`en-US` > `en` > language-less > first record in name table order.
+Family localized names contain only IDs 1, 16 and 21. All other names remain
+on the face. The display name comes from the lowest FaceId representative,
+independent of source order; membership normalization does not rewrite metadata.
 
-Field resolution:
+## 6. Names and locales
 
-* `family_name` = typographic family (16), else legacy family (1)
-* `subfamily_name` = typographic subfamily (17), else legacy subfamily (2)
+Tracked face-level name IDs: **1, 2, 4, 5, 6, 16, 17, 21, 22**. Axis names and
+named-instance labels also use their referenced name IDs. Skrifa/Fontations
+provide string decoding; Folio owns the resulting strings and locale records.
 
-The legacy values are still stored separately so nothing is lost. If a
-font has typographic family but only legacy subfamily, the identity falls
-back to the legacy pair (deterministic, documented in code); family
-grouping still uses the typographic family.
+Each `LocalizedName` preserves the decoded value plus `NameLocale` containing
+platform ID, encoding ID, raw language ID and an optional original format-1
+language tag. Whitespace-only names are omitted. Invalid or unsupported
+encodings may produce no decodable string; this is not a byte-preserving name
+archive.
 
-## 10. Family grouping strategy
+Windows and Macintosh language-ID namespaces are distinct. Folio restricts
+upstream mapping to the appropriate platform range so Windows ID 0 is not
+mislabeled as Mac English, nor Mac 0x0409 as Windows English. Format-1 tags are
+read from their indexed language records without the upstream 30-byte limit.
 
-1. Group by `family_name` when present.
-2. Otherwise group by PostScript name (each such font becomes its own
-   family).
-3. Otherwise group by full name.
-4. Otherwise one `"unnamed"` family per face set.
+`language` accepts a conservative BCP-47 syntax subset: language, optional
+script, optional region, and variants. Unsupported forms (including extensions,
+private use and extlang), invalid tags and unknown IDs produce `None`, preserving
+raw context. Tags are declarations, not independently verified IANA registry
+entries. Platform mapping coverage is incomplete; unknown is preferred to a
+guess. UTF-16 English, Japanese, Chinese, MacRoman English/French and format-1
+English/Chinese are tested. All possible locales/encodings are **NOT VERIFIED**.
 
-Grouping uses a hash map keyed by the canonical family string, so it is
-linear in the number of faces - no O(N²) pairwise comparison. There is no
-filename prefix grouping. Faux-bold or style-suffixed variants that share a
-typographic family are grouped together because the metadata says so, not
-because their names look similar.
+Display selection: `en-US` > `en` > unknown/no language > other. Equal ranks
+use the full `LocalizedName` ordering, not parser iteration order. Face and axis
+name lists are sorted/deduplicated by kind, language, value and raw locale.
 
-Ordering is deterministic:
+## 7. Format model and capabilities
 
-* families by case-insensitive display name, then ID;
-* faces by style rank (Normal, Oblique, Italic), then weight, then
-  subfamily name, then face ID;
-* localized names by kind, language, value.
+`FontFormat` is `TrueType | OpenType | Collection | Woff | Woff2`.
 
-The CLI applies the same order, so scans are reproducible.
+- `TrueType`: TrueType-flavored sfnt (`0x00010000` or `true`), including some
+  bitmap-only assets; it does not guarantee a `glyf` outline exists.
+- `OpenType`: `OTTO` sfnt flavor, normally CFF/CFF2.
+- `Collection`: `ttcf` container, used by both TTC and OTC. The file label does
+  not depend on the first member, member order or a damaged first member.
+- Each parsed/catalog face stores its own sfnt flavor (`TrueType`/`OpenType`).
+- `Woff`/`Woff2`: recognized by `wOFF`/`wOF2`, unsupported, planned for Folio v2.
 
-## 11. Font format model
+[OpenType explicitly permits mixed-outline collections](https://learn.microsoft.com/en-us/typography/opentype/spec/otff#font-collections).
+TTF and OTF metadata parsing, real TTC, generated CFF-only OTC and generated
+mixed collections are tested. Externally distributed OTC files and CFF2-specific
+behavior are **NOT VERIFIED**. Catalog parsing is not full font validation.
 
-```rust
-pub enum FontFormat {
-    TrueType,            // sfnt, TrueType outlines
-    OpenType,            // sfnt, CFF/CFF2 outlines ("OTTO")
-    TrueTypeCollection,  // "ttcf", first member uses TrueType outlines
-    OpenTypeCollection,  // "ttcf", first member uses CFF/CFF2 outlines
-    Woff,                // WOFF 1.0, recognized, planned for v2
-    Woff2,               // WOFF 2.0, recognized, planned for v2
-}
-```
+Format is detected from bytes. Extensions only filter directory candidates.
+An image named `.woff` is malformed; genuine web-font magic with an unrelated
+extension is known-unsupported in an explicit scan. Unsupported files are
+warnings with `format` and planned support, counted separately from failed files.
+Magic recognition does not validate WOFF headers, decompress or parse web fonts.
 
-Format is detected from **content** (`sniff_format`), never from the file
-extension. A JPEG renamed to `cat.ttf` is rejected as malformed; a WOFF
-renamed to `font.ttf` is still recognized as WOFF. Extensions only decide
-which files a directory scan considers candidates.
+Managed assets and installable fonts are different concepts. `is_supported()`
+means this version can attempt metadata parsing, not that an operating system
+can install, activate or render the asset. Platform capabilities are deferred.
 
-A mixed collection is labeled by its first successfully loaded member;
-individual faces keep their own `format`. Mixed collections are extremely
-rare and are documented as a limitation rather than guessed at.
+## 8. Scanner, failures and diagnostics
 
-## 12. Managed != installable
+Directory discovery uses `walkdir`, recursive by default, known extensions,
+and no following of descendant symlinks. A root symlink can name the selected
+directory. Explicit discovery accepts every supplied path regardless of extension
+and follows explicitly selected file symlinks. Existing candidate paths are
+canonicalized, sorted and deduplicated; unresolved paths retain the supplied
+spelling so a read issue can be reported. Hard links remain distinct sources.
 
-`FontFormat` describes a container. It says nothing about whether an
-operating system can activate or install the font. The domain model
-therefore never encodes `format == installable`:
+Both modes then use `parse_font_file`, the same content parser, global merge,
+grouping, issue ordering and stats. Directory inputs passed as explicit files
+are nonfatal `FileRead` issues. Ordinary non-files are rejected before reading.
+Path/metadata/read operations do not form a transactional filesystem snapshot.
 
-* WOFF/WOFF2 are known formats that Folio will manage, search and display
-  (v2) even though macOS and Windows generally cannot install them as
-  system fonts.
-* Future capability flags (`manageable`, `previewable`, `activatable`,
-  `installable`, `convertible`) belong to a separate platform capability
-  layer that Phase 1 intentionally does not build.
-* The only capability question Phase 1 answers is "can the current parser
-  read it", exposed as `FontFormat::is_supported()`.
+- `ScanError`: only an inaccessible/non-directory root prevents the scan.
+- `FontError`: whole-file failure from a direct parse; I/O and opaque
+  `ParserError` preserve source errors and context.
+- `FaceProblem`: a member failure or incomplete identity metadata at the parser
+  result boundary.
+- `ScanIssue`: final owned diagnostic DTO, with severity, category, path,
+  optional member index/format and message. Source errors are formatted here,
+  not in the parser; this DTO does not preserve an error chain for downcasting.
 
-## 13. WOFF / WOFF2
+The parser rejects an empty table directory, out-of-bounds table ranges and
+an unreadable `head` table when one is present. Missing `head` alone is allowed
+(e.g. the observed macOS NISC18030 asset); optional absent metadata remains
+`None`. It does not validate every outline, layout subtable, checksum or signature.
+There is no proof of panic freedom for all possible malformed input.
 
-Planned for **Folio v2**. Phase 1:
+Bad collection offsets and out-of-bounds member tables are tested with another
+member still valid. They become `CollectionProblem` with the failed index; valid
+members survive. When all members fail, the file fails with the first parser
+error. Partially usable collections count as supported files, not failed files.
 
-* recognizes `wOFF` / `wOF2` magic bytes;
-* returns `FontError::UnsupportedFormat { format, planned: "Folio v2" }`;
-* the scanner turns that into a `KnownUnsupportedFormat` warning with the
-  recognized format attached, counted in
-  `ScanStats::unsupported_known_font_files`;
-* never reports them as `MalformedFont` and never counts them as failed.
+`files_seen` counts regular files during directory discovery; for explicit scans
+it counts canonicalized unique inputs, including invalid selections.
+`faces_parsed` is before duplicate merging; `Catalog::face_count()` is after it.
+WOFF/WOFF2 increment `unsupported_known_font_files`, never `failed_files`.
 
-No WOFF parsing, decompression, preview or conversion exists in Phase 1.
+## 9. Classification
 
-## 14. Classification strategy
+Classification remains conservative metadata policy: a dot-prefixed selected
+PS or family name is `Internal`; otherwise a case-insensitive `lastresort`
+substring is `SystemLike`; all others are `Normal`. Thus **`.LastResort` is
+Internal**. The dot rule's precedence is intentional and tested.
 
-`FontClassification` is `Normal | SystemLike | Internal`, computed from the
-PostScript name and family name only:
+This small heuristic is not proof that a font is OS-owned. It neither deletes
+nor drops anything. Catalog and JSON include all faces; only the human CLI view
+hides Internal by default. `--show-internal` restores those rows. No system-font
+blacklist is introduced.
 
-* a name starting with `.` -> `Internal` (for example
-  `.AppleSystemUIFont`);
-* a name containing `lastresort` (case-insensitive) -> `SystemLike`;
-* everything else -> `Normal`.
+## 10. Determinism, serialization and performance
 
-The rules are intentionally minimal. The spec forbids stuffing unverified
-hardcoded system font lists into the core. Classification is metadata:
-classified faces stay in the catalog and in the stats. The CLI hides
-`Internal` faces by default and `--show-internal` reveals them; JSON output
-always contains everything.
+Stable unchanged inputs yield byte-identical JSON across repeated scans and
+explicit-input permutations. Families sort by lowercase display name then ID;
+faces by Normal/Oblique/Italic, weight, lowercase subfamily, then FaceId; sources
+sort/deduplicate by their full fields. Issues sort by path, member index,
+severity, kind and message. Public ordering does not depend on HashMap iteration.
 
-## 15. Scan failure isolation
+Serde is a **CLI/debug DTO**, not an FFI ABI, database schema or WebDAV schema.
+No parser model is serialized. All path DTOs use lossy UTF-8 display, including
+`ParsedFontFile`; they are not round-trip filesystem identifiers. Filesystem
+metadata and OS error text can differ across hosts or over time, so cross-host
+JSON equality is not promised.
 
-* Only unreadable or non-directory scan roots produce a top-level
-  `ScanError`.
-* A file that cannot be read, is empty, has unknown content, or fails to
-  parse produces a structured `ScanIssue` and does not stop the scan.
-* A broken face inside a collection produces a `CollectionProblem` issue
-  with its `face_index`; the remaining members are still parsed.
-* A file with no usable name records still produces a face, a content
-  fallback identity and a `MetadataProblem` warning.
-* Stats track `files_seen`, `candidate_font_files`, `supported_font_files`,
-  `unsupported_known_font_files`, `faces_parsed`, `families_created` and
-  `failed_files` independently.
+Global merging/grouping uses BTreeMaps and family-name unions use BTreeSets.
+The former repeated vector membership checks could become quadratic; they are
+removed. Sorting and grouping are O(N log N) plus name/string costs. No 20,000-face
+benchmark is claimed. Full-file reads and hashes, single-thread parsing and
+full scans are intentional. No cache, concurrency, database or search index.
 
-Parse code never calls `unwrap()`/`expect()` in library paths; malformed
-input cannot panic.
+## 11. Dependencies and later phases
 
-## 16. Directory scans and explicit file scans
+Fontations remains `read-fonts 0.44.0` / `skrifa 0.47.0`. No existing dependency
+was upgraded for this audit. `unicode-normalization 0.1.25` supplies tested NFC
+rather than a partial custom normalizer; it adds `tinyvec` transitively. The
+workspace Rust declaration is 1.85 to match existing dependency requirements;
+the actual validation compiler is 1.94.1, not an MSRV execution test.
 
-Both entry points are thin wrappers around one pipeline:
+The Rust lockfile contains no ttf-parser, Tokio, SQLite, HTTP client, Tauri or
+UniFFI. The JavaScript workspace is separate from the Rust workspace and now
+contains only a pnpm dependency baseline for the planned shared Windows/Linux
+React desktop UI: HeroUI v3 and Tailwind CSS v4. UI source is intentionally
+deferred. Tests use `font-test-data 0.9.1` and local licensed fixtures; see
+their provenance and license details in
+[fixtures/fonts/README.md](../fixtures/fonts/README.md).
 
-```rust
-pub enum ScanInput<'a> {
-    Directory(&'a Path),
-    Files(&'a [PathBuf]),
-}
-pub fn scan(input: ScanInput<'_>, options: &ScanOptions) -> Result<ScanResult, ScanError>;
-```
-
-The only difference is candidate collection:
-
-* **Directory**: `walkdir` (no symlink following), recursive by default,
-  candidates filtered by known extensions; files are sorted before
-  processing.
-* **Explicit files**: every provided path is a candidate regardless of
-  extension, because the caller (eventually Finder/Explorer "Open With
-  Folio") already made the selection. Paths are deduplicated and sorted.
-
-From that point on, parsing, fingerprinting, identity, revision, grouping,
-diagnostics and stats are identical code. A test asserts that scanning two
-files directly produces byte-for-byte the same `Catalog` as scanning a
-directory containing only those files.
-
-## 17. Why Fontations / Skrifa
-
-* `read-fonts` is the Fontations low-level parser: safe, well-fuzzed,
-  zero-copy, and it handles sfnt table directories and `.ttc` collections.
-* `skrifa` provides the higher-level pieces this phase needs: localized
-  `name` strings with language tags, `fvar` axes and named instances, and
-  style/weight/width attributes.
-
-Useful facts verified against the actual dependency sources (read-fonts
-0.44, skrifa 0.47):
-
-* `read_fonts::FileRef::new` distinguishes single fonts from `ttcf`
-  collections, and `CollectionRef::get(index)` isolates member parsing.
-* `skrifa::MetadataProvider::localized_strings` decodes UTF-16BE, MacRoman
-  and name-table v1 language tags and exposes BCP-47 language identifiers.
-* `skrifa::MetadataProvider::axes()` / `named_instances()` wrap `fvar`.
-
-These types are converted to Folio domain types at the boundary
-(`FontWeight`, `FontWidth`, `FontStyle`, `VariableAxis`, `LocalizedName`,
-`FontFormat`, ...). No `skrifa` or `read-fonts` type appears in Folio's
-public API.
-
-No additional font crates were needed. `ttf-parser` is not used.
-
-## 18. Known limitations (Phase 1)
-
-* The content fallback identity for nameless fonts depends on the binary
-  hash, so re-exporting such a font changes its identity. Explicitly marked
-  by `IdentityKind::ContentFallback` and a `MetadataProblem` warning.
-* Identity trusts PostScript names; fonts with colliding PostScript names
-  share an identity. Revisions still differ.
-* Family grouping for fonts without family metadata does not try to parse
-  style suffixes out of PostScript names; such fonts get one family each.
-* Mixed collections are labeled by their first member.
-* `usWidthClass` 0 is reported as unknown instead of guessing a width.
-* Style detection covers `OS/2` selection flags, `post.italicAngle` and
-  `head.macStyle`; italic/oblique variation axes are not interpreted.
-* WOFF/WOFF2 parsing is out of scope; see §13.
-* TTC/OTC face-level failure isolation is implemented, but the committed
-  tests only cover the success path plus the synthetic multi-face fixture
-  from `font-test-data`; producing a corrupt collection fixture legally is
-  left as a future improvement.
-* Localized names are stored for the tracked name IDs only (the face-level
-  names listed in §9, plus axis and named-instance names).
-* Directory scans only consider files whose extension is a known font
-  extension; a valid font with an unknown extension is found only through
-  an explicit file scan. Explicit scans ignore extensions entirely.
-* Symbolic links are not followed during directory scans, so symlinked
-  font files are skipped. Explicit file scans follow symlinks because the
-  caller named the file.
-* Full-file BLAKE3 is computed for every candidate on every scan. No cache,
-  no `mtime`/size shortcut, no conditional hashing.
-* Parsing is single-threaded and reads each file fully into memory.
-
-### Future optimizations (explicitly not implemented)
-
-These are recorded so they are not mistaken for missing work:
-
-* metadata cache keyed by fingerprint
-* `mtime` + size fast path to avoid re-reading unchanged files
-* conditional hashing (hash lazily, only when needed)
-* parallel parsing and hashing
-* search index for large catalogs
-* streaming reads for very large collections
-
-## 19. Platform priority (later phases)
-
-| Priority | Platform | Stack | Notes |
-| --- | --- | --- | --- |
-| P0 | macOS | SwiftUI, AppKit where needed, Rust core via UniFFI | Full desktop management, activate/deactivate, install, hot reload |
-| P1 | Android | Kotlin, Jetpack Compose, MIUIX, Rust core via UniFFI | Portable library, WebDAV, offline cache, DocumentsProvider, ACTION_GET_CONTENT, SAF, USB export |
-| P2 | Windows | Tauri 2, React, Tailwind, Rust core as a Cargo dependency | Full desktop management, activation, hot reload |
-| P3 | iOS / iPadOS | SwiftUI, UniFFI | Browsing, WebDAV, offline, Files/Share/File Provider |
-| P4 | Linux | Tauri, reusing the Windows web UI | Low priority, v2 |
-
-None of these app shells, FFI layers, storage or sync code exists in
-Phase 1.
+Future priorities remain macOS (SwiftUI/AppKit + UniFFI), Android
+(Kotlin/Compose/MIUIX + UniFFI), Windows/Linux (Tauri 2 + shared React,
+HeroUI v3, Tailwind CSS v4 and direct Cargo), and iOS/iPadOS (SwiftUI +
+UniFFI). These are context only; no platform shell, FFI, WebDAV, persistence,
+hot reload or activation code was added to the Rust core. Phase 1B ends at the
+catalog core.

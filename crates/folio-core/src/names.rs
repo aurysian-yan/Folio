@@ -1,15 +1,12 @@
-//! OpenType `name` table handling.
-//!
-//! Folio keeps every localized string it can decode, together with a
-//! BCP-47 language tag when one can be derived. A single "preferred"
-//! value is derived deterministically for display (`en-US`, then `en`,
-//! then language-less strings, then the first record in name table
-//! order).
+//! 本地化名称：保留原始字符串与语言上下文，按语言优先级选择显示值。
+//! 所有名称列表排序去重；未知语言保持未知。
+
+use std::collections::BTreeSet;
 
 use read_fonts::types::NameId;
-use read_fonts::FontRef;
+use read_fonts::{FontRef, TableProvider};
 use serde::Serialize;
-use skrifa::MetadataProvider;
+use skrifa::string::LocalizedString;
 
 /// Name table identifiers Folio tracks.
 pub(crate) const TRACKED_NAME_IDS: [NameId; 9] = [
@@ -102,72 +99,128 @@ pub struct LocalizedName {
     pub language: Option<String>,
     /// Decoded string value.
     pub value: String,
+    /// 原始语言上下文；未知语言保留原值，不猜测标签。
+    pub locale: Option<NameLocale>,
+}
+
+/// name 表原始的平台、编码与语言标识。
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+pub struct NameLocale {
+    pub platform_id: u16,
+    pub encoding_id: u16,
+    pub language_id: u16,
+    pub language_tag: Option<String>,
 }
 
 impl LocalizedName {
-    pub(crate) fn new(kind: NameKind, language: Option<String>, value: String) -> Self {
+    #[cfg(test)]
+    fn new(kind: NameKind, language: Option<String>, value: String) -> Self {
         Self {
             kind,
             language,
             value,
+            locale: None,
         }
     }
 }
 
-/// Collects all tracked localized names of a face in name table order.
+/// 收集已追踪的名称，并按种类、语言、原值和原始语言上下文排序。
 pub(crate) fn collect_localized_names(font: &FontRef<'_>) -> Vec<LocalizedName> {
-    let mut names = Vec::new();
-    for id in TRACKED_NAME_IDS {
-        for string in font.localized_strings(id) {
-            let value = string.to_string();
-            let value = value.trim();
-            if value.is_empty() {
-                continue;
-            }
-            let candidate = LocalizedName::new(
-                NameKind::from_id(id),
-                string.language().map(str::to_owned),
-                value.to_owned(),
-            );
-            if !names.contains(&candidate) {
-                names.push(candidate);
-            }
-        }
-    }
-    names
+    collect_names(font, |id| TRACKED_NAME_IDS.contains(&id))
 }
 
 /// Collects localized names for a single arbitrary name id (used for axes).
 pub(crate) fn collect_names_for_id(font: &FontRef<'_>, id: NameId) -> Vec<LocalizedName> {
-    let mut names = Vec::new();
-    for string in font.localized_strings(id) {
+    collect_names(font, |candidate| candidate == id)
+}
+
+fn collect_names(font: &FontRef<'_>, include: impl Fn(NameId) -> bool) -> Vec<LocalizedName> {
+    let Ok(table) = font.name() else {
+        return Vec::new();
+    };
+    let mut names = BTreeSet::new();
+    for record in table.name_record().iter().filter(|r| include(r.name_id())) {
+        let string = LocalizedString::new(&table, record);
         let value = string.to_string();
-        let value = value.trim();
-        if value.is_empty() {
+        if value.trim().is_empty() {
             continue;
         }
-        let candidate = LocalizedName::new(
-            NameKind::from_id(id),
-            string.language().map(str::to_owned),
-            value.to_owned(),
-        );
-        if !names.contains(&candidate) {
-            names.push(candidate);
-        }
+        let tagged = table.version() == 1 && record.language_id() >= 0x8000;
+        let language_tag = if tagged {
+            table
+                .lang_tag_record()
+                .and_then(|tags| tags.get((record.language_id() - 0x8000) as usize))
+                .and_then(|tag| tag.lang_tag(table.string_data()).ok())
+                .map(|tag| tag.to_string())
+        } else {
+            None
+        };
+        // 上游将 Mac 与 Windows 的映射放在同一张表中，必须先区分平台。
+        let language = if tagged {
+            language_tag.as_deref()
+        } else if matches!(
+            (record.platform_id(), record.language_id()),
+            (1, 0..=151) | (3, 0x0400..=0x7fff)
+        ) {
+            string.language()
+        } else {
+            None
+        };
+        names.insert(LocalizedName {
+            kind: NameKind::from_id(record.name_id()),
+            language: language
+                .filter(|tag| supported_language_tag(tag))
+                .map(str::to_owned),
+            value,
+            locale: Some(NameLocale {
+                platform_id: record.platform_id(),
+                encoding_id: record.encoding_id(),
+                language_id: record.language_id(),
+                language_tag,
+            }),
+        });
     }
-    names
+    names.into_iter().collect()
+}
+
+/// 保守接受语言、脚本、地区和变体；其他形式保留原始标签。
+fn supported_language_tag(tag: &str) -> bool {
+    let mut parts = tag.split('-').peekable();
+    let Some(language) = parts.next() else {
+        return false;
+    };
+    if !(2..=8).contains(&language.len()) || !language.bytes().all(|b| b.is_ascii_alphabetic()) {
+        return false;
+    }
+    if parts
+        .peek()
+        .is_some_and(|part| part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+    {
+        parts.next();
+    }
+    if parts.peek().is_some_and(|part| {
+        (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+            || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))
+    }) {
+        parts.next();
+    }
+    let mut variants = BTreeSet::new();
+    parts.all(|part| {
+        ((5..=8).contains(&part.len()) || (part.len() == 4 && part.as_bytes()[0].is_ascii_digit()))
+            && part.bytes().all(|b| b.is_ascii_alphanumeric())
+            && variants.insert(part.to_ascii_lowercase())
+    })
 }
 
 /// Returns the preferred value for a kind, or `None` when absent.
 ///
-/// Ranking: `en-US`, then `en`, then language-less records, then the first
-/// other record in name table order.
+/// 优先 en-US、en、未知语言，再按名称全序打破同级排序。
 pub(crate) fn preferred_value(names: &[LocalizedName], kind: NameKind) -> Option<String> {
     names
         .iter()
         .filter(|name| name.kind == kind)
-        .min_by_key(|name| language_rank(name.language.as_deref()))
-        .map(|name| name.value.clone())
+        .min_by_key(|name| (language_rank(name.language.as_deref()), *name))
+        .map(|name| name.value.trim().to_owned())
 }
 
 /// Convenience wrapper returning the preferred value for a raw name id.

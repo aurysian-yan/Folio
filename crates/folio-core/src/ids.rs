@@ -1,22 +1,9 @@
-//! Deterministic, domain-separated identifiers.
+//! 路径无关、类型隔离的 128 位 BLAKE3 标识。
 //!
-//! All identifiers in Folio are 128-bit BLAKE3 digests over
-//! domain-separated, length-prefixed byte sequences. The exact input layout
-//! is part of the public contract and is documented in
-//! `docs/architecture.md`:
-//!
-//! ```text
-//! FontFamilyId    = BLAKE3("folio-family\0"    || key)
-//! FontIdentityId  = BLAKE3("folio-identity\0"  || identity_key)
-//! FontRevisionId  = BLAKE3("folio-revision\0"  || identity_id || content_fingerprint || discriminator)
-//! FontFaceId      = BLAKE3("folio-face\0"      || revision_id)
-//! ```
-//!
-//! Every variable-length part is prefixed with its length in little-endian
-//! `u64` form, so distinct inputs can never produce ambiguous encodings.
-//!
-//! Identifiers intentionally do not depend on file paths, file names,
-//! modification times or filesystem enumeration order.
+//! 家族使用归一化分组键；逻辑身份分别编码策略与各名称字段。
+//! 修订绑定身份、完整文件指纹和成员索引；目录条目绑定具体修订。
+//! 每个输入片段均使用小端 u64 字节长度前缀，避免字段拼接歧义。
+//! 完整域标记及编码契约见 docs/architecture.md。
 
 use std::fmt;
 
@@ -119,10 +106,8 @@ define_id! {
 }
 
 define_id! {
-    /// Stable identifier of a catalog face entry.
-    ///
-    /// A face entry is one materialized revision of an identity, so this is
-    /// a domain-separated function of the revision identifier.
+    /// 具体修订的目录条目标识；修订改变时改变。
+    /// 收藏、集合及其他长期逻辑引用使用 FontIdentityId。
     FontFaceId
 }
 
@@ -133,8 +118,8 @@ impl FontFamilyId {
 }
 
 impl FontIdentityId {
-    pub(crate) fn from_identity_key(key: &str) -> Self {
-        Self(IdDigest::hash(IDENTITY_DOMAIN, &[key.as_bytes()]))
+    pub(crate) fn from_identity_parts(parts: &[&[u8]]) -> Self {
+        Self(IdDigest::hash(IDENTITY_DOMAIN, parts))
     }
 }
 

@@ -1,7 +1,7 @@
 # Folio
 
 Folio is a cross-device font asset manager. This repository contains
-**Phase 1: Rust Font Core Foundation** — the UI-independent, platform-
+**Phase 1B: Audited Rust Font Catalog Core** — the UI-independent, platform-
 independent catalog core and its inspection CLI.
 
 The core discovers font assets, parses them, derives stable identities and
@@ -13,14 +13,17 @@ integration.
 
 * Directory scans (recursive by default) and explicit file-list scans
 * TTF and OTF parsing via the Fontations stack (`read-fonts`, `skrifa`)
-* TTC/OTC collections: multiple faces per file, per-face failure isolation
+* TTC/OTC collections: neutral collection container with per-face sfnt format;
+  TTC and runtime-generated CFF-only/mixed collections verified
 * Variable font detection with `fvar` axes and named instances
 * OpenType metadata: names with language tags, weight, width, style,
   version, units per em
-* Stable, domain-separated BLAKE3 identifiers:
+* Domain-separated BLAKE3 identifiers:
   `FontFamilyId`, `FontFaceId`, `FontIdentityId`, `FontRevisionId`
+  (`FontIdentityId` is the logical reference; `FontFaceId` changes with revision)
 * BLAKE3 `ContentFingerprint`; paths never affect identity or revision
-* Metadata-based family grouping (Regular/Bold/Italic, variable fonts)
+* Global metadata-based family grouping across files, directories and collections,
+  with Unicode whitespace, NFC and case normalization
 * Conservative `Normal` / `SystemLike` / `Internal` classification, with
   classified fonts kept in the catalog
 * Structured diagnostics and scan statistics; one broken font never fails
@@ -34,6 +37,8 @@ platform font registration, activation/installation, file watchers, hot
 reload, databases, caching, WebDAV/sync, UniFFI/FFI, WOFF parsing.
 
 ## Build
+
+Rust 1.85 or newer is required by the dependency set; audited with Rust 1.94.1.
 
 ```sh
 cargo build --workspace
@@ -62,7 +67,7 @@ Useful flags:
 
 * `--no-recursive` – stay on the top level
 * `--show-internal` – include faces classified as internal
-* `--json` – emit stable structured JSON
+* `--json` – emit deterministic CLI/debug JSON (not a storage or FFI schema)
 * `--verbose` – debug logging on stderr
 
 ## Scan explicit files
@@ -80,9 +85,12 @@ integrations will use.
 ```text
 Folio/
 ├── Cargo.toml
+├── package.json
+├── pnpm-workspace.yaml
 ├── crates/
 │   ├── folio-core/     # catalog core (no UI, no platform APIs)
 │   └── folio-cli/      # inspection CLI
+├── apps/desktop-ui/     # shared Windows/Linux React UI dependency baseline
 ├── fixtures/fonts/     # legally redistributable test fonts
 ├── docs/architecture.md
 └── rustfmt.toml
@@ -93,11 +101,30 @@ Folio/
 * `docs/architecture.md` – every core design decision, identity/revision
   strategy, grouping, classification, limitations, future platform order
 * `fixtures/fonts/README.md` – fixture provenance and licenses
-* `PHASE1_REPORT.md` – verification report for this phase
+* `PHASE1_REPORT.md` – final verification report
+* `PHASE1_AUDIT.md` – independent findings, regression evidence and final verdict
+* `AGENTS.md` – project rules for the shared Windows/Linux React front end
+
+## Desktop UI dependency baseline
+
+The Windows and Linux front end is planned to use React, TypeScript, Vite,
+Tauri 2 and HeroUI v3 with Tailwind CSS v4. The repository currently contains
+only the dependency manifest at `apps/desktop-ui/package.json`; UI source is
+intentionally deferred.
+
+```sh
+pnpm install
+```
+
+HeroUI is the only default React component library. Fluent UI, Chakra UI, MUI,
+Radix, Ant Design and Mantine are excluded for this project. PrimeReact remains
+a future fallback only if data-heavy controls cannot be covered without mixing
+component systems.
 
 ## Planned
 
 * Folio v2: WOFF/WOFF2 support, managed library storage, collection
-* Desktop apps (macOS first, then Windows), Android, iOS/iPadOS, Linux
+* Desktop apps (macOS first, then Windows/Linux shared React UI), Android,
+  iOS/iPadOS
 * Activate/deactivate, install/uninstall, hot reload, duplicate and
   revision detection, WebDAV sync

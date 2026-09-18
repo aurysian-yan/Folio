@@ -317,3 +317,32 @@ fn write_face(out: &mut impl Write, face: &FontFace) -> io::Result<()> {
     }
     writeln!(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn internal_visibility_only_changes_the_human_report() {
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts/Lato-Regular.ttf");
+        let mut result = scan_files(&[path], &ScanOptions::default()).unwrap();
+        result.catalog.families[0].faces[0].classification = FontClassification::Internal;
+        let mut hidden = Vec::new();
+        let mut shown = Vec::new();
+        write_report(&mut hidden, "Folio", &result, false).unwrap();
+        write_report(&mut shown, "Folio", &result, true).unwrap();
+        let hidden = String::from_utf8(hidden).unwrap();
+        let shown = String::from_utf8(shown).unwrap();
+        assert!(hidden.contains("Hidden: 1 internal face(s)"));
+        assert!(!hidden.contains("PostScript: Lato-Regular"));
+        assert!(shown.contains("PostScript: Lato-Regular"));
+        assert!(!shown.contains("Hidden:"));
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(
+            json["catalog"]["families"][0]["faces"][0]["classification"],
+            "internal"
+        );
+        assert_eq!(result.catalog.face_count(), 1);
+    }
+}

@@ -27,21 +27,21 @@
 
 #![forbid(unsafe_code)]
 
-pub mod attributes;
-pub mod catalog;
-pub mod classification;
-pub mod error;
-pub mod face;
-pub mod family;
-pub mod fingerprint;
-pub mod format;
-pub mod identity;
-pub mod ids;
-pub mod names;
-pub mod parser;
-pub mod revision;
-pub mod scan;
-pub mod source;
+mod attributes;
+mod catalog;
+mod classification;
+mod error;
+mod face;
+mod family;
+mod fingerprint;
+mod format;
+mod identity;
+mod ids;
+mod names;
+mod parser;
+mod revision;
+mod scan;
+mod source;
 
 pub use attributes::{
     AxisCoordinate, FontStyle, FontVersion, FontWeight, FontWidth, NamedInstance, VariableAxis,
@@ -55,7 +55,7 @@ pub use fingerprint::ContentFingerprint;
 pub use format::FontFormat;
 pub use identity::{FontIdentity, IdentityKind};
 pub use ids::{FontFaceId, FontFamilyId, FontIdentityId, FontRevisionId};
-pub use names::{LocalizedName, NameKind};
+pub use names::{LocalizedName, NameKind, NameLocale};
 pub use parser::{parse_font_data, parse_font_file};
 pub use revision::FontRevision;
 pub use scan::{

@@ -13,8 +13,8 @@ commercial fonts or fonts of unknown origin.
 | `Lato-Italic.ttf` | TTF | Italic style, family grouping | SIL OFL 1.1 (`licenses/Lato-OFL.txt`) |
 | `SourceSerif4-Regular.otf` | OTF (CFF outlines) | OpenType/CFF parsing | SIL OFL 1.1 (`licenses/SourceSerif-OFL.txt`) |
 | `Inter-Variable.ttf` | Variable TTF (`wght`, `opsz`) | Variable font detection and axis extraction | SIL OFL 1.1 (`licenses/Inter-OFL.txt`) |
-| `Inter-Regular.woff` | WOFF 1.0 | Known-but-unsupported recognition | SIL OFL 1.1 (`licenses/Inter-OFL.txt`) |
-| `Inter-Regular.woff2` | WOFF 2.0 | Known-but-unsupported recognition | SIL OFL 1.1 (`licenses/Inter-OFL.txt`) |
+| `Inter-Regular.woff` | WOFF 1.0 | Known-but-unsupported recognition | SIL OFL 1.1 (`licenses/Inter-Web-OFL.txt`) |
+| `Inter-Regular.woff2` | WOFF 2.0 | Known-but-unsupported recognition | SIL OFL 1.1 (`licenses/Inter-Web-OFL.txt`) |
 | `not-a-font.ttf` | — | Intentionally invalid content with a font extension | Written by the Folio project (public domain) |
 
 ## Sources
@@ -40,23 +40,63 @@ e20fa0b4fd2dd26e4d14b3ac3cc922509c3a63fa5e910e90c614544aa042dd45  Inter-Regular.
 8909904ab6c872eb994093482a88a28eca2cd95912d7b6fecd72103b0dc07edc  Inter-Regular.woff2
 ```
 
-## Why there is no committed `.ttc` / `.otc` fixture
+## Independent provenance audit (2026-09-18)
 
-Finding a small, clearly licensed collection file is hard. Instead, the
-collection tests use the `font-test-data` crate (a dev-dependency of
-`folio-core`), which ships `TTC.ttc` taken from the HarfBuzz in-house test
-suite. That crate is published by the Fontations project under
-`MIT OR Apache-2.0`, so no binary is committed here and the test data stays
-legally clean. See `crates/folio-core/tests/parser.rs`.
+All seven committed font binaries were fetched from their stated sources and
+compared byte-for-byte and by SHA-256. All matched; no binary was replaced.
+Lato and Inter-variable OFL files also matched their corresponding Google
+Fonts source files exactly.
+
+The Source Serif binary matches Adobe's `release/OTF/SourceSerif4-Regular.otf`.
+The previous license file came from a different distribution and omitted that
+release's Adobe copyright and reserved name notice. `SourceSerif-OFL.txt` now
+contains the exact [Adobe release license](https://raw.githubusercontent.com/adobe-fonts/source-serif/release/LICENSE.md),
+including the reserved name “Source”; SHA-256:
+`c21d7293d87b6d7ab1d0229a2f55b77f33a7613a6a4e66f6693d68d7d8d09464`.
+
+Both Inter web fixtures exactly match the `inter-latin-400-normal` files in
+[`@fontsource/inter@5.2.8`](https://www.npmjs.com/package/@fontsource/inter/v/5.2.8).
+They use the package's own [OFL notice](https://cdn.jsdelivr.net/npm/@fontsource/inter@5.2.8/LICENSE),
+now preserved separately in `Inter-Web-OFL.txt`, including its 2016 copyright;
+SHA-256: `3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345`.
+The 2020 Inter-variable notice is retained for the variable TTF.
+
+The binaries are unmodified upstream releases redistributed with their
+corresponding copyright/OFL notices. The OFL permits bundling with software
+under its conditions; the font assets retain OFL rather than the workspace's
+Rust package license. Lato also has a reserved font name. See the full notices
+and [official OFL text](https://openfontlicense.org/open-font-license-official-text/).
+
+## Collection fixtures
+
+`font-test-data 0.9.1` is a Cargo dev-dependency, not a copied collection in this
+repository. Its packaged `test_data/ttc/README.md` attributes `TTC.ttc` to
+HarfBuzz's `test/shape/data/in-house/fonts/TTC.ttc`; these bytes were independently
+compared with [the upstream file](https://github.com/harfbuzz/harfbuzz/blob/main/test/shape/data/in-house/fonts/TTC.ttc).
+SHA-256: `a8521588045ed5f1f8b07eecaac06ed3186c644655bfac00dd4507cd316fbdc5`.
+
+The crate includes MIT and Apache-2.0 notices. Its package license alone is not
+a license audit of every bundled font: both TTC members additionally declare
+FontTools (2015) with “No rights reserved” in name ID 0 and a FontTools license
+URL in ID 14. The [FontTools license](https://github.com/fonttools/fonttools/blob/main/LICENSE)
+is MIT. This fixture is obtained through Cargo and written only into temporary
+test directories; no TTC binary is committed here.
+
+Additional tests assemble complete TTC, CFF-only OTC and mixed collections from
+the committed Lato and Source Serif binaries at runtime. The helper writes the
+collection header, aligns members, relocates table offsets and clears collection
+head checksum adjustments. It does not generate outlines or merely change a
+magic number. Damaged-member tests then corrupt a member offset or table range
+while leaving another complete member intact.
+
+The revision test edits `head.fontRevision`, rebuilds sfnt table checksums and
+the file checksum adjustment, and asserts their validity. Name/locale tests
+replace the name table. These derivatives exist only locally during tests;
+they are not distributed as font products or committed binary fixtures.
+Classification tests similarly modify temporary copies only.
 
 ## Deliberately absent
 
-The following are never committed:
-
-* macOS or Windows system fonts
-* user or commercial fonts
-* fonts with unknown provenance
-
-Tests that need "system-like" names (for classification) synthesize them at
-runtime by patching the same-length PostScript name inside a copy of
-`Lato-Regular.ttf`; see `crates/folio-core/tests/common/mod.rs`.
+No macOS/Windows system fonts, user fonts, commercial fonts or fonts of unknown
+origin are committed. System smoke scans are read-only. No WOFF parser,
+conversion tool, decompressor or font compiler is included.

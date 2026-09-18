@@ -83,5 +83,6 @@ mod tests {
         let a = compute_revision(&identity, &fingerprint(1), Some(0));
         let b = compute_revision(&identity, &fingerprint(1), Some(1));
         assert_ne!(a.id, b.id);
+        assert_ne!(a.id, compute_revision(&identity, &fingerprint(1), None).id);
     }
 }

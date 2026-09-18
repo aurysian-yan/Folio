@@ -1,21 +1,15 @@
-//! Family grouping.
-//!
-//! Families are derived from metadata (typographic family first, then
-//! legacy family), never from file names. Grouping is deterministic and
-//! uses a hash map keyed by a canonical family string, so it scales
-//! linearly with the number of faces.
-//!
-//! When a face exposes no family name at all, it is placed in its own
-//! family keyed by its PostScript name (or face identifier as a last
-//! resort). Such faces are never merged with unrelated fonts.
+//! 全局家族聚合：按名称元数据分组，保留来源，使用有序映射和集合。
+//! 名称不足时按逻辑身份隔离，不根据路径或样式后缀猜测归属。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::attributes::FontStyle;
 use crate::classification::classify_names;
 use crate::face::{FaceMetadata, FontFace, ParsedFace};
+use crate::identity::normalize_name;
 use crate::ids::FontFamilyId;
 use crate::names::{preferred_value, LocalizedName, NameKind};
 use crate::source::FontSource;
@@ -36,8 +30,9 @@ pub struct FontFamily {
 /// Builds the canonical grouping key of a face.
 pub(crate) fn family_key(metadata: &FaceMetadata) -> String {
     if let Some(name) = metadata.family_name.as_deref() {
-        let name = name.trim();
-        if !name.is_empty() {
+        if let Some(name) =
+            normalize_name(Some(name)).map(|name| name.to_lowercase().nfc().collect::<String>())
+        {
             return format!("family\u{0}{name}");
         }
     }
@@ -74,16 +69,24 @@ pub(crate) fn build_families(faces: Vec<(ParsedFace, Vec<FontSource>)>) -> Vec<F
     let mut groups: BTreeMap<FontFamilyId, FamilyBuilder> = BTreeMap::new();
     for (parsed, sources) in faces {
         let key = family_key(&parsed.metadata);
+        let key = if key == "unnamed" {
+            format!("unnamed\0{}", parsed.identity.id)
+        } else {
+            key
+        };
         let family_id = FontFamilyId::from_family_key(&key);
         let builder = groups.entry(family_id).or_insert_with(|| FamilyBuilder {
             id: family_id,
             display_name: family_display_name(&parsed.metadata),
-            localized_names: Vec::new(),
+            localized_names: BTreeSet::new(),
             faces: Vec::new(),
         });
         for name in &parsed.metadata.localized_names {
-            if !builder.localized_names.contains(name) {
-                builder.localized_names.push(name.clone());
+            if matches!(
+                name.kind,
+                NameKind::Family | NameKind::TypographicFamily | NameKind::WwsFamily
+            ) {
+                builder.localized_names.insert(name.clone());
             }
         }
         builder.faces.push(FontFace {
@@ -104,13 +107,11 @@ pub(crate) fn build_families(faces: Vec<(ParsedFace, Vec<FontSource>)>) -> Vec<F
     let mut families: Vec<FontFamily> = groups
         .into_values()
         .map(|mut builder| {
-            builder.localized_names.sort();
-            builder.localized_names.dedup();
             builder.faces.sort_by(face_order);
             FontFamily {
                 id: builder.id,
                 display_name: builder.display_name,
-                localized_names: builder.localized_names,
+                localized_names: builder.localized_names.into_iter().collect(),
                 faces: builder.faces,
             }
         })
@@ -127,7 +128,7 @@ pub(crate) fn build_families(faces: Vec<(ParsedFace, Vec<FontSource>)>) -> Vec<F
 struct FamilyBuilder {
     id: FontFamilyId,
     display_name: Option<String>,
-    localized_names: Vec<LocalizedName>,
+    localized_names: BTreeSet<LocalizedName>,
     faces: Vec<FontFace>,
 }
 
@@ -177,7 +178,7 @@ mod tests {
     #[test]
     fn typographic_family_is_preferred() {
         let key = family_key(&metadata(Some("Inter"), Some("Inter-Regular")));
-        assert_eq!(key, "family\u{0}Inter");
+        assert_eq!(key, "family\u{0}inter");
     }
 
     #[test]

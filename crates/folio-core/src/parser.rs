@@ -1,8 +1,5 @@
-//! Font parsing pipeline.
-//!
-//! Parsing never panics on malformed input and never fails because
-//! optional metadata is missing. A single bad face inside a collection
-//! does not prevent the remaining faces from being parsed.
+//! 字体解析边界：检查表范围和基础头，保留可用元数据，隔离损坏成员。
+//! 不执行完整轮廓、布局或校验和验证。
 
 use std::path::Path;
 use std::time::SystemTime;
@@ -41,6 +38,15 @@ pub fn parse_font_file(path: impl AsRef<Path>) -> Result<ParsedFontFile, FontErr
         path: path.to_path_buf(),
         source,
     })?;
+    if !metadata.is_file() {
+        return Err(FontError::Io {
+            path: path.to_path_buf(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "expected a regular file",
+            ),
+        });
+    }
     let data = std::fs::read(path).map_err(|source| FontError::Io {
         path: path.to_path_buf(),
         source,
@@ -105,10 +111,12 @@ fn parse_single(
     outline: SfntOutline,
     context: &FileContext<'_>,
 ) -> Result<ParsedFontFile, FontError> {
-    let font = FontRef::new(data).map_err(|source| FontError::Malformed {
-        path: path.to_path_buf(),
-        source: ParserError::new(source),
-    })?;
+    let font = FontRef::new(data)
+        .and_then(validate_face)
+        .map_err(|source| FontError::Malformed {
+            path: path.to_path_buf(),
+            source: ParserError::new(source),
+        })?;
     let mut problems = Vec::new();
     let face = parse_face(&font, 0, outline.format(), context, None, &mut problems);
     tracing::debug!(path = %path.display(), format = ?outline.format(), "parsed single font");
@@ -134,20 +142,12 @@ fn parse_collection(
     let mut faces = Vec::new();
     let mut problems = Vec::new();
     let mut first_error: Option<ReadError> = None;
-    let mut file_format: Option<FontFormat> = None;
 
     for index in 0..collection.len() {
-        match collection.get(index) {
+        match collection.get(index).and_then(validate_face) {
             Ok(font) => {
                 let outline = outline_of(&font);
                 let member_format = outline.format();
-                if file_format.is_none() {
-                    // A mixed collection is labeled by its first member.
-                    file_format = Some(match outline {
-                        SfntOutline::TrueType => FontFormat::TrueTypeCollection,
-                        SfntOutline::OpenType => FontFormat::OpenTypeCollection,
-                    });
-                }
                 faces.push(parse_face(
                     &font,
                     index,
@@ -170,12 +170,15 @@ fn parse_collection(
         }
     }
 
-    let format = file_format.ok_or_else(|| FontError::Malformed {
-        path: path.to_path_buf(),
-        source: ParserError::new(
-            first_error.unwrap_or(ReadError::MalformedData("empty font collection")),
-        ),
-    })?;
+    if faces.is_empty() {
+        return Err(FontError::Malformed {
+            path: path.to_path_buf(),
+            source: ParserError::new(
+                first_error.unwrap_or(ReadError::MalformedData("empty font collection")),
+            ),
+        });
+    }
+    let format = FontFormat::Collection;
 
     tracing::debug!(
         path = %path.display(),
@@ -200,6 +203,29 @@ fn outline_of(font: &FontRef<'_>) -> SfntOutline {
     } else {
         SfntOutline::TrueType
     }
+}
+
+/// 拒绝空目录和越界表；允许没有常规 head 表的字体资产。
+fn validate_face(font: FontRef<'_>) -> Result<FontRef<'_>, ReadError> {
+    if font.table_directory().table_records().is_empty() {
+        return Err(ReadError::MalformedData("empty sfnt table directory"));
+    }
+    for record in font.table_directory().table_records() {
+        let start = record.offset() as usize;
+        let end = start
+            .checked_add(record.length() as usize)
+            .ok_or(ReadError::OutOfBounds)?;
+        if start == 0 || font.data().as_bytes().get(start..end).is_none() {
+            return Err(ReadError::OutOfBounds);
+        }
+    }
+    if font
+        .table_data(read_fonts::types::Tag::new(b"head"))
+        .is_some()
+    {
+        font.head()?;
+    }
+    Ok(font)
 }
 
 fn parse_face(
@@ -236,7 +262,8 @@ fn parse_face(
         problems.push(FaceProblem {
             face_index: Some(face_index),
             kind: FaceProblemKind::Metadata,
-            message: "face has no usable name records; identity derived from content".to_owned(),
+            message: "face has insufficient identity metadata; identity derived from content"
+                .to_owned(),
         });
     }
 

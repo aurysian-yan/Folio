@@ -17,6 +17,7 @@
 //! records that the content-based fallback was taken.
 
 use serde::Serialize;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::fingerprint::ContentFingerprint;
 use crate::ids::FontIdentityId;
@@ -49,16 +50,16 @@ pub struct FontIdentity {
 }
 
 impl FontIdentity {
-    fn new(kind: IdentityKind, key: String, canonical_name: Option<String>) -> Self {
+    fn new(kind: IdentityKind, parts: &[&[u8]], canonical_name: Option<String>) -> Self {
         Self {
-            id: FontIdentityId::from_identity_key(&key),
+            id: FontIdentityId::from_identity_parts(parts),
             kind,
             canonical_name,
         }
     }
 }
 
-/// Trims a name and collapses internal whitespace runs to single spaces.
+/// 去除首尾空白、折叠 Unicode 空白并转为 NFC；保留大小写和原始元数据。
 pub(crate) fn normalize_name(value: Option<&str>) -> Option<String> {
     let value = value?.trim();
     if value.is_empty() {
@@ -77,7 +78,7 @@ pub(crate) fn normalize_name(value: Option<&str>) -> Option<String> {
             last_was_space = false;
         }
     }
-    Some(out)
+    Some(out.nfc().collect())
 }
 
 /// Metadata inputs used to derive an identity.
@@ -98,35 +99,54 @@ pub(crate) fn compute_identity(
     face_index: u32,
 ) -> FontIdentity {
     if let Some(ps_name) = normalize_name(names.postscript_name) {
-        let key = format!("ps\u{0}{ps_name}");
-        return FontIdentity::new(IdentityKind::PostScriptName, key, Some(ps_name));
+        return FontIdentity::new(
+            IdentityKind::PostScriptName,
+            &[b"ps", ps_name.as_bytes()],
+            Some(ps_name.clone()),
+        );
     }
 
     if let (Some(family), Some(subfamily)) = (
         normalize_name(names.typographic_family),
         normalize_name(names.typographic_subfamily),
     ) {
-        let key = format!("typo\u{0}{family}\u{0}{subfamily}");
         let canonical = format!("{family} {subfamily}");
-        return FontIdentity::new(IdentityKind::TypographicNames, key, Some(canonical));
+        return FontIdentity::new(
+            IdentityKind::TypographicNames,
+            &[b"typo", family.as_bytes(), subfamily.as_bytes()],
+            Some(canonical),
+        );
     }
 
     if let (Some(family), Some(subfamily)) = (
         normalize_name(names.legacy_family),
         normalize_name(names.legacy_subfamily),
     ) {
-        let key = format!("legacy\u{0}{family}\u{0}{subfamily}");
         let canonical = format!("{family} {subfamily}");
-        return FontIdentity::new(IdentityKind::LegacyNames, key, Some(canonical));
+        return FontIdentity::new(
+            IdentityKind::LegacyNames,
+            &[b"legacy", family.as_bytes(), subfamily.as_bytes()],
+            Some(canonical),
+        );
     }
 
     if let Some(full_name) = normalize_name(names.full_name) {
-        let key = format!("full\u{0}{full_name}");
-        return FontIdentity::new(IdentityKind::FullName, key, Some(full_name));
+        return FontIdentity::new(
+            IdentityKind::FullName,
+            &[b"full", full_name.as_bytes()],
+            Some(full_name.clone()),
+        );
     }
 
-    let key = format!("content\u{0}{}\u{0}{face_index}", fingerprint.to_hex());
-    FontIdentity::new(IdentityKind::ContentFallback, key, None)
+    FontIdentity::new(
+        IdentityKind::ContentFallback,
+        &[
+            b"content",
+            fingerprint.as_bytes(),
+            &face_index.to_le_bytes(),
+        ],
+        None,
+    )
 }
 
 #[cfg(test)]

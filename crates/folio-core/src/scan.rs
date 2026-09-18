@@ -16,7 +16,7 @@ use crate::face::{FaceProblemKind, ParsedFace};
 use crate::family::{build_families, normalize_sources};
 use crate::format::FontFormat;
 use crate::ids::FontFaceId;
-use crate::parser::parse_font_data;
+use crate::parser::parse_font_file;
 use crate::source::FontSource;
 
 /// File extensions treated as font candidates during directory scans.
@@ -136,7 +136,7 @@ impl ScanIssue {
 /// Aggregate statistics of a scan.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct ScanStats {
-    /// Regular files encountered (all extensions).
+    /// 目录中遇到的普通文件数；显式扫描为去重后的输入数，包含无效路径。
     pub files_seen: u64,
     /// Files considered font candidates.
     pub candidate_font_files: u64,
@@ -225,9 +225,7 @@ fn collect_candidates(
     match input {
         ScanInput::Directory(root) => collect_directory(root, options, stats),
         ScanInput::Files(paths) => {
-            let mut unique: Vec<PathBuf> = paths.to_vec();
-            unique.sort();
-            unique.dedup();
+            let unique = normalize_paths(paths.to_vec());
             stats.files_seen = unique.len() as u64;
             stats.candidate_font_files = unique.len() as u64;
             Ok((unique, Vec::new()))
@@ -285,9 +283,20 @@ fn collect_directory(
         }
     }
 
-    candidates.sort();
+    let candidates = normalize_paths(candidates);
     stats.candidate_font_files = candidates.len() as u64;
     Ok((candidates, issues))
+}
+
+/// 已存在的路径归一化后去重；失败路径保留原值，交由读取阶段报告。
+fn normalize_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut paths: Vec<_> = paths
+        .into_iter()
+        .map(|path| path.canonicalize().unwrap_or(path))
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 fn is_candidate_path(path: &Path) -> bool {
@@ -304,25 +313,7 @@ fn process_candidate(
     stats: &mut ScanStats,
 ) {
     tracing::debug!(path = %path.display(), "scanning candidate file");
-    let data = match std::fs::read(path) {
-        Ok(data) => data,
-        Err(source) => {
-            stats.failed_files += 1;
-            issues.push(ScanIssue::error(
-                IssueKind::FileRead,
-                path,
-                None,
-                source.to_string(),
-            ));
-            return;
-        }
-    };
-    let modified = std::fs::metadata(path)
-        .ok()
-        .and_then(|metadata| metadata.modified().ok());
-    let file_size = data.len() as u64;
-
-    match parse_font_data(path, &data, file_size, modified) {
+    match parse_font_file(path) {
         Ok(parsed) => {
             if parsed.faces.is_empty() {
                 stats.failed_files += 1;
