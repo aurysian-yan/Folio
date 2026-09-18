@@ -1,0 +1,21 @@
+[package]
+name = "folio-core"
+description = "Folio font catalog core: parsing, identity, revision and family grouping, independent of UI and platform font registration."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+blake3.workspace = true
+read-fonts.workspace = true
+serde.workspace = true
+skrifa.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+font-test-data = "0.9.0"
+serde_json.workspace = true
+tempfile = "3.27.0"

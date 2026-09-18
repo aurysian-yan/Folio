@@ -1,0 +1,5 @@
+This file is intentionally not a font.
+
+It is named `not-a-font.ttf` so that tests can verify that Folio rejects
+content which has a known font extension but no valid font signature.
+Do not replace it with a real font.
