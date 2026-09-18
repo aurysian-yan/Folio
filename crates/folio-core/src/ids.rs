@@ -61,6 +61,12 @@ macro_rules! define_id {
             pub fn as_bytes(&self) -> &[u8; 16] {
                 self.0.as_bytes()
             }
+
+            /// 从原始 128 位摘要重建标识；仅供持久化层使用。
+            /// 标识算法本身不变，调用方必须使用 as_bytes 得到的字节。
+            pub fn from_bytes(bytes: [u8; 16]) -> Self {
+                Self(IdDigest(bytes))
+            }
         }
 
         impl fmt::Display for $name {

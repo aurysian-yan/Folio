@@ -124,6 +124,27 @@ impl FontWidth {
     pub fn ratio(self) -> f32 {
         self.0
     }
+
+    /// 归一化宽度对应的 usWidthClass（1..=9），用于持久化往返。
+    pub fn class(self) -> u16 {
+        let bits = self.0.to_bits();
+        let classes: [(f32, u16); 9] = [
+            (Self::ULTRA_CONDENSED.0, 1),
+            (Self::EXTRA_CONDENSED.0, 2),
+            (Self::CONDENSED.0, 3),
+            (Self::SEMI_CONDENSED.0, 4),
+            (Self::NORMAL.0, 5),
+            (Self::SEMI_EXPANDED.0, 6),
+            (Self::EXPANDED.0, 7),
+            (Self::EXTRA_EXPANDED.0, 8),
+            (Self::ULTRA_EXPANDED.0, 9),
+        ];
+        classes
+            .iter()
+            .find(|(ratio, _)| ratio.to_bits() == bits)
+            .map(|(_, class)| *class)
+            .unwrap_or(5)
+    }
 }
 
 impl Serialize for FontWidth {

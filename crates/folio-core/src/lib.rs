@@ -59,7 +59,7 @@ pub use names::{LocalizedName, NameKind, NameLocale};
 pub use parser::{parse_font_data, parse_font_file};
 pub use revision::FontRevision;
 pub use scan::{
-    scan, scan_directory, scan_files, IssueKind, IssueSeverity, ScanInput, ScanIssue, ScanOptions,
-    ScanResult, ScanStats, CANDIDATE_EXTENSIONS,
+    rebuild_catalog, scan, scan_directory, scan_files, IssueKind, IssueSeverity, ScanInput,
+    ScanIssue, ScanOptions, ScanResult, ScanStats, CANDIDATE_EXTENSIONS,
 };
 pub use source::FontSource;

@@ -174,7 +174,7 @@ pub fn scan(input: ScanInput<'_>, options: &ScanOptions) -> Result<ScanResult, S
         process_candidate(path, &mut parsed_faces, &mut issues, &mut stats);
     }
 
-    let catalog = build_catalog(parsed_faces);
+    let catalog = rebuild_catalog(parsed_faces);
     stats.families_created = catalog.family_count() as u64;
 
     issues.sort_by(|a, b| {
@@ -389,7 +389,9 @@ fn process_candidate(
     }
 }
 
-fn build_catalog(parsed_faces: Vec<ParsedFace>) -> Catalog {
+/// 从已解析面重建全局目录：按 FaceId 合并来源，再做一次全局家族分组。
+/// 持久化层据此在不访问文件系统的情况下恢复与实时扫描一致的目录。
+pub fn rebuild_catalog(parsed_faces: Vec<ParsedFace>) -> Catalog {
     let mut merged: BTreeMap<FontFaceId, (ParsedFace, Vec<FontSource>)> = BTreeMap::new();
     for face in parsed_faces {
         let id = face.id;

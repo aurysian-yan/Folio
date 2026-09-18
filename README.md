@@ -1,13 +1,15 @@
 # Folio
 
 Folio is a cross-device font asset manager. This repository contains
-**Phase 1B: Audited Rust Font Catalog Core** — the UI-independent, platform-
-independent catalog core and its inspection CLI.
+**Phase 1B: Audited Rust Font Catalog Core** and **Phase 2A: Persistent &
+Incremental Catalog** — the UI-independent, platform-independent catalog core,
+its persistent local storage, and an inspection CLI.
 
 The core discovers font assets, parses them, derives stable identities and
-revisions, groups faces into families and reports diagnostics. It performs
-**no** font activation, installation, watching, syncing or platform
-integration.
+revisions, groups faces into families and reports diagnostics. The storage
+crate persists library roots in SQLite and reuses cached parse state so an
+unchanged library is not re-read or reparsed. Folio performs **no** font
+activation, installation, watching, syncing or platform integration.
 
 ## Current capabilities
 
@@ -32,9 +34,24 @@ integration.
   yet (planned for Folio v2)
 * `folio-cli` human-readable report and stable JSON output
 
-Not implemented (deliberately out of scope for this phase): UI apps,
-platform font registration, activation/installation, file watchers, hot
-reload, databases, caching, WebDAV/sync, UniFFI/FFI, WOFF parsing.
+Phase 2A adds `folio-storage`:
+
+* Persistent **library roots** (durable user state) in a local SQLite database;
+  roots are distinct from font sources
+* A **rebuildable catalog cache** of per-file parse state, with explicit schema
+  migrations and a typed `DatabaseTooNew` guard
+* **Incremental refresh**: an unchanged file is a metadata cache hit and is not
+  read, hashed or reparsed; a `touch` is rehashed but not reparsed; only real
+  content changes are reparsed
+* **Global catalog reconstruction** from the cache, identical to a live scan,
+  including cross-file, cross-directory and cross-root families
+* Overlapping roots, temporarily unavailable roots and incomplete traversals
+  without losing cached data; malformed and known-unsupported results are cached
+* `load_cached_catalog()` for fast startup without touching the filesystem
+
+Not implemented (deliberately out of scope): collections, favorites, recents,
+search/FTS, file watchers, hot reload, platform font registration,
+activation/installation, WebDAV/sync, UniFFI/FFI, UI apps, WOFF parsing.
 
 ## Build
 
@@ -88,7 +105,8 @@ Folio/
 ├── package.json
 ├── pnpm-workspace.yaml
 ├── crates/
-│   ├── folio-core/     # catalog core (no UI, no platform APIs)
+│   ├── folio-core/     # catalog core (no UI, no platform APIs, no DB)
+│   ├── folio-storage/  # SQLite persistence + incremental refresh
 │   └── folio-cli/      # inspection CLI
 ├── apps/desktop-ui/     # shared Windows/Linux React UI dependency baseline
 ├── fixtures/fonts/     # legally redistributable test fonts
@@ -103,6 +121,7 @@ Folio/
 * `fixtures/fonts/README.md` – fixture provenance and licenses
 * `PHASE1_REPORT.md` – final verification report
 * `PHASE1_AUDIT.md` – independent findings, regression evidence and final verdict
+* `PHASE2A_REPORT.md` – Phase 2A verification report
 * `AGENTS.md` – project rules for the shared Windows/Linux React front end
 
 ## Desktop UI dependency baseline

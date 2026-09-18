@@ -23,6 +23,12 @@ impl ContentFingerprint {
         Self(*blake3::hash(data).as_bytes())
     }
 
+    /// 从原始 32 字节 BLAKE3 摘要重建指纹；仅供持久化层使用。
+    /// 摘要算法本身不变，调用方必须使用 as_bytes 得到的字节。
+    pub fn from_digest(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     /// Lowercase hexadecimal representation of the BLAKE3 digest.
     pub fn to_hex(&self) -> String {
         use std::fmt::Write as _;
@@ -34,7 +40,8 @@ impl ContentFingerprint {
         out
     }
 
-    pub(crate) fn as_bytes(&self) -> &[u8; 32] {
+    /// Raw 32-byte digest. Not part of the stable user-facing format.
+    pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
 }

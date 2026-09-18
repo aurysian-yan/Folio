@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/folio-core", "crates/folio-cli"]
+members = ["crates/folio-core", "crates/folio-cli", "crates/folio-storage"]
 
 [workspace.package]
 version = "0.1.0"
@@ -20,3 +20,5 @@ walkdir = "2"
 read-fonts = "0.44"
 skrifa = "0.47"
 unicode-normalization = "0.1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+bincode = "1.3"
