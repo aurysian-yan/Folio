@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::StorageError;
 
 /// 序列化解析文件载荷的版本号。
-pub const CACHE_PAYLOAD_VERSION: u32 = 1;
+pub const CACHE_PAYLOAD_VERSION: u32 = 2;
 
 /// 单个文件的元数据载荷上限；不包含字体轮廓和原始文件。
 pub(crate) const MAX_PAYLOAD_BYTES: usize = 64 * 1024 * 1024;
@@ -159,6 +159,7 @@ pub(crate) struct CachedNamedInstance {
 /// [`FaceMetadata`] 的存储形式。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct CachedMetadata {
+    pub enrichment: folio_core::FontEnrichment,
     pub family_name: Option<String>,
     pub subfamily_name: Option<String>,
     pub full_name: Option<String>,
@@ -282,6 +283,7 @@ impl CachedProblem {
 impl CachedMetadata {
     fn from(metadata: &FaceMetadata) -> Self {
         Self {
+            enrichment: metadata.enrichment.clone(),
             family_name: metadata.family_name.clone(),
             subfamily_name: metadata.subfamily_name.clone(),
             full_name: metadata.full_name.clone(),
@@ -319,6 +321,7 @@ impl CachedMetadata {
 
     fn to_metadata(&self) -> FaceMetadata {
         FaceMetadata {
+            enrichment: self.enrichment.clone(),
             family_name: self.family_name.clone(),
             subfamily_name: self.subfamily_name.clone(),
             full_name: self.full_name.clone(),

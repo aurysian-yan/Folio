@@ -62,3 +62,8 @@ pub const CACHE_PAYLOAD_VERSION: u32 = cache_payload::CACHE_PAYLOAD_VERSION;
 
 /// 支持的最高 SQLite schema 版本。
 pub const CURRENT_SCHEMA_VERSION: i32 = schema::CURRENT_SCHEMA_VERSION;
+
+mod state;
+pub use folio_core::{
+    Collection, CollectionId, CollectionMembers, LibraryStateSnapshot, RecentFont,
+};

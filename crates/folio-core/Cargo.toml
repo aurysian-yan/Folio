@@ -15,6 +15,7 @@ thiserror.workspace = true
 tracing.workspace = true
 walkdir.workspace = true
 unicode-normalization.workspace = true
+unicode-script.workspace = true
 
 [dev-dependencies]
 font-test-data = "0.9.0"

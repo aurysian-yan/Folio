@@ -1,9 +1,9 @@
 # Folio
 
 Folio is a cross-device font asset manager. This repository contains
-**Phase 1B: Audited Rust Font Catalog Core** and **Phase 2A: Persistent &
-Incremental Catalog** — the UI-independent, platform-independent catalog core,
-its persistent local storage, and an inspection CLI.
+**Phase 2: Local Library Core** — the UI-independent, platform-independent font
+catalog, persistent local library state, metadata and query engine, plus an
+inspection CLI.
 
 The core discovers font assets, parses them, derives stable identities and
 revisions, groups faces into families and reports diagnostics. The storage
@@ -49,8 +49,17 @@ Phase 2A adds `folio-storage`:
   without losing cached data; malformed and known-unsupported results are cached
 * `load_cached_catalog()` for fast startup without touching the filesystem
 
-Not implemented (deliberately out of scope): collections, favorites, recents,
-search/FTS, file watchers, hot reload, platform font registration,
+Phase 2B adds durable library state and `folio-query`:
+
+* Collections, favorites and explicit recent access, bound to logical font identities
+* Transactional schema v2 migration and versioned metadata cache rebuilds
+* License, embedding permissions, manufacturer/designer, observed Unicode scripts,
+  font categories and OpenType feature metadata
+* Unicode-normalized search, multi-facet filtering and library scopes
+* Family results with matched faces, deterministic ranking, pagination and facet counts
+* Duplicate-source, multiple-revision and metadata-conflict analysis
+
+Not implemented (deliberately out of scope): file watchers, hot reload, platform font registration,
 activation/installation, WebDAV/sync, UniFFI/FFI, UI apps, WOFF parsing.
 
 ## Build
@@ -106,7 +115,8 @@ Folio/
 ├── pnpm-workspace.yaml
 ├── crates/
 │   ├── folio-core/     # catalog core (no UI, no platform APIs, no DB)
-│   ├── folio-storage/  # SQLite persistence + incremental refresh
+│   ├── folio-storage/  # SQLite persistence + incremental refresh + library state
+│   ├── folio-query/    # in-memory search, facets and health analysis
 │   └── folio-cli/      # inspection CLI
 ├── apps/desktop-ui/     # shared Windows/Linux React UI dependency baseline
 ├── fixtures/fonts/     # legally redistributable test fonts
@@ -122,6 +132,7 @@ Folio/
 * `PHASE1_REPORT.md` – final verification report
 * `PHASE1_AUDIT.md` – independent findings, regression evidence and final verdict
 * `PHASE2A_REPORT.md` – Phase 2A verification report
+* `PHASE2B_REPORT.md` – library state, metadata and query verification report
 * `AGENTS.md` – project rules for the shared Windows/Linux React front end
 
 ## Desktop UI dependency baseline

@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 bincode.workspace = true
+getrandom.workspace = true
 blake3.workspace = true
 folio-core = { path = "../folio-core" }
 rusqlite.workspace = true

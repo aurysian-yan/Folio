@@ -26,6 +26,8 @@ use crate::source::FontSource;
 /// All metadata Folio extracts from a single face.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct FaceMetadata {
+    /// 许可、厂商、覆盖范围及结构化特征。
+    pub enrichment: crate::FontEnrichment,
     /// Preferred family name (typographic family, else legacy family).
     pub family_name: Option<String>,
     /// Preferred subfamily name (typographic subfamily, else legacy subfamily).

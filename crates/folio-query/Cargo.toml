@@ -1,0 +1,16 @@
+[package]
+name = "folio-query"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+folio-core = { path = "../folio-core" }
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+folio-storage = { path = "../folio-storage" }
+tempfile = "3.27.0"

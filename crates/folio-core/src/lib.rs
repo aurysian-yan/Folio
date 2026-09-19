@@ -63,3 +63,8 @@ pub use scan::{
     ScanIssue, ScanOptions, ScanResult, ScanStats, CANDIDATE_EXTENSIONS,
 };
 pub use source::FontSource;
+
+mod library;
+mod metadata;
+pub use library::*;
+pub use metadata::*;

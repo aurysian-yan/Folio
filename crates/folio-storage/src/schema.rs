@@ -14,7 +14,7 @@ use rusqlite::{Connection, Transaction};
 use crate::error::StorageError;
 
 /// 当前构建支持的最高 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 1;
+pub const CURRENT_SCHEMA_VERSION: i32 = 2;
 
 /// 将新打开的连接迁移到 [`CURRENT_SCHEMA_VERSION`]。
 pub fn migrate(conn: &mut Connection) -> Result<(), StorageError> {
@@ -53,6 +53,7 @@ pub fn read_user_version(conn: &Connection) -> Result<i32, StorageError> {
 fn apply_step(tx: &Transaction<'_>, target: i32) -> Result<(), rusqlite::Error> {
     match target {
         1 => migrate_to_v1(tx),
+        2 => migrate_to_v2(tx),
         _ => Ok(()),
     }
 }
@@ -91,5 +92,32 @@ fn migrate_to_v1(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
         CREATE UNIQUE INDEX source_files_root_path
             ON source_files (root_id, path_platform, path_bytes);
         "#,
+    )
+}
+
+fn migrate_to_v2(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE collections (
+            id BLOB PRIMARY KEY NOT NULL CHECK(length(id) = 16),
+            name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL UNIQUE,
+            created_at_ns INTEGER NOT NULL CHECK(created_at_ns >= 0),
+            updated_at_ns INTEGER NOT NULL CHECK(updated_at_ns >= created_at_ns)
+        );
+        CREATE TABLE collection_members (
+            collection_id BLOB NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+            identity_id BLOB NOT NULL CHECK(length(identity_id) = 16),
+            PRIMARY KEY(collection_id, identity_id)
+        );
+        CREATE TABLE favorites (
+            identity_id BLOB PRIMARY KEY NOT NULL CHECK(length(identity_id) = 16)
+        );
+        CREATE TABLE recent_fonts (
+            identity_id BLOB PRIMARY KEY NOT NULL CHECK(length(identity_id) = 16),
+            last_accessed_at_ns INTEGER NOT NULL CHECK(last_accessed_at_ns >= 0)
+        );
+        CREATE INDEX recent_fonts_order ON recent_fonts(last_accessed_at_ns DESC, identity_id);
+    "#,
     )
 }

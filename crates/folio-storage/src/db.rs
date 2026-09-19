@@ -21,7 +21,7 @@ use crate::schema;
 /// 连接可转移线程但不能并发共享；调用方应串行执行数据库操作。
 #[derive(Debug)]
 pub struct FolioDatabase {
-    conn: Connection,
+    pub(crate) conn: Connection,
     path: PathBuf,
 }
 

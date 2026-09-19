@@ -83,3 +83,9 @@ impl Serialize for LibraryRootId {
         serializer.serialize_str(&self.to_hex())
     }
 }
+
+impl From<LibraryRootId> for folio_core::LibraryRootKey {
+    fn from(id: LibraryRootId) -> Self {
+        Self(*id.as_bytes())
+    }
+}

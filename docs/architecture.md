@@ -648,3 +648,234 @@ not verified. macOS rejects the non-UTF-8 filesystem fixture with EILSEQ; pure
 Unix-byte and UTF-16-code-unit codecs pass. See
 [PHASE2A_AUDIT.md](../PHASE2A_AUDIT.md) and
 [PHASE2A_REPORT.md](../PHASE2A_REPORT.md) for commands, findings and exact counts.
+
+---
+
+# Part III — Library State & Query（Phase 2B）
+
+本节定义 Phase 2B 的当前行为；前两部分保留 Phase 1 / 2A 的历史设计与验证。
+当前 schema 为 **2**，cache payload 为 **2**。
+
+## 30. 模块边界
+
+```text
+folio-core ← folio-storage（SQLite、迁移、刷新、持久状态）
+     ↑
+folio-query（内存索引、搜索、筛选、健康分析）
+```
+
+`folio-core` 增加 `library` 共享 DTO 与 `metadata` 字体元数据。
+`folio-query` 的运行依赖只有 core、Serde、thiserror，不依赖 SQLite 或存储
+schema；测试和冒烟示例通过 dev-dependency 使用 storage。该边界使平台共享
+同一套查询语义，又能纯内存测试。未引入 FTS、异步数据库、泛型 Repository
+或新的平台接口。
+
+新增 `unicode-script = 0.5.8` 使用其 Unicode 数据，避免手写 Script 表；
+`getrandom = 0.4.3` 复用 lockfile 已有版本，提供随机 Collection ID 所需
+128 位字节。没有引入 UUID 框架，也没有更换 Fontations 解析器。
+
+## 31. 持久状态与 ID
+
+新增四张持久表：
+
+| 表 | 主键 | 数据与删除边界 |
+| --- | --- | --- |
+| `collections` | 随机 16 字节 CollectionId | 原始名称、规范化唯一名称、创建及更新时间 |
+| `collection_members` | CollectionId + FontIdentityId | 只依赖 Collection，可随所属集合级联删除 |
+| `favorites` | FontIdentityId | 存在即收藏 |
+| `recent_fonts` | FontIdentityId | 最近主动访问的 UTC Unix 纳秒时间 |
+
+Collection ID 使用操作系统随机源产生不透明 128 位值，既不由名称计算，也不
+公开 SQLite rowid；重命名不改变 ID。碰撞或随机源失败返回错误，不覆盖已有
+记录。集合保持扁平结构，没有嵌套或智能规则。
+
+原样保存 display name。唯一键采用 **NFC → Unicode 小写 → NFC → Unicode
+空白 trim / collapse**。保留标点、重音和兼容字符差异；不做 NFKC、拼音、
+音译或语言相关大小写折叠。`Café` 与 `CAFE + combining acute` 相同，`Cafe`
+与 `Café` 不同。名称为空、规范化冲突和未知 CollectionId 分别有 typed error。
+
+所有长期字体引用使用 **FontIdentityId**。RevisionId 与 FaceId 随二进制修订
+变化，路径属于来源，不能用于用户状态主键。四张新表没有指向 source_files
+或 cached Face 的 FK，因此 cache clear、Rebuild、删除 root、字体移动及修订
+更新不会删除收藏、最近访问或集合成员。真正改变 Identity 后旧引用继续保留，
+不按名称猜测迁移。
+
+集合成员与收藏的批量操作使用一次事务；重复加入或移除是幂等操作。
+删除集合只级联删除其成员。集合创建时间不变；重命名及实际成员变化更新
+updated_at。Recent 仅由 `record_recent` 更新，没有 access_count；查询、读取
+目录、刷新与状态快照不产生访问记录。时间使用 checked i64 纳秒转换；时钟
+无法表示时返回 InvalidTimestamp，不 panic、不截断为秒。更新取旧时间与
+当前时间的较大值，时钟回拨不会倒退；相同时间按 ID 稳定排序。
+
+## 32. 未解析引用与离线快照
+
+`list_collection_members`、`list_favorites`、`list_recent` 总是保留合法 ID，
+无论当前是否有字体。`resolve_identities(ids, catalog)` 提供 resolved 状态；
+每种受限查询 Scope 返回 `unresolved_scope_items`。未解析引用不是 corruption。
+
+**resolved 表示可在传入 Catalog 找到，并不表示文件当前可读。** 这保留了
+Phase 2A 的约定：RootUnavailable 返回保留的陈旧缓存目录，旧 Face 仍可被
+查询。若缓存已清空、文件在完整遍历后被确认删除，或调用方提供仅含可用字体
+的目录，引用变为 unresolved；重新出现后按同一 Identity 自动 resolve。
+没有通过改变 Phase 2A 的目录行为来伪造“离线即无字体”。
+
+测试同时覆盖：离线保留陈旧缓存、离线清空缓存后 unresolved、重新上线恢复，
+以及收藏/集合/Recent 在上述过程中不丢失。仅有旧 v1 载荷且 root 离线时，
+无法解码的载荷原行保留，当前目录不包含它，用户状态仍可读取。
+
+## 33. Schema 与 cache 版本
+
+迁移保留原有 `0 → 1`，增加真实 `1 → 2` SQL 步骤；新表、索引及版本提升
+处在同一事务。v2 重开不执行迁移，更高版本仍由 DatabaseTooNew 拒绝。
+v1 的 root 与 source_files 不在迁移中改写或删除。
+
+`tests/fixtures/schema_v1.sql` 与 `lato_payload_v1.bin` 由 Phase 2A 提交
+`09e46e6` 实际生成后导出，不是把 v2 数据库改版本号来模拟。测试验证迁移
+前后 root ID、旧 blob 原样保留、晚期建表失败完整回滚及后续重建路径。
+
+FaceMetadata 新增 `FontEnrichment`，bincode 布局改变，因此
+CACHE_PAYLOAD_VERSION 提升到 2。扩展值是 Folio 自有、可序列化的 DTO，
+不含 Fontations 对象。版本检查先于解码；严格缓存读取返回 CacheIncompatible。
+刷新将已知 v1 载荷报告为 CacheIncompatible，随后从可读源重建，不计入
+CacheCorrupt。根不可用时保留原行；根可遍历时作废旧解析载荷，删除与替换
+仍在原有短事务内提交。无法解码的旧数据不会走 metadata/hash reuse。
+这次升级作废的载荷在重新发现时按缓存缺失计入 files_added。
+
+载荷上限、损坏隔离、指纹校验、外部平台路径拒绝与 Phase 2A 事务边界保持。
+新元数据参与 payload 往返，后续相同 size + mtime + 有效缓存仍然不读、不
+hash、不 parse。`clear_catalog_cache` 继续只删除 source_files。
+
+## 34. 字体元数据
+
+保留 name ID 0、7、8、9、10、11、12、13、14 的全部 localized records，
+包括语言及原始 locale；通过现有 `NameKind::Other(id)` 表达。显示首选值
+沿用 en-US、en、未知语言、其他语言的确定性排序，原始记录不被替换。
+
+`FontEnrichment` 包含 copyright、trademark、description、LicenseInfo、
+FoundryInfo、EmbeddingPermissions、ScriptCoverage、OS/2 declared ranges、
+PANOSE / family class、FontCategory、monospace / color 和 feature_tags。
+
+LicenseInfo 保存 description、URL、detected_kind。识别完整 OFL / Apache 2
+标题、标准许可 URL 或 MIT 标题/完整授权片段，多个被识别种类并存时保守归
+Custom；无许可信息为 Unknown。它只表达字体元数据中的许可标识，不宣称
+“免费商用”，不从 fsType 推断许可，也不提供法律判定。
+
+EmbeddingPermissions 独立保存 OS/2 版本、raw flags、usage、no_subsetting、
+bitmap_only。usage 区分 Installable、Restricted、PreviewAndPrint、Editable、
+Invalid；v0–2 多权限位按旧版最宽许可处理，v3+ 多位视为无效；v0–1 忽略尚未
+定义的高位语义，所有位仍保留原值。依据
+[OpenType OS/2 fsType 规范](https://learn.microsoft.com/en-us/typography/opentype/spec/os2#fstype)。
+
+FoundryInfo 分别保存 manufacturer、designer、vendor_id、vendor_url、designer_url。
+不把 manufacturer、foundry 与 achVendID 当成同一身份，也没有 vendor 数据库。
+Facet 使用 manufacturer 的规范化稳定键，返回独立 display label；相同键的
+多种显示拼写选择字典序最小者，确保输入顺序变化不影响结果。
+
+ScriptCoverage 来自 Fontations 选出的 cmap 字符映射，排除 glyph 0 与
+非 Unicode scalar。使用 Unicode Script 属性聚合非 Common / Inherited /
+Unknown 的脚本及 codepoint_count；名称使用 Unicode 技术全称，例如 Latin、
+Han、Hiragana。不是完整语言支持测评，不把 name table 的语言当覆盖范围，
+不把 Han 等同简体/繁体中文，也不把 Latin 当所有拉丁文字语言的保证。
+不应用 Script_Extensions，不统计 variation-selector 映射，也未提取 OpenType
+language-system tags。OS/2 Unicode Range 与 Code Page Range 原始位独立保留，
+不会替代 cmap 观察。
+
+Category 优先 fixed-pitch 信号（post.isFixedPitch 或 Latin text PANOSE 的
+monospaced proportion），其次采用 PANOSE 类别与 serif-style，再回退 OS/2
+family class。没有可靠信号返回 Unknown，不检查文件名或含 Sans 的家族名。
+Core 不包含“黑体/宋体”等 UI 别名。
+
+Feature 支持实际 axes 得到的 Variable、现有 FontStyle 的 Italic / Oblique、
+Monospace、Color 与 GSUB/GPOS FeatureList 中的 OpenType tags。Tags 排序
+去重，不执行 shaping。Color 表示可读取 COLR/SVG/CBDT/sbix 表的声明信号，
+不保证特定渲染器能够呈现。原有 axes 与 named instances 保持。
+
+## 35. 索引、搜索与排序
+
+`FontQueryIndex::build(&Catalog, &LibraryStateSnapshot)` 构建自有内存文档，
+检查重复 Family / Face ID 与 Face 的 family_id 一致性。查询不打开文件、
+不访问 SQLite、不重新计算脚本和元数据。Catalog 刷新后重建索引；仅用户状态
+变化时可 `update_state`，不重复规范化搜索字段。
+
+索引字段包括 Family 显示名称、Face 的本地化 family/subfamily、Full Name、
+PostScript Name、subfamily、basename、manufacturer、designer、vendor ID、
+license kind / description 和字体 description。绝对文件路径不参与搜索。
+使用与集合键相同的 NFC / Unicode lowercase / whitespace normalization，
+只修改索引副本。
+
+文本以 whitespace 分 token，每个 token 都必须命中同一 Face 的某个字段，
+允许 token 分布于不同字段。支持 exact / prefix / substring，没有正则、
+布尔表达式、fuzzy、拼音或罗马化。
+
+每 token 取最高命中字段分数：family 900，PS/Full 650，本地化 PS/Full 600，
+subfamily 500，本地化 family 450、本地化 subfamily 400，厂商/设计师/vendor
+300，许可种类 250，basename 200，description/license text 100；exact 加 30，
+prefix 加 20。Family 显示名称与完整查询 exact/prefix/substring 分别加
+100000/80000/60000。家族分数取实际匹配 Face 的最大值。
+
+默认有文本按 Relevance，无文本按 Name，Recent Scope 优先按匹配 Face 的
+最近访问时间降序。可显式选择 Name / Relevance / Recent。所有主排序相同
+时用规范化家族名称及 FamilyId 打破平局；Face / Identity 列表按 ID 排序去重。
+`offset` / `limit` 在稳定家族排序后应用，total_matches 为分页前家族数。
+
+## 36. Facets、Scope 与来源
+
+独立 Facet groups：Category、Script、License、Foundry、Weight、Width、
+Feature、LibraryRoot、State。**同组多值 OR，跨组 AND，全部 Face-level 条件
+必须由同一个 Face 同时满足。** 不允许 Family 内一个 Bold Normal 与另一个
+Regular Italic 拼凑成 Bold Italic。文本与 Scope 也在该 Face 上判断。
+
+Weight 直接复用 FontWeight numeric value，Width 复用 FontWidth；summary
+将 weight 以无损十进制字符串表示，将 width 以 1–9 class 表示。Script 值为
+观察到的 Unicode Script 全称；Feature OpenType 值为字体声明的精确 tag。
+License Facet 只使用 LicenseKind，不把整段许可当标签。
+
+Scope 支持 All、Favorites、Recent、Collection(CollectionId)。未知集合返回
+CollectionNotFound；存在但为空的集合返回空结果。Scope 的 unresolved IDs
+在文本、Facet 与分页之前计算，不会因筛选“消失”。
+
+Storage 在一次读事务内提供 LibraryStateSnapshot，包含收藏、Recent、所有
+集合成员及每个 root 的 Face 归属，没有逐 Face SQL 查询。过期且不能解码的
+载荷不贡献 root Face；一般损坏仍返回错误。
+
+`LibraryRootKey` 是 core 拥有的查询边界键，与 storage 的 LibraryRootId
+原始 16 字节一一对应，使用 `root.id.into()` 转换。这保留 Phase 2A ID 与
+路径编码 API，同时让 Query 不依赖 SQLite 或平台路径编码。归属按 FaceId
+而非 IdentityId，防止一个修订位于 Root A、另一个位于 Root B 时串配。
+Overlapping roots 用集合合并，Root A OR Root B 不重复家族或来源。
+
+State 只包含实际可得的 Favorite、Recent、DuplicateSources、MultipleRevisions、
+MetadataConflict；没有虚构 Activated、Installed 或 Synced。
+
+## 37. 健康分析与 Facet Summary
+
+`analyze_catalog` 按 Identity 聚合，返回确定性 CatalogHealth / IdentityHealth。
+DuplicateSources 表示一个具体 materialized revision 有多个实际 Source；
+MultipleRevisions 表示同一 Identity 有多个 RevisionId，两者不等同。
+不同修订间 family、subfamily、manufacturer 的非空规范化值不一致时报告
+MetadataConflict，并返回冲突字段及值；缺失信息或单纯 version string/head
+revision 改变不算冲突。检测不更改 Phase 1 身份算法，不删除或自动选择修订。
+
+FamilyMatch 返回 family_id、显示名称、实际匹配 FaceId / IdentityId、score
+和匹配身份的最新 Recent 时间。健康状态可直接用于 State Facet。
+
+Facet summary 统计 **当前所有条件过滤后、分页前的匹配结果**，计数单位为
+Family。同一家族同一值只计一次；只统计实际匹配 Face 贡献的值，不把家族内
+不匹配 Face 的属性算入。使用有序映射/集合输出稳定顺序，没有 disjunctive
+faceting，也不表达取消某一筛选后的预测数量。
+
+## 38. 性能与交付边界
+
+索引构建对所有字段规范化一次，并预先分析健康状态；空间与 Face 数及元数据
+文本总长度相关。查询线性扫描候选 Face，文本匹配在预规范化字段上执行，
+summary/结果用有序集合聚合，排序约 O(F log F)。没有每次输入重新 parse 或
+重建 SQLite 连接，也没有复杂增量倒排索引。
+
+20k 冒烟使用实际解析元数据复制为 20k 个独立 Face/Family，覆盖索引、空查询、
+多 token 和跨 Facet 查询，时间不作为 CI assertion。长许可文本会显著增加
+建索引和 substring 成本，全匹配且包含完整 Facet summary 的查询也更贵。
+具体主机观测及验证范围见 [PHASE2B_REPORT.md](../PHASE2B_REPORT.md)。
+
+Phase 2 到此封版：具备本地持久目录、增量刷新、用户状态、元数据、搜索、
+筛选与健康分析。未实现 CoreText、平台安装/激活、watcher、Hot Reload、FFI、
+WebDAV、managed library 或任何平台 UI，未修改前端依赖基线。

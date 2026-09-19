@@ -74,6 +74,8 @@ pub enum RefreshIssueKind {
     CollectionProblem,
     /// 缓存行无效并已被作废。
     CacheCorrupt,
+    /// 旧版本载荷需要重建，不表示数据库损坏。
+    CacheIncompatible,
 }
 
 /// 刷新过程中观测到的非致命问题。
@@ -295,6 +297,22 @@ fn refresh_one_root(
         })
         .collect();
 
+    let mut existing_rows = existing_rows;
+    let incompatible: std::collections::BTreeSet<_> = existing_rows
+        .iter()
+        .filter(|row| row.status == SourceStatus::Parsed && row.payload_version == Some(1))
+        .map(|row| row.id)
+        .collect();
+    existing_rows.retain(|row| !incompatible.contains(&row.id));
+    let mut corrupt_issues = corrupt_issues;
+    for id in &incompatible {
+        corrupt_issues.push(RefreshIssue::warning(
+            RefreshIssueKind::CacheIncompatible,
+            root,
+            None,
+            format!("cache row {id} uses payload v1 and requires reparse"),
+        ));
+    }
     let enumeration = match enumerate_root(root) {
         Ok(enumeration) => enumeration,
         Err(error) => {
@@ -323,6 +341,8 @@ fn refresh_one_root(
             return Ok((faces, issues));
         }
     };
+
+    invalidated.extend(incompatible);
 
     if enumeration.incomplete {
         stats.roots_incomplete += 1;

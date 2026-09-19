@@ -284,6 +284,7 @@ fn parse_face(
     };
 
     let metadata = FaceMetadata {
+        enrichment: crate::metadata::read_enrichment(font, &names),
         family_name,
         subfamily_name,
         full_name,

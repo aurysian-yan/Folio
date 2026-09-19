@@ -244,7 +244,10 @@ fn corrupt(context: &str, message: &str) -> StorageError {
 /// 版本检查先于解码，并核对文件指纹与载荷的绑定。
 pub(crate) fn parsed_payload(row: &CachedSourceRow) -> Result<CachedFilePayload, StorageError> {
     if row.payload_version != Some(CACHE_PAYLOAD_VERSION) {
-        return Err(corrupt(&row.display_path, "incompatible payload version"));
+        return Err(StorageError::CacheIncompatible {
+            found: row.payload_version,
+            supported: CACHE_PAYLOAD_VERSION,
+        });
     }
     let bytes = row
         .payload

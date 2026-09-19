@@ -13,6 +13,19 @@ use crate::path_codec::PathCodecError;
 /// 致命的存储或缓存错误。
 #[derive(Debug, Error)]
 pub enum StorageError {
+    #[error("collection name is empty")]
+    InvalidCollectionName,
+    #[error("collection name already exists")]
+    CollectionNameConflict,
+    #[error("collection not found: {id}")]
+    CollectionNotFound { id: folio_core::CollectionId },
+    #[error("system clock cannot be represented as nanoseconds")]
+    InvalidTimestamp,
+    #[error("random identifier generation failed: {0}")]
+    RandomId(getrandom::Error),
+    #[error("incompatible cache payload: found {found:?}, supported {supported}")]
+    CacheIncompatible { found: Option<u32>, supported: u32 },
+
     /// 数据库版本号必须为非负整数。
     #[error("invalid negative database schema version: {0}")]
     InvalidSchemaVersion(i32),

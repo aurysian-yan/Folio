@@ -13,7 +13,7 @@ fn empty_database_migrates_to_current() {
         db.schema_version().expect("version"),
         CURRENT_SCHEMA_VERSION
     );
-    assert_eq!(CURRENT_SCHEMA_VERSION, 1);
+    assert_eq!(CURRENT_SCHEMA_VERSION, 2);
 }
 
 #[test]

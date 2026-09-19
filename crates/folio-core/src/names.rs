@@ -9,7 +9,16 @@ use serde::Serialize;
 use skrifa::string::LocalizedString;
 
 /// Name table identifiers Folio tracks.
-pub(crate) const TRACKED_NAME_IDS: [NameId; 9] = [
+pub(crate) const TRACKED_NAME_IDS: [NameId; 18] = [
+    NameId::new(0),
+    NameId::new(7),
+    NameId::new(8),
+    NameId::new(9),
+    NameId::new(10),
+    NameId::new(11),
+    NameId::new(12),
+    NameId::new(13),
+    NameId::new(14),
     NameId::FAMILY_NAME,
     NameId::SUBFAMILY_NAME,
     NameId::FULL_NAME,
