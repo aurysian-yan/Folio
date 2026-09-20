@@ -32,6 +32,10 @@ enum FontCardPresentation: Hashable, Sendable {
         }
     }
 
+    var aspectRatio: CGFloat {
+        width / height
+    }
+
     var faceSelectorWidth: CGFloat {
         switch self {
         case .compact: 108
@@ -69,12 +73,7 @@ struct FontFamilyCardView: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            cardContent
-                .frame(maxWidth: presentation == .expanded ? .infinity : nil)
-                .frame(
-                    width: presentation == .expanded ? nil : presentation.width,
-                    height: presentation.height
-                )
+            sizedCardContent
                 .background {
                     cardShape.fill(.ultraThickMaterial)
                     if let cardBackgroundColor = model.cardBackgroundColor {
@@ -108,7 +107,6 @@ struct FontFamilyCardView: View {
             }
         }
         .frame(maxWidth: presentation == .expanded ? presentation.width : nil)
-        .frame(height: presentation.height)
         .contentShape(cardShape)
         .shadow(
             color: presentation == .expanded ? .black.opacity(0.15) : .clear,
@@ -172,6 +170,23 @@ struct FontFamilyCardView: View {
         .accessibilityLabel("\(family.displayName)，\(family.faces.count) 个样式")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .onAppear { model.loadMoreIfNeeded(current: family) }
+    }
+
+    @ViewBuilder
+    private var sizedCardContent: some View {
+        switch presentation {
+        case .compact, .large:
+            cardContent
+                .frame(maxWidth: .infinity)
+                .aspectRatio(presentation.aspectRatio, contentMode: .fit)
+        case .strip:
+            cardContent
+                .frame(maxWidth: .infinity)
+                .frame(height: presentation.height)
+        case .expanded:
+            cardContent
+                .frame(width: presentation.width, height: presentation.height)
+        }
     }
 
     @ViewBuilder

@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum LibraryLayout {
+    static let titleMaxWidth: CGFloat = 960
+    static let cardContainerMaxWidth = titleMaxWidth + 256
+}
+
 struct LibraryView: View {
     @Bindable var model: LibraryViewModel
 
@@ -87,10 +92,11 @@ struct LibraryView: View {
             LibraryHeroView(presentation: model.hero)
             FacetFilterView(model: model)
         }
-        .frame(maxWidth: .infinity)
         .padding(.horizontal, 48)
         .padding(.top, 42)
         .padding(.bottom, 32)
+        .frame(maxWidth: LibraryLayout.titleMaxWidth)
+        .frame(maxWidth: .infinity)
     }
 
     private var emptyLibrary: some View {

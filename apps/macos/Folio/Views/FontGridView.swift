@@ -14,7 +14,7 @@ struct FontGridView: View {
 
     var body: some View {
         Group {
-            if presentation == .expanded {
+            if presentation == .expanded || presentation == .strip {
                 LazyVStack(spacing: 12) {
                     cards
                 }
@@ -22,8 +22,7 @@ struct FontGridView: View {
                 LazyVGrid(
                     columns: [GridItem(
                         .adaptive(
-                            minimum: presentation.width,
-                            maximum: presentation.width
+                            minimum: presentation.width
                         ),
                         spacing: 12
                     )],
@@ -38,6 +37,10 @@ struct FontGridView: View {
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.18), value: presentation)
         .padding(10)
+        .frame(maxWidth: presentation == .expanded
+            ? presentation.width + 20
+            : LibraryLayout.cardContainerMaxWidth)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -48,7 +51,7 @@ struct FontGridView: View {
                 family: family,
                 presentation: presentation
             )
-            .frame(maxWidth: presentation == .expanded ? presentation.width : nil)
+            .frame(maxWidth: presentation == .expanded ? presentation.width : .infinity)
         }
     }
 }
