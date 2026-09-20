@@ -38,9 +38,10 @@ struct PreviewBar: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Slider(value: $model.previewSize, in: 18...144)
+            Slider(value: $model.previewSize, in: 18...144, step: 1)
                 .frame(width: 100)
                 .accessibilityLabel("预览字号")
+                .sliderHaptics(value: model.previewSize, in: 18...144)
             HStack(spacing: 0) {
                 if model.previewSize.rounded() < 100 {
                     Text("0")

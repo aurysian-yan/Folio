@@ -26,6 +26,7 @@
 		B016 /* FontPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F016 /* FontPreviewView.swift */; };
 		B017 /* folio_ffi.swift in Sources */ = {isa = PBXBuildFile; fileRef = F017 /* folio_ffi.swift */; };
 		B018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F022 /* SettingsView.swift */; };
+		B019 /* SliderHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F023 /* SliderHaptics.swift */; };
 		BT01 /* FolioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* FolioTests.swift */; };
 		BX01 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FX01 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -64,6 +65,7 @@
 		F020 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F021 /* Folio.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Folio.entitlements; sourceTree = "<group>"; };
 		F022 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F023 /* SliderHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SliderHaptics.swift; sourceTree = "<group>"; };
 		FT01 /* FolioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioTests.swift; sourceTree = "<group>"; };
 		FX01 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		PR01 /* Folio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Folio.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -155,6 +157,7 @@
 				F015 /* PreviewBar.swift */,
 				F016 /* FontPreviewView.swift */,
 				F022 /* SettingsView.swift */,
+				F023 /* SliderHaptics.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -336,6 +339,7 @@
 				B016 /* FontPreviewView.swift in Sources */,
 				B017 /* folio_ffi.swift in Sources */,
 				B018 /* SettingsView.swift in Sources */,
+				B019 /* SliderHaptics.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

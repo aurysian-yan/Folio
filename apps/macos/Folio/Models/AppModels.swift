@@ -3,6 +3,7 @@ import Foundation
 enum AppPreferences {
     static let selectCardsOnHover = "selectCardsOnHover"
     static let hoverSelectionHaptics = "hoverSelectionHaptics"
+    static let sliderHaptics = "sliderHaptics"
 }
 
 struct FamilyID: Hashable, Identifiable, Sendable {

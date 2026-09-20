@@ -248,7 +248,7 @@ struct FontFamilyCardView: View {
         FontPreviewView(
             text: model.previewText,
             face: face,
-            size: min(model.previewSize, 24),
+            size: model.previewSize,
             color: model.previewColor,
             axes: selected ? model.axisValues : [:],
             alignment: alignment,

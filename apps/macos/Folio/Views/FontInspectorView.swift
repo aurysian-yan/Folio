@@ -105,6 +105,10 @@ struct FontInspectorView: View {
                     )
                     .accessibilityLabel(axis.name)
                     .accessibilityValue(model.axisValues[axis.tag, default: axis.defaultValue].formatted(.number.precision(.fractionLength(0...2))))
+                    .sliderHaptics(
+                        value: model.axisValues[axis.tag, default: axis.defaultValue],
+                        in: axis.minimum...axis.maximum
+                    )
                 }
             }
         }
