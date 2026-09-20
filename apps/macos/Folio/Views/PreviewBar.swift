@@ -93,10 +93,13 @@ struct PreviewBar: View {
     }
 
     private func sizeSlider(width: CGFloat) -> some View {
-        Slider(value: $model.previewSize, in: 18...144, step: 1)
+        Slider(value: Binding(
+            get: { model.previewSize },
+            set: { model.previewSize = $0.rounded() }
+        ), in: 18...106)
             .frame(width: width)
             .accessibilityLabel("预览字号")
-            .sliderHaptics(value: model.previewSize, in: 18...144)
+            .sliderHaptics(value: model.previewSize, in: 18...106, feedbackStep: 1)
     }
 
     private var sizeValue: some View {
