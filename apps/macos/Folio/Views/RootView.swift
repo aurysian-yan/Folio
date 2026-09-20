@@ -1,0 +1,79 @@
+import SwiftUI
+
+struct RootView: View {
+    @State private var model = LibraryViewModel()
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(model: model)
+                .navigationSplitViewColumnWidth(min: 190, ideal: 240, max: 300)
+        } detail: {
+            LibraryView(model: model)
+        }
+        .inspector(isPresented: $model.inspectorPresented) {
+            FontInspectorView(model: model)
+                .inspectorColumnWidth(min: 250, ideal: 284, max: 360)
+        }
+        .background(WindowSizeController())
+        .task { model.start() }
+        .alert("无法完成操作", isPresented: Binding(
+            get: { model.errorMessage != nil },
+            set: { if !$0 { model.errorMessage = nil } }
+        )) {
+            Button("好") { model.errorMessage = nil }
+        } message: {
+            Text(model.errorMessage ?? "发生未知错误")
+        }
+        .sheet(isPresented: $model.isCreatingCollection) {
+            NewCollectionView(model: model)
+        }
+    }
+}
+
+private struct WindowSizeController: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            view.window?.minSize = NSSize(width: 900, height: 650)
+        }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let window = view.window,
+                  window.minSize != NSSize(width: 900, height: 650) else { return }
+            window.minSize = NSSize(width: 900, height: 650)
+        }
+    }
+}
+
+private struct NewCollectionView: View {
+    @Bindable var model: LibraryViewModel
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("新建收藏夹")
+                .font(.headline)
+            TextField("收藏夹名称", text: $model.newCollectionName)
+                .focused($focused)
+                .onSubmit(model.createCollection)
+            HStack {
+                Spacer()
+                Button("取消") {
+                    model.isCreatingCollection = false
+                    model.newCollectionName = ""
+                }
+                .keyboardShortcut(.cancelAction)
+                Button("创建", action: model.createCollection)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(model.newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding()
+        .frame(width: 360)
+        .onAppear { focused = true }
+    }
+}
