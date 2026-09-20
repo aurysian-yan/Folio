@@ -159,4 +159,9 @@ private struct ToolbarSearchField: View {
     RootView()
         .frame(width: 900, height: 650)
 }
+
+#Preview("512 × 468") {
+    RootView()
+        .frame(width: 512, height: 468)
+}
 #endif

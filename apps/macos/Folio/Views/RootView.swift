@@ -7,13 +7,23 @@ struct RootView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(model: model)
-                .navigationSplitViewColumnWidth(min: 190, ideal: 240, max: 300)
+                .navigationSplitViewColumnWidth(min: 160, ideal: 240, max: 300)
         } detail: {
             LibraryView(model: model)
         }
         .inspector(isPresented: $model.inspectorPresented) {
             FontInspectorView(model: model)
-                .inspectorColumnWidth(min: 250, ideal: 284, max: 360)
+                .inspectorColumnWidth(min: 220, ideal: 284, max: 360)
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onChange(of: proxy.size.width) { _, width in
+                        guard width < 760 else { return }
+                        columnVisibility = .detailOnly
+                        model.inspectorPresented = false
+                    }
+            }
         }
         .background(WindowSizeController())
         .task { model.start() }
@@ -35,7 +45,7 @@ private struct WindowSizeController: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
-            view.window?.minSize = NSSize(width: 900, height: 650)
+            view.window?.minSize = NSSize(width: 512, height: 468)
         }
         return view
     }
@@ -43,8 +53,8 @@ private struct WindowSizeController: NSViewRepresentable {
     func updateNSView(_ view: NSView, context: Context) {
         DispatchQueue.main.async {
             guard let window = view.window,
-                  window.minSize != NSSize(width: 900, height: 650) else { return }
-            window.minSize = NSSize(width: 900, height: 650)
+                  window.minSize != NSSize(width: 512, height: 468) else { return }
+            window.minSize = NSSize(width: 512, height: 468)
         }
     }
 }
