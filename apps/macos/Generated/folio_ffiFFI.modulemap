@@ -1,0 +1,7 @@
+module folio_ffiFFI {
+    header "folio_ffiFFI.h"
+    export *
+    use "Darwin"
+    use "_Builtin_stdbool"
+    use "_Builtin_stdint"
+}
