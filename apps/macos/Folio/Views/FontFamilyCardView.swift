@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum FontCardPresentation: Hashable, Sendable {
@@ -42,6 +43,8 @@ enum FontCardPresentation: Hashable, Sendable {
 
 struct FontFamilyCardView: View {
     @Bindable var model: LibraryViewModel
+    @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
+    @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
     let family: FamilyCard
     let presentation: FontCardPresentation
 
@@ -121,9 +124,14 @@ struct FontFamilyCardView: View {
             select()
         }
         .onHover { hovering in
-            if hovering {
-                select()
+            guard hovering, selectCardsOnHover, !selected else { return }
+            if hoverSelectionHaptics {
+                NSHapticFeedbackManager.defaultPerformer.perform(
+                    .alignment,
+                    performanceTime: .now
+                )
             }
+            select()
         }
         .contextMenu {
             Button(family.isFavorite ? "取消收藏" : "收藏") {

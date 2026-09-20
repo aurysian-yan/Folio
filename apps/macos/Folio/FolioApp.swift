@@ -10,5 +10,9 @@ struct FolioApp: App {
         .commands {
             SidebarCommands()
         }
+
+        Settings {
+            SettingsView()
+        }
     }
 }

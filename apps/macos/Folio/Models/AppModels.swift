@@ -1,5 +1,10 @@
 import Foundation
 
+enum AppPreferences {
+    static let selectCardsOnHover = "selectCardsOnHover"
+    static let hoverSelectionHaptics = "hoverSelectionHaptics"
+}
+
 struct FamilyID: Hashable, Identifiable, Sendable {
     let rawValue: String
     var id: String { rawValue }

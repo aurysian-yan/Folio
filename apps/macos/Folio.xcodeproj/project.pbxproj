@@ -25,6 +25,7 @@
 		B015 /* PreviewBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F015 /* PreviewBar.swift */; };
 		B016 /* FontPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F016 /* FontPreviewView.swift */; };
 		B017 /* folio_ffi.swift in Sources */ = {isa = PBXBuildFile; fileRef = F017 /* folio_ffi.swift */; };
+		B018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F022 /* SettingsView.swift */; };
 		BT01 /* FolioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* FolioTests.swift */; };
 		BX01 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FX01 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -62,6 +63,7 @@
 		F019 /* folio_ffiFFI.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = folio_ffiFFI.modulemap; sourceTree = "<group>"; };
 		F020 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F021 /* Folio.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Folio.entitlements; sourceTree = "<group>"; };
+		F022 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		FT01 /* FolioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioTests.swift; sourceTree = "<group>"; };
 		FX01 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		PR01 /* Folio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Folio.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -152,6 +154,7 @@
 				F014 /* FontInspectorView.swift */,
 				F015 /* PreviewBar.swift */,
 				F016 /* FontPreviewView.swift */,
+				F022 /* SettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -332,6 +335,7 @@
 				B015 /* PreviewBar.swift in Sources */,
 				B016 /* FontPreviewView.swift in Sources */,
 				B017 /* folio_ffi.swift in Sources */,
+				B018 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
