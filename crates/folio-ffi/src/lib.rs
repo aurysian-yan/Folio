@@ -116,6 +116,8 @@ pub struct FaceSummaryDto {
     pub file_size: u64,
     pub version: Option<String>,
     pub manufacturer: Option<String>,
+    pub designer: Option<String>,
+    pub copyright: Option<String>,
     pub category: String,
     pub license: String,
     pub scripts: Vec<String>,
@@ -622,6 +624,8 @@ fn face_summary(face: &FontFace) -> FaceSummaryDto {
             .unwrap_or(0),
         version,
         manufacturer: face.metadata.enrichment.foundry.manufacturer.clone(),
+        designer: face.metadata.enrichment.foundry.designer.clone(),
+        copyright: face.metadata.enrichment.copyright.clone(),
         category: category_key(face.metadata.enrichment.category).to_owned(),
         license: license_key(face.metadata.enrichment.license.detected_kind).to_owned(),
         scripts: face

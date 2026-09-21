@@ -234,10 +234,37 @@ final class LibraryViewModel {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
+    func trashSelectedFace() {
+        guard let path = selectedFace?.sourcePath, let repository else { return }
+        let url = URL(fileURLWithPath: path)
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                }.value
+                isRefreshing = true
+                snapshot = try await repository.refreshLibrary()
+                try await performQuery(reset: true)
+                isRefreshing = false
+            } catch {
+                isRefreshing = false
+                present(error)
+            }
+        }
+    }
+
     func copy(_ value: String?) {
         guard let value, !value.isEmpty else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+    }
+
+    func copyForFigma(_ family: FamilyCard, face: FaceSummary) {
+        copyRichFontStyle(family, face: face, prefersHTML: true)
+    }
+
+    func copyForSketch(_ family: FamilyCard, face: FaceSummary) {
+        copyRichFontStyle(family, face: face, prefersHTML: false)
     }
 
     func loadMoreIfNeeded(current family: FamilyCard) {
@@ -269,6 +296,69 @@ final class LibraryViewModel {
                 self.present(error)
             }
         }
+    }
+
+    private func copyRichFontStyle(
+        _ family: FamilyCard,
+        face: FaceSummary,
+        prefersHTML: Bool
+    ) {
+        let font = localFont(for: face, size: 16, axes: axisValues)
+        let familyName = font.familyName ?? family.displayName
+        let attributedString = NSAttributedString(
+            string: familyName,
+            attributes: [.font: font]
+        )
+        let range = NSRange(location: 0, length: attributedString.length)
+        let rtf = try? attributedString.data(
+            from: range,
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+        )
+        let html = fontStyleHTML(familyName: familyName, face: face)
+            .data(using: .utf8)
+
+        let pasteboard = NSPasteboard.general
+        let richTypes: [NSPasteboard.PasteboardType] = prefersHTML
+            ? [.html, .rtf, .string]
+            : [.rtf, .html, .string]
+        pasteboard.declareTypes(richTypes, owner: nil)
+        if let html {
+            pasteboard.setData(html, forType: .html)
+        }
+        if let rtf {
+            pasteboard.setData(rtf, forType: .rtf)
+        }
+        pasteboard.setString(familyName, forType: .string)
+    }
+
+    private func fontStyleHTML(familyName: String, face: FaceSummary) -> String {
+        let weight = axisValues["wght"] ?? face.weight ?? 400
+        let styleName = face.styleName.lowercased()
+        let isItalic = styleName.contains("italic")
+            || styleName.contains("oblique")
+            || axisValues["ital", default: 0] > 0
+            || axisValues["slnt", default: 0] < 0
+        let variations = axisValues
+            .sorted { $0.key < $1.key }
+            .map { "'\(htmlEscaped($0.key))' \($0.value.formatted(.number.precision(.fractionLength(0...2))))" }
+            .joined(separator: ", ")
+        let variationStyle = variations.isEmpty
+            ? ""
+            : " font-variation-settings: \(variations);"
+
+        return """
+        <meta charset="utf-8">
+        <span style="font-family: &quot;\(htmlEscaped(familyName))&quot;; font-size: 16px; font-weight: \(weight.formatted(.number.precision(.fractionLength(0...2)))); font-style: \(isItalic ? "italic" : "normal");\(variationStyle)">\(htmlEscaped(familyName))</span>
+        """
+    }
+
+    private func htmlEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
     }
 
     private func performQuery(reset: Bool) async throws {

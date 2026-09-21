@@ -57,6 +57,8 @@ struct FaceSummary: Hashable, Identifiable, Sendable {
     let fileSize: UInt64
     let version: String?
     let manufacturer: String?
+    let designer: String?
+    let copyright: String?
     let category: String
     let license: String
     let scripts: [String]

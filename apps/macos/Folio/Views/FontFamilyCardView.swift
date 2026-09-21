@@ -49,6 +49,7 @@ struct FontFamilyCardView: View {
     @Bindable var model: LibraryViewModel
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
+    @State private var hoverSelectionTask: Task<Void, Never>?
     let family: FamilyCard
     let presentation: FontCardPresentation
 
@@ -119,17 +120,11 @@ struct FontFamilyCardView: View {
             y: 6
         )
         .onTapGesture {
+            hoverSelectionTask?.cancel()
             select()
         }
         .onHover { hovering in
-            guard hovering, selectCardsOnHover, !selected else { return }
-            if hoverSelectionHaptics {
-                NSHapticFeedbackManager.defaultPerformer.perform(
-                    .alignment,
-                    performanceTime: .now
-                )
-            }
-            select()
+            updateHoverSelection(hovering)
         }
         .contextMenu {
             Button(family.isFavorite ? "取消收藏" : "收藏") {
@@ -170,32 +165,43 @@ struct FontFamilyCardView: View {
         .accessibilityLabel("\(family.displayName)，\(family.faces.count) 个样式")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .onAppear { model.loadMoreIfNeeded(current: family) }
+        .onDisappear {
+            hoverSelectionTask?.cancel()
+        }
     }
 
     @ViewBuilder
     private var sizedCardContent: some View {
         switch presentation {
         case .compact, .large:
-            cardContent
-                .frame(maxWidth: .infinity)
+            Color.clear
                 .aspectRatio(presentation.aspectRatio, contentMode: .fit)
+                .overlay {
+                    GeometryReader { geometry in
+                        cardContent(cardSize: geometry.size)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                    }
+                }
         case .strip:
-            cardContent
+            cardContent()
                 .frame(maxWidth: .infinity)
                 .frame(height: presentation.height)
         case .expanded:
-            cardContent
+            cardContent()
                 .frame(width: presentation.width, height: presentation.height)
         }
     }
 
     @ViewBuilder
-    private var cardContent: some View {
+    private func cardContent(cardSize: CGSize? = nil) -> some View {
         switch presentation {
         case .compact:
             VStack(spacing: 0) {
                 preview(alignment: .center, lineLimit: 2)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: previewHeight(in: cardSize, footerHeight: 36))
+                    .clipped()
+                    .zIndex(0)
                 VStack(spacing: 2) {
                     familyName
                     if selected {
@@ -204,12 +210,17 @@ struct FontFamilyCardView: View {
                         familyMetadata
                     }
                 }
+                .frame(height: 36)
+                .zIndex(1)
             }
             .padding(10)
         case .large:
             VStack(spacing: 0) {
                 preview(alignment: .center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: previewHeight(in: cardSize, footerHeight: 22))
+                    .clipped()
+                    .zIndex(0)
                 HStack {
                     familyName
                     Spacer(minLength: 8)
@@ -221,6 +232,7 @@ struct FontFamilyCardView: View {
                 }
                 .padding(.horizontal, 4)
                 .frame(height: 22)
+                .zIndex(1)
             }
             .padding(10)
         case .strip:
@@ -229,6 +241,7 @@ struct FontFamilyCardView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 42)
                     .padding(.horizontal, 4)
+                    .clipped()
                 HStack {
                     familyName
                     Spacer(minLength: 8)
@@ -247,6 +260,7 @@ struct FontFamilyCardView: View {
                 preview(alignment: .left)
                     .frame(maxWidth: .infinity)
                     .frame(height: 28)
+                    .clipped()
                 Spacer(minLength: 0)
                 familyName
                 HStack {
@@ -257,6 +271,10 @@ struct FontFamilyCardView: View {
             }
             .padding(14)
         }
+    }
+
+    private func previewHeight(in cardSize: CGSize?, footerHeight: CGFloat) -> CGFloat {
+        max(0, (cardSize?.height ?? presentation.height) - 20 - footerHeight)
     }
 
     private func preview(alignment: NSTextAlignment, lineLimit: Int = 1) -> some View {
@@ -350,6 +368,28 @@ struct FontFamilyCardView: View {
     private func select() {
         guard model.selectedFamilyID != family.id else { return }
         model.selectFamily(family)
+    }
+
+    private func updateHoverSelection(_ hovering: Bool) {
+        hoverSelectionTask?.cancel()
+        hoverSelectionTask = nil
+
+        guard hovering, selectCardsOnHover, !selected else { return }
+        hoverSelectionTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(180))
+            } catch {
+                return
+            }
+            guard !selected else { return }
+            if hoverSelectionHaptics {
+                NSHapticFeedbackManager.defaultPerformer.perform(
+                    .alignment,
+                    performanceTime: .now
+                )
+            }
+            select()
+        }
     }
 }
 

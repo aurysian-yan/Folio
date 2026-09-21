@@ -10,9 +10,13 @@ struct FontPreviewView: NSViewRepresentable {
     let axes: [String: Double]
     var alignment: NSTextAlignment = .center
     var lineLimit = 1
+    var lineHeight: Double?
 
     func makeNSView(context: Context) -> LocalFontPreviewNSView {
-        LocalFontPreviewNSView()
+        let view = LocalFontPreviewNSView()
+        view.wantsLayer = true
+        view.layer?.masksToBounds = true
+        return view
     }
 
     func updateNSView(_ view: LocalFontPreviewNSView, context: Context) {
@@ -21,8 +25,28 @@ struct FontPreviewView: NSViewRepresentable {
         view.textColor = NSColor(color)
         view.alignment = alignment
         view.lineLimit = lineLimit
+        view.lineHeight = lineHeight
         view.needsDisplay = true
     }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        nsView: LocalFontPreviewNSView,
+        context: Context
+    ) -> CGSize? {
+        guard let width = proposal.width, width.isFinite else { return nil }
+        return CGSize(width: width, height: nsView.requiredHeight(for: width))
+    }
+}
+
+@MainActor
+func localFontGlyphCount(for face: FaceSummary) -> Int? {
+    FontPreviewCache.shared.glyphCount(for: face)
+}
+
+@MainActor
+func localFont(for face: FaceSummary, size: Double, axes: [String: Double]) -> NSFont {
+    FontPreviewCache.shared.font(for: face, size: size, axes: axes) as NSFont
 }
 
 @MainActor
@@ -63,6 +87,11 @@ private final class FontPreviewCache {
         return font
     }
 
+    func glyphCount(for face: FaceSummary) -> Int? {
+        guard face.sourcePath != nil else { return nil }
+        return CTFontGetGlyphCount(font(for: face, size: 12, axes: [:]))
+    }
+
     private static func tagValue(_ tag: String) -> UInt32 {
         tag.utf8.prefix(4).reduce(0) { ($0 << 8) | UInt32($1) }
     }
@@ -82,42 +111,14 @@ final class LocalFontPreviewNSView: NSView {
     var textColor = NSColor.labelColor
     var alignment: NSTextAlignment = .center
     var lineLimit = 1
+    var lineHeight: Double?
 
     override var isFlipped: Bool { false }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        var textAlignment: CTTextAlignment = .center
-        switch alignment {
-        case .left, .natural:
-            textAlignment = .left
-        case .right:
-            textAlignment = .right
-        default:
-            break
-        }
-        var lineBreakMode: CTLineBreakMode = lineLimit > 1 ? .byWordWrapping : .byTruncatingTail
-        let paragraphStyle = CTParagraphStyleCreate([
-            CTParagraphStyleSetting(
-                spec: .alignment,
-                valueSize: MemoryLayout<CTTextAlignment>.size,
-                value: &textAlignment
-            ),
-            CTParagraphStyleSetting(
-                spec: .lineBreakMode,
-                valueSize: MemoryLayout<CTLineBreakMode>.size,
-                value: &lineBreakMode
-            ),
-        ], 2)
-        let attributed = NSAttributedString(
-            string: text,
-            attributes: [
-                NSAttributedString.Key(kCTFontAttributeName as String): font,
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String): textColor.cgColor,
-                NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle,
-            ]
-        )
+        let attributed = attributedString()
         if lineLimit > 1 {
             drawMultiline(attributed, in: context)
             return
@@ -145,11 +146,81 @@ final class LocalFontPreviewNSView: NSView {
         context.restoreGState()
     }
 
+    func requiredHeight(for width: CGFloat) -> CGFloat {
+        guard lineLimit > 1 else { return ceil(CTFontGetSize(font) * 1.15) }
+        let framesetter = CTFramesetterCreateWithAttributedString(attributedString())
+        let maximumHeight = ceil(
+            CGFloat(lineHeight ?? CTFontGetSize(font) * 1.15) * CGFloat(lineLimit)
+        )
+        let suggested = CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRange(),
+            nil,
+            CGSize(width: width, height: maximumHeight),
+            nil
+        )
+        return min(maximumHeight, ceil(suggested.height))
+    }
+
+    private func attributedString() -> NSAttributedString {
+        var textAlignment: CTTextAlignment = .center
+        switch alignment {
+        case .left, .natural:
+            textAlignment = .left
+        case .right:
+            textAlignment = .right
+        default:
+            break
+        }
+        var lineBreakMode: CTLineBreakMode = lineLimit > 1 ? .byWordWrapping : .byTruncatingTail
+        var resolvedLineHeight = CGFloat(lineHeight ?? 0)
+        let hasLineHeight = resolvedLineHeight > 0
+        let paragraphStyle = withUnsafePointer(to: &textAlignment) { alignmentPointer in
+            withUnsafePointer(to: &lineBreakMode) { lineBreakPointer in
+                withUnsafePointer(to: &resolvedLineHeight) { lineHeightPointer in
+                    var settings = [
+                        CTParagraphStyleSetting(
+                            spec: .alignment,
+                            valueSize: MemoryLayout<CTTextAlignment>.size,
+                            value: alignmentPointer
+                        ),
+                        CTParagraphStyleSetting(
+                            spec: .lineBreakMode,
+                            valueSize: MemoryLayout<CTLineBreakMode>.size,
+                            value: lineBreakPointer
+                        ),
+                    ]
+                    if hasLineHeight {
+                        settings.append(CTParagraphStyleSetting(
+                            spec: .minimumLineHeight,
+                            valueSize: MemoryLayout<CGFloat>.size,
+                            value: lineHeightPointer
+                        ))
+                        settings.append(CTParagraphStyleSetting(
+                            spec: .maximumLineHeight,
+                            valueSize: MemoryLayout<CGFloat>.size,
+                            value: lineHeightPointer
+                        ))
+                    }
+                    return CTParagraphStyleCreate(settings, settings.count)
+                }
+            }
+        }
+        return NSAttributedString(
+            string: text,
+            attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): textColor.cgColor,
+                NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraphStyle,
+            ]
+        )
+    }
+
     private func drawMultiline(_ attributed: NSAttributedString, in context: CGContext) {
         let framesetter = CTFramesetterCreateWithAttributedString(attributed)
         let maximumHeight = min(
             bounds.height,
-            ceil(CTFontGetSize(font) * CGFloat(lineLimit) * 1.15)
+            ceil(CGFloat(lineHeight ?? CTFontGetSize(font) * 1.15) * CGFloat(lineLimit))
         )
         let suggested = CTFramesetterSuggestFrameSizeWithConstraints(
             framesetter,

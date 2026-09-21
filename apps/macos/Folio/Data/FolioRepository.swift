@@ -189,6 +189,8 @@ actor FolioRepository {
             fileSize: dto.fileSize,
             version: dto.version,
             manufacturer: dto.manufacturer,
+            designer: dto.designer,
+            copyright: dto.copyright,
             category: dto.category,
             license: dto.license,
             scripts: dto.scripts,

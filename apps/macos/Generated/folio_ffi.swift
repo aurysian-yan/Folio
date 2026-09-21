@@ -999,6 +999,8 @@ public struct FaceSummaryDto: Equatable, Hashable {
     public var fileSize: UInt64
     public var version: String?
     public var manufacturer: String?
+    public var designer: String?
+    public var copyright: String?
     public var category: String
     public var license: String
     public var scripts: [String]
@@ -1006,7 +1008,7 @@ public struct FaceSummaryDto: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: FaceIdDto, identityId: IdentityIdDto, revisionId: String, styleName: String, postscriptName: String?, fullName: String?, format: String, isVariable: Bool, weight: Double?, width: Double?, sourcePath: String?, faceIndex: UInt32, fileSize: UInt64, version: String?, manufacturer: String?, category: String, license: String, scripts: [String], axes: [VariableAxisDto]) {
+    public init(id: FaceIdDto, identityId: IdentityIdDto, revisionId: String, styleName: String, postscriptName: String?, fullName: String?, format: String, isVariable: Bool, weight: Double?, width: Double?, sourcePath: String?, faceIndex: UInt32, fileSize: UInt64, version: String?, manufacturer: String?, designer: String?, copyright: String?, category: String, license: String, scripts: [String], axes: [VariableAxisDto]) {
         self.id = id
         self.identityId = identityId
         self.revisionId = revisionId
@@ -1022,6 +1024,8 @@ public struct FaceSummaryDto: Equatable, Hashable {
         self.fileSize = fileSize
         self.version = version
         self.manufacturer = manufacturer
+        self.designer = designer
+        self.copyright = copyright
         self.category = category
         self.license = license
         self.scripts = scripts
@@ -1059,6 +1063,8 @@ public struct FfiConverterTypeFaceSummaryDto: FfiConverterRustBuffer {
                 fileSize: FfiConverterUInt64.read(from: &buf), 
                 version: FfiConverterOptionString.read(from: &buf), 
                 manufacturer: FfiConverterOptionString.read(from: &buf), 
+                designer: FfiConverterOptionString.read(from: &buf),
+                copyright: FfiConverterOptionString.read(from: &buf),
                 category: FfiConverterString.read(from: &buf), 
                 license: FfiConverterString.read(from: &buf), 
                 scripts: FfiConverterSequenceString.read(from: &buf), 
@@ -1082,6 +1088,8 @@ public struct FfiConverterTypeFaceSummaryDto: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.fileSize, into: &buf)
         FfiConverterOptionString.write(value.version, into: &buf)
         FfiConverterOptionString.write(value.manufacturer, into: &buf)
+        FfiConverterOptionString.write(value.designer, into: &buf)
+        FfiConverterOptionString.write(value.copyright, into: &buf)
         FfiConverterString.write(value.category, into: &buf)
         FfiConverterString.write(value.license, into: &buf)
         FfiConverterSequenceString.write(value.scripts, into: &buf)
