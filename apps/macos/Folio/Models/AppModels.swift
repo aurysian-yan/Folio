@@ -4,6 +4,9 @@ enum AppPreferences {
     static let selectCardsOnHover = "selectCardsOnHover"
     static let hoverSelectionHaptics = "hoverSelectionHaptics"
     static let sliderHaptics = "sliderHaptics"
+    static let libraryViewMode = "libraryViewMode"
+    static let previewSize = "previewSize"
+    static let expandedCardWidth = "expandedCardWidth"
 }
 
 struct FamilyID: Hashable, Identifiable, Sendable {

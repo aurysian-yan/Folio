@@ -7,6 +7,7 @@ import SwiftUI
 final class LibraryViewModel {
     var snapshot: LibrarySnapshot = .empty
     var families: [FamilyCard] = []
+    var carouselTailFamilies: [FamilyCard] = []
     var facetOptions: [FacetOption] = []
     var selectedFacets: Set<FacetOption> = []
     var selectedDestination: SidebarDestination = .allFonts {
@@ -14,13 +15,24 @@ final class LibraryViewModel {
     }
     var selectedFamilyID: FamilyID?
     var selectedFaceID: FaceID?
-    var viewMode: LibraryViewMode = .compactGrid
+    var viewMode: LibraryViewMode {
+        didSet {
+            UserDefaults.standard.set(
+                viewMode.rawValue,
+                forKey: AppPreferences.libraryViewMode
+            )
+        }
+    }
     var searchText = "" {
         didSet { scheduleQuery(immediate: false) }
     }
     var previewMode: PreviewTextMode = .custom
     var customPreviewText = "Folio 字体预览"
-    var previewSize = 48.0
+    var previewSize: Double
+    private(set) var committedPreviewSize: Double
+    private(set) var isPreviewSizeEditing = false
+    private(set) var previewSizeEditingFamilyID: FamilyID?
+    private(set) var previewSizeCommitGeneration = 0
     var previewColor = Color.primary
     var cardBackgroundColor: Color?
     var inspectorPresented = true
@@ -37,14 +49,70 @@ final class LibraryViewModel {
     private var repository: FolioRepository?
     private var startupTask: Task<Void, Never>?
     private var queryTask: Task<Void, Never>?
+    private var paginationTask: Task<Void, Never>?
+    private var carouselTailTask: Task<Void, Never>?
+    private var requestedFamilyIndex = 0
     private var hasStarted = false
+
+    init() {
+        let defaults = UserDefaults.standard
+        viewMode = defaults.string(forKey: AppPreferences.libraryViewMode)
+            .flatMap(LibraryViewMode.init(rawValue:)) ?? .compactGrid
+        let storedPreviewSize = defaults.object(forKey: AppPreferences.previewSize)
+            .flatMap { ($0 as? NSNumber)?.doubleValue } ?? 48
+        let normalizedPreviewSize = min(max(storedPreviewSize.rounded(), 18), 106)
+        previewSize = normalizedPreviewSize
+        committedPreviewSize = normalizedPreviewSize
+    }
 
     var previewText: String {
         previewMode.text ?? customPreviewText
     }
 
+    func beginPreviewSizeEditing() {
+        guard !isPreviewSizeEditing else { return }
+        previewSizeEditingFamilyID = selectedFamilyID.flatMap { selectedID in
+            families.contains(where: { $0.id == selectedID }) ? selectedID : nil
+        } ?? families.first?.id
+        isPreviewSizeEditing = true
+    }
+
+    func updatePreviewSize(_ size: Double) {
+        if !isPreviewSizeEditing {
+            beginPreviewSizeEditing()
+        }
+        previewSize = min(max(size.rounded(), 18), 106)
+    }
+
+    func endPreviewSizeEditing() {
+        guard isPreviewSizeEditing else { return }
+        isPreviewSizeEditing = false
+        commitPreviewSize()
+    }
+
+    func applyPreferredPreviewSize(_ size: Double) {
+        let normalizedSize = min(max(size.rounded(), 18), 106)
+        guard normalizedSize != committedPreviewSize || isPreviewSizeEditing else { return }
+        isPreviewSizeEditing = false
+        previewSizeEditingFamilyID = selectedFamilyID ?? families.first?.id
+        previewSize = normalizedSize
+        commitPreviewSize()
+    }
+
+    func applyPreferredViewMode(_ rawValue: String) {
+        guard let mode = LibraryViewMode(rawValue: rawValue), mode != viewMode else { return }
+        viewMode = mode
+    }
+
+    private func commitPreviewSize() {
+        committedPreviewSize = previewSize
+        UserDefaults.standard.set(previewSize, forKey: AppPreferences.previewSize)
+        previewSizeCommitGeneration &+= 1
+    }
+
     var selectedFamily: FamilyCard? {
         families.first(where: { $0.id == selectedFamilyID })
+            ?? carouselTailFamilies.first(where: { $0.id == selectedFamilyID })
     }
 
     var selectedFace: FaceSummary? {
@@ -272,12 +340,38 @@ final class LibraryViewModel {
               UInt64(families.count) < totalMatches,
               !isLoading else { return }
         Task {
-            do {
-                try await performQuery(reset: false)
-            } catch {
-                present(error)
+            await loadFamilies(through: families.count)
+        }
+    }
+
+    func loadFamilies(through index: Int) async {
+        guard index >= families.count, UInt64(families.count) < totalMatches else { return }
+        requestedFamilyIndex = max(
+            requestedFamilyIndex,
+            min(index, max(Int(clamping: totalMatches) - 1, 0))
+        )
+        if let paginationTask {
+            await paginationTask.value
+            return
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while self.families.count <= self.requestedFamilyIndex,
+                  UInt64(self.families.count) < self.totalMatches {
+                let previousCount = self.families.count
+                do {
+                    try await self.performQuery(reset: false)
+                } catch {
+                    self.present(error)
+                    return
+                }
+                guard self.families.count > previousCount else { return }
             }
         }
+        paginationTask = task
+        await task.value
+        paginationTask = nil
     }
 
     private func scheduleQuery(immediate: Bool) {
@@ -380,11 +474,52 @@ final class LibraryViewModel {
             families.append(contentsOf: page.families.filter { !existing.contains($0.id) })
         }
         totalMatches = page.totalMatches
+        if reset {
+            loadCarouselTail()
+        }
         if let selectedFamilyID, !families.contains(where: { $0.id == selectedFamilyID }) {
             self.selectedFamilyID = nil
             selectedFaceID = nil
         }
         isLoading = false
+    }
+
+    private func loadCarouselTail() {
+        carouselTailTask?.cancel()
+        let totalCount = Int(clamping: totalMatches)
+        guard totalCount > 1 else {
+            carouselTailFamilies = []
+            return
+        }
+        if totalCount <= families.count {
+            carouselTailFamilies = Array(families.suffix(min(2, totalCount - 1)))
+            return
+        }
+        guard let repository else {
+            carouselTailFamilies = []
+            return
+        }
+
+        let text = searchText
+        let destination = selectedDestination
+        let facets = selectedFacets
+        let offset = max(totalCount - 2, 0)
+        carouselTailTask = Task { @MainActor [weak self] in
+            do {
+                let page = try await repository.query(
+                    text: text,
+                    destination: destination,
+                    facets: facets,
+                    offset: offset,
+                    limit: 2
+                )
+                guard !Task.isCancelled else { return }
+                self?.carouselTailFamilies = page.families
+            } catch is CancellationError {
+            } catch {
+                self?.carouselTailFamilies = []
+            }
+        }
     }
 
     private func present(_ error: Error) {

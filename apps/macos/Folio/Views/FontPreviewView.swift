@@ -2,6 +2,11 @@ import AppKit
 import CoreText
 import SwiftUI
 
+enum FontPreviewVerticalAlignment {
+    case top
+    case center
+}
+
 struct FontPreviewView: NSViewRepresentable {
     let text: String
     let face: FaceSummary?
@@ -9,6 +14,7 @@ struct FontPreviewView: NSViewRepresentable {
     let color: Color
     let axes: [String: Double]
     var alignment: NSTextAlignment = .center
+    var verticalAlignment: FontPreviewVerticalAlignment = .center
     var lineLimit = 1
     var lineHeight: Double?
 
@@ -24,6 +30,7 @@ struct FontPreviewView: NSViewRepresentable {
         view.font = FontPreviewCache.shared.font(for: face, size: size, axes: axes)
         view.textColor = NSColor(color)
         view.alignment = alignment
+        view.verticalAlignment = verticalAlignment
         view.lineLimit = lineLimit
         view.lineHeight = lineHeight
         view.needsDisplay = true
@@ -110,6 +117,7 @@ final class LocalFontPreviewNSView: NSView {
     var font: CTFont = CTFontCreateWithName("Helvetica" as CFString, 48, nil)
     var textColor = NSColor.labelColor
     var alignment: NSTextAlignment = .center
+    var verticalAlignment: FontPreviewVerticalAlignment = .center
     var lineLimit = 1
     var lineHeight: Double?
 
@@ -137,7 +145,13 @@ final class LocalFontPreviewNSView: NSView {
         default:
             x = max(0, (bounds.width - width) / 2)
         }
-        let baseline = max(descent, (bounds.height - ascent - descent) / 2 + descent)
+        let baseline: CGFloat
+        switch verticalAlignment {
+        case .top:
+            baseline = max(descent, bounds.height - ascent)
+        case .center:
+            baseline = max(descent, (bounds.height - ascent - descent) / 2 + descent)
+        }
         context.saveGState()
         context.clip(to: bounds)
         context.textMatrix = .identity
@@ -147,7 +161,12 @@ final class LocalFontPreviewNSView: NSView {
     }
 
     func requiredHeight(for width: CGFloat) -> CGFloat {
-        guard lineLimit > 1 else { return ceil(CTFontGetSize(font) * 1.15) }
+        guard lineLimit > 1 else {
+            let naturalHeight = CTFontGetAscent(font)
+                + CTFontGetDescent(font)
+                + CTFontGetLeading(font)
+            return ceil(CGFloat(lineHeight ?? Double(naturalHeight)))
+        }
         let framesetter = CTFramesetterCreateWithAttributedString(attributedString())
         let maximumHeight = ceil(
             CGFloat(lineHeight ?? CTFontGetSize(font) * 1.15) * CGFloat(lineLimit)
@@ -230,12 +249,14 @@ final class LocalFontPreviewNSView: NSView {
             nil
         )
         let height = min(maximumHeight, ceil(suggested.height))
-        let rect = CGRect(
-            x: 0,
-            y: max(0, (bounds.height - height) / 2),
-            width: bounds.width,
-            height: height
-        )
+        let originY: CGFloat
+        switch verticalAlignment {
+        case .top:
+            originY = max(0, bounds.height - height)
+        case .center:
+            originY = max(0, (bounds.height - height) / 2)
+        }
+        let rect = CGRect(x: 0, y: originY, width: bounds.width, height: height)
         let path = CGPath(rect: rect, transform: nil)
         let frame = CTFramesetterCreateFrame(framesetter, CFRange(), path, nil)
         context.saveGState()

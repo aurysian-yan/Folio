@@ -3,6 +3,9 @@ import SwiftUI
 struct RootView: View {
     @State private var model = LibraryViewModel()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @AppStorage(AppPreferences.libraryViewMode) private var preferredViewMode =
+        LibraryViewMode.compactGrid.rawValue
+    @AppStorage(AppPreferences.previewSize) private var preferredPreviewSize = 48.0
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -27,6 +30,12 @@ struct RootView: View {
         }
         .background(WindowSizeController())
         .task { model.start() }
+        .onChange(of: preferredViewMode) { _, rawValue in
+            model.applyPreferredViewMode(rawValue)
+        }
+        .onChange(of: preferredPreviewSize) { _, size in
+            model.applyPreferredPreviewSize(size)
+        }
         .alert("无法完成操作", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }

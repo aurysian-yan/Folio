@@ -49,11 +49,26 @@ struct FontFamilyCardView: View {
     @Bindable var model: LibraryViewModel
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
+    @AppStorage(AppPreferences.expandedCardWidth) private var expandedCardWidth = 410.0
     @State private var hoverSelectionTask: Task<Void, Never>?
+    @State private var previewSizeUpdateTask: Task<Void, Never>?
+    @State private var displayedPreviewSize: Double
     let family: FamilyCard
     let presentation: FontCardPresentation
 
     private let cornerRadius: CGFloat = 16
+    private let expandedFooterHeight: CGFloat = 44
+
+    init(
+        model: LibraryViewModel,
+        family: FamilyCard,
+        presentation: FontCardPresentation
+    ) {
+        self.model = model
+        self.family = family
+        self.presentation = presentation
+        _displayedPreviewSize = State(initialValue: model.committedPreviewSize)
+    }
 
     private var face: FaceSummary? {
         if selected,
@@ -72,11 +87,25 @@ struct FontFamilyCardView: View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
 
+    private var cardWidth: CGFloat {
+        presentation == .expanded ? CGFloat(expandedCardWidth) : presentation.width
+    }
+
+    private var cardHeight: CGFloat {
+        presentation == .expanded
+            ? cardWidth / FontCardPresentation.expanded.aspectRatio
+            : presentation.height
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             sizedCardContent
                 .background {
-                    cardShape.fill(.ultraThickMaterial)
+                    cardShape.fill(.thickMaterial)
+                    cardShape.fill(
+                        Color(nsColor: .controlBackgroundColor)
+                            .opacity(presentation == .expanded ? 0.72 : 0.58)
+                    )
                     if let cardBackgroundColor = model.cardBackgroundColor {
                         cardShape.fill(cardBackgroundColor)
                     }
@@ -92,11 +121,12 @@ struct FontFamilyCardView: View {
                         .clipShape(cardShape)
                     }
                 }
+                .clipShape(cardShape)
                 .overlay {
                     cardShape.stroke(
                         selected && presentation != .expanded
                             ? Color(red: 0, green: 120 / 255, blue: 240 / 255)
-                            : Color.primary.opacity(presentation == .expanded ? 0 : 0.1),
+                            : Color.primary.opacity(presentation == .expanded ? 0.08 : 0.1),
                         lineWidth: selected && presentation != .expanded ? 3 : 1
                     )
                     .allowsHitTesting(false)
@@ -107,7 +137,7 @@ struct FontFamilyCardView: View {
                     .padding(10)
             }
         }
-        .frame(maxWidth: presentation == .expanded ? presentation.width : nil)
+        .frame(maxWidth: presentation == .expanded ? cardWidth : nil)
         .contentShape(cardShape)
         .shadow(
             color: presentation == .expanded ? .black.opacity(0.15) : .clear,
@@ -118,6 +148,11 @@ struct FontFamilyCardView: View {
             color: presentation == .expanded ? .black.opacity(0.05) : .clear,
             radius: 2.5,
             y: 6
+        )
+        .shadow(
+            color: presentation == .expanded ? .black.opacity(0.05) : .clear,
+            radius: 1,
+            y: 2
         )
         .onTapGesture {
             hoverSelectionTask?.cancel()
@@ -165,8 +200,12 @@ struct FontFamilyCardView: View {
         .accessibilityLabel("\(family.displayName)，\(family.faces.count) 个样式")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .onAppear { model.loadMoreIfNeeded(current: family) }
+        .onChange(of: model.previewSizeCommitGeneration) { _, _ in
+            schedulePreviewSizeUpdate()
+        }
         .onDisappear {
             hoverSelectionTask?.cancel()
+            previewSizeUpdateTask?.cancel()
         }
     }
 
@@ -188,7 +227,7 @@ struct FontFamilyCardView: View {
                 .frame(height: presentation.height)
         case .expanded:
             cardContent()
-                .frame(width: presentation.width, height: presentation.height)
+                .frame(width: cardWidth, height: cardHeight)
         }
     }
 
@@ -256,20 +295,47 @@ struct FontFamilyCardView: View {
             }
             .padding(10)
         case .expanded:
-            VStack(alignment: .leading, spacing: 0) {
-                preview(alignment: .left)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 28)
+            GeometryReader { geometry in
+                let contentWidth = max(0, geometry.size.width - 28)
+                let contentHeight = max(0, geometry.size.height - 28)
+
+                ZStack(alignment: .bottom) {
+                    preview(
+                        alignment: .left,
+                        verticalAlignment: .top,
+                        lineLimit: 6
+                    )
+                    .frame(
+                        width: contentWidth,
+                        height: contentHeight,
+                        alignment: .top
+                    )
                     .clipped()
-                Spacer(minLength: 0)
-                familyName
-                HStack {
-                    familyMetadata
-                    Spacer(minLength: 8)
-                    faceSelector
+                    .mask {
+                        VStack(spacing: 0) {
+                            Rectangle()
+                            Color.clear
+                                .frame(height: expandedFooterHeight)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        familyName
+                        HStack {
+                            familyMetadata
+                            Spacer(minLength: 8)
+                            faceSelector
+                        }
+                    }
+                    .frame(width: contentWidth, alignment: .leading)
+                    .frame(height: expandedFooterHeight, alignment: .bottom)
                 }
+                .frame(width: contentWidth, height: contentHeight)
+                .position(
+                    x: geometry.size.width / 2,
+                    y: geometry.size.height / 2
+                )
             }
-            .padding(14)
         }
     }
 
@@ -277,16 +343,54 @@ struct FontFamilyCardView: View {
         max(0, (cardSize?.height ?? presentation.height) - 20 - footerHeight)
     }
 
-    private func preview(alignment: NSTextAlignment, lineLimit: Int = 1) -> some View {
+    private func preview(
+        alignment: NSTextAlignment,
+        verticalAlignment: FontPreviewVerticalAlignment = .center,
+        lineLimit: Int = 1
+    ) -> some View {
         FontPreviewView(
             text: model.previewText,
             face: face,
-            size: model.previewSize,
+            size: cardPreviewSize,
             color: model.previewColor,
             axes: selected ? model.axisValues : [:],
             alignment: alignment,
+            verticalAlignment: verticalAlignment,
             lineLimit: lineLimit
         )
+    }
+
+    private var cardPreviewSize: Double {
+        if model.isPreviewSizeEditing,
+           model.previewSizeEditingFamilyID == family.id {
+            return model.previewSize
+        }
+        return displayedPreviewSize
+    }
+
+    private func schedulePreviewSizeUpdate() {
+        previewSizeUpdateTask?.cancel()
+        let targetSize = model.committedPreviewSize
+        let anchorID = model.previewSizeEditingFamilyID ?? model.families.first?.id
+        guard family.id != anchorID,
+              let familyIndex = model.families.firstIndex(where: { $0.id == family.id }) else {
+            displayedPreviewSize = targetSize
+            return
+        }
+        let anchorIndex = anchorID.flatMap { id in
+            model.families.firstIndex(where: { $0.id == id })
+        } ?? 0
+        let updateOrder = abs(familyIndex - anchorIndex) + 1
+        let delayMilliseconds = min(updateOrder * 10, 1_000)
+        previewSizeUpdateTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(delayMilliseconds))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            displayedPreviewSize = targetSize
+        }
     }
 
     private var familyName: some View {

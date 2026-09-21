@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PreviewBar: View {
     @Bindable var model: LibraryViewModel
+    @AppStorage(AppPreferences.expandedCardWidth) private var expandedCardWidth = 410.0
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -26,6 +27,15 @@ struct PreviewBar: View {
             sizeSlider(width: 100)
             sizeValue
 
+            if model.viewMode == .stack {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                cardSizeSlider(width: 80)
+                cardSizeValue
+            }
+
             Divider()
                 .frame(height: 20)
 
@@ -45,6 +55,9 @@ struct PreviewBar: View {
             previewTextField(minWidth: 64)
             sizeSlider(width: 72)
             sizeValue
+            if model.viewMode == .stack {
+                cardSizeSlider(width: 56)
+            }
             compactColorPicker(
                 "卡片背景色",
                 systemImage: "rectangle.fill",
@@ -95,8 +108,14 @@ struct PreviewBar: View {
     private func sizeSlider(width: CGFloat) -> some View {
         Slider(value: Binding(
             get: { model.previewSize },
-            set: { model.previewSize = $0.rounded() }
-        ), in: 18...106)
+            set: { model.updatePreviewSize($0) }
+        ), in: 18...106) { editing in
+            if editing {
+                model.beginPreviewSizeEditing()
+            } else {
+                model.endPreviewSizeEditing()
+            }
+        }
             .frame(width: width)
             .accessibilityLabel("预览字号")
             .sliderHaptics(value: model.previewSize, in: 18...106, feedbackStep: 1)
@@ -115,6 +134,26 @@ struct PreviewBar: View {
         .contentTransition(.numericText(value: model.previewSize))
         .animation(.snappy(duration: 0.18), value: model.previewSize.rounded())
         .frame(width: 50, alignment: .trailing)
+    }
+
+    private func cardSizeSlider(width: CGFloat) -> some View {
+        Slider(value: $expandedCardWidth, in: 320...560, step: 10)
+            .frame(width: width)
+            .accessibilityLabel("大卡片尺寸")
+            .help("调整大卡片尺寸")
+            .sliderHaptics(
+                value: expandedCardWidth,
+                in: 320...560,
+                feedbackStep: 10
+            )
+    }
+
+    private var cardSizeValue: some View {
+        Text("\(Int(expandedCardWidth.rounded()))px")
+            .font(.system(size: 13, weight: .medium, design: .monospaced))
+            .monospacedDigit()
+            .contentTransition(.numericText(value: expandedCardWidth))
+            .frame(width: 50, alignment: .trailing)
     }
 
     private func compactColorPicker(
