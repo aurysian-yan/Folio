@@ -6,6 +6,17 @@ struct RootView: View {
     @AppStorage(AppPreferences.libraryViewMode) private var preferredViewMode =
         LibraryViewMode.compactGrid.rawValue
     @AppStorage(AppPreferences.previewSize) private var preferredPreviewSize = 48.0
+    @AppStorage(AppPreferences.useCollectionThemeColor) private var useCollectionThemeColor = true
+    @AppStorage(AppPreferences.defaultThemeColor) private var defaultThemeColor = DefaultThemeColor.folio.rawValue
+
+    private var themeColor: Color {
+        if useCollectionThemeColor,
+           case let .collection(id) = model.selectedDestination,
+           let collection = model.snapshot.collections.first(where: { $0.id == id }) {
+            return collection.color.color
+        }
+        return (DefaultThemeColor(rawValue: defaultThemeColor) ?? .folio).color
+    }
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -58,6 +69,9 @@ struct RootView: View {
         .sheet(isPresented: $model.isImportReportPresented) {
             ImportReportView(model: model)
         }
+        .tint(themeColor)
+        .accentColor(themeColor)
+        .environment(\.folioThemeColor, themeColor)
     }
 }
 
@@ -183,6 +197,7 @@ private struct WindowLayoutPersistenceController: NSViewRepresentable {
 
 private struct CollectionEditorView: View {
     @Bindable var model: LibraryViewModel
+    @Environment(\.folioThemeColor) private var themeColor
     let intent: CollectionEditorIntent
     @FocusState private var focused: Bool
     @State private var name: String
@@ -217,7 +232,7 @@ private struct CollectionEditorView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .tint(icon == option ? .accentColor : .secondary)
+                        .tint(icon == option ? themeColor : .secondary)
                         .accessibilityLabel(option.title)
                         .accessibilityAddTraits(icon == option ? .isSelected : [])
                         .help(option.title)

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FacetFilterView: View {
     @Bindable var model: LibraryViewModel
+    @Environment(\.folioThemeColor) private var themeColor
 
     var body: some View {
         DisclosureGroup(isExpanded: $model.filterExpanded) {
@@ -65,7 +66,7 @@ struct FacetFilterView: View {
             .background {
                 if selected {
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(Color(red: 0, green: 136 / 255, blue: 1))
+                        .fill(themeColor)
                 } else {
                     ZStack {
                         RoundedRectangle(cornerRadius: 5, style: .continuous)

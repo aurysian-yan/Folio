@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LibraryListView: View {
     @Bindable var model: LibraryViewModel
+    @Environment(\.folioThemeColor) private var themeColor
 
     var body: some View {
         Table(model.families, selection: $model.selectedFamilyID) {
@@ -32,7 +33,7 @@ struct LibraryListView: View {
 
             TableColumn("可变") { family in
                 Image.englishSystemName(family.isVariable ? "checkmark" : "minus")
-                    .foregroundStyle(family.isVariable ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(family.isVariable ? themeColor : Color.secondary)
                     .accessibilityLabel(family.isVariable ? "可变字体" : "非可变字体")
             }
             .width(50)

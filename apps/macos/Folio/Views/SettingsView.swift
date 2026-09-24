@@ -9,6 +9,8 @@ struct SettingsView: View {
     @AppStorage(AppPreferences.previewSize) private var previewSize = 48.0
     @AppStorage(AppPreferences.askImportMode) private var askImportMode = false
     @AppStorage(AppPreferences.defaultImportMode) private var defaultImportMode = FontImportMode.copy.rawValue
+    @AppStorage(AppPreferences.useCollectionThemeColor) private var useCollectionThemeColor = true
+    @AppStorage(AppPreferences.defaultThemeColor) private var defaultThemeColor = DefaultThemeColor.folio.rawValue
 
     var body: some View {
         Form {
@@ -38,6 +40,15 @@ struct SettingsView: View {
                 )
             }
 
+            Section("主题色") {
+                Picker("默认主题色", selection: $defaultThemeColor) {
+                    ForEach(DefaultThemeColor.allCases) { option in
+                        Text(option.title).tag(option.rawValue)
+                    }
+                }
+                Toggle("进入收藏夹时使用收藏夹颜色", isOn: $useCollectionThemeColor)
+            }
+
             Section {
                 Toggle("悬停时选中字体卡片", isOn: $selectCardsOnHover)
                 Toggle("切换字体卡片时提供触觉反馈", isOn: $hoverSelectionHaptics)
@@ -49,6 +60,8 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .tint((DefaultThemeColor(rawValue: defaultThemeColor) ?? .folio).color)
+        .accentColor((DefaultThemeColor(rawValue: defaultThemeColor) ?? .folio).color)
         .frame(width: 480, height: 440)
     }
 }

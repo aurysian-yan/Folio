@@ -47,6 +47,7 @@ enum FontCardPresentation: Hashable, Sendable {
 
 struct FontFamilyCardView: View {
     @Bindable var model: LibraryViewModel
+    @Environment(\.folioThemeColor) private var themeColor
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
     @State private var hoverSelectionTask: Task<Void, Never>?
@@ -113,7 +114,7 @@ struct FontFamilyCardView: View {
                         LinearGradient(
                             stops: [
                                 .init(color: .clear, location: 0.53125),
-                                .init(color: Color.accentColor.opacity(0.4), location: 1),
+                                .init(color: themeColor.opacity(0.4), location: 1),
                             ],
                             startPoint: .top,
                             endPoint: .bottom
@@ -125,7 +126,7 @@ struct FontFamilyCardView: View {
                 .overlay {
                     cardShape.stroke(
                         selected && presentation != .expanded
-                            ? Color(red: 0, green: 120 / 255, blue: 240 / 255)
+                            ? themeColor
                             : Color.primary.opacity(presentation == .expanded ? 0.08 : 0.1),
                         lineWidth: selected && presentation != .expanded ? 3 : 1
                     )

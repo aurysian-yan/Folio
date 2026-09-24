@@ -1,6 +1,8 @@
 import SwiftUI
 
 enum AppPreferences {
+    static let useCollectionThemeColor = "useCollectionThemeColor"
+    static let defaultThemeColor = "defaultThemeColor"
     static let selectCardsOnHover = "selectCardsOnHover"
     static let hoverSelectionHaptics = "hoverSelectionHaptics"
     static let sliderHaptics = "sliderHaptics"
@@ -9,6 +11,38 @@ enum AppPreferences {
     static let expandedCardHeightRatio = "expandedCardHeightRatio"
     static let askImportMode = "askImportMode"
     static let defaultImportMode = "defaultImportMode"
+}
+
+enum DefaultThemeColor: String, CaseIterable, Identifiable {
+    case folio
+    case macOS
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .folio: "Folio 橙色"
+        case .macOS: "macOS 主题色"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .folio: Color(.sRGB, red: 248.0 / 255.0, green: 104.0 / 255.0, blue: 44.0 / 255.0, opacity: 1)
+        case .macOS: Color(nsColor: .controlAccentColor)
+        }
+    }
+}
+
+private struct FolioThemeColorKey: EnvironmentKey {
+    static let defaultValue = Color(nsColor: .controlAccentColor)
+}
+
+extension EnvironmentValues {
+    var folioThemeColor: Color {
+        get { self[FolioThemeColorKey.self] }
+        set { self[FolioThemeColorKey.self] = newValue }
+    }
 }
 
 enum FontImportMode: String, CaseIterable, Identifiable, Sendable {

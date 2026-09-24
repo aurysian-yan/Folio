@@ -1,7 +1,9 @@
+import AppKit
 import SwiftUI
 
 struct SidebarView: View {
     @Bindable var model: LibraryViewModel
+    @Environment(\.folioThemeColor) private var themeColor
 
     var body: some View {
         List(selection: $model.selectedDestination) {
@@ -41,12 +43,7 @@ struct SidebarView: View {
                 }
                     .foregroundStyle(.tertiary)
                     .help("在线字体将在后续版本提供")
-                Label {
-                    Text("字体健康")
-                } icon: {
-                    SidebarSymbolIcon(symbol: "stethoscope", isSelected: model.selectedDestination == .fontHealth)
-                }
-                    .badge(healthCount)
+                sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
                     .tag(SidebarDestination.fontHealth)
             }
 
@@ -85,6 +82,8 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .background(SidebarSelectionHighlightController())
+        .environment(\.appearsActive, true)
         .navigationTitle("Folio")
     }
 
@@ -105,7 +104,7 @@ struct SidebarView: View {
         return HStack {
             Label {
                 Text(title)
-                    .foregroundStyle(isSelected && symbolColor != nil ? Color.white : Color.primary)
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
             } icon: {
                 if let symbolColor {
                     SidebarSymbolIcon(
@@ -120,17 +119,66 @@ struct SidebarView: View {
                         isSelected: isSelected,
                         speed: speed
                     )
+                    .foregroundStyle(isSelected ? .white : themeColor)
                 }
             }
             Spacer()
             if let count {
                 Text(count, format: .number)
-                    .foregroundStyle(isSelected && symbolColor != nil ? Color.white.opacity(0.88) : Color.secondary)
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.88) : Color.secondary)
                     .monospacedDigit()
+            }
+        }
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isSelected ? themeColor : .clear)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+        )
+    }
+}
+
+private struct SidebarSelectionHighlightController: NSViewRepresentable {
+    func makeNSView(context: Context) -> SidebarSelectionHighlightView {
+        SidebarSelectionHighlightView()
+    }
+
+    func updateNSView(_ view: SidebarSelectionHighlightView, context: Context) {
+        view.updateSelectionHighlight()
+    }
+}
+
+private final class SidebarSelectionHighlightView: NSView {
+    private weak var sidebar: NSOutlineView?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        sidebar = nil
+        updateSelectionHighlight()
+    }
+
+    func updateSelectionHighlight() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let contentView = self.window?.contentView else { return }
+            let outline = self.sidebar ?? self.findSidebar(in: contentView)
+            self.sidebar = outline
+            if let outline, outline.selectionHighlightStyle != .none {
+                outline.selectionHighlightStyle = .none
             }
         }
     }
 
+    private func findSidebar(in view: NSView) -> NSOutlineView? {
+        if let outline = view as? NSOutlineView, outline.style == .sourceList {
+            return outline
+        }
+        for subview in view.subviews {
+            if let outline = findSidebar(in: subview) {
+                return outline
+            }
+        }
+        return nil
+    }
 }
 
 /// 侧栏图标：切换到该项时先播消失动画，再紧接着用绘制动画出现。
