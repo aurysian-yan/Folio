@@ -3,8 +3,8 @@
 use crate::root::{id_bytes, system_time_to_nanos};
 use crate::{cache, FolioDatabase, StorageError};
 use folio_core::{
-    normalize_search, Collection, CollectionId, CollectionMembers, FontFaceId, FontIdentityId,
-    LibraryStateSnapshot, RecentFont, RootMembership,
+    normalize_search, Collection, CollectionColor, CollectionIcon, CollectionId, CollectionMembers,
+    FontFaceId, FontIdentityId, LibraryStateSnapshot, RecentFont, RootMembership,
 };
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use std::collections::{BTreeMap, BTreeSet};
@@ -37,11 +37,17 @@ fn require_collection(conn: &Connection, id: CollectionId) -> Result<(), Storage
 }
 fn collection(row: &Row<'_>) -> Result<Collection, StorageError> {
     let id: Vec<u8> = row.get(0)?;
+    let icon_key: String = row.get(4)?;
+    let color_key: String = row.get(5)?;
     Ok(Collection {
         id: CollectionId::from_bytes(id_bytes(&id, "collections.id")?),
         name: row.get(1)?,
         created_at_ns: row.get(2)?,
         updated_at_ns: row.get(3)?,
+        icon: CollectionIcon::from_key(&icon_key)
+            .ok_or(StorageError::CorruptCollectionIcon(icon_key))?,
+        color: CollectionColor::from_key(&color_key)
+            .ok_or(StorageError::CorruptCollectionColor(color_key))?,
     })
 }
 fn name_conflict(error: rusqlite::Error) -> StorageError {
@@ -74,6 +80,23 @@ fn members(conn: &Connection, id: CollectionId) -> Result<Vec<FontIdentityId>, S
 
 impl FolioDatabase {
     pub fn create_collection(&self, name: &str) -> Result<Collection, StorageError> {
+        self.create_collection_with_style(name, CollectionIcon::Folder, CollectionColor::Gray)
+    }
+
+    pub fn create_collection_with_icon(
+        &self,
+        name: &str,
+        icon: CollectionIcon,
+    ) -> Result<Collection, StorageError> {
+        self.create_collection_with_style(name, icon, CollectionColor::Gray)
+    }
+
+    pub fn create_collection_with_style(
+        &self,
+        name: &str,
+        icon: CollectionIcon,
+        color: CollectionColor,
+    ) -> Result<Collection, StorageError> {
         let key = valid_name(name)?;
         let mut bytes = [0; 16];
         getrandom::fill(&mut bytes).map_err(StorageError::RandomId)?;
@@ -81,17 +104,21 @@ impl FolioDatabase {
         let result = Collection {
             id: CollectionId::from_bytes(bytes),
             name: name.to_owned(),
+            icon,
+            color,
             created_at_ns: timestamp,
             updated_at_ns: timestamp,
         };
         self.conn
             .execute(
-                "INSERT INTO collections VALUES (?1,?2,?3,?4,?4)",
+                "INSERT INTO collections (id,name,normalized_name,created_at_ns,updated_at_ns,icon,color) VALUES (?1,?2,?3,?4,?4,?5,?6)",
                 params![
                     result.id.as_bytes().as_slice(),
                     name,
                     key,
-                    result.created_at_ns
+                    result.created_at_ns,
+                    icon.key(),
+                    color.key(),
                 ],
             )
             .map_err(name_conflict)?;
@@ -100,6 +127,26 @@ impl FolioDatabase {
     pub fn rename_collection(&self, id: CollectionId, name: &str) -> Result<(), StorageError> {
         let key = valid_name(name)?;
         let changed = self.conn.execute("UPDATE collections SET name=?2, normalized_name=?3, updated_at_ns=max(updated_at_ns,?4) WHERE id=?1", params![id.as_bytes().as_slice(), name, key, now()?]).map_err(name_conflict)?;
+        if changed == 0 {
+            return Err(StorageError::CollectionNotFound { id });
+        }
+        Ok(())
+    }
+    pub fn update_collection(
+        &self,
+        id: CollectionId,
+        name: &str,
+        icon: CollectionIcon,
+        color: CollectionColor,
+    ) -> Result<(), StorageError> {
+        let key = valid_name(name)?;
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE collections SET name=?2, normalized_name=?3, icon=?4, color=?5, updated_at_ns=max(updated_at_ns,?6) WHERE id=?1",
+                params![id.as_bytes().as_slice(), name, key, icon.key(), color.key(), now()?],
+            )
+            .map_err(name_conflict)?;
         if changed == 0 {
             return Err(StorageError::CollectionNotFound { id });
         }
@@ -116,7 +163,7 @@ impl FolioDatabase {
         Ok(())
     }
     pub fn list_collections(&self) -> Result<Vec<Collection>, StorageError> {
-        let mut stmt = self.conn.prepare("SELECT id,name,created_at_ns,updated_at_ns FROM collections ORDER BY normalized_name,id")?;
+        let mut stmt = self.conn.prepare("SELECT id,name,created_at_ns,updated_at_ns,icon,color FROM collections ORDER BY normalized_name,id")?;
         let mut rows = stmt.query([])?;
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {

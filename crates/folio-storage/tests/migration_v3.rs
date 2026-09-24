@@ -27,7 +27,7 @@ fn v2_directory_and_cache_survive_v3_migration() {
     drop(conn);
 
     let mut reopened = open_db(dir.path());
-    assert_eq!(reopened.schema_version().unwrap(), 3);
+    assert_eq!(reopened.schema_version().unwrap(), 5);
     let roots = reopened.list_roots().unwrap();
     assert_eq!(roots.len(), 1);
     assert_eq!(roots[0].id, root.id);

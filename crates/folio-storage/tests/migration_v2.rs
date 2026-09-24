@@ -55,7 +55,7 @@ fn real_v1_schema_preserves_roots_cache_and_rebuilds_old_payload() {
     let fingerprint = folio_core::ContentFingerprint::from_bytes(&bytes);
     conn.execute("INSERT INTO source_files (root_id,path_platform,path_bytes,display_path,file_size,mtime_ns,content_hash,status,format,payload_version,payload) VALUES(?1,?2,?3,?4,?5,1,?6,'parsed','truetype',1,?7)",params![root.as_bytes().as_slice(),platform,file_bytes,file.to_string_lossy(),bytes.len() as i64,fingerprint.as_bytes().as_slice(),PAYLOAD]).unwrap();
     let mut db = FolioDatabase::open(&path).unwrap();
-    assert_eq!(db.schema_version().unwrap(), 3);
+    assert_eq!(db.schema_version().unwrap(), 5);
     assert_eq!(db.list_roots().unwrap()[0].kind, LibraryRootKind::Directory);
     assert_eq!(db.list_roots().unwrap()[0].id, root);
     assert_eq!(
@@ -96,7 +96,7 @@ fn real_v1_schema_preserves_roots_cache_and_rebuilds_old_payload() {
     assert_eq!(db.list_recent(10).unwrap().len(), 1);
     drop(db);
     let reopened = FolioDatabase::open(&path).unwrap();
-    assert_eq!(reopened.schema_version().unwrap(), 3);
+    assert_eq!(reopened.schema_version().unwrap(), 5);
     assert_eq!(reopened.load_cached_catalog().unwrap(), warm.catalog);
 }
 #[test]

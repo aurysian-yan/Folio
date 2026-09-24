@@ -7,8 +7,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use folio_core::{
-    Catalog, CollectionId, FontCategory, FontFace, FontFaceId, FontFamilyId, FontIdentityId,
-    LicenseKind,
+    Catalog, CollectionColor, CollectionIcon, CollectionId, FontCategory, FontFace, FontFaceId,
+    FontFamilyId, FontIdentityId, LicenseKind,
 };
 use folio_query::{
     FacetFilter, FacetValue, FontQuery, FontQueryIndex, FoundryKey, QueryScope, QuerySort,
@@ -182,6 +182,8 @@ pub struct FamilyDetailsDto {
 pub struct CollectionDto {
     pub id: CollectionIdDto,
     pub name: String,
+    pub icon: String,
+    pub color: String,
     pub member_count: u64,
 }
 
@@ -473,16 +475,58 @@ impl FolioEngine {
     }
 
     pub fn create_collection(&self, name: String) -> Result<CollectionDto, FolioFfiError> {
+        self.create_collection_with_icon(
+            name,
+            CollectionIcon::Folder.key().to_owned(),
+            CollectionColor::Gray.key().to_owned(),
+        )
+    }
+
+    pub fn create_collection_with_icon(
+        &self,
+        name: String,
+        icon: String,
+        color: String,
+    ) -> Result<CollectionDto, FolioFfiError> {
+        let icon = CollectionIcon::from_key(&icon)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection icon"))?;
+        let color = CollectionColor::from_key(&color)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection color"))?;
         let state = self.lock()?;
         let collection = state
             .database
-            .create_collection(&name)
+            .create_collection_with_style(&name, icon, color)
             .map_err(FolioFfiError::operation)?;
         Ok(CollectionDto {
             id: collection_dto(collection.id),
             name: collection.name,
+            icon: collection.icon.key().to_owned(),
+            color: collection.color.key().to_owned(),
             member_count: 0,
         })
+    }
+
+    pub fn update_collection(
+        &self,
+        id: CollectionIdDto,
+        name: String,
+        icon: String,
+        color: String,
+    ) -> Result<(), FolioFfiError> {
+        let icon = CollectionIcon::from_key(&icon)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection icon"))?;
+        let color = CollectionColor::from_key(&color)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection color"))?;
+        let state = self.lock()?;
+        state
+            .database
+            .update_collection(
+                CollectionId::from_bytes(parse_id(&id.value)?),
+                &name,
+                icon,
+                color,
+            )
+            .map_err(FolioFfiError::operation)
     }
 
     pub fn rename_collection(
@@ -575,6 +619,8 @@ fn snapshot(state: &mut EngineState) -> Result<LibrarySnapshotDto, FolioFfiError
             CollectionDto {
                 id: collection_dto(collection.id),
                 name: collection.name,
+                icon: collection.icon.key().to_owned(),
+                color: collection.color.key().to_owned(),
                 member_count,
             }
         })

@@ -45,8 +45,8 @@ struct RootView: View {
         } message: {
             Text(model.errorMessage ?? "发生未知错误")
         }
-        .sheet(isPresented: $model.isCreatingCollection) {
-            NewCollectionView(model: model)
+        .sheet(item: $model.collectionEditor) { intent in
+            CollectionEditorView(model: model, intent: intent)
         }
         .confirmationDialog("导入字体", isPresented: $model.isImportChoicePresented) {
             Button("复制到 Folio 字体库") { model.importPending(as: .copy) }
@@ -181,31 +181,102 @@ private struct WindowLayoutPersistenceController: NSViewRepresentable {
     }
 }
 
-private struct NewCollectionView: View {
+private struct CollectionEditorView: View {
     @Bindable var model: LibraryViewModel
+    let intent: CollectionEditorIntent
     @FocusState private var focused: Bool
+    @State private var name: String
+    @State private var icon: CollectionIcon
+    @State private var color: CollectionColor
+
+    init(model: LibraryViewModel, intent: CollectionEditorIntent) {
+        self.model = model
+        self.intent = intent
+        _name = State(initialValue: intent.initialName)
+        _icon = State(initialValue: intent.initialIcon)
+        _color = State(initialValue: intent.initialColor)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("新建收藏夹")
+            Text(intent.title)
                 .font(.headline)
-            TextField("收藏夹名称", text: $model.newCollectionName)
+            TextField("收藏夹名称", text: $name)
                 .focused($focused)
-                .onSubmit(model.createCollection)
+                .onSubmit(save)
+            Text("图标")
+                .font(.subheadline)
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 6) {
+                    ForEach(CollectionIcon.allCases) { option in
+                        Button {
+                            icon = option
+                        } label: {
+                            Image.englishSystemName(option.symbolName)
+                                .frame(maxWidth: .infinity, minHeight: 28)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(icon == option ? .accentColor : .secondary)
+                        .accessibilityLabel(option.title)
+                        .accessibilityAddTraits(icon == option ? .isSelected : [])
+                        .help(option.title)
+                    }
+                }
+            }
+            .frame(height: 150)
+            HStack {
+                Text("颜色")
+                    .font(.subheadline)
+                Spacer()
+                Text(color.title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 8) {
+                ForEach(CollectionColor.allCases) { option in
+                    colorSwatch(option)
+                }
+            }
             HStack {
                 Spacer()
                 Button("取消") {
-                    model.isCreatingCollection = false
-                    model.newCollectionName = ""
+                    model.collectionEditor = nil
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("创建", action: model.createCollection)
+                Button(intent.isCreate ? "创建" : "保存", action: save)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(model.newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding()
-        .frame(width: 360)
+        .frame(width: 380)
         .onAppear { focused = true }
+    }
+
+    private func save() {
+        model.saveCollection(intent, name: name, icon: icon, color: color)
+    }
+
+    private func colorSwatch(_ option: CollectionColor) -> some View {
+        let isSelected = color == option
+        return Button {
+            color = option
+        } label: {
+            ZStack {
+                Circle().fill(option.color)
+                if isSelected {
+                    Circle()
+                        .stroke(Color.primary, lineWidth: 2)
+                        .padding(2)
+                }
+            }
+            .frame(width: 24, height: 24)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .help(option.title)
     }
 }

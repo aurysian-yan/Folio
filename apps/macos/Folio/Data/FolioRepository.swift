@@ -163,12 +163,26 @@ actor FolioRepository {
         try engine.recordRecent(identityId: IdentityIdDto(value: identityID.rawValue))
     }
 
-    func createCollection(name: String) throws {
-        _ = try engine.createCollection(name: name)
+    func createCollection(name: String, icon: CollectionIcon, color: CollectionColor) throws {
+        _ = try engine.createCollectionWithIcon(
+            name: name,
+            icon: icon.rawValue,
+            color: color.rawValue
+        )
     }
 
-    func renameCollection(_ id: CollectionID, name: String) throws {
-        try engine.renameCollection(id: CollectionIdDto(value: id.rawValue), name: name)
+    func updateCollection(
+        _ id: CollectionID,
+        name: String,
+        icon: CollectionIcon,
+        color: CollectionColor
+    ) throws {
+        try engine.updateCollection(
+            id: CollectionIdDto(value: id.rawValue),
+            name: name,
+            icon: icon.rawValue,
+            color: color.rawValue
+        )
     }
 
     func deleteCollection(_ id: CollectionID) throws {
@@ -193,6 +207,8 @@ actor FolioRepository {
                 CollectionSummary(
                     id: CollectionID(rawValue: $0.id.value),
                     name: $0.name,
+                    icon: CollectionIcon(rawValue: $0.icon) ?? .folder,
+                    color: CollectionColor(rawValue: $0.color) ?? .gray,
                     memberCount: $0.memberCount
                 )
             },

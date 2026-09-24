@@ -79,8 +79,7 @@ final class LibraryViewModel {
         get { previewSession.inspectorPreviewText }
         set { previewSession.inspectorPreviewText = newValue }
     }
-    var isCreatingCollection = false
-    var newCollectionName = ""
+    var collectionEditor: CollectionEditorIntent?
 
     private let pageSize = 120
     @ObservationIgnored private let previewSession = FontPreviewSession.shared
@@ -310,15 +309,36 @@ final class LibraryViewModel {
         }
     }
 
-    func createCollection() {
-        let name = newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines)
+    func saveCollection(
+        _ intent: CollectionEditorIntent,
+        name: String,
+        icon: CollectionIcon,
+        color: CollectionColor
+    ) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, let repository else { return }
+        if case let .edit(collection) = intent,
+           collection.name == name,
+           collection.icon == icon,
+           collection.color == color {
+            collectionEditor = nil
+            return
+        }
         Task {
             do {
-                try await repository.createCollection(name: name)
+                switch intent {
+                case .create:
+                    try await repository.createCollection(name: name, icon: icon, color: color)
+                case let .edit(collection):
+                    try await repository.updateCollection(
+                        collection.id,
+                        name: name,
+                        icon: icon,
+                        color: color
+                    )
+                }
                 snapshot = try await repository.loadCachedLibrary()
-                newCollectionName = ""
-                isCreatingCollection = false
+                collectionEditor = nil
             } catch {
                 present(error)
             }

@@ -591,6 +591,8 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
 
     func createCollection(name: String) throws  -> CollectionDto
 
+    func createCollectionWithIcon(name: String, icon: String, color: String) throws  -> CollectionDto
+
     func deleteCollection(id: CollectionIdDto) throws
 
     func familyDetails(familyId: FamilyIdDto) throws  -> FamilyDetailsDto
@@ -612,6 +614,8 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
     func setCollectionMembers(collectionId: CollectionIdDto, identityIds: [IdentityIdDto], member: Bool) throws
 
     func setFavorite(identityIds: [IdentityIdDto], favorite: Bool) throws
+
+    func updateCollection(id: CollectionIdDto, name: String, icon: String, color: String) throws
 
     func validateFontFile(path: String) throws
 
@@ -704,6 +708,18 @@ open func createCollection(name: String)throws  -> CollectionDto  {
     uniffi_folio_ffi_fn_method_folioengine_create_collection(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(name),uniffiCallStatus
+    )
+})
+}
+
+open func createCollectionWithIcon(name: String, icon: String, color: String)throws  -> CollectionDto  {
+    return try  FfiConverterTypeCollectionDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_create_collection_with_icon(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(name),
+        FfiConverterString.lower(icon),
+        FfiConverterString.lower(color),uniffiCallStatus
     )
 })
 }
@@ -813,6 +829,18 @@ open func setFavorite(identityIds: [IdentityIdDto], favorite: Bool)throws   {try
 }
 }
 
+open func updateCollection(id: CollectionIdDto, name: String, icon: String, color: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_update_collection(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCollectionIdDto_lower(id),
+        FfiConverterString.lower(name),
+        FfiConverterString.lower(icon),
+        FfiConverterString.lower(color),uniffiCallStatus
+    )
+}
+}
+
 open func validateFontFile(path: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_folioengine_validate_font_file(
@@ -873,13 +901,17 @@ public func FfiConverterTypeFolioEngine_lower(_ value: FolioEngine) -> UInt64 {
 public struct CollectionDto: Equatable, Hashable {
     public var id: CollectionIdDto
     public var name: String
+    public var icon: String
+    public var color: String
     public var memberCount: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: CollectionIdDto, name: String, memberCount: UInt64) {
+    public init(id: CollectionIdDto, name: String, icon: String, color: String, memberCount: UInt64) {
         self.id = id
         self.name = name
+        self.icon = icon
+        self.color = color
         self.memberCount = memberCount
     }
 
@@ -901,6 +933,8 @@ public struct FfiConverterTypeCollectionDto: FfiConverterRustBuffer {
             try CollectionDto(
                 id: FfiConverterTypeCollectionIdDto.read(from: &buf),
                 name: FfiConverterString.read(from: &buf),
+                icon: FfiConverterString.read(from: &buf),
+                color: FfiConverterString.read(from: &buf),
                 memberCount: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -908,6 +942,8 @@ public struct FfiConverterTypeCollectionDto: FfiConverterRustBuffer {
     public static func write(_ value: CollectionDto, into buf: inout [UInt8]) {
         FfiConverterTypeCollectionIdDto.write(value.id, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.icon, into: &buf)
+        FfiConverterString.write(value.color, into: &buf)
         FfiConverterUInt64.write(value.memberCount, into: &buf)
     }
 }
@@ -2877,6 +2913,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_create_collection() != 9265) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_create_collection_with_icon() != 2075) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_delete_collection() != 49319) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2908,6 +2947,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_set_favorite() != 35292) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_update_collection() != 12557) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_validate_font_file() != 7645) {

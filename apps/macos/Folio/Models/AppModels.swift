@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 enum AppPreferences {
     static let selectCardsOnHover = "selectCardsOnHover"
@@ -173,7 +173,215 @@ struct FacetOption: Hashable, Identifiable, Sendable {
 struct CollectionSummary: Hashable, Identifiable, Sendable {
     let id: CollectionID
     var name: String
+    let icon: CollectionIcon
+    let color: CollectionColor
     let memberCount: UInt64
+}
+
+enum CollectionIcon: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case folder
+    case books
+    case type
+    case star
+    case heart
+    case bookmark
+    case tag
+    case briefcase
+    case sparkles
+    case slidersHorizontal = "sliders-horizontal"
+    case signature
+    case archive
+    case book
+    case paperclip
+    case package
+    case swatches
+    case gift
+    case stack
+    case numberCircle0 = "number-circle-0"
+    case numberCircle1 = "number-circle-1"
+    case numberCircle2 = "number-circle-2"
+    case numberCircle3 = "number-circle-3"
+    case numberCircle4 = "number-circle-4"
+    case numberCircle5 = "number-circle-5"
+    case numberCircle6 = "number-circle-6"
+    case numberCircle7 = "number-circle-7"
+    case numberCircle8 = "number-circle-8"
+    case numberCircle9 = "number-circle-9"
+    case numberSquare0 = "number-square-0"
+    case numberSquare1 = "number-square-1"
+    case numberSquare2 = "number-square-2"
+    case numberSquare3 = "number-square-3"
+    case numberSquare4 = "number-square-4"
+    case numberSquare5 = "number-square-5"
+    case numberSquare6 = "number-square-6"
+    case numberSquare7 = "number-square-7"
+    case numberSquare8 = "number-square-8"
+    case numberSquare9 = "number-square-9"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .folder: "文件夹"
+        case .books: "书籍"
+        case .type: "字体"
+        case .star: "星标"
+        case .heart: "爱心"
+        case .bookmark: "书签"
+        case .tag: "标签"
+        case .briefcase: "工作"
+        case .sparkles: "灵感"
+        case .slidersHorizontal: "调节"
+        case .signature: "签名"
+        case .archive: "归档"
+        case .book: "书本"
+        case .paperclip: "回形针"
+        case .package: "包裹"
+        case .swatches: "色板"
+        case .gift: "礼物"
+        case .stack: "叠层"
+        case .numberCircle0, .numberSquare0: "数字 0"
+        case .numberCircle1, .numberSquare1: "数字 1"
+        case .numberCircle2, .numberSquare2: "数字 2"
+        case .numberCircle3, .numberSquare3: "数字 3"
+        case .numberCircle4, .numberSquare4: "数字 4"
+        case .numberCircle5, .numberSquare5: "数字 5"
+        case .numberCircle6, .numberSquare6: "数字 6"
+        case .numberCircle7, .numberSquare7: "数字 7"
+        case .numberCircle8, .numberSquare8: "数字 8"
+        case .numberCircle9, .numberSquare9: "数字 9"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .folder: "folder"
+        case .books: "books.vertical"
+        case .type: "textformat"
+        case .star: "star"
+        case .heart: "heart"
+        case .bookmark: "bookmark"
+        case .tag: "tag"
+        case .briefcase: "briefcase"
+        case .sparkles: "sparkles"
+        case .slidersHorizontal: "slider.horizontal.3"
+        case .signature: "signature"
+        case .archive: "archivebox"
+        case .book: "book"
+        case .paperclip: "paperclip"
+        case .package: "shippingbox"
+        case .swatches: "swatchpalette"
+        case .gift: "gift"
+        case .stack: "rectangle.stack"
+        case .numberCircle0: "0.circle"
+        case .numberCircle1: "1.circle"
+        case .numberCircle2: "2.circle"
+        case .numberCircle3: "3.circle"
+        case .numberCircle4: "4.circle"
+        case .numberCircle5: "5.circle"
+        case .numberCircle6: "6.circle"
+        case .numberCircle7: "7.circle"
+        case .numberCircle8: "8.circle"
+        case .numberCircle9: "9.circle"
+        case .numberSquare0: "0.square"
+        case .numberSquare1: "1.square"
+        case .numberSquare2: "2.square"
+        case .numberSquare3: "3.square"
+        case .numberSquare4: "4.square"
+        case .numberSquare5: "5.square"
+        case .numberSquare6: "6.square"
+        case .numberSquare7: "7.square"
+        case .numberSquare8: "8.square"
+        case .numberSquare9: "9.square"
+        }
+    }
+}
+
+enum CollectionColor: String, CaseIterable, Hashable, Identifiable, Sendable {
+    case red
+    case orange
+    case yellow
+    case lime
+    case green
+    case cyan
+    case blue
+    case purple
+    case gray
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .red: "红色"
+        case .orange: "橙色"
+        case .yellow: "黄色"
+        case .lime: "黄绿色"
+        case .green: "绿色"
+        case .cyan: "青色"
+        case .blue: "蓝色"
+        case .purple: "紫色"
+        case .gray: "灰色"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .red: Color(.sRGB, red: 0.86, green: 0.22, blue: 0.25, opacity: 1)
+        case .orange: Color(.sRGB, red: 0.91, green: 0.39, blue: 0.12, opacity: 1)
+        case .yellow: Color(.sRGB, red: 0.82, green: 0.62, blue: 0.02, opacity: 1)
+        case .lime: Color(.sRGB, red: 0.49, green: 0.69, blue: 0.16, opacity: 1)
+        case .green: Color(.sRGB, red: 0.12, green: 0.60, blue: 0.36, opacity: 1)
+        case .cyan: Color(.sRGB, red: 0.00, green: 0.59, blue: 0.63, opacity: 1)
+        case .blue: Color(.sRGB, red: 0.18, green: 0.47, blue: 0.84, opacity: 1)
+        case .purple: Color(.sRGB, red: 0.49, green: 0.31, blue: 0.81, opacity: 1)
+        case .gray: Color(.sRGB, red: 0.48, green: 0.50, blue: 0.53, opacity: 1)
+        }
+    }
+}
+
+enum CollectionEditorIntent: Identifiable, Sendable {
+    case create
+    case edit(CollectionSummary)
+
+    var id: String {
+        switch self {
+        case .create: "create"
+        case let .edit(collection): "edit-\(collection.id.rawValue)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .create: "新建收藏夹"
+        case .edit: "编辑收藏夹"
+        }
+    }
+
+    var isCreate: Bool {
+        if case .create = self { return true }
+        return false
+    }
+
+    var initialName: String {
+        switch self {
+        case .create: ""
+        case let .edit(collection): collection.name
+        }
+    }
+
+    var initialIcon: CollectionIcon {
+        switch self {
+        case .create: .folder
+        case let .edit(collection): collection.icon
+        }
+    }
+
+    var initialColor: CollectionColor {
+        switch self {
+        case .create: .gray
+        case let .edit(collection): collection.color
+        }
+    }
 }
 
 struct RootSummary: Hashable, Identifiable, Sendable {

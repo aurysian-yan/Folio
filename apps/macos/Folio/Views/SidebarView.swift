@@ -52,21 +52,31 @@ struct SidebarView: View {
 
             Section {
                 ForEach(model.snapshot.collections) { collection in
-                    sidebarRow(collection.name, symbol: "folder", count: collection.memberCount, destination: .collection(collection.id))
+                    sidebarRow(
+                        collection.name,
+                        symbol: collection.icon.symbolName,
+                        count: collection.memberCount,
+                        destination: .collection(collection.id),
+                        symbolColor: collection.color.color
+                    )
                         .tag(SidebarDestination.collection(collection.id))
                         .contextMenu {
+                            Button("编辑收藏夹…") {
+                                model.collectionEditor = .edit(collection)
+                            }
                             Button("删除收藏夹", role: .destructive) {
                                 model.deleteCollection(collection)
                             }
                         }
                 }
                 Button {
-                    model.isCreatingCollection = true
+                    model.collectionEditor = .create
                 } label: {
-                    Label {
-                        Text("新收藏夹")
-                    } icon: {
+                    HStack(spacing: 8) {
                         Image.englishSystemName("plus")
+                            .foregroundStyle(Color.secondary)
+                        Text("新收藏夹")
+                            .foregroundStyle(Color.secondary)
                     }
                 }
                 .buttonStyle(.plain)
@@ -83,17 +93,39 @@ struct SidebarView: View {
         return Int(health.damagedFiles + health.multipleRevisions + health.metadataConflicts)
     }
 
-    private func sidebarRow(_ title: String, symbol: String, count: UInt64?, destination: SidebarDestination, speed: Double = 0.76) -> some View {
-        HStack {
+    private func sidebarRow(
+        _ title: String,
+        symbol: String,
+        count: UInt64?,
+        destination: SidebarDestination,
+        speed: Double = 0.76,
+        symbolColor: Color? = nil
+    ) -> some View {
+        let isSelected = model.selectedDestination == destination
+        return HStack {
             Label {
                 Text(title)
+                    .foregroundStyle(isSelected && symbolColor != nil ? Color.white : Color.primary)
             } icon: {
-                SidebarSymbolIcon(symbol: symbol, isSelected: model.selectedDestination == destination, speed: speed)
+                if let symbolColor {
+                    SidebarSymbolIcon(
+                        symbol: symbol,
+                        isSelected: isSelected,
+                        speed: speed
+                    )
+                    .foregroundStyle(isSelected ? .white : symbolColor)
+                } else {
+                    SidebarSymbolIcon(
+                        symbol: symbol,
+                        isSelected: isSelected,
+                        speed: speed
+                    )
+                }
             }
             Spacer()
             if let count {
                 Text(count, format: .number)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isSelected && symbolColor != nil ? Color.white.opacity(0.88) : Color.secondary)
                     .monospacedDigit()
             }
         }
@@ -167,8 +199,8 @@ private enum SidebarPreviewModel {
             variableFamilyCount: 96,
             recentCount: 12,
             collections: [
-                CollectionSummary(id: CollectionID(rawValue: "sans"), name: "无衬线", memberCount: 24),
-                CollectionSummary(id: CollectionID(rawValue: "serif"), name: "衬线", memberCount: 18)
+                CollectionSummary(id: CollectionID(rawValue: "sans"), name: "无衬线", icon: .type, color: .blue, memberCount: 24),
+                CollectionSummary(id: CollectionID(rawValue: "serif"), name: "衬线", icon: .books, color: .purple, memberCount: 18)
             ],
             roots: [],
             health: HealthSummary(

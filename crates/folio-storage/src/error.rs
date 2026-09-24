@@ -17,6 +17,10 @@ pub enum StorageError {
     InvalidCollectionName,
     #[error("collection name already exists")]
     CollectionNameConflict,
+    #[error("unknown collection icon stored in database: {0}")]
+    CorruptCollectionIcon(String),
+    #[error("unknown collection color stored in database: {0}")]
+    CorruptCollectionColor(String),
     #[error("collection not found: {id}")]
     CollectionNotFound { id: folio_core::CollectionId },
     #[error("system clock cannot be represented as nanoseconds")]

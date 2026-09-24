@@ -14,7 +14,7 @@ use rusqlite::{Connection, Transaction};
 use crate::error::StorageError;
 
 /// 当前构建支持的最高 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 3;
+pub const CURRENT_SCHEMA_VERSION: i32 = 5;
 
 /// 将新打开的连接迁移到 [`CURRENT_SCHEMA_VERSION`]。
 pub fn migrate(conn: &mut Connection) -> Result<(), StorageError> {
@@ -55,6 +55,8 @@ fn apply_step(tx: &Transaction<'_>, target: i32) -> Result<(), rusqlite::Error> 
         1 => migrate_to_v1(tx),
         2 => migrate_to_v2(tx),
         3 => migrate_to_v3(tx),
+        4 => migrate_to_v4(tx),
+        5 => migrate_to_v5(tx),
         _ => Ok(()),
     }
 }
@@ -128,5 +130,52 @@ fn migrate_to_v3(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
         "ALTER TABLE library_roots ADD COLUMN kind TEXT NOT NULL DEFAULT 'directory' \
          CHECK(kind IN ('directory', 'file')); \
          CREATE INDEX source_files_path ON source_files(path_platform, path_bytes);",
+    )
+}
+
+fn migrate_to_v4(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        "ALTER TABLE collections ADD COLUMN icon TEXT NOT NULL DEFAULT 'folder' \
+         CHECK(icon IN ('folder', 'books', 'type', 'star', 'heart', 'bookmark', 'tag', 'briefcase', 'sparkles'));",
+    )
+}
+
+fn migrate_to_v5(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE collections_new (
+            id BLOB PRIMARY KEY NOT NULL CHECK(length(id) = 16),
+            name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL UNIQUE,
+            created_at_ns INTEGER NOT NULL CHECK(created_at_ns >= 0),
+            updated_at_ns INTEGER NOT NULL CHECK(updated_at_ns >= created_at_ns),
+            icon TEXT NOT NULL CHECK(icon IN (
+                'folder', 'books', 'type', 'star', 'heart', 'bookmark', 'tag', 'briefcase', 'sparkles',
+                'sliders-horizontal', 'signature', 'archive', 'book', 'paperclip', 'package', 'swatches', 'gift', 'stack',
+                'number-circle-0', 'number-circle-1', 'number-circle-2', 'number-circle-3', 'number-circle-4',
+                'number-circle-5', 'number-circle-6', 'number-circle-7', 'number-circle-8', 'number-circle-9',
+                'number-square-0', 'number-square-1', 'number-square-2', 'number-square-3', 'number-square-4',
+                'number-square-5', 'number-square-6', 'number-square-7', 'number-square-8', 'number-square-9'
+            )),
+            color TEXT NOT NULL DEFAULT 'gray' CHECK(color IN (
+                'red', 'orange', 'yellow', 'lime', 'green', 'cyan', 'blue', 'purple', 'gray'
+            ))
+        );
+        INSERT INTO collections_new (id, name, normalized_name, created_at_ns, updated_at_ns, icon, color)
+            SELECT id, name, normalized_name, created_at_ns, updated_at_ns, icon, 'gray' FROM collections;
+
+        CREATE TABLE collection_members_new (
+            collection_id BLOB NOT NULL REFERENCES collections_new(id) ON DELETE CASCADE,
+            identity_id BLOB NOT NULL CHECK(length(identity_id) = 16),
+            PRIMARY KEY(collection_id, identity_id)
+        );
+        INSERT INTO collection_members_new (collection_id, identity_id)
+            SELECT collection_id, identity_id FROM collection_members;
+
+        DROP TABLE collection_members;
+        DROP TABLE collections;
+        ALTER TABLE collections_new RENAME TO collections;
+        ALTER TABLE collection_members_new RENAME TO collection_members;
+        "#,
     )
 }
