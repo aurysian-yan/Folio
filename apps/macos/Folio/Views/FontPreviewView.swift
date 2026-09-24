@@ -42,7 +42,11 @@ struct FontPreviewView: NSViewRepresentable {
         context: Context
     ) -> CGSize? {
         guard let width = proposal.width, width.isFinite else { return nil }
-        return CGSize(width: width, height: nsView.requiredHeight(for: width))
+        let requiredHeight = nsView.requiredHeight(for: width)
+        guard let height = proposal.height, height.isFinite, height > 0 else {
+            return CGSize(width: width, height: requiredHeight)
+        }
+        return CGSize(width: width, height: min(requiredHeight, height))
     }
 }
 

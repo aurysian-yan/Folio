@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct FontInspectorView: View {
@@ -8,9 +9,6 @@ struct FontInspectorView: View {
     @State private var copyExpanded = true
     @State private var informationExpanded = true
     @State private var destructiveActionsPresented = false
-    @State private var inspectorPreviewSize = 16.0
-    @State private var inspectorPreviewHeight: CGFloat = 96
-    @State private var previewHeightDragOrigin: CGFloat?
 
     var body: some View {
         Group {
@@ -56,9 +54,7 @@ struct FontInspectorView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     disclosureHeader("预览", isExpanded: $previewExpanded)
                     if previewExpanded {
-                        preview(face)
-                        previewResizeHandle()
-                        previewSizeAdjustment()
+                        InspectorFontPreview(model: model, face: face)
                     }
                 }
 
@@ -117,6 +113,7 @@ struct FontInspectorView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .layoutPriority(1)
+                        .help(formattedVersion(face.version))
                     Text("|")
                         .foregroundStyle(.tertiary)
                         .fixedSize()
@@ -259,81 +256,6 @@ struct FontInspectorView: View {
         if destructiveActions.contains(.uninstall) { return "字体将从系统字体中卸载。" }
         if destructiveActions.contains(.remove) { return "字体文件会从字体库中移除，可在废纸篓中恢复。" }
         return ""
-    }
-
-    private func preview(_ face: FaceSummary) -> some View {
-        FontPreviewView(
-            text: "ABCDEFGHIJKLMNOPQRSTUVWXY\nabcdefghijklmnopqrstuvwxyz\n0123456789",
-            face: face,
-            size: inspectorPreviewSize,
-            color: .primary,
-            axes: model.axisValues,
-            alignment: .left,
-            lineLimit: 4
-        )
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 66)
-        .frame(height: inspectorPreviewHeight)
-        .padding(.horizontal, 4)
-    }
-
-    private func previewResizeHandle() -> some View {
-        Image.englishSystemName("line.3.horizontal")
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.tertiary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 12)
-            .contentShape(.rect)
-            .highPriorityGesture(
-                DragGesture()
-                    .onChanged { value in
-                        let origin = previewHeightDragOrigin ?? inspectorPreviewHeight
-                        previewHeightDragOrigin = origin
-                        inspectorPreviewHeight = min(max(origin + value.translation.height, 66), 360)
-                    }
-                    .onEnded { _ in
-                        previewHeightDragOrigin = nil
-                    }
-            )
-            .accessibilityLabel("预览区域高度")
-            .accessibilityHint("上下拖动以调整预览区域高度")
-    }
-
-    private func previewSizeAdjustment() -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text("字号")
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                Spacer(minLength: 0)
-                Text("\(Int(inspectorPreviewSize.rounded())) px")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(height: 18)
-            .padding(.horizontal, 4)
-
-            Slider(
-                value: $inspectorPreviewSize,
-                in: 10...32
-            )
-            .controlSize(.small)
-            .frame(height: 24)
-            .padding(.horizontal, 6)
-            .accessibilityLabel("预览字号")
-            .accessibilityValue("\(Int(inspectorPreviewSize.rounded())) px")
-            .sliderHaptics(value: inspectorPreviewSize, in: 10...32, feedbackStep: 1)
-
-            HStack {
-                Text("10")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("32")
-                    .foregroundStyle(.tertiary)
-            }
-            .font(.system(size: 11, weight: .medium, design: .monospaced))
-            .frame(height: 14)
-            .padding(.horizontal, 4)
-        }
     }
 
     private func facePicker(_ family: FamilyCard, face: FaceSummary) -> some View {
@@ -595,6 +517,153 @@ struct FontInspectorView: View {
     private func swiftUIFont(_ family: FamilyCard, face: FaceSummary) -> String {
         let name = face.postScriptName ?? family.displayName
         return ".font(.custom(\"\(name)\", size: 16))"
+    }
+}
+
+private struct InspectorFontPreview: View {
+    @Bindable var model: LibraryViewModel
+    let face: FaceSummary
+    @State private var dragOriginHeight: CGFloat?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            EditableInspectorFontPreview(
+                text: $model.inspectorPreviewText,
+                face: face,
+                size: model.inspectorPreviewSize,
+                color: .primary,
+                axes: model.axisValues
+            )
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 66)
+            .frame(height: model.inspectorPreviewHeight, alignment: .top)
+            .padding(.horizontal, 4)
+            .clipped()
+
+            previewResizeHandle
+
+            previewSizeAdjustment
+        }
+        .transaction { $0.animation = nil }
+    }
+
+    private var previewResizeHandle: some View {
+        Image.englishSystemName("line.3.horizontal")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 12)
+            .contentShape(.rect)
+            .highPriorityGesture(
+                DragGesture()
+                    .onChanged { value in
+                        let origin = dragOriginHeight ?? model.inspectorPreviewHeight
+                        dragOriginHeight = origin
+                        model.inspectorPreviewHeight = min(max(origin + value.translation.height, 66), 720)
+                    }
+                    .onEnded { _ in
+                        dragOriginHeight = nil
+                    }
+            )
+            .accessibilityLabel("预览区域高度")
+            .accessibilityHint("上下拖动以调整预览区域高度")
+    }
+
+    private var previewSizeAdjustment: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("字号")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                Spacer(minLength: 0)
+                Text("\(Int(model.inspectorPreviewSize.rounded())) px")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(height: 18)
+            .padding(.horizontal, 4)
+
+            Slider(value: $model.inspectorPreviewSize, in: 10...32)
+                .controlSize(.small)
+                .frame(height: 24)
+                .padding(.horizontal, 6)
+                .accessibilityLabel("预览字号")
+                .accessibilityValue("\(Int(model.inspectorPreviewSize.rounded())) px")
+                .sliderHaptics(value: model.inspectorPreviewSize, in: 10...32, feedbackStep: 1)
+
+            HStack {
+                Text("10")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("32")
+                    .foregroundStyle(.tertiary)
+            }
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .frame(height: 14)
+            .padding(.horizontal, 4)
+        }
+    }
+}
+
+private struct EditableInspectorFontPreview: NSViewRepresentable {
+    @Binding var text: String
+    let face: FaceSummary
+    let size: Double
+    let color: Color
+    let axes: [String: Double]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+
+        let textView = NSTextView()
+        textView.delegate = context.coordinator
+        textView.drawsBackground = false
+        textView.isRichText = false
+        textView.isEditable = true
+        textView.allowsUndo = true
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: 0,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.setAccessibilityLabel("字体预览文本")
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.text = $text
+        if textView.string != text {
+            textView.string = text
+        }
+        textView.font = localFont(for: face, size: size, axes: axes)
+        textView.textColor = NSColor(color)
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            text.wrappedValue = textView.string
+        }
     }
 }
 

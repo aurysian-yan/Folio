@@ -5,6 +5,17 @@ import UniformTypeIdentifiers
 
 @MainActor
 @Observable
+private final class FontPreviewSession {
+    static let shared = FontPreviewSession()
+
+    var axisValuesByFace: [FaceID: [String: Double]] = [:]
+    var inspectorPreviewSize = 16.0
+    var inspectorPreviewHeight: CGFloat = 96
+    var inspectorPreviewText = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789\nThe quick brown fox jumps over the lazy dog.\nPack my box with five dozen liquor jugs."
+}
+
+@MainActor
+@Observable
 final class LibraryViewModel {
     var snapshot: LibrarySnapshot = .empty
     var families: [FamilyCard] = []
@@ -49,11 +60,30 @@ final class LibraryViewModel {
     var isRefreshing = false
     var errorMessage: String?
     var totalMatches: UInt64 = 0
-    var axisValues: [String: Double] = [:]
+    var axisValues: [String: Double] = [:] {
+        didSet {
+            if let selectedFaceID {
+                previewSession.axisValuesByFace[selectedFaceID] = axisValues
+            }
+        }
+    }
+    var inspectorPreviewSize: Double {
+        get { previewSession.inspectorPreviewSize }
+        set { previewSession.inspectorPreviewSize = newValue }
+    }
+    var inspectorPreviewHeight: CGFloat {
+        get { previewSession.inspectorPreviewHeight }
+        set { previewSession.inspectorPreviewHeight = newValue }
+    }
+    var inspectorPreviewText: String {
+        get { previewSession.inspectorPreviewText }
+        set { previewSession.inspectorPreviewText = newValue }
+    }
     var isCreatingCollection = false
     var newCollectionName = ""
 
     private let pageSize = 120
+    @ObservationIgnored private let previewSession = FontPreviewSession.shared
     private var repository: FolioRepository?
     private var operations: FontOperations?
     private var libraryFaceSources: [LibraryFaceSources] = []
@@ -214,9 +244,7 @@ final class LibraryViewModel {
         let face = family.defaultFace
         selectedFaceID = face?.id
         selectedSourcePath = face?.sources.count == 1 ? face?.sources.first?.path : nil
-        axisValues = Dictionary(uniqueKeysWithValues: (face?.axes ?? []).map {
-            ($0.tag, $0.defaultValue)
-        })
+        axisValues = face.map { previewSession.axisValuesByFace[$0.id] ?? defaultAxisValues(for: $0) } ?? [:]
         inspectorPresented = true
         guard let repository, let identityID = face?.identityID else { return }
         Task {
@@ -232,9 +260,7 @@ final class LibraryViewModel {
     func selectFace(_ face: FaceSummary) {
         selectedFaceID = face.id
         selectedSourcePath = face.sources.count == 1 ? face.sources.first?.path : nil
-        axisValues = Dictionary(uniqueKeysWithValues: face.axes.map {
-            ($0.tag, $0.defaultValue)
-        })
+        axisValues = previewSession.axisValuesByFace[face.id] ?? defaultAxisValues(for: face)
         guard let repository else { return }
         Task {
             do {
@@ -251,6 +277,10 @@ final class LibraryViewModel {
         let current = family.faces.firstIndex(where: { $0.id == selectedFaceID }) ?? 0
         let next = (current + offset + family.faces.count) % family.faces.count
         selectFace(family.faces[next])
+    }
+
+    private func defaultAxisValues(for face: FaceSummary) -> [String: Double] {
+        Dictionary(uniqueKeysWithValues: face.axes.map { ($0.tag, $0.defaultValue) })
     }
 
     func toggleFavorite(_ family: FamilyCard) {
