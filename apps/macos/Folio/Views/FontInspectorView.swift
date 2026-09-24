@@ -7,7 +7,10 @@ struct FontInspectorView: View {
     @State private var axesExpanded = true
     @State private var copyExpanded = true
     @State private var informationExpanded = true
-    @State private var deleteConfirmationPresented = false
+    @State private var destructiveActionsPresented = false
+    @State private var inspectorPreviewSize = 16.0
+    @State private var inspectorPreviewHeight: CGFloat = 96
+    @State private var previewHeightDragOrigin: CGFloat?
 
     var body: some View {
         Group {
@@ -25,11 +28,23 @@ struct FontInspectorView: View {
                 }
             }
         }
-        .alert("将字体移到废纸篓？", isPresented: $deleteConfirmationPresented) {
+        .confirmationDialog(destructiveDialogTitle, isPresented: $destructiveActionsPresented) {
+            if let source = model.selectedSource {
+                let actions = model.availableActions(for: source)
+                if actions.contains(.uninstall) {
+                    Button("卸载字体", role: .destructive) {
+                        model.perform(.uninstall, on: source)
+                    }
+                }
+                if actions.contains(.remove) {
+                    Button("移到废纸篓", role: .destructive) {
+                        model.trashSelectedFace()
+                    }
+                }
+            }
             Button("取消", role: .cancel) {}
-            Button("移到废纸篓", role: .destructive, action: model.trashSelectedFace)
         } message: {
-            Text("字体文件会从字体库中移除，可在废纸篓中恢复。")
+            Text(destructiveDialogMessage)
         }
     }
 
@@ -42,10 +57,17 @@ struct FontInspectorView: View {
                     disclosureHeader("预览", isExpanded: $previewExpanded)
                     if previewExpanded {
                         preview(face)
+                        previewResizeHandle()
+                        previewSizeAdjustment()
                     }
                 }
 
                 inspectorDivider
+
+                if family.faces.count > 1 {
+                    facePicker(family, face: face)
+                    inspectorDivider
+                }
 
                 if !visibleAxes(face).isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
@@ -84,50 +106,75 @@ struct FontInspectorView: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(family.displayName)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 22, weight: .medium))
                     .fontWidth(.condensed)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
 
-                HStack(spacing: 8) {
-                    HStack(spacing: 5) {
-                        Text(formattedVersion(face.version))
-                        Text("|")
-                            .foregroundStyle(.tertiary)
-                        Text(formattedFileSize(face.fileSize))
-                    }
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .padding(.horizontal, 4)
-
+                HStack(spacing: 5) {
+                    Text(formattedVersion(face.version))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .layoutPriority(1)
+                    Text("|")
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
+                    Text(formattedFileSize(face.fileSize))
+                        .fixedSize(horizontal: true, vertical: false)
                     Spacer(minLength: 0)
-
-                    faceNavigator(family, face: face)
                 }
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(height: 16)
+
+                if let source = model.selectedSource {
+                    sourceStatusLabel(source)
+                        .padding(.horizontal, 4)
+                }
             }
 
             HStack(spacing: 8) {
-                inspectorButton(
-                    "在 Finder 中查看",
-                    systemImage: "finder",
-                    action: model.revealSelectedFace
-                )
-                .disabled(model.selectedSource == nil)
-
                 if let source = model.selectedSource,
-                   model.availableActions(for: source).contains(.remove) {
+                   !visibleActions(for: source).isEmpty {
+                    Button(action: model.revealSelectedFace) {
+                        Image.englishSystemName("finder")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(InspectorButtonStyle(cornerRadius: 17))
+                    .accessibilityLabel("在 Finder 中查看")
+                } else {
+                    inspectorButton("在 Finder 中查看", systemImage: "finder", action: model.revealSelectedFace)
+                        .disabled(model.selectedSource == nil)
+                }
+
+                if let source = model.selectedSource {
+                    ForEach(visibleActions(for: source), id: \.rawValue) { action in
+                        inspectorButton(
+                            action.title,
+                            systemImage: actionSymbol(action),
+                            titleFont: .system(size: 14, weight: .medium),
+                            centersWhenTight: true
+                        ) {
+                            model.perform(action, on: source)
+                        }
+                    }
+                }
+
+                if !destructiveActions.isEmpty {
                     Button {
-                        deleteConfirmationPresented = true
+                        destructiveActionsPresented = true
                     } label: {
                         Image.englishSystemName("trash")
                             .font(.system(size: 12, weight: .semibold))
                             .frame(width: 34, height: 34)
                     }
                     .buttonStyle(InspectorButtonStyle(cornerRadius: 17, destructive: true))
-                    .accessibilityLabel("移除字体")
+                    .accessibilityLabel(destructiveButtonLabel)
                 }
             }
 
@@ -140,23 +187,13 @@ struct FontInspectorView: View {
                 }
             }
 
-            if let source = model.selectedSource {
-                Text(sourceStatus(model.status(for: source).state))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack {
-                    ForEach(model.availableActions(for: source).filter { $0 != .remove }, id: \.rawValue) { action in
-                        Button(action.title) { model.perform(action, on: source) }
-                    }
-                }
-            }
         }
     }
 
     private func sourceStatus(_ state: FontOperationState) -> String {
         switch state {
         case .available: "仅在字体库"
-        case .active: "当前会话已激活"
+        case .active: "已挂载"
         case .installed: "已安装"
         case .external: "外部文件"
         case .system: "系统字体"
@@ -164,55 +201,168 @@ struct FontInspectorView: View {
         }
     }
 
-    private func faceNavigator(_ family: FamilyCard, face: FaceSummary) -> some View {
-        HStack(spacing: 0) {
-            Button {
-                model.moveFace(in: family, offset: -1)
-            } label: {
-                Image.englishSystemName("chevron.left")
-                    .frame(width: 16, height: 16)
-            }
-            .accessibilityLabel("上一个字款")
-
-            Text(face.styleName)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .frame(maxWidth: .infinity)
-
-            Button {
-                model.moveFace(in: family, offset: 1)
-            } label: {
-                Image.englishSystemName("chevron.right")
-                    .frame(width: 16, height: 16)
-            }
-            .accessibilityLabel("下一个字款")
+    private func sourceStatusLabel(_ source: FontSource) -> some View {
+        let state = model.status(for: source).state
+        return HStack(spacing: 6) {
+            Image.englishSystemName(statusSymbol(state))
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 16)
+            Text(sourceStatus(state))
+                .font(.system(size: 12, weight: .medium))
         }
-        .font(.system(size: 10, weight: .medium))
         .foregroundStyle(.secondary)
-        .buttonStyle(.plain)
-        .frame(width: 82, height: 16)
-        .padding(.horizontal, 4)
+    }
+
+    private func statusSymbol(_ state: FontOperationState) -> String {
+        switch state {
+        case .available: "plus.diamond"
+        case .active: "checkmark.diamond"
+        case .installed: "minus.diamond"
+        case .external: "doc"
+        case .system: "laptopcomputer.and.arrow.down"
+        case .unavailable: "exclamationmark.triangle"
+        }
+    }
+
+    private func actionSymbol(_ action: FontAction) -> String {
+        switch action {
+        case .activate: "plus.diamond"
+        case .deactivate: "minus.diamond"
+        case .install: "square.and.arrow.down"
+        case .uninstall: "square.and.arrow.up"
+        case .remove: "trash"
+        }
+    }
+
+    private func visibleActions(for source: FontSource) -> [FontAction] {
+        model.availableActions(for: source).filter { $0 != .remove && $0 != .uninstall }
+    }
+
+    private var destructiveActions: [FontAction] {
+        guard let source = model.selectedSource else { return [] }
+        return model.availableActions(for: source).filter { $0 == .uninstall || $0 == .remove }
+    }
+
+    private var destructiveButtonLabel: String {
+        if destructiveActions.count > 1 { return "卸载或移除字体" }
+        return destructiveActions.first == .uninstall ? "卸载字体" : "移除字体"
+    }
+
+    private var destructiveDialogTitle: String {
+        destructiveActions.count > 1 ? "管理字体" : destructiveButtonLabel
+    }
+
+    private var destructiveDialogMessage: String {
+        if destructiveActions.contains(.uninstall) && destructiveActions.contains(.remove) {
+            return "选择要执行的操作"
+        }
+        if destructiveActions.contains(.uninstall) { return "字体将从系统字体中卸载。" }
+        if destructiveActions.contains(.remove) { return "字体文件会从字体库中移除，可在废纸篓中恢复。" }
+        return ""
     }
 
     private func preview(_ face: FaceSummary) -> some View {
         FontPreviewView(
             text: "ABCDEFGHIJKLMNOPQRSTUVWXY\nabcdefghijklmnopqrstuvwxyz\n0123456789",
             face: face,
-            size: 16,
+            size: inspectorPreviewSize,
             color: .primary,
             axes: model.axisValues,
             alignment: .left,
-            lineLimit: 4,
-            lineHeight: 22
+            lineLimit: 4
         )
         .frame(maxWidth: .infinity)
         .frame(minHeight: 66)
+        .frame(height: inspectorPreviewHeight)
+        .padding(.horizontal, 4)
+    }
+
+    private func previewResizeHandle() -> some View {
+        Image.englishSystemName("line.3.horizontal")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 12)
+            .contentShape(.rect)
+            .highPriorityGesture(
+                DragGesture()
+                    .onChanged { value in
+                        let origin = previewHeightDragOrigin ?? inspectorPreviewHeight
+                        previewHeightDragOrigin = origin
+                        inspectorPreviewHeight = min(max(origin + value.translation.height, 66), 360)
+                    }
+                    .onEnded { _ in
+                        previewHeightDragOrigin = nil
+                    }
+            )
+            .accessibilityLabel("预览区域高度")
+            .accessibilityHint("上下拖动以调整预览区域高度")
+    }
+
+    private func previewSizeAdjustment() -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text("字号")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                Spacer(minLength: 0)
+                Text("\(Int(inspectorPreviewSize.rounded())) px")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(height: 18)
+            .padding(.horizontal, 4)
+
+            Slider(
+                value: $inspectorPreviewSize,
+                in: 10...32
+            )
+            .controlSize(.small)
+            .frame(height: 24)
+            .padding(.horizontal, 6)
+            .accessibilityLabel("预览字号")
+            .accessibilityValue("\(Int(inspectorPreviewSize.rounded())) px")
+            .sliderHaptics(value: inspectorPreviewSize, in: 10...32, feedbackStep: 1)
+
+            HStack {
+                Text("10")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("32")
+                    .foregroundStyle(.tertiary)
+            }
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .frame(height: 14)
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private func facePicker(_ family: FamilyCard, face: FaceSummary) -> some View {
+        HStack {
+            Text("字重")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            Picker("字重", selection: Binding(
+                get: { model.selectedFaceID ?? face.id },
+                set: { faceID in
+                    guard let selectedFace = family.faces.first(where: { $0.id == faceID }) else { return }
+                    model.selectFace(selectedFace)
+                }
+            )) {
+                ForEach(family.faces) { item in
+                    Text(item.styleName).tag(item.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .font(.system(size: 12, weight: .medium))
+        }
+        .frame(height: 26)
         .padding(.horizontal, 4)
     }
 
     private func axes(_ face: FaceSummary) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(visibleAxes(face)) { axis in
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 8) {
@@ -225,7 +375,7 @@ struct FontInspectorView: View {
                             .tracking(-0.6)
                             .foregroundStyle(.secondary)
                     }
-                    .frame(height: 20)
+                    .frame(height: 18)
                     .padding(.horizontal, 4)
 
                     Slider(
@@ -236,7 +386,7 @@ struct FontInspectorView: View {
                         in: axis.minimum...axis.maximum
                     )
                     .controlSize(.small)
-                    .frame(height: 32)
+                    .frame(height: 24)
                     .padding(.horizontal, 6)
                     .accessibilityLabel(axis.name)
                     .accessibilityValue(axisValue(axis))
@@ -253,7 +403,7 @@ struct FontInspectorView: View {
                             .foregroundStyle(.tertiary)
                     }
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .frame(height: 15)
+                    .frame(height: 14)
                     .padding(.horizontal, 4)
                 }
             }
@@ -345,19 +495,42 @@ struct FontInspectorView: View {
     private func inspectorButton(
         _ title: String,
         systemImage: String,
+        titleFont: Font = .system(size: 12, weight: .medium),
+        centersWhenTight: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image.englishSystemName(systemImage)
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 14)
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
+            Group {
+                if centersWhenTight {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            Image.englishSystemName(systemImage)
+                                .font(.system(size: 12, weight: .semibold))
+                                .frame(width: 16)
+                            Text(title)
+                                .font(titleFont)
+                                .fixedSize(horizontal: true, vertical: false)
+                            Spacer(minLength: 0)
+                        }
+
+                        Text(title)
+                            .font(titleFont)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        Image.englishSystemName(systemImage)
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 16)
+                        Text(title)
+                            .font(titleFont)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34)
             .contentShape(.rect)
         }
