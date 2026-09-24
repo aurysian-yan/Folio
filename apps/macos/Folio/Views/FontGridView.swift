@@ -69,10 +69,13 @@ private struct ExpandedFontCardCarousel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hapticsEnabled = true
     @AppStorage(AppPreferences.expandedCardHeightRatio) private var expandedCardHeightRatio = 0.68
+    @AppStorage(AppPreferences.expandedCardWheelSpeed) private var wheelSpeed = 1.25
     @State private var scrollProgress: CGFloat = 0
     @State private var lastScrollDirection: CGFloat = 0
     @State private var pendingIndex: Int?
     @State private var pendingMoveTask: Task<Void, Never>?
+    @State private var pendingAnimationTask: Task<Void, Never>?
+    @State private var previousPageTask: Task<Void, Never>?
     @State private var viewportWidth: CGFloat = 820
     @State private var draftHeightRatio: CGFloat?
     @State private var dragStartHeightRatio: CGFloat?
@@ -127,13 +130,19 @@ private struct ExpandedFontCardCarousel: View {
         totalCount + 1
     }
 
+    private var hasCompleteCycle: Bool {
+        totalCount > 1
+            && model.families.count + model.carouselTailFamilies.count >= totalCount
+    }
+
     private var minimumVirtualIndex: Int {
+        if hasCompleteCycle { return -cycleLength }
         guard !model.carouselTailFamilies.isEmpty else { return 0 }
         return -(min(model.carouselTailFamilies.count, max(totalCount - 1, 0)) + 1)
     }
 
     private var maximumVirtualIndex: Int {
-        guard totalCount > 0 else { return 0 }
+        guard totalCount > 1 else { return 0 }
         return model.families.count >= totalCount
             ? cycleLength
             : max(model.families.count - 1, 0)
@@ -145,7 +154,9 @@ private struct ExpandedFontCardCarousel: View {
         let fraction = scrollProgress - floor(scrollProgress)
         let lowerBound = fraction < 0.001 ? lowerIndex - 2 : lowerIndex - 1
         let upperBound = fraction < 0.001 ? lowerIndex : lowerIndex + 1
-        let validLowerBound = max(lowerBound, minimumVirtualIndex)
+        let validLowerBound = hasCompleteCycle
+            ? lowerBound
+            : max(lowerBound, minimumVirtualIndex)
         let validUpperBound = min(upperBound, maximumVirtualIndex)
         guard validLowerBound <= validUpperBound else { return [] }
         var indices = Array(validLowerBound...validUpperBound)
@@ -172,6 +183,7 @@ private struct ExpandedFontCardCarousel: View {
                         lowerBound: CGFloat(minimumVirtualIndex),
                         upperBound: CGFloat(maximumVirtualIndex),
                         hapticsEnabled: hapticsEnabled,
+                        wheelSpeed: wheelSpeed,
                         onChange: updateScrollProgress,
                         onEnd: requestVirtualMove
                     )
@@ -196,14 +208,17 @@ private struct ExpandedFontCardCarousel: View {
                 scrollProgress = CGFloat(selectedIndex)
             }
         }
-        .onChange(of: model.families.map(\.id)) { _, familyIDs in
-            guard !familyIDs.isEmpty else {
-                scrollProgress = 0
-                return
-            }
-            if scrollProgress > CGFloat(maximumVirtualIndex) {
-                scrollProgress = CGFloat(maximumVirtualIndex)
-            }
+        .onChange(of: model.families.map(\.id)) { _, _ in
+            clampScrollProgress()
+        }
+        .onChange(of: model.carouselTailFamilies.map(\.id)) { _, _ in
+            clampScrollProgress()
+        }
+        .onChange(of: totalCount) { _, _ in
+            clampScrollProgress()
+        }
+        .onChange(of: scrollProgress) { _, _ in
+            prefetchPreviousPageIfNeeded()
         }
         .onChange(of: model.selectedFamilyID) { _, familyID in
             guard let familyID,
@@ -213,6 +228,8 @@ private struct ExpandedFontCardCarousel: View {
         }
         .onDisappear {
             pendingMoveTask?.cancel()
+            pendingAnimationTask?.cancel()
+            previousPageTask?.cancel()
         }
     }
 
@@ -358,7 +375,7 @@ private struct ExpandedFontCardCarousel: View {
             Slider(
                 value: Binding(
                     get: { Double(totalCount == 0 ? 0 : displayedIndex + 1) },
-                    set: { requestMove(to: Int($0.rounded()) - 1, delayed: true) }
+                    set: { requestMove(to: Int($0.rounded()) - 1, animated: false) }
                 ),
                 in: totalCount > 1 ? 1...Double(totalCount) : 0...1,
                 step: 1
@@ -404,46 +421,71 @@ private struct ExpandedFontCardCarousel: View {
         .foregroundStyle(.secondary)
         .disabled(
             totalCount < 2
-                || currentVirtualIndex + offset < minimumVirtualIndex
+                || currentVirtualIndex + offset < -cycleLength
         )
         .accessibilityLabel(label)
     }
 
-    private func requestMove(to index: Int, delayed: Bool = false) {
+    private func requestMove(to index: Int, animated: Bool = true) {
         guard totalCount > 0 else { return }
         let targetIndex = min(max(index, 0), totalCount - 1)
-        pendingIndex = targetIndex
         pendingMoveTask?.cancel()
+        pendingAnimationTask?.cancel()
+        pendingIndex = targetIndex
+
+        let tailStartIndex = totalCount - model.carouselTailFamilies.count
+        if targetIndex >= tailStartIndex {
+            let tailIndex = targetIndex - tailStartIndex
+            if model.carouselTailFamilies.indices.contains(tailIndex) {
+                pendingIndex = nil
+                move(to: tailIndex - model.carouselTailFamilies.count - 1, animated: animated)
+                return
+            }
+        }
+        if model.families.indices.contains(targetIndex) {
+            pendingIndex = nil
+            move(to: targetIndex, animated: animated)
+            return
+        }
+
         pendingMoveTask = Task { @MainActor in
-            if delayed {
-                do {
-                    try await Task.sleep(for: .milliseconds(120))
-                } catch {
-                    return
-                }
-            }
-            let tailStartIndex = totalCount - model.carouselTailFamilies.count
-            if targetIndex >= tailStartIndex {
-                let tailIndex = targetIndex - tailStartIndex
-                if model.carouselTailFamilies.indices.contains(tailIndex) {
-                    animate(to: tailIndex - model.carouselTailFamilies.count - 1)
-                    pendingIndex = nil
-                    return
-                }
-            }
             await model.loadFamilies(through: targetIndex)
-            guard !Task.isCancelled,
-                  model.families.indices.contains(targetIndex) else {
+            guard !Task.isCancelled, pendingIndex == targetIndex else { return }
+            guard model.families.indices.contains(targetIndex) else {
                 pendingIndex = nil
                 return
             }
-            animate(to: targetIndex)
             pendingIndex = nil
+            move(to: targetIndex, animated: animated)
+        }
+    }
+
+    private func move(to index: Int, animated: Bool) {
+        if animated {
+            animate(to: index)
+            return
+        }
+        pendingAnimationTask?.cancel()
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            scrollProgress = CGFloat(index)
+            selectFamily(at: index)
         }
     }
 
     private func requestVirtualMove(to index: Int) {
-        guard totalCount > 0, index >= minimumVirtualIndex else { return }
+        guard totalCount > 0, index >= -cycleLength else { return }
+        if index < minimumVirtualIndex {
+            pendingMoveTask?.cancel()
+            pendingMoveTask = Task { @MainActor in
+                await model.loadPreviousCarouselPage()
+                guard !Task.isCancelled,
+                      index >= minimumVirtualIndex else { return }
+                requestVirtualMove(to: index)
+            }
+            return
+        }
         if index > maximumVirtualIndex {
             guard model.families.count < totalCount else { return }
             requestMove(to: logicalIndex(for: index))
@@ -460,12 +502,45 @@ private struct ExpandedFontCardCarousel: View {
             animate(to: index)
             return
         }
+        if index < 0 {
+            pendingMoveTask?.cancel()
+            pendingMoveTask = Task { @MainActor in
+                await model.loadPreviousCarouselPage()
+                guard !Task.isCancelled, family(at: index) != nil else { return }
+                requestVirtualMove(to: index)
+            }
+            return
+        }
         requestMove(to: logicalIndex(for: index))
+    }
+
+    private func prefetchPreviousPageIfNeeded() {
+        guard totalCount > 1,
+              !hasCompleteCycle,
+              !model.carouselTailFamilies.isEmpty,
+              scrollProgress <= CGFloat(minimumVirtualIndex + 1),
+              previousPageTask == nil else { return }
+        previousPageTask = Task { @MainActor in
+            await model.loadPreviousCarouselPage()
+            previousPageTask = nil
+        }
+    }
+
+    private func clampScrollProgress() {
+        guard !model.families.isEmpty else {
+            scrollProgress = 0
+            return
+        }
+        scrollProgress = min(
+            max(scrollProgress, CGFloat(minimumVirtualIndex)),
+            CGFloat(maximumVirtualIndex)
+        )
     }
 
     private func updateScrollProgress(_ progress: CGFloat) {
         guard !model.families.isEmpty else { return }
         pendingMoveTask?.cancel()
+        pendingAnimationTask?.cancel()
         pendingIndex = nil
         let nextProgress = min(
             max(progress, CGFloat(minimumVirtualIndex)),
@@ -495,6 +570,7 @@ private struct ExpandedFontCardCarousel: View {
     private func animateAcrossWrap(to index: Int) {
         guard family(at: index) != nil else { return }
         pendingMoveTask?.cancel()
+        pendingAnimationTask?.cancel()
         pendingIndex = nil
         let target = CGFloat(index)
         if reduceMotion {
@@ -514,6 +590,7 @@ private struct ExpandedFontCardCarousel: View {
 
     private func animate(to index: Int) {
         guard isWrapHint(index) || family(at: index) != nil else { return }
+        pendingAnimationTask?.cancel()
         let target = CGFloat(index)
         if reduceMotion {
             scrollProgress = target
@@ -528,8 +605,9 @@ private struct ExpandedFontCardCarousel: View {
         } else if abs(target - scrollProgress) >= 0.001 {
             scrollProgress += direction * 0.001
         }
-        Task { @MainActor in
+        pendingAnimationTask = Task { @MainActor in
             await Task.yield()
+            guard !Task.isCancelled else { return }
             withAnimation(pageAnimation) {
                 scrollProgress = target
             }
@@ -546,7 +624,7 @@ private struct ExpandedFontCardCarousel: View {
     }
 
     private func normalizeWrappedProgress(after index: Int) {
-        guard index == cycleLength else { return }
+        guard index == cycleLength || index == -cycleLength else { return }
         Task { @MainActor in
             if !reduceMotion {
                 try? await Task.sleep(for: .milliseconds(420))
@@ -642,6 +720,7 @@ private struct HorizontalPagingInput: NSViewRepresentable {
     let lowerBound: CGFloat
     let upperBound: CGFloat
     let hapticsEnabled: Bool
+    let wheelSpeed: Double
     let onChange: (CGFloat) -> Void
     let onEnd: (Int) -> Void
 
@@ -650,6 +729,7 @@ private struct HorizontalPagingInput: NSViewRepresentable {
         view.onChange = onChange
         view.onEnd = onEnd
         view.hapticsEnabled = hapticsEnabled
+        view.wheelSpeed = wheelSpeed
         view.lowerBound = lowerBound
         view.upperBound = upperBound
         return view
@@ -660,6 +740,7 @@ private struct HorizontalPagingInput: NSViewRepresentable {
         view.lowerBound = lowerBound
         view.upperBound = upperBound
         view.hapticsEnabled = hapticsEnabled
+        view.wheelSpeed = wheelSpeed
         view.onChange = onChange
         view.onEnd = onEnd
     }
@@ -670,11 +751,14 @@ private final class HorizontalPagingInputView: NSView {
     var lowerBound: CGFloat = 0
     var upperBound: CGFloat = 0
     var hapticsEnabled = true
+    var wheelSpeed = 1.25
     var onChange: ((CGFloat) -> Void)?
     var onEnd: ((Int) -> Void)?
 
     private var settleWorkItem: DispatchWorkItem?
     private var lastWheelStepTime: TimeInterval = 0
+    private var wheelExtraSteps = 0.0
+    private var lastWheelDirection = 0
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard NSApp.currentEvent?.type == .scrollWheel else { return nil }
@@ -683,6 +767,7 @@ private final class HorizontalPagingInputView: NSView {
 
     override func scrollWheel(with event: NSEvent) {
         guard upperBound > lowerBound else { return }
+        let speed = min(max(wheelSpeed, 0.5), 2.0)
         let horizontalDelta = event.scrollingDeltaX
         let verticalDelta = event.scrollingDeltaY
         let delta = abs(horizontalDelta) > abs(verticalDelta)
@@ -692,7 +777,7 @@ private final class HorizontalPagingInputView: NSView {
 
         if event.hasPreciseScrollingDeltas {
             let previousIndex = Int(progress.rounded())
-            let travel = max(bounds.width * 0.72, 260)
+            let travel = max(bounds.width * 0.72, 260) / speed
             let nextProgress = min(
                 max(progress - delta / travel, lowerBound),
                 upperBound
@@ -702,11 +787,18 @@ private final class HorizontalPagingInputView: NSView {
             onChange?(nextProgress)
             scheduleSettle()
         } else {
-            guard event.timestamp - lastWheelStepTime > 0.12 else { return }
+            guard event.timestamp - lastWheelStepTime > 0.12 / speed else { return }
             lastWheelStepTime = event.timestamp
             let direction = delta > 0 ? -1 : 1
+            if direction != lastWheelDirection {
+                wheelExtraSteps = 0
+                lastWheelDirection = direction
+            }
+            wheelExtraSteps += max(speed - 1, 0)
+            let extraSteps = Int(wheelExtraSteps)
+            wheelExtraSteps -= Double(extraSteps)
             let target = min(
-                max(Int(progress.rounded()) + direction, Int(lowerBound)),
+                max(Int(progress.rounded()) + direction * (1 + extraSteps), Int(lowerBound)),
                 Int(upperBound)
             )
             performHapticIfNeeded(from: Int(progress.rounded()), to: target)

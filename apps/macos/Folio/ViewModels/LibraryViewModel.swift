@@ -98,6 +98,8 @@ final class LibraryViewModel {
     private var queryTask: Task<Void, Never>?
     private var paginationTask: Task<Void, Never>?
     private var carouselTailTask: Task<Void, Never>?
+    private var previousCarouselPageTask: Task<Void, Never>?
+    private var carouselQueryRevision = 0
     private var requestedFamilyIndex = 0
     private var hasStarted = false
 
@@ -622,6 +624,70 @@ final class LibraryViewModel {
         paginationTask = nil
     }
 
+    func loadPreviousCarouselPage() async {
+        if let carouselTailTask {
+            await carouselTailTask.value
+        }
+        if let previousCarouselPageTask {
+            await previousCarouselPageTask.value
+            return
+        }
+
+        let totalCount = Int(clamping: totalMatches)
+        let tailStartIndex = totalCount - carouselTailFamilies.count
+        guard !carouselTailFamilies.isEmpty,
+              tailStartIndex > families.count,
+              let repository else { return }
+
+        let offset = max(tailStartIndex - pageSize, families.count)
+        let limit = tailStartIndex - offset
+        let revision = carouselQueryRevision
+        let text = searchText
+        let destination = selectedDestination
+        let facets = selectedFacets
+        let allowedFaceIDs: Set<FaceID>?
+        let allowedSourcePaths: Set<String>?
+        if case let .fontState(state) = destination {
+            allowedFaceIDs = faceIDsByState[state] ?? []
+            allowedSourcePaths = sourcePathsByState[state] ?? []
+        } else {
+            allowedFaceIDs = nil
+            allowedSourcePaths = nil
+        }
+
+        let task = Task { @MainActor [weak self] in
+            do {
+                let page = try await repository.query(
+                    text: text,
+                    destination: destination,
+                    facets: facets,
+                    allowedFaceIDs: allowedFaceIDs,
+                    allowedSourcePaths: allowedSourcePaths,
+                    offset: offset,
+                    limit: limit
+                )
+                guard let self,
+                      !Task.isCancelled,
+                      self.carouselQueryRevision == revision,
+                      self.totalMatches == UInt64(totalCount),
+                      self.carouselTailFamilies.count == totalCount - tailStartIndex,
+                      page.families.count == limit else { return }
+                self.carouselTailFamilies.insert(contentsOf: page.families, at: 0)
+            } catch is CancellationError {
+            } catch {
+                guard let self,
+                      !Task.isCancelled,
+                      self.carouselQueryRevision == revision else { return }
+                self.present(error)
+            }
+        }
+        previousCarouselPageTask = task
+        await task.value
+        if carouselQueryRevision == revision {
+            previousCarouselPageTask = nil
+        }
+    }
+
     private func scheduleQuery(immediate: Bool) {
         guard hasStarted else { return }
         queryTask?.cancel()
@@ -738,7 +804,9 @@ final class LibraryViewModel {
         if reset {
             loadCarouselTail()
         }
-        if let selectedFamilyID, !families.contains(where: { $0.id == selectedFamilyID }) {
+        if let selectedFamilyID,
+           !families.contains(where: { $0.id == selectedFamilyID }),
+           !carouselTailFamilies.contains(where: { $0.id == selectedFamilyID }) {
             self.selectedFamilyID = nil
             selectedFaceID = nil
         }
@@ -774,6 +842,10 @@ final class LibraryViewModel {
 
     private func loadCarouselTail() {
         carouselTailTask?.cancel()
+        previousCarouselPageTask?.cancel()
+        previousCarouselPageTask = nil
+        carouselQueryRevision &+= 1
+        let revision = carouselQueryRevision
         let totalCount = Int(clamping: totalMatches)
         guard totalCount > 1 else {
             carouselTailFamilies = []
@@ -787,6 +859,8 @@ final class LibraryViewModel {
             carouselTailFamilies = []
             return
         }
+
+        carouselTailFamilies = []
 
         let text = searchText
         let destination = selectedDestination
@@ -812,11 +886,15 @@ final class LibraryViewModel {
                     offset: offset,
                     limit: 2
                 )
-                guard !Task.isCancelled else { return }
-                self?.carouselTailFamilies = page.families
+                guard let self,
+                      !Task.isCancelled,
+                      self.carouselQueryRevision == revision,
+                      self.totalMatches == UInt64(totalCount) else { return }
+                self.carouselTailFamilies = page.families
             } catch is CancellationError {
             } catch {
-                self?.carouselTailFamilies = []
+                guard let self, self.carouselQueryRevision == revision else { return }
+                self.carouselTailFamilies = []
             }
         }
     }

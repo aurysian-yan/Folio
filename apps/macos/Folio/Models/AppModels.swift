@@ -9,6 +9,7 @@ enum AppPreferences {
     static let libraryViewMode = "libraryViewMode"
     static let previewSize = "previewSize"
     static let expandedCardHeightRatio = "expandedCardHeightRatio"
+    static let expandedCardWheelSpeed = "expandedCardWheelSpeed"
     static let askImportMode = "askImportMode"
     static let defaultImportMode = "defaultImportMode"
 }

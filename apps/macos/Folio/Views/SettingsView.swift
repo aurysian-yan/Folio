@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(AppPreferences.libraryViewMode) private var libraryViewMode =
         LibraryViewMode.compactGrid.rawValue
     @AppStorage(AppPreferences.previewSize) private var previewSize = 48.0
+    @AppStorage(AppPreferences.expandedCardWheelSpeed) private var expandedCardWheelSpeed = 1.25
     @AppStorage(AppPreferences.askImportMode) private var askImportMode = false
     @AppStorage(AppPreferences.defaultImportMode) private var defaultImportMode = FontImportMode.copy.rawValue
     @AppStorage(AppPreferences.useCollectionThemeColor) private var useCollectionThemeColor = true
@@ -53,6 +54,19 @@ struct SettingsView: View {
                 Toggle("悬停时选中字体卡片", isOn: $selectCardsOnHover)
                 Toggle("切换字体卡片时提供触觉反馈", isOn: $hoverSelectionHaptics)
                 Toggle("拖动滑块时提供触觉反馈", isOn: $sliderHaptics)
+                HStack {
+                    Text("滚轮滚动速度")
+                    Slider(
+                        value: $expandedCardWheelSpeed,
+                        in: 0.5...2.0,
+                        step: 0.05
+                    )
+                    .accessibilityLabel("滚轮滚动速度")
+                    Text("\(expandedCardWheelSpeed, specifier: "%.2f")×")
+                        .font(.system(.body, design: .monospaced))
+                        .monospacedDigit()
+                        .frame(width: 54, alignment: .trailing)
+                }
             } header: {
                 Text("字体卡片")
             } footer: {
@@ -62,7 +76,7 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .tint((DefaultThemeColor(rawValue: defaultThemeColor) ?? .folio).color)
         .accentColor((DefaultThemeColor(rawValue: defaultThemeColor) ?? .folio).color)
-        .frame(width: 480, height: 440)
+        .frame(width: 480, height: 480)
     }
 }
 
