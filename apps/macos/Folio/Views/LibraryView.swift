@@ -21,6 +21,7 @@ struct LibraryView: View {
         }
         .navigationTitle("Folio")
         .navigationSubtitle("\(model.totalMatches) 个字族")
+        .searchable(text: $model.searchText, placement: .toolbar, prompt: "搜索")
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Picker("浏览方式", selection: $model.viewMode) {
@@ -32,10 +33,6 @@ struct LibraryView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 145)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                ToolbarSearchField(text: $model.searchText)
-                    .frame(width: 130)
             }
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
@@ -163,36 +160,6 @@ struct LibraryView: View {
             }
         } description: {
             Text("尝试更改搜索内容或筛选条件")
-        }
-    }
-}
-
-private struct ToolbarSearchField: View {
-    @Binding var text: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image.englishSystemName("magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("搜索", text: $text)
-                .textFieldStyle(.plain)
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image.englishSystemName("xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("清除搜索")
-            }
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 28)
-        .background(.regularMaterial, in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
         }
     }
 }
