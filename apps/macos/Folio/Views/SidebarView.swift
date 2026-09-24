@@ -6,7 +6,7 @@ struct SidebarView: View {
     var body: some View {
         List(selection: $model.selectedDestination) {
             Section("本地") {
-                sidebarRow("全部字体", symbol: "textformat", count: model.snapshot.familyCount)
+                sidebarRow("全部字体", symbol: "textformat.alt", count: model.snapshot.familyCount)
                     .tag(SidebarDestination.allFonts)
                 sidebarRow("最近", symbol: "clock", count: model.snapshot.recentCount)
                     .tag(SidebarDestination.recent)
@@ -27,7 +27,7 @@ struct SidebarView: View {
                 sidebarRow("外部文件", symbol: "doc", count: model.fontStateCounts[.external] ?? 0)
                     .tag(SidebarDestination.fontState(.external))
                     .help("引用的文件和已添加文件夹中的字体")
-                sidebarRow("系统字体", symbol: "desktopcomputer", count: model.fontStateCounts[.system] ?? 0)
+                sidebarRow("系统字体", symbol: "laptopcomputer.and.arrow.down", count: model.fontStateCounts[.system] ?? 0)
                     .tag(SidebarDestination.fontState(.system))
                 sidebarRow("文件不可用", symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0)
                     .tag(SidebarDestination.fontState(.unavailable))
