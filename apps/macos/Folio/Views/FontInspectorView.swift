@@ -111,19 +111,52 @@ struct FontInspectorView: View {
                     systemImage: "finder",
                     action: model.revealSelectedFace
                 )
-                .disabled(face.sourcePath == nil)
+                .disabled(model.selectedSource == nil)
 
-                Button {
-                    deleteConfirmationPresented = true
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 34, height: 34)
+                if let source = model.selectedSource,
+                   model.availableActions(for: source).contains(.remove) {
+                    Button {
+                        deleteConfirmationPresented = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(InspectorButtonStyle(cornerRadius: 17, destructive: true))
+                    .accessibilityLabel("移除字体")
                 }
-                .buttonStyle(InspectorButtonStyle(cornerRadius: 17, destructive: true))
-                .accessibilityLabel("删除字体")
-                .disabled(face.sourcePath == nil)
             }
+
+            if face.sources.count > 1 {
+                Picker("字体文件", selection: $model.selectedSourcePath) {
+                    Text("选择字体文件").tag(String?.none)
+                    ForEach(face.sources) { source in
+                        Text(source.path).tag(Optional(source.path))
+                    }
+                }
+            }
+
+            if let source = model.selectedSource {
+                Text(sourceStatus(model.status(for: source).state))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    ForEach(model.availableActions(for: source).filter { $0 != .remove }, id: \.rawValue) { action in
+                        Button(action.title) { model.perform(action, on: source) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func sourceStatus(_ state: FontOperationState) -> String {
+        switch state {
+        case .available: "仅在字体库"
+        case .active: "当前会话已激活"
+        case .installed: "已安装"
+        case .external: "外部文件"
+        case .system: "系统字体"
+        case .unavailable: "文件暂时不可用"
         }
     }
 

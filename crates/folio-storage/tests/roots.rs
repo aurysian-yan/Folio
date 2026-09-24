@@ -3,7 +3,53 @@
 mod common;
 
 use common::open_db;
-use folio_storage::AddRootOutcome;
+use folio_storage::{AddRootOutcome, LibraryRootKind, RefreshMode};
+
+#[test]
+fn file_root_scans_only_selected_file_and_survives_offline_refresh() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let fonts = dir.path().join("fonts");
+    std::fs::create_dir(&fonts).expect("mkdir");
+    let selected = common::copy_fixture(&fonts, "Lato-Regular.ttf", "selected.ttf");
+    common::copy_fixture(&fonts, "Lato-Bold.ttf", "other.ttf");
+    let mut db = open_db(dir.path());
+    let root = match db.add_file_root(&selected).expect("add file") {
+        AddRootOutcome::Created(root) => root,
+        AddRootOutcome::Existing(_) => panic!("new file root"),
+    };
+    assert_eq!(root.kind, LibraryRootKind::File);
+    assert!(!root.recursive);
+    assert_eq!(
+        db.refresh(RefreshMode::Incremental)
+            .unwrap()
+            .catalog
+            .face_count(),
+        1
+    );
+    assert_eq!(db.source_root_ids(&selected).unwrap(), vec![root.id]);
+    assert!(matches!(
+        db.add_file_root(&selected).unwrap(),
+        AddRootOutcome::Existing(_)
+    ));
+    std::fs::remove_file(&selected).unwrap();
+    assert_eq!(
+        db.refresh(RefreshMode::Incremental)
+            .unwrap()
+            .catalog
+            .face_count(),
+        1
+    );
+    std::fs::copy(common::fixture("Lato-Regular.ttf"), &selected).unwrap();
+    assert_eq!(
+        db.refresh(RefreshMode::Incremental)
+            .unwrap()
+            .catalog
+            .face_count(),
+        1
+    );
+    assert!(db.remove_root(root.id).unwrap());
+    assert_eq!(db.load_cached_catalog().unwrap().face_count(), 0);
+}
 
 #[test]
 fn add_is_deterministic_for_duplicate_paths() {

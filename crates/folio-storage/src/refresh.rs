@@ -30,7 +30,7 @@ use crate::cache_payload::{encode_payload, CACHE_PAYLOAD_VERSION};
 use crate::error::StorageError;
 use crate::ids::LibraryRootId;
 use crate::path_codec::{decode_path, encode_path, EncodedPath};
-use crate::root::{nanos_to_system_time, system_time_to_nanos, LibraryRoot};
+use crate::root::{nanos_to_system_time, system_time_to_nanos, LibraryRoot, LibraryRootKind};
 
 /// 刷新如何处理可重建目录缓存。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -799,6 +799,29 @@ fn enumerate_root_with(
     canonicalize: impl Fn(&Path) -> io::Result<PathBuf>,
 ) -> io::Result<Enumeration> {
     let metadata = std::fs::metadata(&root.path)?;
+    if root.kind == LibraryRootKind::File {
+        if !metadata.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "library source is not a file",
+            ));
+        }
+        let path = canonicalize(&root.path)?;
+        let files = if is_candidate_path(&path) {
+            vec![CandidateFile {
+                path,
+                size: metadata.len(),
+                mtime_ns: metadata.modified().ok().and_then(system_time_to_nanos),
+            }]
+        } else {
+            Vec::new()
+        };
+        return Ok(Enumeration {
+            files,
+            incomplete: false,
+            issues: Vec::new(),
+        });
+    }
     if !metadata.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

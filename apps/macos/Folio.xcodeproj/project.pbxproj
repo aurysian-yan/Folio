@@ -27,6 +27,8 @@
 		B017 /* folio_ffi.swift in Sources */ = {isa = PBXBuildFile; fileRef = F017 /* folio_ffi.swift */; };
 		B018 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F022 /* SettingsView.swift */; };
 		B019 /* SliderHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F023 /* SliderHaptics.swift */; };
+		B020 /* FontOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = F024 /* FontOperations.swift */; };
+		BT02 /* Lato-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FT02 /* Lato-Regular.ttf */; };
 		BT01 /* FolioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* FolioTests.swift */; };
 		BX01 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FX01 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -66,7 +68,9 @@
 		F021 /* Folio.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Folio.entitlements; sourceTree = "<group>"; };
 		F022 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		F023 /* SliderHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SliderHaptics.swift; sourceTree = "<group>"; };
+		F024 /* FontOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontOperations.swift; sourceTree = "<group>"; };
 		FT01 /* FolioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioTests.swift; sourceTree = "<group>"; };
+		FT02 /* Lato-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../../../fixtures/fonts/Lato-Regular.ttf; sourceTree = "<group>"; };
 		FX01 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		PR01 /* Folio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Folio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		PR02 /* FolioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FolioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -130,6 +134,7 @@
 			children = (
 				F003 /* BookmarkStore.swift */,
 				F004 /* FolioRepository.swift */,
+				F024 /* FontOperations.swift */,
 			);
 			path = Data;
 			sourceTree = "<group>";
@@ -176,6 +181,7 @@
 			isa = PBXGroup;
 			children = (
 				FT01 /* FolioTests.swift */,
+				FT02 /* Lato-Regular.ttf */,
 			);
 			path = FolioTests;
 			sourceTree = "<group>";
@@ -288,6 +294,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BT02 /* Lato-Regular.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,6 +347,7 @@
 				B017 /* folio_ffi.swift in Sources */,
 				B018 /* SettingsView.swift in Sources */,
 				B019 /* SliderHaptics.swift in Sources */,
+				B020 /* FontOperations.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

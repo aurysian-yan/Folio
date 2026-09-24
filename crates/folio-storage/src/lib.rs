@@ -55,7 +55,7 @@ pub use path_codec::{DecodedPath, EncodedPath, PathCodecError, PathPlatform};
 pub use refresh::{
     RefreshIssue, RefreshIssueKind, RefreshIssueSeverity, RefreshMode, RefreshResult, RefreshStats,
 };
-pub use root::{AddRootOutcome, LibraryRoot};
+pub use root::{AddRootOutcome, LibraryRoot, LibraryRootKind};
 
 /// 序列化解析缓存载荷的版本号。
 pub const CACHE_PAYLOAD_VERSION: u32 = cache_payload::CACHE_PAYLOAD_VERSION;

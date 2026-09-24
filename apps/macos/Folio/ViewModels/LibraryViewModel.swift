@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -15,6 +16,13 @@ final class LibraryViewModel {
     }
     var selectedFamilyID: FamilyID?
     var selectedFaceID: FaceID?
+    var selectedSourcePath: String?
+    var sourceStatuses: [String: FontSourceStatus] = [:]
+    var fontStateCounts: [FontOperationState: UInt64] = [:]
+    var importOutcomes: [FontOperationOutcome] = []
+    var batchOutcomes: [FontOperationOutcome] = []
+    var isImportReportPresented = false
+    var isImportChoicePresented = false
     var viewMode: LibraryViewMode {
         didSet {
             UserDefaults.standard.set(
@@ -47,6 +55,16 @@ final class LibraryViewModel {
 
     private let pageSize = 120
     private var repository: FolioRepository?
+    private var operations: FontOperations?
+    private var libraryFaceSources: [LibraryFaceSources] = []
+    private var faceIDsByState: [FontOperationState: Set<FaceID>] = [:]
+    private var sourcePathsByState: [FontOperationState: Set<String>] = [:]
+    private var pendingImportURLs: [URL] = []
+    private var lastImportURLs: [URL] = []
+    private var lastImportMode: FontImportMode = .copy
+    private var lastBatchAction: FontAction?
+    private var incomingURLs: [URL] = []
+    private var incomingTask: Task<Void, Never>?
     private var startupTask: Task<Void, Never>?
     private var queryTask: Task<Void, Never>?
     private var paginationTask: Task<Void, Never>?
@@ -67,6 +85,10 @@ final class LibraryViewModel {
 
     var previewText: String {
         previewMode.text ?? customPreviewText
+    }
+
+    var lastReportedBatchAction: FontAction? {
+        lastBatchAction
     }
 
     func beginPreviewSizeEditing() {
@@ -120,6 +142,12 @@ final class LibraryViewModel {
         return family.faces.first(where: { $0.id == selectedFaceID }) ?? family.defaultFace
     }
 
+    var selectedSource: FontSource? {
+        guard let face = selectedFace else { return nil }
+        return face.sources.first(where: { $0.path == selectedSourcePath })
+            ?? (face.sources.count == 1 ? face.sources.first : nil)
+    }
+
     var hero: HeroPresentation {
         Self.hero(for: snapshot)
     }
@@ -136,12 +164,19 @@ final class LibraryViewModel {
                     try FolioRepository()
                 }.value
                 self.repository = repository
+                self.operations = try FontOperations(repository: repository)
+                if !self.pendingImportURLs.isEmpty {
+                    self.queueImport(self.pendingImportURLs)
+                }
                 self.snapshot = try await repository.loadCachedLibrary()
+                try await repository.migrateLegacyUserFontRoot(self.snapshot.roots)
+                try await self.reloadLibrarySources()
                 var refreshedDuringSetup = false
                 if self.snapshot.roots.isEmpty,
                    try await repository.addDefaultLibraryRoots() {
                     self.isRefreshing = true
                     self.snapshot = try await repository.refreshLibrary()
+                    try await self.reloadLibrarySources()
                     self.isRefreshing = false
                     refreshedDuringSetup = true
                 }
@@ -150,6 +185,7 @@ final class LibraryViewModel {
                 if !refreshedDuringSetup {
                     self.isRefreshing = true
                     self.snapshot = try await repository.refreshLibrary()
+                    try await self.reloadLibrarySources()
                     try await self.performQuery(reset: true)
                     self.isRefreshing = false
                 }
@@ -177,6 +213,7 @@ final class LibraryViewModel {
         selectedFamilyID = family.id
         let face = family.defaultFace
         selectedFaceID = face?.id
+        selectedSourcePath = face?.sources.count == 1 ? face?.sources.first?.path : nil
         axisValues = Dictionary(uniqueKeysWithValues: (face?.axes ?? []).map {
             ($0.tag, $0.defaultValue)
         })
@@ -194,6 +231,7 @@ final class LibraryViewModel {
 
     func selectFace(_ face: FaceSummary) {
         selectedFaceID = face.id
+        selectedSourcePath = face.sources.count == 1 ? face.sources.first?.path : nil
         axisValues = Dictionary(uniqueKeysWithValues: face.axes.map {
             ($0.tag, $0.defaultValue)
         })
@@ -288,8 +326,182 @@ final class LibraryViewModel {
                 try await repository.addLibraryRoot(url)
                 isRefreshing = true
                 snapshot = try await repository.refreshLibrary()
+                try await reloadLibrarySources()
                 try await performQuery(reset: true)
                 isRefreshing = false
+            } catch {
+                isRefreshing = false
+                present(error)
+            }
+        }
+    }
+
+    func importFiles() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.font]
+        panel.prompt = "导入字体"
+        guard panel.runModal() == .OK else { return }
+        queueImport(panel.urls)
+    }
+
+    func receiveOpenURL(_ url: URL) {
+        incomingURLs.append(url)
+        incomingTask?.cancel()
+        incomingTask = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            let urls = incomingURLs
+            incomingURLs.removeAll()
+            queueImport(urls)
+        }
+    }
+
+    private func queueImport(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        pendingImportURLs = urls
+        guard operations != nil else { return }
+        if UserDefaults.standard.bool(forKey: AppPreferences.askImportMode) {
+            isImportChoicePresented = true
+        } else {
+            let raw = UserDefaults.standard.string(forKey: AppPreferences.defaultImportMode)
+            importPending(as: FontImportMode(rawValue: raw ?? "copy") ?? .copy)
+        }
+    }
+
+    func importPending(as mode: FontImportMode) {
+        guard let operations, let repository else { return }
+        let urls = pendingImportURLs
+        pendingImportURLs.removeAll()
+        guard !urls.isEmpty else { return }
+        lastImportURLs = urls
+        lastImportMode = mode
+        lastBatchAction = nil
+        batchOutcomes = []
+        Task {
+            importOutcomes = await operations.importFiles(urls, mode: mode)
+            do {
+                isRefreshing = true
+                snapshot = try await repository.refreshLibrary()
+                try await reloadLibrarySources()
+                try await performQuery(reset: true)
+                isRefreshing = false
+            } catch {
+                isRefreshing = false
+                present(error)
+            }
+            isImportReportPresented = true
+        }
+    }
+
+    func performImportedBatch(_ action: FontAction) {
+        guard let operations else { return }
+        let paths = importOutcomes.compactMap { $0.error == nil ? $0.path : nil }
+        guard !paths.isEmpty else { return }
+        lastBatchAction = action
+        Task {
+            let names = Dictionary(importOutcomes.compactMap { outcome in
+                outcome.path.map { ($0, outcome.name) }
+            }, uniquingKeysWith: { first, _ in first })
+            batchOutcomes = await operations.performBatch(action, paths: paths).map { outcome in
+                FontOperationOutcome(
+                    name: outcome.path.flatMap { names[$0] } ?? outcome.name,
+                    error: outcome.error,
+                    path: outcome.path
+                )
+            }
+            await refreshAllStatuses()
+            if case .fontState = selectedDestination {
+                do { try await performQuery(reset: true) }
+                catch { present(error) }
+            }
+            isImportReportPresented = true
+        }
+    }
+
+    func retryFailedOutcomes() {
+        guard let operations else { return }
+        let failures = importOutcomes.indices.filter { importOutcomes[$0].error != nil }
+        let urls = failures.compactMap { $0 < lastImportURLs.count ? lastImportURLs[$0] : nil }
+        let paths = batchOutcomes.compactMap { $0.error != nil ? $0.path : nil }
+        guard !urls.isEmpty || !paths.isEmpty else { return }
+        Task {
+            if !urls.isEmpty {
+                let retried = await operations.importFiles(urls, mode: lastImportMode)
+                for (index, outcome) in zip(failures, retried) {
+                    importOutcomes[index] = outcome
+                }
+                if let repository {
+                    do {
+                        snapshot = try await repository.refreshLibrary()
+                        try await reloadLibrarySources()
+                        try await performQuery(reset: true)
+                    } catch { present(error) }
+                }
+            }
+            if let action = lastBatchAction, !paths.isEmpty {
+                let names = Dictionary(batchOutcomes.compactMap { outcome in
+                    outcome.path.map { ($0, outcome.name) }
+                }, uniquingKeysWith: { first, _ in first })
+                let retried = await operations.performBatch(action, paths: paths).map { outcome in
+                    FontOperationOutcome(
+                        name: outcome.path.flatMap { names[$0] } ?? outcome.name,
+                        error: outcome.error,
+                        path: outcome.path
+                    )
+                }
+                for outcome in retried {
+                    if let index = batchOutcomes.firstIndex(where: { $0.path == outcome.path }) {
+                        batchOutcomes[index] = outcome
+                    }
+                }
+                await refreshAllStatuses()
+                if case .fontState = selectedDestination {
+                    do { try await performQuery(reset: true) }
+                    catch { present(error) }
+                }
+            }
+        }
+    }
+
+    func status(for source: FontSource) -> FontSourceStatus {
+        sourceStatuses[source.path] ?? .init(state: .unavailable, isManagedCopy: false,
+                                            canDeactivate: false, canUninstall: false)
+    }
+
+    func availableActions(for source: FontSource) -> [FontAction] {
+        let status = status(for: source)
+        var actions: [FontAction]
+        switch status.state {
+        case .available: actions = [.activate, .install]
+        case .active: actions = status.canDeactivate ? [.deactivate, .install] : [.install]
+        case .installed: actions = status.canUninstall ? [.uninstall] : []
+        case .external: actions = [.activate, .install]
+        case .system, .unavailable: actions = []
+        }
+        if status.isManagedCopy && status.state != .unavailable { actions.append(.remove) }
+        return actions
+    }
+
+    func perform(_ action: FontAction, on source: FontSource) {
+        guard let operations, let repository else { return }
+        Task {
+            do {
+                try await operations.perform(action, path: source.path)
+                if action == .remove {
+                    isRefreshing = true
+                    snapshot = try await repository.refreshLibrary()
+                    try await reloadLibrarySources()
+                    try await performQuery(reset: true)
+                    isRefreshing = false
+                } else {
+                    await refreshAllStatuses()
+                    if case .fontState = selectedDestination {
+                        try await performQuery(reset: true)
+                    }
+                }
             } catch {
                 isRefreshing = false
                 present(error)
@@ -298,27 +510,13 @@ final class LibraryViewModel {
     }
 
     func revealSelectedFace() {
-        guard let path = selectedFace?.sourcePath else { return }
+        guard let path = selectedSource?.path else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
     func trashSelectedFace() {
-        guard let path = selectedFace?.sourcePath, let repository else { return }
-        let url = URL(fileURLWithPath: path)
-        Task {
-            do {
-                try await Task.detached(priority: .userInitiated) {
-                    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                }.value
-                isRefreshing = true
-                snapshot = try await repository.refreshLibrary()
-                try await performQuery(reset: true)
-                isRefreshing = false
-            } catch {
-                isRefreshing = false
-                present(error)
-            }
-        }
+        guard let source = selectedSource, status(for: source).isManagedCopy else { return }
+        perform(.remove, on: source)
     }
 
     func copy(_ value: String?) {
@@ -459,13 +657,26 @@ final class LibraryViewModel {
         guard let repository else { return }
         isLoading = reset && families.isEmpty
         let offset = reset ? 0 : families.count
+        let destination = selectedDestination
+        let allowedFaceIDs: Set<FaceID>?
+        let allowedSourcePaths: Set<String>?
+        if case let .fontState(state) = destination {
+            allowedFaceIDs = faceIDsByState[state] ?? []
+            allowedSourcePaths = sourcePathsByState[state] ?? []
+        } else {
+            allowedFaceIDs = nil
+            allowedSourcePaths = nil
+        }
         let page = try await repository.query(
             text: searchText,
-            destination: selectedDestination,
+            destination: destination,
             facets: selectedFacets,
+            allowedFaceIDs: allowedFaceIDs,
+            allowedSourcePaths: allowedSourcePaths,
             offset: offset,
             limit: pageSize
         )
+        guard destination == selectedDestination else { return }
         if reset {
             families = page.families
             facetOptions = page.facets
@@ -482,6 +693,33 @@ final class LibraryViewModel {
             selectedFaceID = nil
         }
         isLoading = false
+    }
+
+    private func reloadLibrarySources() async throws {
+        guard let repository else { return }
+        libraryFaceSources = try await repository.libraryFaceSources()
+        await refreshAllStatuses()
+    }
+
+    private func refreshAllStatuses() async {
+        guard let operations else { return }
+        let paths = libraryFaceSources.flatMap(\.paths)
+        let statuses = await operations.statuses(for: paths)
+        var familiesByState: [FontOperationState: Set<FamilyID>] = [:]
+        var facesByState: [FontOperationState: Set<FaceID>] = [:]
+        var pathsByState: [FontOperationState: Set<String>] = [:]
+        for entry in libraryFaceSources {
+            for path in entry.paths {
+                guard let state = statuses[path]?.state else { continue }
+                familiesByState[state, default: []].insert(entry.familyID)
+                facesByState[state, default: []].insert(entry.faceID)
+                pathsByState[state, default: []].insert(path)
+            }
+        }
+        sourceStatuses = statuses
+        fontStateCounts = familiesByState.mapValues { UInt64($0.count) }
+        faceIDsByState = facesByState
+        sourcePathsByState = pathsByState
     }
 
     private func loadCarouselTail() {
@@ -503,6 +741,15 @@ final class LibraryViewModel {
         let text = searchText
         let destination = selectedDestination
         let facets = selectedFacets
+        let allowedFaceIDs: Set<FaceID>?
+        let allowedSourcePaths: Set<String>?
+        if case let .fontState(state) = destination {
+            allowedFaceIDs = faceIDsByState[state] ?? []
+            allowedSourcePaths = sourcePathsByState[state] ?? []
+        } else {
+            allowedFaceIDs = nil
+            allowedSourcePaths = nil
+        }
         let offset = max(totalCount - 2, 0)
         carouselTailTask = Task { @MainActor [weak self] in
             do {
@@ -510,6 +757,8 @@ final class LibraryViewModel {
                     text: text,
                     destination: destination,
                     facets: facets,
+                    allowedFaceIDs: allowedFaceIDs,
+                    allowedSourcePaths: allowedSourcePaths,
                     offset: offset,
                     limit: 2
                 )

@@ -162,12 +162,28 @@ struct FontFamilyCardView: View {
             updateHoverSelection(hovering)
         }
         .contextMenu {
+            if let face, face.sources.contains(where: { !model.availableActions(for: $0).isEmpty }) {
+                Menu("字体操作") {
+                    ForEach(face.sources.filter { !model.availableActions(for: $0).isEmpty }) { source in
+                        Menu(source.path) {
+                            ForEach(model.availableActions(for: source), id: \.rawValue) { action in
+                                Button(action.title) { model.perform(action, on: source) }
+                            }
+                        }
+                    }
+                }
+            }
             Button(family.isFavorite ? "取消收藏" : "收藏") {
                 model.toggleFavorite(family)
             }
-            Button("在 Finder 中显示") {
-                select()
-                model.revealSelectedFace()
+            if let face {
+                Menu("在 Finder 中显示") {
+                    ForEach(face.sources) { source in
+                        Button(source.path) {
+                            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: source.path)])
+                        }
+                    }
+                }
             }
             Divider()
             Button("复制字族名") {

@@ -14,6 +14,25 @@ struct SidebarView: View {
                     .tag(SidebarDestination.favorites)
             }
 
+            Section("字体状态") {
+                sidebarRow("已挂载", symbol: "bolt", count: model.fontStateCounts[.active] ?? 0)
+                    .tag(SidebarDestination.fontState(.active))
+                    .help("当前登录会话已激活")
+                sidebarRow("已安装", symbol: "checkmark.circle", count: model.fontStateCounts[.installed] ?? 0)
+                    .tag(SidebarDestination.fontState(.installed))
+                    .help("包含手动安装和 Folio 安装的字体")
+                sidebarRow("仅在字体库", symbol: "tray", count: model.fontStateCounts[.available] ?? 0)
+                    .tag(SidebarDestination.fontState(.available))
+                    .help("Folio 字体库中尚未挂载或安装的副本")
+                sidebarRow("外部文件", symbol: "doc", count: model.fontStateCounts[.external] ?? 0)
+                    .tag(SidebarDestination.fontState(.external))
+                    .help("引用的文件和已添加文件夹中的字体")
+                sidebarRow("系统字体", symbol: "desktopcomputer", count: model.fontStateCounts[.system] ?? 0)
+                    .tag(SidebarDestination.fontState(.system))
+                sidebarRow("文件不可用", symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0)
+                    .tag(SidebarDestination.fontState(.unavailable))
+            }
+
             Section("工具") {
                 Label("在线字体", systemImage: "globe")
                     .foregroundStyle(.tertiary)

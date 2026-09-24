@@ -398,7 +398,7 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-// Initial value and increment amount for handles. 
+// Initial value and increment amount for handles.
 // These ensure that SWIFT handles always have the lowest bit set
 fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
 fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
@@ -584,29 +584,37 @@ fileprivate struct FfiConverterString: FfiConverter {
 
 
 public protocol FolioEngineProtocol: AnyObject, Sendable {
-    
+
+    func addFontFile(path: String) throws  -> RootDto
+
     func addLibraryRoot(path: String) throws  -> RootDto
-    
+
     func createCollection(name: String) throws  -> CollectionDto
-    
-    func deleteCollection(id: CollectionIdDto) throws 
-    
+
+    func deleteCollection(id: CollectionIdDto) throws
+
     func familyDetails(familyId: FamilyIdDto) throws  -> FamilyDetailsDto
-    
+
+    func libraryFaceSources() throws  -> [LibraryFaceSourcesDto]
+
     func loadCachedLibrary() throws  -> LibrarySnapshotDto
-    
+
     func queryLibrary(query: LibraryQueryDto) throws  -> LibraryPageDto
-    
-    func recordRecent(identityId: IdentityIdDto) throws 
-    
+
+    func recordRecent(identityId: IdentityIdDto) throws
+
     func refreshLibrary() throws  -> RefreshOutcomeDto
-    
-    func renameCollection(id: CollectionIdDto, name: String) throws 
-    
-    func setCollectionMembers(collectionId: CollectionIdDto, identityIds: [IdentityIdDto], member: Bool) throws 
-    
-    func setFavorite(identityIds: [IdentityIdDto], favorite: Bool) throws 
-    
+
+    func removeLibraryRoot(id: RootIdDto) throws
+
+    func renameCollection(id: CollectionIdDto, name: String) throws
+
+    func setCollectionMembers(collectionId: CollectionIdDto, identityIds: [IdentityIdDto], member: Bool) throws
+
+    func setFavorite(identityIds: [IdentityIdDto], favorite: Bool) throws
+
+    func validateFontFile(path: String) throws
+
 }
 open class FolioEngine: FolioEngineProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -658,7 +666,7 @@ open class FolioEngine: FolioEngineProtocol, @unchecked Sendable {
         try! rustCall { uniffi_folio_ffi_fn_free_folioengine(handle, $0) }
     }
 
-    
+
 public static func `open`(databasePath: String)throws  -> FolioEngine  {
     return try  FfiConverterTypeFolioEngine_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -667,9 +675,19 @@ public static func `open`(databasePath: String)throws  -> FolioEngine  {
     )
 })
 }
-    
 
-    
+
+
+open func addFontFile(path: String)throws  -> RootDto  {
+    return try  FfiConverterTypeRootDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_add_font_file(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(path),uniffiCallStatus
+    )
+})
+}
+
 open func addLibraryRoot(path: String)throws  -> RootDto  {
     return try  FfiConverterTypeRootDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -679,7 +697,7 @@ open func addLibraryRoot(path: String)throws  -> RootDto  {
     )
 })
 }
-    
+
 open func createCollection(name: String)throws  -> CollectionDto  {
     return try  FfiConverterTypeCollectionDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -689,7 +707,7 @@ open func createCollection(name: String)throws  -> CollectionDto  {
     )
 })
 }
-    
+
 open func deleteCollection(id: CollectionIdDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_folioengine_delete_collection(
@@ -698,7 +716,7 @@ open func deleteCollection(id: CollectionIdDto)throws   {try rustCallWithError(F
     )
 }
 }
-    
+
 open func familyDetails(familyId: FamilyIdDto)throws  -> FamilyDetailsDto  {
     return try  FfiConverterTypeFamilyDetailsDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -708,7 +726,16 @@ open func familyDetails(familyId: FamilyIdDto)throws  -> FamilyDetailsDto  {
     )
 })
 }
-    
+
+open func libraryFaceSources()throws  -> [LibraryFaceSourcesDto]  {
+    return try  FfiConverterSequenceTypeLibraryFaceSourcesDto.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_library_face_sources(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func loadCachedLibrary()throws  -> LibrarySnapshotDto  {
     return try  FfiConverterTypeLibrarySnapshotDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -717,7 +744,7 @@ open func loadCachedLibrary()throws  -> LibrarySnapshotDto  {
     )
 })
 }
-    
+
 open func queryLibrary(query: LibraryQueryDto)throws  -> LibraryPageDto  {
     return try  FfiConverterTypeLibraryPageDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -727,7 +754,7 @@ open func queryLibrary(query: LibraryQueryDto)throws  -> LibraryPageDto  {
     )
 })
 }
-    
+
 open func recordRecent(identityId: IdentityIdDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_folioengine_record_recent(
@@ -736,7 +763,7 @@ open func recordRecent(identityId: IdentityIdDto)throws   {try rustCallWithError
     )
 }
 }
-    
+
 open func refreshLibrary()throws  -> RefreshOutcomeDto  {
     return try  FfiConverterTypeRefreshOutcomeDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -745,7 +772,16 @@ open func refreshLibrary()throws  -> RefreshOutcomeDto  {
     )
 })
 }
-    
+
+open func removeLibraryRoot(id: RootIdDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_remove_library_root(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeRootIdDto_lower(id),uniffiCallStatus
+    )
+}
+}
+
 open func renameCollection(id: CollectionIdDto, name: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_folioengine_rename_collection(
@@ -755,7 +791,7 @@ open func renameCollection(id: CollectionIdDto, name: String)throws   {try rustC
     )
 }
 }
-    
+
 open func setCollectionMembers(collectionId: CollectionIdDto, identityIds: [IdentityIdDto], member: Bool)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_folioengine_set_collection_members(
@@ -766,7 +802,7 @@ open func setCollectionMembers(collectionId: CollectionIdDto, identityIds: [Iden
     )
 }
 }
-    
+
 open func setFavorite(identityIds: [IdentityIdDto], favorite: Bool)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_folioengine_set_favorite(
@@ -776,9 +812,18 @@ open func setFavorite(identityIds: [IdentityIdDto], favorite: Bool)throws   {try
     )
 }
 }
-    
 
-    
+open func validateFontFile(path: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_validate_font_file(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(path),uniffiCallStatus
+    )
+}
+}
+
+
+
 }
 
 
@@ -838,9 +883,9 @@ public struct CollectionDto: Equatable, Hashable {
         self.memberCount = memberCount
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -854,8 +899,8 @@ public struct FfiConverterTypeCollectionDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CollectionDto {
         return
             try CollectionDto(
-                id: FfiConverterTypeCollectionIdDto.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
+                id: FfiConverterTypeCollectionIdDto.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
                 memberCount: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -892,9 +937,9 @@ public struct CollectionIdDto: Equatable, Hashable {
         self.value = value
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -942,9 +987,9 @@ public struct FaceIdDto: Equatable, Hashable {
         self.value = value
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -995,6 +1040,7 @@ public struct FaceSummaryDto: Equatable, Hashable {
     public var weight: Double?
     public var width: Double?
     public var sourcePath: String?
+    public var sources: [FontSourceDto]
     public var faceIndex: UInt32
     public var fileSize: UInt64
     public var version: String?
@@ -1008,7 +1054,7 @@ public struct FaceSummaryDto: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: FaceIdDto, identityId: IdentityIdDto, revisionId: String, styleName: String, postscriptName: String?, fullName: String?, format: String, isVariable: Bool, weight: Double?, width: Double?, sourcePath: String?, faceIndex: UInt32, fileSize: UInt64, version: String?, manufacturer: String?, designer: String?, copyright: String?, category: String, license: String, scripts: [String], axes: [VariableAxisDto]) {
+    public init(id: FaceIdDto, identityId: IdentityIdDto, revisionId: String, styleName: String, postscriptName: String?, fullName: String?, format: String, isVariable: Bool, weight: Double?, width: Double?, sourcePath: String?, sources: [FontSourceDto], faceIndex: UInt32, fileSize: UInt64, version: String?, manufacturer: String?, designer: String?, copyright: String?, category: String, license: String, scripts: [String], axes: [VariableAxisDto]) {
         self.id = id
         self.identityId = identityId
         self.revisionId = revisionId
@@ -1020,6 +1066,7 @@ public struct FaceSummaryDto: Equatable, Hashable {
         self.weight = weight
         self.width = width
         self.sourcePath = sourcePath
+        self.sources = sources
         self.faceIndex = faceIndex
         self.fileSize = fileSize
         self.version = version
@@ -1032,9 +1079,9 @@ public struct FaceSummaryDto: Equatable, Hashable {
         self.axes = axes
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1048,26 +1095,27 @@ public struct FfiConverterTypeFaceSummaryDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FaceSummaryDto {
         return
             try FaceSummaryDto(
-                id: FfiConverterTypeFaceIdDto.read(from: &buf), 
-                identityId: FfiConverterTypeIdentityIdDto.read(from: &buf), 
-                revisionId: FfiConverterString.read(from: &buf), 
-                styleName: FfiConverterString.read(from: &buf), 
-                postscriptName: FfiConverterOptionString.read(from: &buf), 
-                fullName: FfiConverterOptionString.read(from: &buf), 
-                format: FfiConverterString.read(from: &buf), 
-                isVariable: FfiConverterBool.read(from: &buf), 
-                weight: FfiConverterOptionDouble.read(from: &buf), 
-                width: FfiConverterOptionDouble.read(from: &buf), 
-                sourcePath: FfiConverterOptionString.read(from: &buf), 
-                faceIndex: FfiConverterUInt32.read(from: &buf), 
-                fileSize: FfiConverterUInt64.read(from: &buf), 
-                version: FfiConverterOptionString.read(from: &buf), 
-                manufacturer: FfiConverterOptionString.read(from: &buf), 
+                id: FfiConverterTypeFaceIdDto.read(from: &buf),
+                identityId: FfiConverterTypeIdentityIdDto.read(from: &buf),
+                revisionId: FfiConverterString.read(from: &buf),
+                styleName: FfiConverterString.read(from: &buf),
+                postscriptName: FfiConverterOptionString.read(from: &buf),
+                fullName: FfiConverterOptionString.read(from: &buf),
+                format: FfiConverterString.read(from: &buf),
+                isVariable: FfiConverterBool.read(from: &buf),
+                weight: FfiConverterOptionDouble.read(from: &buf),
+                width: FfiConverterOptionDouble.read(from: &buf),
+                sourcePath: FfiConverterOptionString.read(from: &buf),
+                sources: FfiConverterSequenceTypeFontSourceDto.read(from: &buf),
+                faceIndex: FfiConverterUInt32.read(from: &buf),
+                fileSize: FfiConverterUInt64.read(from: &buf),
+                version: FfiConverterOptionString.read(from: &buf),
+                manufacturer: FfiConverterOptionString.read(from: &buf),
                 designer: FfiConverterOptionString.read(from: &buf),
                 copyright: FfiConverterOptionString.read(from: &buf),
-                category: FfiConverterString.read(from: &buf), 
-                license: FfiConverterString.read(from: &buf), 
-                scripts: FfiConverterSequenceString.read(from: &buf), 
+                category: FfiConverterString.read(from: &buf),
+                license: FfiConverterString.read(from: &buf),
+                scripts: FfiConverterSequenceString.read(from: &buf),
                 axes: FfiConverterSequenceTypeVariableAxisDto.read(from: &buf)
         )
     }
@@ -1084,6 +1132,7 @@ public struct FfiConverterTypeFaceSummaryDto: FfiConverterRustBuffer {
         FfiConverterOptionDouble.write(value.weight, into: &buf)
         FfiConverterOptionDouble.write(value.width, into: &buf)
         FfiConverterOptionString.write(value.sourcePath, into: &buf)
+        FfiConverterSequenceTypeFontSourceDto.write(value.sources, into: &buf)
         FfiConverterUInt32.write(value.faceIndex, into: &buf)
         FfiConverterUInt64.write(value.fileSize, into: &buf)
         FfiConverterOptionString.write(value.version, into: &buf)
@@ -1128,9 +1177,9 @@ public struct FacetCountDto: Equatable, Hashable {
         self.familyCount = familyCount
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1144,9 +1193,9 @@ public struct FfiConverterTypeFacetCountDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FacetCountDto {
         return
             try FacetCountDto(
-                kind: FfiConverterTypeFacetKindDto.read(from: &buf), 
-                value: FfiConverterString.read(from: &buf), 
-                label: FfiConverterString.read(from: &buf), 
+                kind: FfiConverterTypeFacetKindDto.read(from: &buf),
+                value: FfiConverterString.read(from: &buf),
+                label: FfiConverterString.read(from: &buf),
                 familyCount: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -1186,9 +1235,9 @@ public struct FacetSelectionDto: Equatable, Hashable {
         self.value = value
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1202,7 +1251,7 @@ public struct FfiConverterTypeFacetSelectionDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FacetSelectionDto {
         return
             try FacetSelectionDto(
-                kind: FfiConverterTypeFacetKindDto.read(from: &buf), 
+                kind: FfiConverterTypeFacetKindDto.read(from: &buf),
                 value: FfiConverterString.read(from: &buf)
         )
     }
@@ -1252,9 +1301,9 @@ public struct FamilyCardDto: Equatable, Hashable {
         self.manufacturer = manufacturer
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1268,13 +1317,13 @@ public struct FfiConverterTypeFamilyCardDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FamilyCardDto {
         return
             try FamilyCardDto(
-                id: FfiConverterTypeFamilyIdDto.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
-                faces: FfiConverterSequenceTypeFaceSummaryDto.read(from: &buf), 
-                identityIds: FfiConverterSequenceTypeIdentityIdDto.read(from: &buf), 
-                matchedFaceIds: FfiConverterSequenceTypeFaceIdDto.read(from: &buf), 
-                isFavorite: FfiConverterBool.read(from: &buf), 
-                isVariable: FfiConverterBool.read(from: &buf), 
+                id: FfiConverterTypeFamilyIdDto.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                faces: FfiConverterSequenceTypeFaceSummaryDto.read(from: &buf),
+                identityIds: FfiConverterSequenceTypeIdentityIdDto.read(from: &buf),
+                matchedFaceIds: FfiConverterSequenceTypeFaceIdDto.read(from: &buf),
+                isFavorite: FfiConverterBool.read(from: &buf),
+                isVariable: FfiConverterBool.read(from: &buf),
                 manufacturer: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -1324,9 +1373,9 @@ public struct FamilyDetailsDto: Equatable, Hashable {
         self.isFavorite = isFavorite
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1340,10 +1389,10 @@ public struct FfiConverterTypeFamilyDetailsDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FamilyDetailsDto {
         return
             try FamilyDetailsDto(
-                id: FfiConverterTypeFamilyIdDto.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
-                faces: FfiConverterSequenceTypeFaceSummaryDto.read(from: &buf), 
-                identityIds: FfiConverterSequenceTypeIdentityIdDto.read(from: &buf), 
+                id: FfiConverterTypeFamilyIdDto.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                faces: FfiConverterSequenceTypeFaceSummaryDto.read(from: &buf),
+                identityIds: FfiConverterSequenceTypeIdentityIdDto.read(from: &buf),
                 isFavorite: FfiConverterBool.read(from: &buf)
         )
     }
@@ -1382,9 +1431,9 @@ public struct FamilyIdDto: Equatable, Hashable {
         self.value = value
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1423,6 +1472,64 @@ public func FfiConverterTypeFamilyIdDto_lower(_ value: FamilyIdDto) -> RustBuffe
 }
 
 
+public struct FontSourceDto: Equatable, Hashable {
+    public var path: String
+    public var faceIndex: UInt32
+    public var rootIds: [RootIdDto]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(path: String, faceIndex: UInt32, rootIds: [RootIdDto]) {
+        self.path = path
+        self.faceIndex = faceIndex
+        self.rootIds = rootIds
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FontSourceDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFontSourceDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FontSourceDto {
+        return
+            try FontSourceDto(
+                path: FfiConverterString.read(from: &buf),
+                faceIndex: FfiConverterUInt32.read(from: &buf),
+                rootIds: FfiConverterSequenceTypeRootIdDto.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FontSourceDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.path, into: &buf)
+        FfiConverterUInt32.write(value.faceIndex, into: &buf)
+        FfiConverterSequenceTypeRootIdDto.write(value.rootIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontSourceDto_lift(_ buf: RustBuffer) throws -> FontSourceDto {
+    return try FfiConverterTypeFontSourceDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontSourceDto_lower(_ value: FontSourceDto) -> RustBuffer {
+    return FfiConverterTypeFontSourceDto.lower(value)
+}
+
+
 public struct HealthSummaryDto: Equatable, Hashable {
     public var damagedFiles: UInt64
     public var duplicateSources: UInt64
@@ -1438,9 +1545,9 @@ public struct HealthSummaryDto: Equatable, Hashable {
         self.metadataConflicts = metadataConflicts
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1454,9 +1561,9 @@ public struct FfiConverterTypeHealthSummaryDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HealthSummaryDto {
         return
             try HealthSummaryDto(
-                damagedFiles: FfiConverterUInt64.read(from: &buf), 
-                duplicateSources: FfiConverterUInt64.read(from: &buf), 
-                multipleRevisions: FfiConverterUInt64.read(from: &buf), 
+                damagedFiles: FfiConverterUInt64.read(from: &buf),
+                duplicateSources: FfiConverterUInt64.read(from: &buf),
+                multipleRevisions: FfiConverterUInt64.read(from: &buf),
                 metadataConflicts: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -1494,9 +1601,9 @@ public struct IdentityIdDto: Equatable, Hashable {
         self.value = value
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1535,6 +1642,64 @@ public func FfiConverterTypeIdentityIdDto_lower(_ value: IdentityIdDto) -> RustB
 }
 
 
+public struct LibraryFaceSourcesDto: Equatable, Hashable {
+    public var familyId: FamilyIdDto
+    public var faceId: FaceIdDto
+    public var paths: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(familyId: FamilyIdDto, faceId: FaceIdDto, paths: [String]) {
+        self.familyId = familyId
+        self.faceId = faceId
+        self.paths = paths
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LibraryFaceSourcesDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLibraryFaceSourcesDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LibraryFaceSourcesDto {
+        return
+            try LibraryFaceSourcesDto(
+                familyId: FfiConverterTypeFamilyIdDto.read(from: &buf),
+                faceId: FfiConverterTypeFaceIdDto.read(from: &buf),
+                paths: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LibraryFaceSourcesDto, into buf: inout [UInt8]) {
+        FfiConverterTypeFamilyIdDto.write(value.familyId, into: &buf)
+        FfiConverterTypeFaceIdDto.write(value.faceId, into: &buf)
+        FfiConverterSequenceString.write(value.paths, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLibraryFaceSourcesDto_lift(_ buf: RustBuffer) throws -> LibraryFaceSourcesDto {
+    return try FfiConverterTypeLibraryFaceSourcesDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLibraryFaceSourcesDto_lower(_ value: LibraryFaceSourcesDto) -> RustBuffer {
+    return FfiConverterTypeLibraryFaceSourcesDto.lower(value)
+}
+
+
 public struct LibraryPageDto: Equatable, Hashable {
     public var totalMatches: UInt64
     public var families: [FamilyCardDto]
@@ -1550,9 +1715,9 @@ public struct LibraryPageDto: Equatable, Hashable {
         self.unresolvedScopeItems = unresolvedScopeItems
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1566,9 +1731,9 @@ public struct FfiConverterTypeLibraryPageDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LibraryPageDto {
         return
             try LibraryPageDto(
-                totalMatches: FfiConverterUInt64.read(from: &buf), 
-                families: FfiConverterSequenceTypeFamilyCardDto.read(from: &buf), 
-                facets: FfiConverterSequenceTypeFacetCountDto.read(from: &buf), 
+                totalMatches: FfiConverterUInt64.read(from: &buf),
+                families: FfiConverterSequenceTypeFamilyCardDto.read(from: &buf),
+                facets: FfiConverterSequenceTypeFacetCountDto.read(from: &buf),
                 unresolvedScopeItems: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -1602,23 +1767,27 @@ public struct LibraryQueryDto: Equatable, Hashable {
     public var scope: QueryScopeDto
     public var collectionId: CollectionIdDto?
     public var facets: [FacetSelectionDto]
+    public var allowedFaceIds: [FaceIdDto]?
+    public var allowedSourcePaths: [String]?
     public var offset: UInt64
     public var limit: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(text: String?, scope: QueryScopeDto, collectionId: CollectionIdDto?, facets: [FacetSelectionDto], offset: UInt64, limit: UInt64) {
+    public init(text: String?, scope: QueryScopeDto, collectionId: CollectionIdDto?, facets: [FacetSelectionDto], allowedFaceIds: [FaceIdDto]?, allowedSourcePaths: [String]?, offset: UInt64, limit: UInt64) {
         self.text = text
         self.scope = scope
         self.collectionId = collectionId
         self.facets = facets
+        self.allowedFaceIds = allowedFaceIds
+        self.allowedSourcePaths = allowedSourcePaths
         self.offset = offset
         self.limit = limit
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1632,11 +1801,13 @@ public struct FfiConverterTypeLibraryQueryDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LibraryQueryDto {
         return
             try LibraryQueryDto(
-                text: FfiConverterOptionString.read(from: &buf), 
-                scope: FfiConverterTypeQueryScopeDto.read(from: &buf), 
-                collectionId: FfiConverterOptionTypeCollectionIdDto.read(from: &buf), 
-                facets: FfiConverterSequenceTypeFacetSelectionDto.read(from: &buf), 
-                offset: FfiConverterUInt64.read(from: &buf), 
+                text: FfiConverterOptionString.read(from: &buf),
+                scope: FfiConverterTypeQueryScopeDto.read(from: &buf),
+                collectionId: FfiConverterOptionTypeCollectionIdDto.read(from: &buf),
+                facets: FfiConverterSequenceTypeFacetSelectionDto.read(from: &buf),
+                allowedFaceIds: FfiConverterOptionSequenceTypeFaceIdDto.read(from: &buf),
+                allowedSourcePaths: FfiConverterOptionSequenceString.read(from: &buf),
+                offset: FfiConverterUInt64.read(from: &buf),
                 limit: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -1646,6 +1817,8 @@ public struct FfiConverterTypeLibraryQueryDto: FfiConverterRustBuffer {
         FfiConverterTypeQueryScopeDto.write(value.scope, into: &buf)
         FfiConverterOptionTypeCollectionIdDto.write(value.collectionId, into: &buf)
         FfiConverterSequenceTypeFacetSelectionDto.write(value.facets, into: &buf)
+        FfiConverterOptionSequenceTypeFaceIdDto.write(value.allowedFaceIds, into: &buf)
+        FfiConverterOptionSequenceString.write(value.allowedSourcePaths, into: &buf)
         FfiConverterUInt64.write(value.offset, into: &buf)
         FfiConverterUInt64.write(value.limit, into: &buf)
     }
@@ -1688,9 +1861,9 @@ public struct LibrarySnapshotDto: Equatable, Hashable {
         self.health = health
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1704,12 +1877,12 @@ public struct FfiConverterTypeLibrarySnapshotDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LibrarySnapshotDto {
         return
             try LibrarySnapshotDto(
-                familyCount: FfiConverterUInt64.read(from: &buf), 
-                faceCount: FfiConverterUInt64.read(from: &buf), 
-                variableFamilyCount: FfiConverterUInt64.read(from: &buf), 
-                recentCount: FfiConverterUInt64.read(from: &buf), 
-                collections: FfiConverterSequenceTypeCollectionDto.read(from: &buf), 
-                roots: FfiConverterSequenceTypeRootDto.read(from: &buf), 
+                familyCount: FfiConverterUInt64.read(from: &buf),
+                faceCount: FfiConverterUInt64.read(from: &buf),
+                variableFamilyCount: FfiConverterUInt64.read(from: &buf),
+                recentCount: FfiConverterUInt64.read(from: &buf),
+                collections: FfiConverterSequenceTypeCollectionDto.read(from: &buf),
+                roots: FfiConverterSequenceTypeRootDto.read(from: &buf),
                 health: FfiConverterTypeHealthSummaryDto.read(from: &buf)
         )
     }
@@ -1762,9 +1935,9 @@ public struct RefreshOutcomeDto: Equatable, Hashable {
         self.issueCount = issueCount
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1778,12 +1951,12 @@ public struct FfiConverterTypeRefreshOutcomeDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RefreshOutcomeDto {
         return
             try RefreshOutcomeDto(
-                snapshot: FfiConverterTypeLibrarySnapshotDto.read(from: &buf), 
-                candidateFiles: FfiConverterUInt64.read(from: &buf), 
-                filesReparsed: FfiConverterUInt64.read(from: &buf), 
-                filesAdded: FfiConverterUInt64.read(from: &buf), 
-                filesChanged: FfiConverterUInt64.read(from: &buf), 
-                filesRemoved: FfiConverterUInt64.read(from: &buf), 
+                snapshot: FfiConverterTypeLibrarySnapshotDto.read(from: &buf),
+                candidateFiles: FfiConverterUInt64.read(from: &buf),
+                filesReparsed: FfiConverterUInt64.read(from: &buf),
+                filesAdded: FfiConverterUInt64.read(from: &buf),
+                filesChanged: FfiConverterUInt64.read(from: &buf),
+                filesRemoved: FfiConverterUInt64.read(from: &buf),
                 issueCount: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -1819,20 +1992,22 @@ public struct RootDto: Equatable, Hashable {
     public var id: RootIdDto
     public var displayPath: String
     public var recursive: Bool
+    public var kind: String
     public var pathIsLossless: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: RootIdDto, displayPath: String, recursive: Bool, pathIsLossless: Bool) {
+    public init(id: RootIdDto, displayPath: String, recursive: Bool, kind: String, pathIsLossless: Bool) {
         self.id = id
         self.displayPath = displayPath
         self.recursive = recursive
+        self.kind = kind
         self.pathIsLossless = pathIsLossless
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1846,9 +2021,10 @@ public struct FfiConverterTypeRootDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootDto {
         return
             try RootDto(
-                id: FfiConverterTypeRootIdDto.read(from: &buf), 
-                displayPath: FfiConverterString.read(from: &buf), 
-                recursive: FfiConverterBool.read(from: &buf), 
+                id: FfiConverterTypeRootIdDto.read(from: &buf),
+                displayPath: FfiConverterString.read(from: &buf),
+                recursive: FfiConverterBool.read(from: &buf),
+                kind: FfiConverterString.read(from: &buf),
                 pathIsLossless: FfiConverterBool.read(from: &buf)
         )
     }
@@ -1857,6 +2033,7 @@ public struct FfiConverterTypeRootDto: FfiConverterRustBuffer {
         FfiConverterTypeRootIdDto.write(value.id, into: &buf)
         FfiConverterString.write(value.displayPath, into: &buf)
         FfiConverterBool.write(value.recursive, into: &buf)
+        FfiConverterString.write(value.kind, into: &buf)
         FfiConverterBool.write(value.pathIsLossless, into: &buf)
     }
 }
@@ -1886,9 +2063,9 @@ public struct RootIdDto: Equatable, Hashable {
         self.value = value
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1946,9 +2123,9 @@ public struct VariableAxisDto: Equatable, Hashable {
         self.hidden = hidden
     }
 
-    
 
-    
+
+
 }
 
 #if compiler(>=6)
@@ -1962,11 +2139,11 @@ public struct FfiConverterTypeVariableAxisDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VariableAxisDto {
         return
             try VariableAxisDto(
-                tag: FfiConverterString.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
-                minValue: FfiConverterDouble.read(from: &buf), 
-                defaultValue: FfiConverterDouble.read(from: &buf), 
-                maxValue: FfiConverterDouble.read(from: &buf), 
+                tag: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                minValue: FfiConverterDouble.read(from: &buf),
+                defaultValue: FfiConverterDouble.read(from: &buf),
+                maxValue: FfiConverterDouble.read(from: &buf),
                 hidden: FfiConverterBool.read(from: &buf)
         )
     }
@@ -1999,7 +2176,7 @@ public func FfiConverterTypeVariableAxisDto_lower(_ value: VariableAxisDto) -> R
 
 
 public enum FacetKindDto: Equatable, Hashable {
-    
+
     case category
     case script
     case foundry
@@ -2024,38 +2201,38 @@ public struct FfiConverterTypeFacetKindDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FacetKindDto {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .category
-        
+
         case 2: return .script
-        
+
         case 3: return .foundry
-        
+
         case 4: return .license
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: FacetKindDto, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .category:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .script:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .foundry:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .license:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -2077,23 +2254,23 @@ public func FfiConverterTypeFacetKindDto_lower(_ value: FacetKindDto) -> RustBuf
 
 
 
-public 
+public
 enum FolioFfiError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
-    
-    
+
+
     case Operation(message: String
     )
 
-    
 
-    
 
-    
+
+
+
     public var errorDescription: String? {
         String(reflecting: self)
     }
-    
+
 }
 
 #if compiler(>=6)
@@ -2110,9 +2287,9 @@ public struct FfiConverterTypeFolioFfiError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .Operation(
             message: try FfiConverterString.read(from: &buf)
             )
@@ -2124,14 +2301,14 @@ public struct FfiConverterTypeFolioFfiError: FfiConverterRustBuffer {
     public static func write(_ value: FolioFfiError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
-        
+
+
+
         case let .Operation(message):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(message, into: &buf)
-            
+
         }
     }
 }
@@ -2154,7 +2331,7 @@ public func FfiConverterTypeFolioFfiError_lower(_ value: FolioFfiError) -> RustB
 
 
 public enum QueryScopeDto: Equatable, Hashable {
-    
+
     case all
     case favorites
     case recent
@@ -2179,38 +2356,38 @@ public struct FfiConverterTypeQueryScopeDto: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QueryScopeDto {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .all
-        
+
         case 2: return .favorites
-        
+
         case 3: return .recent
-        
+
         case 4: return .collection
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: QueryScopeDto, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .all:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .favorites:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .recent:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .collection:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -2298,6 +2475,54 @@ fileprivate struct FfiConverterOptionTypeCollectionIdDto: FfiConverterRustBuffer
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeCollectionIdDto.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionSequenceTypeFaceIdDto: FfiConverterRustBuffer {
+    typealias SwiftType = [FaceIdDto]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeFaceIdDto.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeFaceIdDto.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -2481,6 +2706,31 @@ fileprivate struct FfiConverterSequenceTypeFamilyCardDto: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFontSourceDto: FfiConverterRustBuffer {
+    typealias SwiftType = [FontSourceDto]
+
+    public static func write(_ value: [FontSourceDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFontSourceDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FontSourceDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FontSourceDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFontSourceDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeIdentityIdDto: FfiConverterRustBuffer {
     typealias SwiftType = [IdentityIdDto]
 
@@ -2506,6 +2756,31 @@ fileprivate struct FfiConverterSequenceTypeIdentityIdDto: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeLibraryFaceSourcesDto: FfiConverterRustBuffer {
+    typealias SwiftType = [LibraryFaceSourcesDto]
+
+    public static func write(_ value: [LibraryFaceSourcesDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLibraryFaceSourcesDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LibraryFaceSourcesDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LibraryFaceSourcesDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLibraryFaceSourcesDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRootDto: FfiConverterRustBuffer {
     typealias SwiftType = [RootDto]
 
@@ -2523,6 +2798,31 @@ fileprivate struct FfiConverterSequenceTypeRootDto: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeRootDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRootIdDto: FfiConverterRustBuffer {
+    typealias SwiftType = [RootIdDto]
+
+    public static func write(_ value: [RootIdDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRootIdDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RootIdDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RootIdDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRootIdDto.read(from: &buf))
         }
         return seq
     }
@@ -2568,6 +2868,9 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_add_font_file() != 611) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_add_library_root() != 56225) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2578,6 +2881,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_family_details() != 18619) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_library_face_sources() != 61505) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_load_cached_library() != 16021) {
@@ -2592,6 +2898,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_refresh_library() != 43263) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_remove_library_root() != 58415) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_rename_collection() != 12286) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2599,6 +2908,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_set_favorite() != 35292) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_validate_font_file() != 7645) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_constructor_folioengine_open() != 62270) {

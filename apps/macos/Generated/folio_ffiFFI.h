@@ -258,6 +258,11 @@ void uniffi_folio_ffi_fn_free_folioengine(uint64_t handle, RustCallStatus *_Nonn
 uint64_t uniffi_folio_ffi_fn_constructor_folioengine_open(RustBuffer database_path, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_ADD_FONT_FILE
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_ADD_FONT_FILE
+RustBuffer uniffi_folio_ffi_fn_method_folioengine_add_font_file(uint64_t ptr, RustBuffer path, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_ADD_LIBRARY_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_ADD_LIBRARY_ROOT
 RustBuffer uniffi_folio_ffi_fn_method_folioengine_add_library_root(uint64_t ptr, RustBuffer path, RustCallStatus *_Nonnull out_status
@@ -276,6 +281,11 @@ void uniffi_folio_ffi_fn_method_folioengine_delete_collection(uint64_t ptr, Rust
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_FAMILY_DETAILS
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_FAMILY_DETAILS
 RustBuffer uniffi_folio_ffi_fn_method_folioengine_family_details(uint64_t ptr, RustBuffer family_id, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_LIBRARY_FACE_SOURCES
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_LIBRARY_FACE_SOURCES
+RustBuffer uniffi_folio_ffi_fn_method_folioengine_library_face_sources(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_LOAD_CACHED_LIBRARY
@@ -298,6 +308,11 @@ void uniffi_folio_ffi_fn_method_folioengine_record_recent(uint64_t ptr, RustBuff
 RustBuffer uniffi_folio_ffi_fn_method_folioengine_refresh_library(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_REMOVE_LIBRARY_ROOT
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_REMOVE_LIBRARY_ROOT
+void uniffi_folio_ffi_fn_method_folioengine_remove_library_root(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_RENAME_COLLECTION
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_RENAME_COLLECTION
 void uniffi_folio_ffi_fn_method_folioengine_rename_collection(uint64_t ptr, RustBuffer id, RustBuffer name, RustCallStatus *_Nonnull out_status
@@ -311,6 +326,11 @@ void uniffi_folio_ffi_fn_method_folioengine_set_collection_members(uint64_t ptr,
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_SET_FAVORITE
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_SET_FAVORITE
 void uniffi_folio_ffi_fn_method_folioengine_set_favorite(uint64_t ptr, RustBuffer identity_ids, int8_t favorite, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_VALIDATE_FONT_FILE
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_VALIDATE_FONT_FILE
+void uniffi_folio_ffi_fn_method_folioengine_validate_font_file(uint64_t ptr, RustBuffer path, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_FOLIO_FFI_RUSTBUFFER_ALLOC
@@ -573,82 +593,106 @@ void ffi_folio_ffi_rust_future_free_void(uint64_t handle
 void ffi_folio_ffi_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_ADD_FONT_FILE
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_ADD_FONT_FILE
+uint16_t uniffi_folio_ffi_checksum_method_folioengine_add_font_file(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_ADD_LIBRARY_ROOT
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_ADD_LIBRARY_ROOT
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_add_library_root(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_CREATE_COLLECTION
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_CREATE_COLLECTION
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_create_collection(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_DELETE_COLLECTION
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_DELETE_COLLECTION
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_delete_collection(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_FAMILY_DETAILS
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_FAMILY_DETAILS
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_family_details(void
-    
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_LIBRARY_FACE_SOURCES
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_LIBRARY_FACE_SOURCES
+uint16_t uniffi_folio_ffi_checksum_method_folioengine_library_face_sources(void
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_LOAD_CACHED_LIBRARY
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_LOAD_CACHED_LIBRARY
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_load_cached_library(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_QUERY_LIBRARY
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_QUERY_LIBRARY
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_query_library(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_RECORD_RECENT
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_RECORD_RECENT
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_record_recent(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_REFRESH_LIBRARY
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_REFRESH_LIBRARY
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_refresh_library(void
-    
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_REMOVE_LIBRARY_ROOT
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_REMOVE_LIBRARY_ROOT
+uint16_t uniffi_folio_ffi_checksum_method_folioengine_remove_library_root(void
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_RENAME_COLLECTION
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_RENAME_COLLECTION
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_rename_collection(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_SET_COLLECTION_MEMBERS
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_SET_COLLECTION_MEMBERS
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_set_collection_members(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_SET_FAVORITE
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_SET_FAVORITE
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_set_favorite(void
-    
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_VALIDATE_FONT_FILE
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_VALIDATE_FONT_FILE
+uint16_t uniffi_folio_ffi_checksum_method_folioengine_validate_font_file(void
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_CONSTRUCTOR_FOLIOENGINE_OPEN
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_CONSTRUCTOR_FOLIOENGINE_OPEN
 uint16_t uniffi_folio_ffi_checksum_constructor_folioengine_open(void
-    
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_FOLIO_FFI_UNIFFI_CONTRACT_VERSION
 #define UNIFFI_FFIDEF_FFI_FOLIO_FFI_UNIFFI_CONTRACT_VERSION
 uint32_t ffi_folio_ffi_uniffi_contract_version(void
-    
+
 );
 #endif
 

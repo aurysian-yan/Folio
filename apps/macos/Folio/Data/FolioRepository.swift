@@ -1,18 +1,25 @@
+import Darwin
 import Foundation
 
 actor FolioRepository {
     private let engine: FolioEngine
 
-    init() throws {
+    init(databaseURL: URL? = nil) throws {
         let manager = FileManager.default
-        let support = try manager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        ).appendingPathComponent("Folio", isDirectory: true)
-        try manager.createDirectory(at: support, withIntermediateDirectories: true)
-        engine = try FolioEngine.open(databasePath: support.appendingPathComponent("folio.sqlite").path)
+        let path: URL
+        if let databaseURL {
+            path = databaseURL
+        } else {
+            let support = try manager.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ).appendingPathComponent("Folio", isDirectory: true)
+            path = support.appendingPathComponent("folio.sqlite")
+        }
+        try manager.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+        engine = try FolioEngine.open(databasePath: path.path)
     }
 
     func loadCachedLibrary() throws -> LibrarySnapshot {
@@ -27,9 +34,34 @@ actor FolioRepository {
         _ = try engine.addLibraryRoot(path: url.path)
     }
 
+    func addFontFile(_ url: URL) throws -> RootID {
+        let root = try engine.addFontFile(path: url.path)
+        return RootID(rawValue: root.id.value)
+    }
+
+    func validateFontFile(_ url: URL) throws {
+        try engine.validateFontFile(path: url.path)
+    }
+
+    func removeRoot(_ id: RootID) throws {
+        try engine.removeLibraryRoot(id: RootIdDto(value: id.rawValue))
+    }
+
+    func libraryFaceSources() throws -> [LibraryFaceSources] {
+        try engine.libraryFaceSources().map {
+            LibraryFaceSources(
+                familyID: FamilyID(rawValue: $0.familyId.value),
+                faceID: FaceID(rawValue: $0.faceId.value),
+                paths: $0.paths
+            )
+        }
+    }
+
     func addDefaultLibraryRoots() throws -> Bool {
         let manager = FileManager.default
-        let home = manager.homeDirectoryForCurrentUser
+        let home = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) }
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? manager.homeDirectoryForCurrentUser
         let candidates = [
             URL(fileURLWithPath: "/System/Library/Fonts", isDirectory: true),
             URL(fileURLWithPath: "/Library/Fonts", isDirectory: true),
@@ -43,10 +75,25 @@ actor FolioRepository {
         return added
     }
 
+    func migrateLegacyUserFontRoot(_ roots: [RootSummary]) throws {
+        let manager = FileManager.default
+        let sandboxFonts = manager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Fonts", isDirectory: true).standardizedFileURL
+        guard roots.contains(where: { $0.kind == "directory" && $0.displayPath == sandboxFonts.path }),
+              let accountHome = getpwuid(getuid()).map({ String(cString: $0.pointee.pw_dir) }),
+              !accountHome.isEmpty else { return }
+        let userFonts = URL(fileURLWithPath: accountHome, isDirectory: true)
+            .appendingPathComponent("Library/Fonts", isDirectory: true).standardizedFileURL
+        guard userFonts != sandboxFonts, manager.fileExists(atPath: userFonts.path) else { return }
+        _ = try engine.addLibraryRoot(path: userFonts.path)
+    }
+
     func query(
         text: String,
         destination: SidebarDestination,
         facets: Set<FacetOption>,
+        allowedFaceIDs: Set<FaceID>? = nil,
+        allowedSourcePaths: Set<String>? = nil,
         offset: Int,
         limit: Int
     ) throws -> LibraryPage {
@@ -62,6 +109,9 @@ actor FolioRepository {
         case let .collection(id):
             scope = .collection
             collectionID = CollectionIdDto(value: id.rawValue)
+        case .fontState:
+            scope = .all
+            collectionID = nil
         default:
             scope = .all
             collectionID = nil
@@ -74,6 +124,10 @@ actor FolioRepository {
             scope: scope,
             collectionId: collectionID,
             facets: selections,
+            allowedFaceIds: allowedFaceIDs.map { ids in
+                ids.map { FaceIdDto(value: $0.rawValue) }
+            },
+            allowedSourcePaths: allowedSourcePaths.map(Array.init),
             offset: UInt64(max(0, offset)),
             limit: UInt64(max(1, limit))
         ))
@@ -147,6 +201,7 @@ actor FolioRepository {
                     id: RootID(rawValue: $0.id.value),
                     displayPath: $0.displayPath,
                     recursive: $0.recursive,
+                    kind: $0.kind,
                     pathIsLossless: $0.pathIsLossless
                 )
             },
@@ -185,6 +240,13 @@ actor FolioRepository {
             weight: dto.weight,
             width: dto.width,
             sourcePath: dto.sourcePath,
+            sources: dto.sources.map {
+                FontSource(
+                    path: $0.path,
+                    faceIndex: $0.faceIndex,
+                    rootIDs: $0.rootIds.map { RootID(rawValue: $0.value) }
+                )
+            },
             faceIndex: dto.faceIndex,
             fileSize: dto.fileSize,
             version: dto.version,

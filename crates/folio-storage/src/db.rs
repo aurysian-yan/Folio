@@ -60,6 +60,37 @@ impl FolioDatabase {
         root::add_root(&self.conn, path.as_ref(), recursive)
     }
 
+    /// 添加仅包含一个字体文件的来源。
+    pub fn add_file_root(&self, path: impl AsRef<Path>) -> Result<AddRootOutcome, StorageError> {
+        root::add_file_root(&self.conn, path.as_ref())
+    }
+
+    /// 查询具体来源文件所属的所有根目录。
+    pub fn source_root_ids(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> Result<Vec<LibraryRootId>, StorageError> {
+        let canonical = path
+            .as_ref()
+            .canonicalize()
+            .unwrap_or_else(|_| path.as_ref().to_path_buf());
+        let encoded = crate::path_codec::encode_path(&canonical);
+        let mut statement = self.conn.prepare(
+            "SELECT root_id FROM source_files WHERE path_platform = ?1 AND path_bytes = ?2 ORDER BY root_id",
+        )?;
+        let mut rows =
+            statement.query(rusqlite::params![encoded.platform.as_str(), encoded.bytes])?;
+        let mut ids = Vec::new();
+        while let Some(row) = rows.next()? {
+            let bytes: Vec<u8> = row.get(0)?;
+            ids.push(LibraryRootId::from_bytes(crate::root::id_bytes(
+                &bytes,
+                "source_files.root_id",
+            )?));
+        }
+        Ok(ids)
+    }
+
     /// 列出全部库根目录。
     pub fn list_roots(&self) -> Result<Vec<LibraryRoot>, StorageError> {
         root::list_roots(&self.conn)

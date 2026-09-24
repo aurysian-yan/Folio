@@ -1,8 +1,7 @@
-//! 库根目录：用户持久状态。
+//! 字体来源根：用户持久状态。
 //!
-//! [`LibraryRoot`] 是用户主动加入 Folio 的目录，**不是**字体来源：根目录是
-//! 容器，来源是其下发现的具体 `文件 + face_index`。根目录在清空/重建缓存后
-//! 仍然保留。
+//! [`LibraryRoot`] 表示用户加入的目录或单个文件；具体字体来源由
+//! `文件 + face_index` 标识。根记录在清空或重建缓存后仍然保留。
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -24,10 +23,28 @@ pub struct LibraryRoot {
     pub display_path: String,
     /// 目录遍历是否递归子目录。
     pub recursive: bool,
+    /// 来源为目录或单个文件。
+    pub kind: LibraryRootKind,
     /// 加入时间。
     pub created_at: SystemTime,
     /// `path` 在本机是否可精确往返。
     pub path_is_lossless: bool,
+}
+
+/// 字体库来源类型。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LibraryRootKind {
+    Directory,
+    File,
+}
+
+impl LibraryRootKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Directory => "directory",
+            Self::File => "file",
+        }
+    }
 }
 
 impl LibraryRoot {
@@ -52,6 +69,20 @@ pub fn add_root(
     path: &Path,
     recursive: bool,
 ) -> Result<AddRootOutcome, StorageError> {
+    add_source(conn, path, recursive, LibraryRootKind::Directory)
+}
+
+/// 添加单个字体文件来源。
+pub fn add_file_root(conn: &Connection, path: &Path) -> Result<AddRootOutcome, StorageError> {
+    add_source(conn, path, false, LibraryRootKind::File)
+}
+
+fn add_source(
+    conn: &Connection,
+    path: &Path,
+    recursive: bool,
+    kind: LibraryRootKind,
+) -> Result<AddRootOutcome, StorageError> {
     let path: PathBuf = std::path::absolute(path)
         .map_err(StorageError::InvalidRootPath)?
         .components()
@@ -63,8 +94,8 @@ pub fn add_root(
 
     let changed = conn.execute(
         "INSERT INTO library_roots \
-         (id, path_platform, path_bytes, display_path, recursive, created_at_ns) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(path_platform, path_bytes) DO NOTHING",
+         (id, path_platform, path_bytes, display_path, recursive, created_at_ns, kind) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(path_platform, path_bytes) DO NOTHING",
         rusqlite::params![
             id.as_bytes().as_slice(),
             encoded.platform.as_str(),
@@ -72,6 +103,7 @@ pub fn add_root(
             encoded.display,
             recursive,
             created_at,
+            kind.as_str(),
         ],
     )?;
 
@@ -86,7 +118,7 @@ pub fn add_root(
 /// 按确定顺序列出全部库根目录。
 pub fn list_roots(conn: &Connection) -> Result<Vec<LibraryRoot>, StorageError> {
     let mut statement = conn.prepare(
-        "SELECT id, path_platform, path_bytes, display_path, recursive, created_at_ns \
+        "SELECT id, path_platform, path_bytes, display_path, recursive, created_at_ns, kind \
          FROM library_roots ORDER BY display_path, id",
     )?;
     let mut rows = statement.query([])?;
@@ -100,7 +132,7 @@ pub fn list_roots(conn: &Connection) -> Result<Vec<LibraryRoot>, StorageError> {
 /// 按标识查询库根目录。
 pub fn get_root(conn: &Connection, id: LibraryRootId) -> Result<Option<LibraryRoot>, StorageError> {
     let mut statement = conn.prepare(
-        "SELECT id, path_platform, path_bytes, display_path, recursive, created_at_ns \
+        "SELECT id, path_platform, path_bytes, display_path, recursive, created_at_ns, kind \
          FROM library_roots WHERE id = ?1",
     )?;
     let mut rows = statement.query(rusqlite::params![id.as_bytes().as_slice()])?;
@@ -128,7 +160,7 @@ pub fn set_root_recursive(
     recursive: bool,
 ) -> Result<bool, StorageError> {
     let changed = conn.execute(
-        "UPDATE library_roots SET recursive = ?2 WHERE id = ?1",
+        "UPDATE library_roots SET recursive = ?2 WHERE id = ?1 AND kind = 'directory'",
         rusqlite::params![id.as_bytes().as_slice(), recursive],
     )?;
     Ok(changed > 0)
@@ -149,6 +181,16 @@ fn read_root(row: &Row<'_>) -> Result<LibraryRoot, StorageError> {
             })
         }
     };
+    let kind = match row.get::<_, String>("kind")?.as_str() {
+        "directory" => LibraryRootKind::Directory,
+        "file" => LibraryRootKind::File,
+        _ => {
+            return Err(StorageError::CorruptCache {
+                context: "library_roots.kind".to_owned(),
+                message: "unknown source kind".to_owned(),
+            })
+        }
+    };
     let created_at_ns: i64 = row.get("created_at_ns")?;
 
     let id = decode_root_id(&id_bytes, "library_roots.id")?;
@@ -165,6 +207,7 @@ fn read_root(row: &Row<'_>) -> Result<LibraryRoot, StorageError> {
         path,
         display_path,
         recursive,
+        kind,
         created_at: nanos_to_system_time(created_at_ns).unwrap_or(UNIX_EPOCH),
         path_is_lossless,
     })

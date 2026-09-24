@@ -30,6 +30,7 @@ struct RootView: View {
         }
         .background(WindowSizeController())
         .task { model.start() }
+        .onOpenURL { model.receiveOpenURL($0) }
         .onChange(of: preferredViewMode) { _, rawValue in
             model.applyPreferredViewMode(rawValue)
         }
@@ -46,6 +47,73 @@ struct RootView: View {
         }
         .sheet(isPresented: $model.isCreatingCollection) {
             NewCollectionView(model: model)
+        }
+        .confirmationDialog("导入字体", isPresented: $model.isImportChoicePresented) {
+            Button("复制到 Folio 字体库") { model.importPending(as: .copy) }
+            Button("引用原文件") { model.importPending(as: .reference) }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("选择字体文件的保存方式")
+        }
+        .sheet(isPresented: $model.isImportReportPresented) {
+            ImportReportView(model: model)
+        }
+    }
+}
+
+private struct ImportReportView: View {
+    @Bindable var model: LibraryViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("导入结果")
+                .font(.headline)
+            List {
+                Section("导入") {
+                    ForEach(model.importOutcomes.indices, id: \.self) { index in
+                        outcomeRow(model.importOutcomes[index])
+                    }
+                }
+                if let action = model.lastReportedBatchAction, !model.batchOutcomes.isEmpty {
+                    Section(action.title) {
+                        ForEach(model.batchOutcomes.indices, id: \.self) { index in
+                            outcomeRow(model.batchOutcomes[index])
+                        }
+                    }
+                }
+            }
+            HStack {
+                if model.importOutcomes.contains(where: { $0.error != nil })
+                    || model.batchOutcomes.contains(where: { $0.error != nil }) {
+                    Button("重试失败项") { model.retryFailedOutcomes() }
+                }
+                if model.importOutcomes.contains(where: { $0.error == nil }) {
+                    Button("激活成功导入的字体") {
+                        model.performImportedBatch(.activate)
+                    }
+                    Button("安装成功导入的字体") {
+                        model.performImportedBatch(.install)
+                    }
+                }
+                Spacer()
+                Button("完成") { dismiss() }
+            }
+        }
+        .padding()
+        .frame(width: 480, height: 360)
+    }
+
+    private func outcomeRow(_ outcome: FontOperationOutcome) -> some View {
+        HStack {
+            Image(systemName: outcome.error == nil ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(outcome.error == nil ? .green : .orange)
+            VStack(alignment: .leading) {
+                Text(outcome.name)
+                if let error = outcome.error {
+                    Text(error).font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }

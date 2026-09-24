@@ -20,7 +20,7 @@ struct LibraryView: View {
             PreviewBar(model: model)
         }
         .navigationTitle("Folio")
-        .navigationSubtitle("\(model.totalMatches) 个本地字体")
+        .navigationSubtitle("\(model.totalMatches) 个字族")
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Picker("浏览方式", selection: $model.viewMode) {
@@ -39,6 +39,15 @@ struct LibraryView: View {
             }
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("导入字体", systemImage: "plus") { model.importFiles() }
+                    Button("添加文件夹", systemImage: "folder.badge.plus") { model.addFolder() }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("添加字体")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -89,7 +98,9 @@ struct LibraryView: View {
 
     private var libraryHeader: some View {
         VStack(spacing: 18) {
-            LibraryHeroView(presentation: model.hero)
+            if model.selectedDestination == .allFonts {
+                LibraryHeroView(presentation: model.hero)
+            }
             FacetFilterView(model: model)
         }
         .padding(.horizontal, 48)
@@ -105,8 +116,9 @@ struct LibraryView: View {
         } description: {
             Text("添加你的第一个字体文件夹")
         } actions: {
-            Button("添加文件夹", systemImage: "folder.badge.plus", action: model.addFolder)
+            Button("导入字体", systemImage: "plus", action: model.importFiles)
                 .buttonStyle(.borderedProminent)
+            Button("添加文件夹", systemImage: "folder.badge.plus", action: model.addFolder)
         }
     }
 

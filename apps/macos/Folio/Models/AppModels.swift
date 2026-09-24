@@ -7,6 +7,68 @@ enum AppPreferences {
     static let libraryViewMode = "libraryViewMode"
     static let previewSize = "previewSize"
     static let expandedCardWidth = "expandedCardWidth"
+    static let askImportMode = "askImportMode"
+    static let defaultImportMode = "defaultImportMode"
+}
+
+enum FontImportMode: String, CaseIterable, Identifiable, Sendable {
+    case copy
+    case reference
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .copy: "复制到 Folio 字体库"
+        case .reference: "引用原文件"
+        }
+    }
+}
+
+enum FontAction: String, CaseIterable, Sendable {
+    case activate
+    case deactivate
+    case install
+    case uninstall
+    case remove
+
+    var title: String {
+        switch self {
+        case .activate: "激活"
+        case .deactivate: "停用"
+        case .install: "安装"
+        case .uninstall: "卸载"
+        case .remove: "移除"
+        }
+    }
+}
+
+enum FontOperationState: Hashable, Sendable {
+    case available
+    case active
+    case installed
+    case external
+    case system
+    case unavailable
+}
+
+struct LibraryFaceSources: Sendable {
+    let familyID: FamilyID
+    let faceID: FaceID
+    let paths: [String]
+}
+
+struct FontOperationOutcome: Sendable {
+    let name: String
+    let error: String?
+    let path: String?
+}
+
+struct FontSource: Hashable, Identifiable, Sendable {
+    let path: String
+    let faceIndex: UInt32
+    let rootIDs: [RootID]
+    var id: String { "\(path):\(faceIndex)" }
+    var filename: String { URL(fileURLWithPath: path).lastPathComponent }
 }
 
 struct FamilyID: Hashable, Identifiable, Sendable {
@@ -56,6 +118,7 @@ struct FaceSummary: Hashable, Identifiable, Sendable {
     let weight: Double?
     let width: Double?
     let sourcePath: String?
+    let sources: [FontSource]
     let faceIndex: UInt32
     let fileSize: UInt64
     let version: String?
@@ -117,6 +180,7 @@ struct RootSummary: Hashable, Identifiable, Sendable {
     let id: RootID
     let displayPath: String
     let recursive: Bool
+    let kind: String
     let pathIsLossless: Bool
 }
 
@@ -162,6 +226,7 @@ struct LibraryPage: Sendable {
 
 enum SidebarDestination: Hashable, Sendable {
     case allFonts
+    case fontState(FontOperationState)
     case recent
     case favorites
     case onlineFonts

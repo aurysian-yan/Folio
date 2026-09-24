@@ -14,7 +14,7 @@ use rusqlite::{Connection, Transaction};
 use crate::error::StorageError;
 
 /// 当前构建支持的最高 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 2;
+pub const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 /// 将新打开的连接迁移到 [`CURRENT_SCHEMA_VERSION`]。
 pub fn migrate(conn: &mut Connection) -> Result<(), StorageError> {
@@ -54,6 +54,7 @@ fn apply_step(tx: &Transaction<'_>, target: i32) -> Result<(), rusqlite::Error> 
     match target {
         1 => migrate_to_v1(tx),
         2 => migrate_to_v2(tx),
+        3 => migrate_to_v3(tx),
         _ => Ok(()),
     }
 }
@@ -119,5 +120,13 @@ fn migrate_to_v2(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
         );
         CREATE INDEX recent_fonts_order ON recent_fonts(last_accessed_at_ns DESC, identity_id);
     "#,
+    )
+}
+
+fn migrate_to_v3(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        "ALTER TABLE library_roots ADD COLUMN kind TEXT NOT NULL DEFAULT 'directory' \
+         CHECK(kind IN ('directory', 'file')); \
+         CREATE INDEX source_files_path ON source_files(path_platform, path_bytes);",
     )
 }

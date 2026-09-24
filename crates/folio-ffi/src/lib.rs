@@ -85,6 +85,8 @@ pub struct LibraryQueryDto {
     pub scope: QueryScopeDto,
     pub collection_id: Option<CollectionIdDto>,
     pub facets: Vec<FacetSelectionDto>,
+    pub allowed_face_ids: Option<Vec<FaceIdDto>>,
+    pub allowed_source_paths: Option<Vec<String>>,
     pub offset: u64,
     pub limit: u64,
 }
@@ -112,6 +114,7 @@ pub struct FaceSummaryDto {
     pub weight: Option<f64>,
     pub width: Option<f64>,
     pub source_path: Option<String>,
+    pub sources: Vec<FontSourceDto>,
     pub face_index: u32,
     pub file_size: u64,
     pub version: Option<String>,
@@ -122,6 +125,20 @@ pub struct FaceSummaryDto {
     pub license: String,
     pub scripts: Vec<String>,
     pub axes: Vec<VariableAxisDto>,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct FontSourceDto {
+    pub path: String,
+    pub face_index: u32,
+    pub root_ids: Vec<RootIdDto>,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct LibraryFaceSourcesDto {
+    pub family_id: FamilyIdDto,
+    pub face_id: FaceIdDto,
+    pub paths: Vec<String>,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -173,6 +190,7 @@ pub struct RootDto {
     pub id: RootIdDto,
     pub display_path: String,
     pub recursive: bool,
+    pub kind: String,
     pub path_is_lossless: bool,
 }
 
@@ -288,12 +306,58 @@ impl FolioEngine {
         Ok(root_dto(&root))
     }
 
+    pub fn add_font_file(&self, path: String) -> Result<RootDto, FolioFfiError> {
+        let state = self.lock()?;
+        let outcome = state
+            .database
+            .add_file_root(Path::new(&path))
+            .map_err(FolioFfiError::operation)?;
+        let root = match outcome {
+            AddRootOutcome::Created(root) | AddRootOutcome::Existing(root) => root,
+        };
+        Ok(root_dto(&root))
+    }
+
+    pub fn validate_font_file(&self, path: String) -> Result<(), FolioFfiError> {
+        let parsed =
+            folio_core::parse_font_file(Path::new(&path)).map_err(FolioFfiError::operation)?;
+        if parsed.faces.is_empty() {
+            return Err(FolioFfiError::Operation {
+                message: "字体文件没有可用的字款".to_owned(),
+            });
+        }
+        Ok(())
+    }
+
+    pub fn remove_library_root(&self, id: RootIdDto) -> Result<(), FolioFfiError> {
+        let state = self.lock()?;
+        let id = folio_storage::LibraryRootId::from_bytes(parse_id(&id.value)?);
+        state
+            .database
+            .remove_root(id)
+            .map_err(FolioFfiError::operation)?;
+        Ok(())
+    }
+
     pub fn query_library(&self, query: LibraryQueryDto) -> Result<LibraryPageDto, FolioFfiError> {
         let state = self.lock()?;
+        let allowed_face_ids = query
+            .allowed_face_ids
+            .as_ref()
+            .map(|ids| {
+                ids.iter()
+                    .map(|id| parse_id(&id.value).map(FontFaceId::from_bytes))
+                    .collect::<Result<BTreeSet<_>, _>>()
+            })
+            .transpose()?;
+        let allowed_source_paths = query
+            .allowed_source_paths
+            .as_ref()
+            .map(|paths| paths.iter().cloned().collect::<BTreeSet<_>>());
         let query = query_from_dto(query)?;
         let result = state
             .index
-            .query(&query)
+            .query_with_faces(&query, allowed_face_ids.as_ref())
             .map_err(FolioFfiError::operation)?;
         let favorites = state
             .database
@@ -305,12 +369,17 @@ impl FolioEngine {
             .families
             .iter()
             .filter_map(|matched| {
-                state
-                    .catalog
-                    .find_family(matched.family_id)
-                    .map(|family| family_card(family, &matched.matched_face_ids, &favorites))
+                state.catalog.find_family(matched.family_id).map(|family| {
+                    family_card(
+                        family,
+                        &matched.matched_face_ids,
+                        &favorites,
+                        &state.database,
+                        allowed_source_paths.as_ref(),
+                    )
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(LibraryPageDto {
             total_matches: result.total_matches as u64,
             families,
@@ -321,6 +390,26 @@ impl FolioEngine {
                 .collect(),
             unresolved_scope_items: result.unresolved_scope_items.len() as u64,
         })
+    }
+
+    pub fn library_face_sources(&self) -> Result<Vec<LibraryFaceSourcesDto>, FolioFfiError> {
+        let state = self.lock()?;
+        Ok(state
+            .catalog
+            .families
+            .iter()
+            .flat_map(|family| {
+                family.faces.iter().map(|face| LibraryFaceSourcesDto {
+                    family_id: family_dto(family.id),
+                    face_id: face_dto(face.id),
+                    paths: face
+                        .sources
+                        .iter()
+                        .map(|source| source.path().to_string_lossy().into_owned())
+                        .collect(),
+                })
+            })
+            .collect())
     }
 
     pub fn family_details(
@@ -348,7 +437,11 @@ impl FolioEngine {
                 .display_name
                 .clone()
                 .unwrap_or_else(|| "未命名字体".to_owned()),
-            faces: family.faces.iter().map(face_summary).collect(),
+            faces: family
+                .faces
+                .iter()
+                .map(|face| face_summary(face, &state.database, None))
+                .collect::<Result<Vec<_>, _>>()?,
             is_favorite: !identities.is_empty()
                 && identities.iter().all(|id| favorites.contains(id)),
             identity_ids: identities.into_iter().map(identity_dto).collect(),
@@ -563,24 +656,33 @@ fn family_card(
     family: &folio_core::FontFamily,
     matched_faces: &[FontFaceId],
     favorites: &BTreeSet<FontIdentityId>,
-) -> FamilyCardDto {
+    database: &FolioDatabase,
+    source_paths: Option<&BTreeSet<String>>,
+) -> Result<FamilyCardDto, FolioFfiError> {
     let identities = family_identities(family);
-    FamilyCardDto {
+    let shown_faces: Vec<_> = family
+        .faces
+        .iter()
+        .filter(|face| source_paths.is_none() || matched_faces.contains(&face.id))
+        .collect();
+    Ok(FamilyCardDto {
         id: family_dto(family.id),
         display_name: family
             .display_name
             .clone()
             .unwrap_or_else(|| "未命名字体".to_owned()),
-        faces: family.faces.iter().map(face_summary).collect(),
+        faces: shown_faces
+            .iter()
+            .map(|face| face_summary(face, database, source_paths))
+            .collect::<Result<Vec<_>, _>>()?,
         identity_ids: identities.iter().copied().map(identity_dto).collect(),
         matched_face_ids: matched_faces.iter().copied().map(face_dto).collect(),
         is_favorite: !identities.is_empty() && identities.iter().all(|id| favorites.contains(id)),
-        is_variable: family.faces.iter().any(|face| face.metadata.is_variable),
-        manufacturer: family
-            .faces
+        is_variable: shown_faces.iter().any(|face| face.metadata.is_variable),
+        manufacturer: shown_faces
             .iter()
             .find_map(|face| face.metadata.enrichment.foundry.manufacturer.clone()),
-    }
+    })
 }
 
 fn family_identities(family: &folio_core::FontFamily) -> Vec<FontIdentityId> {
@@ -593,8 +695,20 @@ fn family_identities(family: &folio_core::FontFamily) -> Vec<FontIdentityId> {
         .collect()
 }
 
-fn face_summary(face: &FontFace) -> FaceSummaryDto {
-    let source = face.sources.first();
+fn face_summary(
+    face: &FontFace,
+    database: &FolioDatabase,
+    source_paths: Option<&BTreeSet<String>>,
+) -> Result<FaceSummaryDto, FolioFfiError> {
+    let selected_sources: Vec<_> = face
+        .sources
+        .iter()
+        .filter(|source| {
+            source_paths
+                .is_none_or(|paths| paths.contains(source.path().to_string_lossy().as_ref()))
+        })
+        .collect();
+    let source = selected_sources.first().copied();
     let version = face
         .metadata
         .font_version
@@ -606,7 +720,25 @@ fn face_summary(face: &FontFace) -> FaceSummaryDto {
                 .head_revision
                 .map(|value| format!("{value:.3}"))
         });
-    FaceSummaryDto {
+    let sources = selected_sources
+        .iter()
+        .map(|source| {
+            let root_ids = database
+                .source_root_ids(source.path())
+                .map_err(FolioFfiError::operation)?;
+            Ok(FontSourceDto {
+                path: source.path().to_string_lossy().into_owned(),
+                face_index: source.face_index(),
+                root_ids: root_ids
+                    .into_iter()
+                    .map(|id| RootIdDto {
+                        value: id.to_string(),
+                    })
+                    .collect(),
+            })
+        })
+        .collect::<Result<Vec<_>, FolioFfiError>>()?;
+    Ok(FaceSummaryDto {
         id: face_dto(face.id),
         identity_id: identity_dto(face.identity_id),
         revision_id: face.revision_id.to_string(),
@@ -618,6 +750,7 @@ fn face_summary(face: &FontFace) -> FaceSummaryDto {
         weight: face.metadata.weight.map(|weight| weight.value() as f64),
         width: face.metadata.width.map(|width| width.ratio() as f64),
         source_path: source.map(|source| source.path().to_string_lossy().into_owned()),
+        sources,
         face_index: source.map_or(0, |source| source.face_index()),
         file_size: source
             .map(|source| std::fs::metadata(source.path()).map_or(0, |metadata| metadata.len()))
@@ -648,7 +781,7 @@ fn face_summary(face: &FontFace) -> FaceSummaryDto {
                 hidden: axis.hidden,
             })
             .collect(),
-    }
+    })
 }
 
 fn facet_count(count: folio_query::FacetCount) -> Option<FacetCountDto> {
@@ -810,6 +943,7 @@ fn root_dto(root: &folio_storage::LibraryRoot) -> RootDto {
         },
         display_path: root.display_path.clone(),
         recursive: root.recursive,
+        kind: root.kind.as_str().to_owned(),
         path_is_lossless: root.path_is_lossless,
     }
 }
@@ -844,11 +978,87 @@ mod tests {
                 scope: QueryScopeDto::All,
                 collection_id: None,
                 facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
                 offset: 0,
                 limit: 120,
             })
             .unwrap();
         assert_eq!(page.total_matches, 0);
+    }
+
+    #[test]
+    fn selected_file_source_exposes_only_its_file_and_root() {
+        let directory = tempfile::tempdir().unwrap();
+        let fonts = directory.path().join("fonts");
+        std::fs::create_dir(&fonts).unwrap();
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts");
+        let selected = fonts.join("selected.ttf");
+        std::fs::copy(fixtures.join("Lato-Regular.ttf"), &selected).unwrap();
+        std::fs::copy(fixtures.join("Lato-Bold.ttf"), fonts.join("unselected.ttf")).unwrap();
+        let engine = FolioEngine::open(
+            directory
+                .path()
+                .join("folio.sqlite")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .unwrap();
+        engine
+            .validate_font_file(selected.to_string_lossy().into_owned())
+            .unwrap();
+        let root = engine
+            .add_font_file(selected.to_string_lossy().into_owned())
+            .unwrap();
+        assert_eq!(root.kind, "file");
+        assert_eq!(engine.refresh_library().unwrap().files_added, 1);
+        let page = engine
+            .query_library(LibraryQueryDto {
+                text: None,
+                scope: QueryScopeDto::All,
+                collection_id: None,
+                facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
+                offset: 0,
+                limit: 120,
+            })
+            .unwrap();
+        assert_eq!(page.total_matches, 1);
+        let source = &page.families[0].faces[0].sources[0];
+        assert!(source.path.ends_with("selected.ttf"));
+        assert_eq!(source.root_ids[0].value, root.id.value);
+        let directory_root = engine
+            .add_library_root(fonts.to_string_lossy().into_owned())
+            .unwrap();
+        engine.refresh_library().unwrap();
+        let page = engine
+            .query_library(LibraryQueryDto {
+                text: None,
+                scope: QueryScopeDto::All,
+                collection_id: None,
+                facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
+                offset: 0,
+                limit: 120,
+            })
+            .unwrap();
+        let source = page.families[0]
+            .faces
+            .iter()
+            .flat_map(|face| &face.sources)
+            .find(|source| source.path.ends_with("selected.ttf"))
+            .unwrap();
+        assert_eq!(source.root_ids.len(), 2);
+        assert!(source.root_ids.iter().any(|id| id.value == root.id.value));
+        assert!(source
+            .root_ids
+            .iter()
+            .any(|id| id.value == directory_root.id.value));
+        engine.remove_library_root(root.id).unwrap();
+        engine.remove_library_root(directory_root.id).unwrap();
+        assert_eq!(engine.refresh_library().unwrap().snapshot.family_count, 0);
     }
 
     #[test]
@@ -888,6 +1098,8 @@ mod tests {
                 scope: QueryScopeDto::All,
                 collection_id: None,
                 facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
                 offset: 0,
                 limit: 1,
             })
@@ -908,6 +1120,8 @@ mod tests {
                 scope: QueryScopeDto::Favorites,
                 collection_id: None,
                 facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
                 offset: 0,
                 limit: 120,
             })
@@ -929,6 +1143,8 @@ mod tests {
                 scope: QueryScopeDto::Collection,
                 collection_id: Some(collection.id.clone()),
                 facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
                 offset: 0,
                 limit: 120,
             })

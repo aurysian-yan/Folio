@@ -8,9 +8,21 @@ struct SettingsView: View {
         LibraryViewMode.compactGrid.rawValue
     @AppStorage(AppPreferences.previewSize) private var previewSize = 48.0
     @AppStorage(AppPreferences.expandedCardWidth) private var expandedCardWidth = 410.0
+    @AppStorage(AppPreferences.askImportMode) private var askImportMode = false
+    @AppStorage(AppPreferences.defaultImportMode) private var defaultImportMode = FontImportMode.copy.rawValue
 
     var body: some View {
         Form {
+            Section("字体导入") {
+                Toggle("每次询问导入方式", isOn: $askImportMode)
+                Picker("默认导入方式", selection: $defaultImportMode) {
+                    ForEach(FontImportMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                .disabled(askImportMode)
+            }
+
             Section("显示") {
                 Picker("当前视图", selection: $libraryViewMode) {
                     ForEach(LibraryViewMode.allCases) { mode in
@@ -45,7 +57,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 360)
+        .frame(width: 480, height: 440)
     }
 }
 

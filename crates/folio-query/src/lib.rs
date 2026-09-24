@@ -350,6 +350,15 @@ impl FontQueryIndex {
         }
     }
     pub fn query(&self, query: &FontQuery) -> Result<QueryResult, QueryError> {
+        self.query_with_faces(query, None)
+    }
+
+    /// 将结果限制在指定字款，同时保持搜索、Facet 和分页语义。
+    pub fn query_with_faces(
+        &self,
+        query: &FontQuery,
+        face_ids: Option<&BTreeSet<FontFaceId>>,
+    ) -> Result<QueryResult, QueryError> {
         let recent_ids: BTreeSet<_> = self.recent.keys().copied().collect();
         let allowed = match query.scope {
             QueryScope::All => None,
@@ -370,7 +379,10 @@ impl FontQueryIndex {
         let mut facets: BTreeMap<FacetValue, (BTreeSet<FontFamilyId>, Option<String>)> =
             BTreeMap::new();
         for d in &self.documents {
-            if allowed.is_some_and(|ids| !ids.contains(&d.identity)) || !d.matches(&query.facets) {
+            if face_ids.is_some_and(|ids| !ids.contains(&d.face))
+                || allowed.is_some_and(|ids| !ids.contains(&d.identity))
+                || !d.matches(&query.facets)
+            {
                 continue;
             }
             let Some(score) = d.score(&text, &tokens) else {
