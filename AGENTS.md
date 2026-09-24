@@ -21,6 +21,8 @@
 
 ## UI 约定
 
+- macOS 界面的 SF Symbols 固定使用英文图形形态，不随系统或界面语言本地化；
+  SwiftUI 中统一通过 `Image.englishSystemName(_:)` 显示。
 - Windows 与 Linux 使用同一套 React 页面和交互模型。
 - 设计稿中的侧栏、工具栏、搜索框、字体卡片网格和底部预览栏作为后续
   前端实现的基础结构。
