@@ -224,7 +224,7 @@ struct FontInspectorView: View {
     private func actionSymbol(_ action: FontAction) -> String {
         switch action {
         case .activate: "plus.diamond"
-        case .deactivate: "minus.diamond"
+        case .deactivate: "eject"
         case .install: "square.and.arrow.down"
         case .uninstall: "square.and.arrow.up"
         case .remove: "trash"

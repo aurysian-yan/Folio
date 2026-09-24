@@ -482,6 +482,16 @@ struct FontFamilyCardView: View {
             ) {
                 model.toggleFavorite(family)
             }
+            if let source = family.faces
+                .flatMap(\.sources)
+                .first(where: { model.availableActions(for: $0).contains(.deactivate) }) {
+                CardGlassButton(
+                    systemName: "eject",
+                    accessibilityLabel: "取消挂载"
+                ) {
+                    model.perform(.deactivate, on: source)
+                }
+            }
         }
     }
 
