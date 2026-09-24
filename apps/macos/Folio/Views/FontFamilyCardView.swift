@@ -49,12 +49,12 @@ struct FontFamilyCardView: View {
     @Bindable var model: LibraryViewModel
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
-    @AppStorage(AppPreferences.expandedCardWidth) private var expandedCardWidth = 410.0
     @State private var hoverSelectionTask: Task<Void, Never>?
     @State private var previewSizeUpdateTask: Task<Void, Never>?
     @State private var displayedPreviewSize: Double
     let family: FamilyCard
     let presentation: FontCardPresentation
+    let expandedSize: CGSize?
 
     private let cornerRadius: CGFloat = 16
     private let expandedFooterHeight: CGFloat = 44
@@ -62,11 +62,13 @@ struct FontFamilyCardView: View {
     init(
         model: LibraryViewModel,
         family: FamilyCard,
-        presentation: FontCardPresentation
+        presentation: FontCardPresentation,
+        expandedSize: CGSize? = nil
     ) {
         self.model = model
         self.family = family
         self.presentation = presentation
+        self.expandedSize = expandedSize
         _displayedPreviewSize = State(initialValue: model.committedPreviewSize)
     }
 
@@ -88,13 +90,11 @@ struct FontFamilyCardView: View {
     }
 
     private var cardWidth: CGFloat {
-        presentation == .expanded ? CGFloat(expandedCardWidth) : presentation.width
+        expandedSize?.width ?? presentation.width
     }
 
     private var cardHeight: CGFloat {
-        presentation == .expanded
-            ? cardWidth / FontCardPresentation.expanded.aspectRatio
-            : presentation.height
+        expandedSize?.height ?? presentation.height
     }
 
     var body: some View {
@@ -271,7 +271,7 @@ struct FontFamilyCardView: View {
             .padding(10)
         case .large:
             VStack(spacing: 0) {
-                preview(alignment: .center)
+                preview(alignment: .center, lineLimit: 3)
                     .frame(maxWidth: .infinity)
                     .frame(height: previewHeight(in: cardSize, footerHeight: 22))
                     .clipped()

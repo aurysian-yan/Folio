@@ -68,20 +68,35 @@ private struct ExpandedFontCardCarousel: View {
     @Bindable var model: LibraryViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hapticsEnabled = true
-    @AppStorage(AppPreferences.expandedCardWidth) private var expandedCardWidth = 410.0
+    @AppStorage(AppPreferences.expandedCardHeightRatio) private var expandedCardHeightRatio = 0.68
     @State private var scrollProgress: CGFloat = 0
     @State private var lastScrollDirection: CGFloat = 0
     @State private var pendingIndex: Int?
     @State private var pendingMoveTask: Task<Void, Never>?
+    @State private var viewportWidth: CGFloat = 820
+    @State private var draftHeightRatio: CGFloat?
+    @State private var dragStartHeightRatio: CGFloat?
+    @State private var resizingCardIndex: Int?
 
-    private let pagerWidth: CGFloat = 399
+    private var pagerWidth: CGFloat {
+        min(cardWidth, 520)
+    }
 
     private var cardWidth: CGFloat {
-        CGFloat(expandedCardWidth)
+        let preferredWidth = min(max(viewportWidth * 0.36 + 158, 280), 960)
+        return min(preferredWidth, max(viewportWidth - 24, 1))
     }
 
     private var cardHeight: CGFloat {
-        cardWidth / FontCardPresentation.expanded.aspectRatio
+        cardWidth * CGFloat(expandedCardHeightRatio)
+    }
+
+    private var activeCardHeight: CGFloat {
+        cardWidth * (draftHeightRatio ?? CGFloat(expandedCardHeightRatio))
+    }
+
+    private var stageHeight: CGFloat {
+        max(cardHeight, activeCardHeight)
     }
 
     private var cardScale: CGFloat {
@@ -162,13 +177,18 @@ private struct ExpandedFontCardCarousel: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .onAppear {
+                    if viewportWidth > 0 { self.viewportWidth = viewportWidth }
+                }
+                .onChange(of: viewportWidth) { _, width in
+                    if width > 0 { self.viewportWidth = width }
+                }
             }
-            .frame(height: cardHeight)
+            .frame(height: stageHeight)
 
             pager
         }
         .padding(.vertical, 10)
-        .frame(maxWidth: LibraryLayout.cardContainerMaxWidth)
         .frame(maxWidth: .infinity)
         .onAppear {
             if let selectedFamilyID = model.selectedFamilyID,
@@ -197,7 +217,7 @@ private struct ExpandedFontCardCarousel: View {
     }
 
     private func cardStack(viewportWidth: CGFloat) -> some View {
-        ZStack(alignment: .trailing) {
+        ZStack(alignment: .topTrailing) {
             ForEach(visibleIndices, id: \.self) { index in
                 let depth = scrollProgress - CGFloat(index)
                 if isWrapHint(index) {
@@ -205,15 +225,33 @@ private struct ExpandedFontCardCarousel: View {
                         .zIndex(wrapQueueZIndex(for: depth))
                         .allowsHitTesting(false)
                 } else if let family = family(at: index) {
+                    let isCurrent = abs(depth) < 0.001
+                    let height = isCurrent ? activeCardHeight : cardHeight
                     FontFamilyCardView(
                         model: model,
                         family: family,
-                        presentation: .expanded
+                        presentation: .expanded,
+                        expandedSize: CGSize(width: cardWidth, height: height)
                     )
                     .frame(
                         width: cardWidth,
-                        height: cardHeight
+                        height: height
                     )
+                    .overlay(alignment: .bottom) {
+                        if isCurrent {
+                            Image.englishSystemName("line.3.horizontal")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                                .padding(.bottom, 2)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .highPriorityGesture(
+                        cardResizeGesture(for: index),
+                        including: isCurrent ? .all : .none
+                    )
+                    .help(isCurrent ? "上下拖动调整卡片高度比例" : "")
+                    .accessibilityHint(isCurrent ? "上下拖动调整卡片高度比例" : "")
                     .scaleEffect(cardScale(for: depth))
                     .offset(x: cardOffset(for: depth))
                     .opacity(cardOpacity(for: depth))
@@ -225,9 +263,33 @@ private struct ExpandedFontCardCarousel: View {
         }
         .frame(
             width: min(stackWidth, viewportWidth),
-            height: cardHeight,
-            alignment: .trailing
+            height: stageHeight,
+            alignment: .topTrailing
         )
+    }
+
+    private func cardResizeGesture(for index: Int) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                guard resizingCardIndex == index
+                    || (resizingCardIndex == nil && abs(scrollProgress - CGFloat(index)) < 0.001)
+                else { return }
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+
+                let origin = dragStartHeightRatio ?? CGFloat(expandedCardHeightRatio)
+                dragStartHeightRatio = origin
+                resizingCardIndex = index
+                draftHeightRatio = min(max(origin + value.translation.height / cardWidth, 0.45), 1.4)
+            }
+            .onEnded { _ in
+                guard resizingCardIndex == index, let ratio = draftHeightRatio else { return }
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                    expandedCardHeightRatio = Double(ratio)
+                    draftHeightRatio = nil
+                    dragStartHeightRatio = nil
+                    resizingCardIndex = nil
+                }
+            }
     }
 
     private func wrapQueueCard(depth: CGFloat) -> some View {

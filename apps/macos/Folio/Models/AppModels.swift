@@ -6,7 +6,7 @@ enum AppPreferences {
     static let sliderHaptics = "sliderHaptics"
     static let libraryViewMode = "libraryViewMode"
     static let previewSize = "previewSize"
-    static let expandedCardWidth = "expandedCardWidth"
+    static let expandedCardHeightRatio = "expandedCardHeightRatio"
     static let askImportMode = "askImportMode"
     static let defaultImportMode = "defaultImportMode"
 }

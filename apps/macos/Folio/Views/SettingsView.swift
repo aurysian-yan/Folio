@@ -7,7 +7,6 @@ struct SettingsView: View {
     @AppStorage(AppPreferences.libraryViewMode) private var libraryViewMode =
         LibraryViewMode.compactGrid.rawValue
     @AppStorage(AppPreferences.previewSize) private var previewSize = 48.0
-    @AppStorage(AppPreferences.expandedCardWidth) private var expandedCardWidth = 410.0
     @AppStorage(AppPreferences.askImportMode) private var askImportMode = false
     @AppStorage(AppPreferences.defaultImportMode) private var defaultImportMode = FontImportMode.copy.rawValue
 
@@ -36,13 +35,6 @@ struct SettingsView: View {
                     value: $previewSize,
                     range: 18...106,
                     step: 1
-                )
-
-                PreferenceSliderRow(
-                    title: "大卡片尺寸",
-                    value: $expandedCardWidth,
-                    range: 320...560,
-                    step: 10
                 )
             }
 
