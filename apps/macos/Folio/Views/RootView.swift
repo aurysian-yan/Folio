@@ -16,7 +16,7 @@ struct RootView: View {
         }
         .inspector(isPresented: $model.inspectorPresented) {
             FontInspectorView(model: model)
-                .inspectorColumnWidth(min: 220, ideal: 284, max: 360)
+                .inspectorColumnWidth(min: 220, ideal: 260, max: 340)
         }
         .background {
             GeometryReader { proxy in
@@ -28,7 +28,7 @@ struct RootView: View {
                     }
             }
         }
-        .background(WindowSizeController())
+        .background(WindowLayoutPersistenceController())
         .task { model.start() }
         .onOpenURL { model.receiveOpenURL($0) }
         .onChange(of: preferredViewMode) { _, rawValue in
@@ -118,21 +118,66 @@ private struct ImportReportView: View {
     }
 }
 
-private struct WindowSizeController: NSViewRepresentable {
+private struct WindowLayoutPersistenceController: NSViewRepresentable {
+    private let windowFrameAutosaveName = "Folio.MainWindow"
+    private let searchFieldWidth: CGFloat = 240
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async {
-            view.window?.minSize = NSSize(width: 512, height: 468)
-        }
+        configureWindowLayout(from: view)
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
+        configureWindowLayout(from: view)
+    }
+
+    private func configureWindowLayout(from view: NSView) {
         DispatchQueue.main.async {
-            guard let window = view.window,
-                  window.minSize != NSSize(width: 512, height: 468) else { return }
-            window.minSize = NSSize(width: 512, height: 468)
+            guard let window = view.window else { return }
+            if window.minSize != NSSize(width: 512, height: 468) {
+                window.minSize = NSSize(width: 512, height: 468)
+            }
+            if window.frameAutosaveName != windowFrameAutosaveName {
+                window.setFrameAutosaveName(windowFrameAutosaveName)
+            }
+
+            if let contentView = window.contentView {
+                for (index, splitView) in splitViews(in: contentView).enumerated() {
+                    let autosaveName = "Folio.SplitView.\(index)"
+                    if splitView.autosaveName != autosaveName {
+                        splitView.autosaveName = autosaveName
+                    }
+                }
+            }
+
+            guard let searchItem = window.toolbar?.items
+                .compactMap({ $0 as? NSSearchToolbarItem })
+                .first else { return }
+            searchItem.preferredWidthForSearchField = searchFieldWidth
+            let widthConstraintIdentifier = "Folio.SearchFieldWidth"
+            if !searchItem.searchField.constraintsAffectingLayout(for: .horizontal).contains(where: {
+                $0.identifier == widthConstraintIdentifier
+            }) {
+                let widthConstraint = searchItem.searchField.widthAnchor
+                    .constraint(equalToConstant: searchFieldWidth)
+                widthConstraint.identifier = widthConstraintIdentifier
+                widthConstraint.priority = .defaultHigh
+                widthConstraint.isActive = true
+            }
         }
+    }
+
+    private func splitViews(in view: NSView) -> [NSSplitView] {
+        var result: [NSSplitView] = []
+        func collect(from view: NSView) {
+            if let splitView = view as? NSSplitView {
+                result.append(splitView)
+            }
+            view.subviews.forEach { collect(from: $0) }
+        }
+        collect(from: view)
+        return result
     }
 }
 
