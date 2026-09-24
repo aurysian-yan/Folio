@@ -20,7 +20,7 @@ struct PreviewBar: View {
             previewModeMenu
             previewTextField(minWidth: 90)
 
-            Image(systemName: "textformat.size")
+            Image.englishSystemName("textformat.size")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
@@ -28,7 +28,7 @@ struct PreviewBar: View {
             sizeValue
 
             if model.viewMode == .stack {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                Image.englishSystemName("arrow.up.left.and.arrow.down.right")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
@@ -82,14 +82,18 @@ struct PreviewBar: View {
                     model.previewMode = mode
                 } label: {
                     if model.previewMode == mode {
-                        Label(mode.title, systemImage: "checkmark")
+                        Label {
+                            Text(mode.title)
+                        } icon: {
+                            Image.englishSystemName("checkmark")
+                        }
                     } else {
                         Text(mode.title)
                     }
                 }
             }
         } label: {
-            Image(systemName: "character.text.justify")
+            Image.englishSystemName("character.text.justify")
                 .font(.system(size: 15, weight: .medium))
                 .frame(width: 32, height: 28)
         }
@@ -162,7 +166,7 @@ struct PreviewBar: View {
         selection: Binding<Color>
     ) -> some View {
         ColorPicker(selection: selection, supportsOpacity: true) {
-            Image(systemName: systemImage)
+            Image.englishSystemName(systemImage)
         }
         .fixedSize()
         .accessibilityLabel(accessibilityLabel)

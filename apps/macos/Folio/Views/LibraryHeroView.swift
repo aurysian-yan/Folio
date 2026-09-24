@@ -6,7 +6,7 @@ struct LibraryHeroView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: presentation.symbol)
+                Image.englishSystemName(presentation.symbol)
                     .font(.system(size: 20, weight: .semibold))
                     .symbolRenderingMode(.monochrome)
                     .foregroundStyle(iconColor)
@@ -16,7 +16,7 @@ struct LibraryHeroView: View {
                     .fontWidth(.condensed)
 
                 if presentation.kind != .normal {
-                    Image(systemName: "chevron.right")
+                    Image.englishSystemName("chevron.right")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.tertiary)
                 }

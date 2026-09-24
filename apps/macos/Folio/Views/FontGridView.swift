@@ -231,7 +231,7 @@ private struct ExpandedFontCardCarousel: View {
     }
 
     private func wrapQueueCard(depth: CGFloat) -> some View {
-        Image(systemName: "arrowshape.turn.up.backward.2.fill")
+        Image.englishSystemName("arrowshape.turn.up.backward.2.fill")
             .font(.system(size: 34, weight: .medium))
             .foregroundStyle(.secondary)
             .environment(\.layoutDirection, .rightToLeft)
@@ -335,7 +335,7 @@ private struct ExpandedFontCardCarousel: View {
         Button {
             requestVirtualMove(to: currentVirtualIndex + offset)
         } label: {
-            Image(systemName: systemName)
+            Image.englishSystemName(systemName)
                 .frame(width: 22, height: 22)
         }
         .buttonStyle(.plain)

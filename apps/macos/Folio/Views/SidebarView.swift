@@ -34,10 +34,18 @@ struct SidebarView: View {
             }
 
             Section("工具") {
-                Label("在线字体", systemImage: "globe")
+                Label {
+                    Text("在线字体")
+                } icon: {
+                    Image.englishSystemName("globe")
+                }
                     .foregroundStyle(.tertiary)
                     .help("在线字体将在后续版本提供")
-                Label("字体健康", systemImage: "stethoscope")
+                Label {
+                    Text("字体健康")
+                } icon: {
+                    Image.englishSystemName("stethoscope")
+                }
                     .badge(healthCount)
                     .tag(SidebarDestination.fontHealth)
             }
@@ -55,7 +63,11 @@ struct SidebarView: View {
                 Button {
                     model.isCreatingCollection = true
                 } label: {
-                    Label("新收藏夹", systemImage: "plus")
+                    Label {
+                        Text("新收藏夹")
+                    } icon: {
+                        Image.englishSystemName("plus")
+                    }
                 }
                 .buttonStyle(.plain)
             } header: {
@@ -73,7 +85,11 @@ struct SidebarView: View {
 
     private func sidebarRow(_ title: String, symbol: String, count: UInt64?) -> some View {
         HStack {
-            Label(title, systemImage: symbol)
+            Label {
+                Text(title)
+            } icon: {
+                Image.englishSystemName(symbol)
+            }
             Spacer()
             if let count {
                 Text(count, format: .number)

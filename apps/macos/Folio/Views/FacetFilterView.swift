@@ -45,7 +45,7 @@ struct FacetFilterView: View {
         } label: {
             HStack(spacing: 0) {
                 if selected {
-                    Image(systemName: "checkmark")
+                    Image.englishSystemName("checkmark")
                         .font(.system(size: 8, weight: .medium))
                         .frame(width: 24)
                 }

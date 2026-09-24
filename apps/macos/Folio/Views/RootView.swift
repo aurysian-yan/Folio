@@ -106,7 +106,7 @@ private struct ImportReportView: View {
 
     private func outcomeRow(_ outcome: FontOperationOutcome) -> some View {
         HStack {
-            Image(systemName: outcome.error == nil ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+            Image.englishSystemName(outcome.error == nil ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .foregroundStyle(outcome.error == nil ? .green : .orange)
             VStack(alignment: .leading) {
                 Text(outcome.name)

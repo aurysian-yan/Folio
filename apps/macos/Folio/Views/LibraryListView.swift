@@ -31,7 +31,7 @@ struct LibraryListView: View {
             .width(50)
 
             TableColumn("可变") { family in
-                Image(systemName: family.isVariable ? "checkmark" : "minus")
+                Image.englishSystemName(family.isVariable ? "checkmark" : "minus")
                     .foregroundStyle(family.isVariable ? Color.accentColor : Color.secondary)
                     .accessibilityLabel(family.isVariable ? "可变字体" : "非可变字体")
             }

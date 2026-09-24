@@ -14,11 +14,15 @@ struct FontInspectorView: View {
             if let family = model.selectedFamily, let face = model.selectedFace {
                 inspector(family, face: face)
             } else {
-                ContentUnavailableView(
-                    "选择字体",
-                    systemImage: "character.cursor.ibeam",
-                    description: Text("选择一个字族以查看详细信息")
-                )
+                ContentUnavailableView {
+                    Label {
+                        Text("选择字体")
+                    } icon: {
+                        Image.englishSystemName("character.cursor.ibeam")
+                    }
+                } description: {
+                    Text("选择一个字族以查看详细信息")
+                }
             }
         }
         .alert("将字体移到废纸篓？", isPresented: $deleteConfirmationPresented) {
@@ -118,7 +122,7 @@ struct FontInspectorView: View {
                     Button {
                         deleteConfirmationPresented = true
                     } label: {
-                        Image(systemName: "trash")
+                        Image.englishSystemName("trash")
                             .font(.system(size: 12, weight: .semibold))
                             .frame(width: 34, height: 34)
                     }
@@ -165,7 +169,7 @@ struct FontInspectorView: View {
             Button {
                 model.moveFace(in: family, offset: -1)
             } label: {
-                Image(systemName: "chevron.left")
+                Image.englishSystemName("chevron.left")
                     .frame(width: 16, height: 16)
             }
             .accessibilityLabel("上一个字款")
@@ -179,7 +183,7 @@ struct FontInspectorView: View {
             Button {
                 model.moveFace(in: family, offset: 1)
             } label: {
-                Image(systemName: "chevron.right")
+                Image.englishSystemName("chevron.right")
                     .frame(width: 16, height: 16)
             }
             .accessibilityLabel("下一个字款")
@@ -325,7 +329,7 @@ struct FontInspectorView: View {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.down")
+                Image.englishSystemName("chevron.down")
                     .font(.system(size: 10, weight: .semibold))
                     .rotationEffect(isExpanded.wrappedValue ? .zero : .degrees(-90))
                     .foregroundStyle(.tertiary)
@@ -345,7 +349,7 @@ struct FontInspectorView: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: systemImage)
+                Image.englishSystemName(systemImage)
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 14)
                 Text(title)

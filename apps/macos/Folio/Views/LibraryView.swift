@@ -25,7 +25,7 @@ struct LibraryView: View {
             ToolbarItem(placement: .navigation) {
                 Picker("浏览方式", selection: $model.viewMode) {
                     ForEach(LibraryViewMode.allCases) { mode in
-                        Image(systemName: mode.symbolName)
+                        Image.englishSystemName(mode.symbolName)
                             .accessibilityLabel(mode.accessibilityTitle)
                             .tag(mode)
                     }
@@ -42,10 +42,26 @@ struct LibraryView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button("导入字体", systemImage: "plus") { model.importFiles() }
-                    Button("添加文件夹", systemImage: "folder.badge.plus") { model.addFolder() }
+                    Button {
+                        model.importFiles()
+                    } label: {
+                        Label {
+                            Text("导入字体")
+                        } icon: {
+                            Image.englishSystemName("plus")
+                        }
+                    }
+                    Button {
+                        model.addFolder()
+                    } label: {
+                        Label {
+                            Text("添加文件夹")
+                        } icon: {
+                            Image.englishSystemName("folder.badge.plus")
+                        }
+                    }
                 } label: {
-                    Image(systemName: "plus")
+                    Image.englishSystemName("plus")
                 }
                 .accessibilityLabel("添加字体")
             }
@@ -55,7 +71,7 @@ struct LibraryView: View {
                         model.filterExpanded.toggle()
                     }
                 } label: {
-                    Image(systemName: "line.3.horizontal.decrease")
+                    Image.englishSystemName("line.3.horizontal.decrease")
                 }
                 .accessibilityLabel("筛选")
                 .help("显示或隐藏筛选")
@@ -67,7 +83,7 @@ struct LibraryView: View {
                 Button {
                     model.inspectorPresented.toggle()
                 } label: {
-                    Image(systemName: "sidebar.right")
+                    Image.englishSystemName("sidebar.right")
                 }
                 .accessibilityLabel("检查器")
                 .help("显示或隐藏检查器")
@@ -112,22 +128,42 @@ struct LibraryView: View {
 
     private var emptyLibrary: some View {
         ContentUnavailableView {
-            Label("Folio", systemImage: "textformat")
+            Label {
+                Text("Folio")
+            } icon: {
+                Image.englishSystemName("textformat")
+            }
         } description: {
             Text("添加你的第一个字体文件夹")
         } actions: {
-            Button("导入字体", systemImage: "plus", action: model.importFiles)
+            Button(action: model.importFiles) {
+                Label {
+                    Text("导入字体")
+                } icon: {
+                    Image.englishSystemName("plus")
+                }
+            }
                 .buttonStyle(.borderedProminent)
-            Button("添加文件夹", systemImage: "folder.badge.plus", action: model.addFolder)
+            Button(action: model.addFolder) {
+                Label {
+                    Text("添加文件夹")
+                } icon: {
+                    Image.englishSystemName("folder.badge.plus")
+                }
+            }
         }
     }
 
     private var noResults: some View {
-        ContentUnavailableView(
-            "没有匹配的字体",
-            systemImage: "text.magnifyingglass",
-            description: Text("尝试更改搜索内容或筛选条件")
-        )
+        ContentUnavailableView {
+            Label {
+                Text("没有匹配的字体")
+            } icon: {
+                Image.englishSystemName("text.magnifyingglass")
+            }
+        } description: {
+            Text("尝试更改搜索内容或筛选条件")
+        }
     }
 }
 
@@ -136,7 +172,7 @@ private struct ToolbarSearchField: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
+            Image.englishSystemName("magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField("搜索", text: $text)
                 .textFieldStyle(.plain)
@@ -144,7 +180,7 @@ private struct ToolbarSearchField: View {
                 Button {
                     text = ""
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    Image.englishSystemName("xmark.circle.fill")
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)

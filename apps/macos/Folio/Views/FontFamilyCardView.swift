@@ -444,14 +444,14 @@ struct FontFamilyCardView: View {
                 Button {
                     model.moveFace(in: family, offset: -1)
                 } label: {
-                    Image(systemName: "chevron.left")
+                    Image.englishSystemName("chevron.left")
                         .frame(width: 22, height: 16)
                 }
                 Spacer(minLength: 0)
                 Button {
                     model.moveFace(in: family, offset: 1)
                 } label: {
-                    Image(systemName: "chevron.right")
+                    Image.englishSystemName("chevron.right")
                         .frame(width: 22, height: 16)
                 }
             }
@@ -534,7 +534,7 @@ private struct CardGlassButton: View {
 
     private var button: some View {
         Button(action: action) {
-            Image(systemName: systemName)
+            Image.englishSystemName(systemName)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 22, height: 22)
