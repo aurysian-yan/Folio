@@ -18,7 +18,7 @@ struct SidebarView: View {
                 sidebarRow("已挂载", symbol: "checkmark.diamond", count: model.fontStateCounts[.active] ?? 0, destination: .fontState(.active))
                     .tag(SidebarDestination.fontState(.active))
                     .help("当前登录会话已激活")
-                sidebarRow("已安装", symbol: "square.and.arrow.down", count: model.fontStateCounts[.installed] ?? 0, destination: .fontState(.installed), speed: 0.79)
+                sidebarRow("已安装", symbol: "square.and.arrow.down", count: model.fontStateCounts[.installed] ?? 0, destination: .fontState(.installed), speed: 1.29)
                     .tag(SidebarDestination.fontState(.installed))
                     .help("包含手动安装和 Folio 安装的字体")
                 sidebarRow("仅在字体库", symbol: "book.closed", count: model.fontStateCounts[.available] ?? 0, destination: .fontState(.available))
@@ -83,7 +83,7 @@ struct SidebarView: View {
         return Int(health.damagedFiles + health.multipleRevisions + health.metadataConflicts)
     }
 
-    private func sidebarRow(_ title: String, symbol: String, count: UInt64?, destination: SidebarDestination, speed: Double = 0.66) -> some View {
+    private func sidebarRow(_ title: String, symbol: String, count: UInt64?, destination: SidebarDestination, speed: Double = 0.76) -> some View {
         HStack {
             Label {
                 Text(title)
@@ -106,7 +106,7 @@ struct SidebarView: View {
 private struct SidebarSymbolIcon: View {
     let symbol: String
     let isSelected: Bool
-    var speed: Double = 0.53
+    var speed: Double = 0.63
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isVisible = true
@@ -143,7 +143,7 @@ private struct SidebarSymbolIcon: View {
         withAnimation(.easeOut(duration: 0.33), completionCriteria: .removed) {
             isVisible = false
         } completion: {
-            withAnimation(.easeIn(duration: 0.38)) {
+            withAnimation(.easeIn(duration: 0.48)) {
                 isVisible = true
             }
         }
