@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use folio_core::{
-    parse_font_data, parse_font_file, Collection, CollectionColor, CollectionIcon, CollectionId,
-    ContentFingerprint, FontIdentityId,
+    normalize_search, parse_font_data, parse_font_file, Collection, CollectionColor,
+    CollectionIcon, CollectionId, ContentFingerprint, FontIdentityId, SmartFolder, SmartFolderId,
 };
 use folio_storage::{
     FolioDatabase, RefreshMode, StoredSyncAsset, StoredSyncConflict, StoredSyncEvent,
@@ -166,6 +166,59 @@ impl WireCollection {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct WireSmartFolder {
+    id: String,
+    name: String,
+    #[serde(default = "default_smart_folder_icon")]
+    icon: String,
+    #[serde(default = "default_smart_folder_color")]
+    color: String,
+    query_json: String,
+    created_at_ns: i64,
+    updated_at_ns: i64,
+}
+
+impl From<SmartFolder> for WireSmartFolder {
+    fn from(value: SmartFolder) -> Self {
+        Self {
+            id: value.id.to_string(),
+            name: value.name,
+            icon: value.icon.key().to_owned(),
+            color: value.color.key().to_owned(),
+            query_json: value.query_json,
+            created_at_ns: value.created_at_ns,
+            updated_at_ns: value.updated_at_ns,
+        }
+    }
+}
+
+impl WireSmartFolder {
+    fn decode(&self) -> Result<SmartFolder, SyncError> {
+        let query: folio_query::SavedFontQuery = serde_json::from_str(&self.query_json)?;
+        query
+            .into_query(0, None)
+            .map_err(|_| SyncError::InvalidId)?;
+        Ok(SmartFolder {
+            id: SmartFolderId::from_bytes(parse_id(&self.id)?),
+            name: self.name.clone(),
+            icon: CollectionIcon::from_key(&self.icon).ok_or(SyncError::InvalidId)?,
+            color: CollectionColor::from_key(&self.color).ok_or(SyncError::InvalidId)?,
+            query_json: self.query_json.clone(),
+            created_at_ns: self.created_at_ns,
+            updated_at_ns: self.updated_at_ns,
+        })
+    }
+}
+
+fn default_smart_folder_icon() -> String {
+    CollectionIcon::Folder.key().to_owned()
+}
+
+fn default_smart_folder_color() -> String {
+    CollectionColor::Gray.key().to_owned()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 enum Change {
     FontAdded(RemoteAsset),
@@ -197,6 +250,14 @@ enum Change {
         collection_id: String,
         parents: Vec<String>,
     },
+    SmartFolderSet {
+        smart_folder: WireSmartFolder,
+        parents: Vec<String>,
+    },
+    SmartFolderDeleted {
+        smart_folder_id: String,
+        parents: Vec<String>,
+    },
     RecentViewed {
         identity_id: String,
         timestamp_ns: i64,
@@ -218,6 +279,8 @@ struct UserSnapshot {
     collections: BTreeMap<String, WireCollection>,
     members: BTreeSet<(String, String)>,
     recent: BTreeMap<String, i64>,
+    #[serde(default)]
+    smart_folders: BTreeMap<String, WireSmartFolder>,
 }
 
 pub fn load_profile(database_path: impl AsRef<Path>) -> Result<Option<SyncProfile>, SyncError> {
@@ -328,6 +391,8 @@ pub fn resolve_conflict(
     match conflict.kind.as_str() {
         "collection" => resolve_collection_conflict(&mut db, id, resolution)?,
         "collection_name" => resolve_collection_name_conflict(&mut db, id, resolution)?,
+        "smart_folder" => resolve_smart_folder_conflict(&mut db, id, resolution)?,
+        "smart_folder_name" => resolve_smart_folder_name_conflict(&mut db, id, resolution)?,
         "font_revision" => {
             let discarded = match resolution {
                 ConflictResolution::UseLocal => conflict.remote_fingerprint,
@@ -341,6 +406,156 @@ pub fn resolve_conflict(
         _ => return Err(SyncError::InvalidId),
     }
     db.resolve_sync_conflict(id)?;
+    Ok(())
+}
+
+fn resolve_smart_folder_conflict(
+    db: &mut FolioDatabase,
+    conflict_id: &str,
+    resolution: ConflictResolution,
+) -> Result<(), SyncError> {
+    let id = conflict_id
+        .strip_prefix("smart_folder-")
+        .ok_or(SyncError::InvalidId)?;
+    let events = decoded_events(db)?;
+    let heads = smart_folder_heads(&events, id);
+    if heads.len() < 2 {
+        return Err(SyncError::InvalidId);
+    }
+    let device = db.sync_device_id()?;
+    let local_head = heads.keys().find(|head| head.starts_with(&device)).cloned();
+    let remote_head = heads
+        .keys()
+        .find(|head| !head.starts_with(&device))
+        .cloned();
+    let selected = match resolution {
+        ConflictResolution::UseLocal | ConflictResolution::KeepBoth => {
+            local_head.or_else(|| heads.keys().next().cloned())
+        }
+        ConflictResolution::UseRemote => remote_head.or_else(|| heads.keys().next_back().cloned()),
+    }
+    .ok_or(SyncError::InvalidId)?;
+    let chosen = heads.get(&selected).cloned().ok_or(SyncError::InvalidId)?;
+    if resolution == ConflictResolution::KeepBoth {
+        for (head, alternate) in &heads {
+            if head == &selected {
+                continue;
+            }
+            if let Some(alternate) = alternate {
+                let alternate = alternate.decode()?;
+                let duplicate = db.create_smart_folder_with_style(
+                    &unique_smart_folder_name(db, &alternate.name, "另一版本")?,
+                    &alternate.query_json,
+                    alternate.icon,
+                    alternate.color,
+                )?;
+                stage_change(
+                    db,
+                    &Change::SmartFolderSet {
+                        smart_folder: duplicate.into(),
+                        parents: Vec::new(),
+                    },
+                )?;
+            }
+        }
+    }
+    let parents = heads.into_keys().collect();
+    match chosen {
+        Some(smart_folder) => {
+            db.upsert_remote_smart_folder(&smart_folder.decode()?)?;
+            stage_change(
+                db,
+                &Change::SmartFolderSet {
+                    smart_folder,
+                    parents,
+                },
+            )?;
+        }
+        None => {
+            let parsed = SmartFolderId::from_bytes(parse_id(id)?);
+            if db
+                .list_smart_folders()?
+                .iter()
+                .any(|value| value.id == parsed)
+            {
+                db.delete_smart_folder(parsed)?;
+            }
+            stage_change(
+                db,
+                &Change::SmartFolderDeleted {
+                    smart_folder_id: id.to_owned(),
+                    parents,
+                },
+            )?;
+        }
+    }
+    db.set_sync_metadata(
+        BASELINE_KEY,
+        &serde_json::to_string(&capture_user_state(db)?)?,
+    )?;
+    Ok(())
+}
+
+fn resolve_smart_folder_name_conflict(
+    db: &mut FolioDatabase,
+    conflict_id: &str,
+    resolution: ConflictResolution,
+) -> Result<(), SyncError> {
+    let id = conflict_id
+        .strip_prefix("smart_folder_name-")
+        .ok_or(SyncError::InvalidId)?;
+    let heads = smart_folder_heads(&decoded_events(db)?, id);
+    let (head, value) = heads.iter().next_back().ok_or(SyncError::InvalidId)?;
+    let mut remote = value.clone().ok_or(SyncError::InvalidId)?;
+    let existing = db
+        .list_smart_folders()?
+        .into_iter()
+        .find(|folder| {
+            folder.id.to_string() != id
+                && normalize_search(&folder.name) == normalize_search(&remote.name)
+        })
+        .ok_or(SyncError::InvalidId)?;
+    match resolution {
+        ConflictResolution::KeepBoth => {
+            remote.name = unique_smart_folder_name(db, &remote.name, "云端")?;
+            db.upsert_remote_smart_folder(&remote.decode()?)?;
+            stage_change(
+                db,
+                &Change::SmartFolderSet {
+                    smart_folder: remote,
+                    parents: vec![head.clone()],
+                },
+            )?;
+        }
+        ConflictResolution::UseLocal => {
+            stage_change(
+                db,
+                &Change::SmartFolderDeleted {
+                    smart_folder_id: id.to_owned(),
+                    parents: heads.into_keys().collect(),
+                },
+            )?;
+        }
+        ConflictResolution::UseRemote => {
+            let existing_id = existing.id.to_string();
+            let parents = smart_folder_heads(&decoded_events(db)?, &existing_id)
+                .into_keys()
+                .collect();
+            db.delete_smart_folder(existing.id)?;
+            stage_change(
+                db,
+                &Change::SmartFolderDeleted {
+                    smart_folder_id: existing_id,
+                    parents,
+                },
+            )?;
+            db.upsert_remote_smart_folder(&remote.decode()?)?;
+        }
+    }
+    db.set_sync_metadata(
+        BASELINE_KEY,
+        &serde_json::to_string(&capture_user_state(db)?)?,
+    )?;
     Ok(())
 }
 
@@ -524,6 +739,29 @@ fn unique_collection_name(
             format!("{name}（{label} {index}）")
         };
         if !used.contains(&candidate.to_lowercase()) {
+            return Ok(candidate);
+        }
+    }
+    Err(SyncError::InvalidId)
+}
+
+fn unique_smart_folder_name(
+    db: &FolioDatabase,
+    name: &str,
+    label: &str,
+) -> Result<String, SyncError> {
+    let used = db
+        .list_smart_folders()?
+        .into_iter()
+        .map(|folder| normalize_search(&folder.name))
+        .collect::<BTreeSet<_>>();
+    for index in 1..1000 {
+        let candidate = if index == 1 {
+            format!("{name}（{label}）")
+        } else {
+            format!("{name}（{label} {index}）")
+        };
+        if !used.contains(&normalize_search(&candidate)) {
             return Ok(candidate);
         }
     }
@@ -792,11 +1030,17 @@ fn capture_user_state(db: &FolioDatabase) -> Result<UserSnapshot, SyncError> {
         .into_iter()
         .map(|item| (item.identity_id.to_string(), item.last_accessed_at_ns))
         .collect();
+    let smart_folders = db
+        .list_smart_folders()?
+        .into_iter()
+        .map(|folder| (folder.id.to_string(), folder.into()))
+        .collect();
     Ok(UserSnapshot {
         favorites,
         collections,
         members,
         recent,
+        smart_folders,
     })
 }
 
@@ -806,6 +1050,7 @@ fn event_user_baseline(db: &FolioDatabase) -> Result<UserSnapshot, SyncError> {
     let mut favorite_ids = BTreeSet::new();
     let mut collection_ids = BTreeSet::new();
     let mut member_ids = BTreeSet::new();
+    let mut smart_folder_ids = BTreeSet::new();
     let mut recent = BTreeMap::<String, i64>::new();
     for (_, change) in &events {
         match change {
@@ -817,6 +1062,14 @@ fn event_user_baseline(db: &FolioDatabase) -> Result<UserSnapshot, SyncError> {
             }
             Change::CollectionDeleted { collection_id, .. } => {
                 collection_ids.insert(collection_id.clone());
+            }
+            Change::SmartFolderSet { smart_folder, .. } => {
+                smart_folder_ids.insert(smart_folder.id.clone());
+            }
+            Change::SmartFolderDeleted {
+                smart_folder_id, ..
+            } => {
+                smart_folder_ids.insert(smart_folder_id.clone());
             }
             Change::MemberAdded {
                 collection_id,
@@ -863,11 +1116,25 @@ fn event_user_baseline(db: &FolioDatabase) -> Result<UserSnapshot, SyncError> {
                 && !member_add_tags(&events, collection, identity).is_empty()
         })
         .collect();
+    let mut smart_folders = BTreeMap::new();
+    for id in smart_folder_ids {
+        let heads = smart_folder_heads(&events, &id);
+        if heads.len() == 1 {
+            if let Some(Some(folder)) = heads.into_values().next() {
+                if current.smart_folders.contains_key(&id) {
+                    smart_folders.insert(id, folder);
+                }
+            }
+        } else if let Some(folder) = current.smart_folders.get(&id) {
+            smart_folders.insert(id, folder.clone());
+        }
+    }
     Ok(UserSnapshot {
         favorites,
         collections,
         members,
         recent,
+        smart_folders,
     })
 }
 
@@ -919,6 +1186,33 @@ fn stage_user_changes(db: &mut FolioDatabase) -> Result<(), SyncError> {
                 &Change::CollectionDeleted {
                     collection_id: id.clone(),
                     parents: collection_heads(&known, id).into_keys().collect(),
+                },
+            )?;
+        }
+    }
+    for (id, smart_folder) in &current.smart_folders {
+        if previous.smart_folders.get(id).is_none_or(|before| {
+            before.name != smart_folder.name
+                || before.query_json != smart_folder.query_json
+                || before.icon != smart_folder.icon
+                || before.color != smart_folder.color
+        }) {
+            stage_change(
+                db,
+                &Change::SmartFolderSet {
+                    smart_folder: smart_folder.clone(),
+                    parents: smart_folder_heads(&known, id).into_keys().collect(),
+                },
+            )?;
+        }
+    }
+    for id in previous.smart_folders.keys() {
+        if !current.smart_folders.contains_key(id) {
+            stage_change(
+                db,
+                &Change::SmartFolderDeleted {
+                    smart_folder_id: id.clone(),
+                    parents: smart_folder_heads(&known, id).into_keys().collect(),
                 },
             )?;
         }
@@ -1213,6 +1507,35 @@ fn member_add_tags(
     )
 }
 
+fn smart_folder_heads(
+    events: &[(StoredSyncEvent, Change)],
+    smart_folder: &str,
+) -> BTreeMap<String, Option<WireSmartFolder>> {
+    let mut values = BTreeMap::new();
+    let mut superseded = BTreeSet::new();
+    for (event, change) in events {
+        match change {
+            Change::SmartFolderSet {
+                smart_folder: record,
+                parents,
+            } if record.id == smart_folder => {
+                values.insert(event.id.clone(), Some(record.clone()));
+                superseded.extend(parents.iter().cloned());
+            }
+            Change::SmartFolderDeleted {
+                smart_folder_id,
+                parents,
+            } if smart_folder_id == smart_folder => {
+                values.insert(event.id.clone(), None);
+                superseded.extend(parents.iter().cloned());
+            }
+            _ => {}
+        }
+    }
+    values.retain(|id, _| !superseded.contains(id));
+    values
+}
+
 fn collection_heads(
     events: &[(StoredSyncEvent, Change)],
     collection: &str,
@@ -1252,6 +1575,7 @@ async fn apply_remote_events(
 ) -> Result<(), SyncError> {
     let events = decoded_events(db)?;
     let mut collection_ids = BTreeSet::new();
+    let mut smart_folder_ids = BTreeSet::new();
     let mut favorite_ids = BTreeSet::new();
     let mut member_ids = BTreeSet::new();
     let mut recent = BTreeMap::<String, i64>::new();
@@ -1264,6 +1588,14 @@ async fn apply_remote_events(
             }
             Change::CollectionDeleted { collection_id, .. } => {
                 collection_ids.insert(collection_id.clone());
+            }
+            Change::SmartFolderSet { smart_folder, .. } => {
+                smart_folder_ids.insert(smart_folder.id.clone());
+            }
+            Change::SmartFolderDeleted {
+                smart_folder_id, ..
+            } => {
+                smart_folder_ids.insert(smart_folder_id.clone());
             }
             Change::FavoriteAdded { identity_id } | Change::FavoriteRemoved { identity_id, .. } => {
                 favorite_ids.insert(identity_id.clone());
@@ -1339,6 +1671,60 @@ async fn apply_remote_events(
                 let parsed = CollectionId::from_bytes(parse_id(&id)?);
                 if db.list_collections()?.iter().any(|item| item.id == parsed) {
                     db.delete_collection(parsed)?;
+                }
+            }
+            None => {}
+        }
+    }
+
+    for id in smart_folder_ids {
+        let heads = smart_folder_heads(&events, &id);
+        if heads.len() > 1 {
+            record_conflict(
+                db,
+                SyncConflict {
+                    id: format!("smart_folder-{id}"),
+                    kind: "smart_folder".to_owned(),
+                    title: "智慧收藏夹内容冲突".to_owned(),
+                    detail: "多台设备同时修改了这个智慧收藏夹，请选择要保留的规则。".to_owned(),
+                    local_fingerprint: None,
+                    remote_fingerprint: None,
+                },
+            )?;
+            continue;
+        }
+        match heads.into_values().next() {
+            Some(Some(folder)) => {
+                let folder = folder.decode()?;
+                match db.upsert_remote_smart_folder(&folder) {
+                    Ok(()) => {}
+                    Err(folio_storage::StorageError::SmartFolderNameConflict) => {
+                        record_conflict(
+                            db,
+                            SyncConflict {
+                                id: format!("smart_folder_name-{}", folder.id),
+                                kind: "smart_folder_name".to_owned(),
+                                title: "智慧收藏夹名称重复".to_owned(),
+                                detail: format!(
+                                    "“{}”已被另一个智慧收藏夹使用，请先调整名称。",
+                                    folder.name
+                                ),
+                                local_fingerprint: None,
+                                remote_fingerprint: None,
+                            },
+                        )?;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            Some(None) => {
+                let parsed = SmartFolderId::from_bytes(parse_id(&id)?);
+                if db
+                    .list_smart_folders()?
+                    .iter()
+                    .any(|item| item.id == parsed)
+                {
+                    db.delete_smart_folder(parsed)?;
                 }
             }
             None => {}

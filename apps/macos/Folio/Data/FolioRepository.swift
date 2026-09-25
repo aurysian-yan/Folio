@@ -97,6 +97,24 @@ actor FolioRepository {
         offset: Int,
         limit: Int
     ) throws -> LibraryPage {
+        let selections = facets.map {
+            FacetSelectionDto(kind: $0.kind.dto, value: $0.value)
+        }
+        if case let .smartFolder(id) = destination {
+            let page = try engine.querySmartFolder(
+                id: SmartFolderIdDto(value: id.rawValue),
+                text: text.isEmpty ? nil : text,
+                facets: selections,
+                offset: UInt64(max(0, offset)),
+                limit: UInt64(max(1, limit))
+            )
+            return LibraryPage(
+                totalMatches: page.totalMatches,
+                families: page.families.map(map),
+                facets: page.facets.compactMap(map),
+                cloudOnlyFonts: page.cloudOnlyFonts
+            )
+        }
         let scope: QueryScopeDto
         let collectionID: CollectionIdDto?
         switch destination {
@@ -115,9 +133,6 @@ actor FolioRepository {
         default:
             scope = .all
             collectionID = nil
-        }
-        let selections = facets.map {
-            FacetSelectionDto(kind: $0.kind.dto, value: $0.value)
         }
         let page = try engine.queryLibrary(query: LibraryQueryDto(
             text: text.isEmpty ? nil : text,
@@ -164,12 +179,13 @@ actor FolioRepository {
         try engine.recordRecent(identityId: IdentityIdDto(value: identityID.rawValue))
     }
 
-    func createCollection(name: String, icon: CollectionIcon, color: CollectionColor) throws {
-        _ = try engine.createCollectionWithIcon(
+    func createCollection(name: String, icon: CollectionIcon, color: CollectionColor) throws -> CollectionID {
+        let dto = try engine.createCollectionWithIcon(
             name: name,
             icon: icon.rawValue,
             color: color.rawValue
         )
+        return CollectionID(rawValue: dto.id.value)
     }
 
     func updateCollection(
@@ -188,6 +204,133 @@ actor FolioRepository {
 
     func deleteCollection(_ id: CollectionID) throws {
         try engine.deleteCollection(id: CollectionIdDto(value: id.rawValue))
+    }
+
+    func allFacetOptions() throws -> [FacetOption] {
+        let page = try engine.queryLibrary(query: LibraryQueryDto(
+            text: nil,
+            scope: .all,
+            collectionId: nil,
+            facets: [],
+            allowedFaceIds: nil,
+            allowedSourcePaths: nil,
+            offset: 0,
+            limit: 1
+        ))
+        var options = page.facets.compactMap(map)
+        if !options.contains(where: { $0.kind == .feature && $0.value == "variable" }) {
+            options.append(FacetOption(
+                kind: .feature,
+                value: "variable",
+                label: "可变字体",
+                familyCount: 0
+            ))
+        }
+        if !options.contains(where: { $0.kind == .multipleVariants }) {
+            options.append(FacetOption(
+                kind: .multipleVariants,
+                value: "multiple",
+                label: "多字款",
+                familyCount: 0
+            ))
+        }
+        return options
+    }
+
+    func smartFolder(_ id: SmartFolderID, options: [FacetOption]) throws -> SmartFolderDetails {
+        let dto = try engine.getSmartFolder(id: SmartFolderIdDto(value: id.rawValue))
+        let available = Dictionary(uniqueKeysWithValues: options.map { ($0.id, $0) })
+        let selected = Set(dto.query.facets.compactMap { selection in
+            map(selection, available: available)
+        })
+        return SmartFolderDetails(
+            summary: SmartFolderSummary(
+                id: SmartFolderID(rawValue: dto.id.value),
+                name: dto.name,
+                icon: CollectionIcon(rawValue: dto.icon) ?? .folder,
+                color: CollectionColor(rawValue: dto.color) ?? .gray,
+                matchCount: dto.matchCount
+            ),
+            text: dto.query.text ?? "",
+            selectedFacets: selected
+        )
+    }
+
+    func createSmartFolder(
+        name: String,
+        text: String,
+        facets: Set<FacetOption>,
+        icon: CollectionIcon = .folder,
+        color: CollectionColor = .gray
+    ) throws -> SmartFolderID {
+        let dto = try engine.createSmartFolderWithStyle(
+            name: name,
+            query: smartFolderQuery(text: text, facets: facets),
+            icon: icon.rawValue,
+            color: color.rawValue
+        )
+        return SmartFolderID(rawValue: dto.value)
+    }
+
+    func convertCollectionToSmartFolder(
+        _ id: CollectionID,
+        name: String,
+        text: String,
+        facets: Set<FacetOption>,
+        icon: CollectionIcon,
+        color: CollectionColor
+    ) throws -> SmartFolderID {
+        let dto = try engine.convertCollectionToSmartFolder(
+            id: CollectionIdDto(value: id.rawValue),
+            name: name,
+            query: smartFolderQuery(text: text, facets: facets),
+            icon: icon.rawValue,
+            color: color.rawValue
+        )
+        return SmartFolderID(rawValue: dto.value)
+    }
+
+    func updateSmartFolder(
+        _ id: SmartFolderID,
+        name: String,
+        text: String,
+        facets: Set<FacetOption>,
+        icon: CollectionIcon,
+        color: CollectionColor
+    ) throws {
+        try engine.updateSmartFolderWithStyle(
+            id: SmartFolderIdDto(value: id.rawValue),
+            name: name,
+            query: smartFolderQuery(text: text, facets: facets),
+            icon: icon.rawValue,
+            color: color.rawValue
+        )
+    }
+
+    func convertSmartFolderToCollection(
+        _ id: SmartFolderID,
+        name: String,
+        icon: CollectionIcon,
+        color: CollectionColor
+    ) throws -> CollectionID {
+        let dto = try engine.convertSmartFolderToCollection(
+            id: SmartFolderIdDto(value: id.rawValue),
+            name: name,
+            icon: icon.rawValue,
+            color: color.rawValue
+        )
+        return CollectionID(rawValue: dto.id.value)
+    }
+
+    func deleteSmartFolder(_ id: SmartFolderID) throws {
+        try engine.deleteSmartFolder(id: SmartFolderIdDto(value: id.rawValue))
+    }
+
+    private func smartFolderQuery(text: String, facets: Set<FacetOption>) -> SmartFolderQueryDto {
+        SmartFolderQueryDto(
+            text: text.isEmpty ? nil : text,
+            facets: facets.map { FacetSelectionDto(kind: $0.kind.dto, value: $0.value) }
+        )
     }
 
     func setCollection(_ id: CollectionID, family: FamilyCard, member: Bool) throws {
@@ -211,6 +354,15 @@ actor FolioRepository {
                     icon: CollectionIcon(rawValue: $0.icon) ?? .folder,
                     color: CollectionColor(rawValue: $0.color) ?? .gray,
                     memberCount: $0.memberCount
+                )
+            },
+            smartFolders: dto.smartFolders.map {
+                SmartFolderSummary(
+                    id: SmartFolderID(rawValue: $0.id.value),
+                    name: $0.name,
+                    icon: CollectionIcon(rawValue: $0.icon) ?? .folder,
+                    color: CollectionColor(rawValue: $0.color) ?? .gray,
+                    matchCount: $0.matchCount
                 )
             },
             roots: dto.roots.map {
@@ -295,6 +447,20 @@ actor FolioRepository {
             familyCount: dto.familyCount
         )
     }
+
+    private func map(
+        _ dto: FacetSelectionDto,
+        available: [String: FacetOption]
+    ) -> FacetOption? {
+        guard let kind = dto.kind.model else { return nil }
+        let id = "\(kind.rawValue):\(dto.value)"
+        return available[id] ?? FacetOption(
+            kind: kind,
+            value: dto.value,
+            label: selectionLabel(kind: kind, value: dto.value),
+            familyCount: 0
+        )
+    }
 }
 
 private extension FacetKind {
@@ -304,6 +470,11 @@ private extension FacetKind {
         case .script: .script
         case .foundry: .foundry
         case .license: .license
+        case .weight: .weight
+        case .width: .width
+        case .feature: .feature
+        case .state: .state
+        case .multipleVariants: .multipleVariants
         }
     }
 }
@@ -315,6 +486,53 @@ private extension FacetKindDto {
         case .script: .script
         case .foundry: .foundry
         case .license: .license
+        case .weight: .weight
+        case .width: .width
+        case .feature: .feature
+        case .state: .state
+        case .multipleVariants: .multipleVariants
         }
+    }
+}
+
+private func selectionLabel(kind: FacetKind, value: String) -> String {
+    switch kind {
+    case .category:
+        switch value {
+        case "sans_serif": "无衬线"
+        case "serif": "衬线"
+        case "monospace": "等宽"
+        case "script": "手写"
+        case "decorative": "装饰"
+        case "symbol": "符号"
+        default: "未分类"
+        }
+    case .license:
+        switch value {
+        case "ofl": "OFL"
+        case "apache_2": "Apache 2.0"
+        case "mit": "MIT"
+        case "custom": "自定义"
+        default: "未知"
+        }
+    case .feature:
+        switch value {
+        case "variable": "可变字体"
+        case "italic": "斜体"
+        case "oblique": "倾斜体"
+        case "monospace": "等宽"
+        case "color": "彩色字体"
+        default: value
+        }
+    case .state:
+        switch value {
+        case "favorite": "已收藏"
+        case "recent": "最近访问"
+        case "duplicate_sources": "多个来源"
+        case "multiple_revisions": "多个版本"
+        default: "元数据冲突"
+        }
+    case .multipleVariants: "多字款"
+    default: value
     }
 }

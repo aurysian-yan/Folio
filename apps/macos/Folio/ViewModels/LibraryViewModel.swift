@@ -90,7 +90,9 @@ final class LibraryViewModel {
         get { previewSession.inspectorPreviewText }
         set { previewSession.inspectorPreviewText = newValue }
     }
-    var collectionEditor: CollectionEditorIntent?
+    var favoriteFolderEditor: FavoriteFolderEditorIntent?
+    var favoriteFolderSeedText = ""
+    var favoriteFolderSeedFacets: Set<FacetOption> = []
 
     private let pageSize = 120
     @ObservationIgnored private let previewSession = FontPreviewSession.shared
@@ -405,43 +407,6 @@ final class LibraryViewModel {
         }
     }
 
-    func saveCollection(
-        _ intent: CollectionEditorIntent,
-        name: String,
-        icon: CollectionIcon,
-        color: CollectionColor
-    ) {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, let repository else { return }
-        if case let .edit(collection) = intent,
-           collection.name == name,
-           collection.icon == icon,
-           collection.color == color {
-            collectionEditor = nil
-            return
-        }
-        Task {
-            do {
-                switch intent {
-                case .create:
-                    try await repository.createCollection(name: name, icon: icon, color: color)
-                case let .edit(collection):
-                    try await repository.updateCollection(
-                        collection.id,
-                        name: name,
-                        icon: icon,
-                        color: color
-                    )
-                }
-                snapshot = try await repository.loadCachedLibrary()
-                collectionEditor = nil
-                CloudSyncModel.shared.requestAutomaticSync()
-            } catch {
-                present(error)
-            }
-        }
-    }
-
     func deleteCollection(_ collection: CollectionSummary) {
         guard let repository else { return }
         if selectedDestination == .collection(collection.id) {
@@ -450,6 +415,144 @@ final class LibraryViewModel {
         Task {
             do {
                 try await repository.deleteCollection(collection.id)
+                snapshot = try await repository.loadCachedLibrary()
+                try await performQuery(reset: true)
+                CloudSyncModel.shared.requestAutomaticSync()
+            } catch {
+                present(error)
+            }
+        }
+    }
+
+    func beginFavoriteFolderCreation() {
+        favoriteFolderSeedText = searchText
+        favoriteFolderSeedFacets = selectedFacets
+        guard let repository else {
+            favoriteFolderEditor = .create
+            return
+        }
+        if case let .smartFolder(id) = selectedDestination {
+            Task {
+                do {
+                    let options = try await repository.allFacetOptions()
+                    let details = try await repository.smartFolder(id, options: options)
+                    favoriteFolderSeedText = [details.text, searchText]
+                        .filter { !$0.isEmpty }
+                        .joined(separator: " ")
+                    favoriteFolderSeedFacets.formUnion(details.selectedFacets)
+                    favoriteFolderEditor = .create
+                } catch {
+                    present(error)
+                }
+            }
+        } else {
+            favoriteFolderEditor = .create
+        }
+    }
+
+    func loadSmartFolderFacetOptions() async throws -> [FacetOption] {
+        guard let repository else { return [] }
+        return try await repository.allFacetOptions()
+    }
+
+    func loadSmartFolderDetails(
+        _ id: SmartFolderID,
+        options: [FacetOption]
+    ) async throws -> SmartFolderDetails? {
+        guard let repository else { return nil }
+        return try await repository.smartFolder(id, options: options)
+    }
+
+    func saveFavoriteFolder(
+        _ intent: FavoriteFolderEditorIntent,
+        name: String,
+        text: String,
+        facets: Set<FacetOption>,
+        icon: CollectionIcon,
+        color: CollectionColor
+    ) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let repository else { return }
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasRules = !text.isEmpty || !facets.isEmpty
+        Task {
+            do {
+                switch intent {
+                case .create:
+                    if hasRules {
+                        let id = try await repository.createSmartFolder(
+                            name: name,
+                            text: text,
+                            facets: facets,
+                            icon: icon,
+                            color: color
+                        )
+                        selectedDestination = .smartFolder(id)
+                    } else {
+                        let id = try await repository.createCollection(
+                            name: name,
+                            icon: icon,
+                            color: color
+                        )
+                        selectedDestination = .collection(id)
+                    }
+                case let .editCollection(folder):
+                    if hasRules {
+                        let id = try await repository.convertCollectionToSmartFolder(
+                            folder.id,
+                            name: name,
+                            text: text,
+                            facets: facets,
+                            icon: icon,
+                            color: color
+                        )
+                        selectedDestination = .smartFolder(id)
+                    } else {
+                        try await repository.updateCollection(
+                            folder.id,
+                            name: name,
+                            icon: icon,
+                            color: color
+                        )
+                    }
+                case let .editSmartFolder(folder):
+                    if hasRules {
+                        try await repository.updateSmartFolder(
+                            folder.id,
+                            name: name,
+                            text: text,
+                            facets: facets,
+                            icon: icon,
+                            color: color
+                        )
+                    } else {
+                        let id = try await repository.convertSmartFolderToCollection(
+                            folder.id,
+                            name: name,
+                            icon: icon,
+                            color: color
+                        )
+                        selectedDestination = .collection(id)
+                    }
+                }
+                snapshot = try await repository.loadCachedLibrary()
+                favoriteFolderEditor = nil
+                try await performQuery(reset: true)
+                CloudSyncModel.shared.requestAutomaticSync()
+            } catch {
+                present(error)
+            }
+        }
+    }
+
+    func deleteSmartFolder(_ folder: SmartFolderSummary) {
+        guard let repository else { return }
+        if selectedDestination == .smartFolder(folder.id) {
+            selectedDestination = .allFonts
+        }
+        Task {
+            do {
+                try await repository.deleteSmartFolder(folder.id)
                 snapshot = try await repository.loadCachedLibrary()
                 try await performQuery(reset: true)
                 CloudSyncModel.shared.requestAutomaticSync()

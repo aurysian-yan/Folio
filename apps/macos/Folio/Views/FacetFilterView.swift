@@ -33,7 +33,7 @@ struct FacetFilterView: View {
             }
             .padding(.top, 8)
         } label: {
-            Text("按分类筛选字体")
+            Text("筛选字体")
                 .font(.headline)
         }
         .frame(maxWidth: 648)

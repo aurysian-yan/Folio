@@ -589,19 +589,33 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
 
     func addLibraryRoot(path: String) throws  -> RootDto
 
+    func convertCollectionToSmartFolder(id: CollectionIdDto, name: String, query: SmartFolderQueryDto, icon: String, color: String) throws  -> SmartFolderIdDto
+
+    func convertSmartFolderToCollection(id: SmartFolderIdDto, name: String, icon: String, color: String) throws  -> CollectionDto
+
     func createCollection(name: String) throws  -> CollectionDto
 
     func createCollectionWithIcon(name: String, icon: String, color: String) throws  -> CollectionDto
 
+    func createSmartFolder(name: String, query: SmartFolderQueryDto) throws  -> SmartFolderIdDto
+
+    func createSmartFolderWithStyle(name: String, query: SmartFolderQueryDto, icon: String, color: String) throws  -> SmartFolderIdDto
+
     func deleteCollection(id: CollectionIdDto) throws
 
+    func deleteSmartFolder(id: SmartFolderIdDto) throws
+
     func familyDetails(familyId: FamilyIdDto) throws  -> FamilyDetailsDto
+
+    func getSmartFolder(id: SmartFolderIdDto) throws  -> SmartFolderDto
 
     func libraryFaceSources() throws  -> [LibraryFaceSourcesDto]
 
     func loadCachedLibrary() throws  -> LibrarySnapshotDto
 
     func queryLibrary(query: LibraryQueryDto) throws  -> LibraryPageDto
+
+    func querySmartFolder(id: SmartFolderIdDto, text: String?, facets: [FacetSelectionDto], offset: UInt64, limit: UInt64) throws  -> LibraryPageDto
 
     func recordRecent(identityId: IdentityIdDto) throws
 
@@ -616,6 +630,10 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
     func setFavorite(identityIds: [IdentityIdDto], favorite: Bool) throws
 
     func updateCollection(id: CollectionIdDto, name: String, icon: String, color: String) throws
+
+    func updateSmartFolder(id: SmartFolderIdDto, name: String, query: SmartFolderQueryDto) throws
+
+    func updateSmartFolderWithStyle(id: SmartFolderIdDto, name: String, query: SmartFolderQueryDto, icon: String, color: String) throws
 
     func validateFontFile(path: String) throws
 
@@ -702,6 +720,33 @@ open func addLibraryRoot(path: String)throws  -> RootDto  {
 })
 }
 
+open func convertCollectionToSmartFolder(id: CollectionIdDto, name: String, query: SmartFolderQueryDto, icon: String, color: String)throws  -> SmartFolderIdDto  {
+    return try  FfiConverterTypeSmartFolderIdDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_convert_collection_to_smart_folder(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCollectionIdDto_lower(id),
+        FfiConverterString.lower(name),
+        FfiConverterTypeSmartFolderQueryDto_lower(query),
+        FfiConverterString.lower(icon),
+        FfiConverterString.lower(color),uniffiCallStatus
+    )
+})
+}
+
+open func convertSmartFolderToCollection(id: SmartFolderIdDto, name: String, icon: String, color: String)throws  -> CollectionDto  {
+    return try  FfiConverterTypeCollectionDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_convert_smart_folder_to_collection(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSmartFolderIdDto_lower(id),
+        FfiConverterString.lower(name),
+        FfiConverterString.lower(icon),
+        FfiConverterString.lower(color),uniffiCallStatus
+    )
+})
+}
+
 open func createCollection(name: String)throws  -> CollectionDto  {
     return try  FfiConverterTypeCollectionDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -724,11 +769,44 @@ open func createCollectionWithIcon(name: String, icon: String, color: String)thr
 })
 }
 
+open func createSmartFolder(name: String, query: SmartFolderQueryDto)throws  -> SmartFolderIdDto  {
+    return try  FfiConverterTypeSmartFolderIdDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_create_smart_folder(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(name),
+        FfiConverterTypeSmartFolderQueryDto_lower(query),uniffiCallStatus
+    )
+})
+}
+
+open func createSmartFolderWithStyle(name: String, query: SmartFolderQueryDto, icon: String, color: String)throws  -> SmartFolderIdDto  {
+    return try  FfiConverterTypeSmartFolderIdDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_create_smart_folder_with_style(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(name),
+        FfiConverterTypeSmartFolderQueryDto_lower(query),
+        FfiConverterString.lower(icon),
+        FfiConverterString.lower(color),uniffiCallStatus
+    )
+})
+}
+
 open func deleteCollection(id: CollectionIdDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_folioengine_delete_collection(
             self.uniffiCloneHandle(),
         FfiConverterTypeCollectionIdDto_lower(id),uniffiCallStatus
+    )
+}
+}
+
+open func deleteSmartFolder(id: SmartFolderIdDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_delete_smart_folder(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSmartFolderIdDto_lower(id),uniffiCallStatus
     )
 }
 }
@@ -739,6 +817,16 @@ open func familyDetails(familyId: FamilyIdDto)throws  -> FamilyDetailsDto  {
     uniffi_folio_ffi_fn_method_folioengine_family_details(
             self.uniffiCloneHandle(),
         FfiConverterTypeFamilyIdDto_lower(familyId),uniffiCallStatus
+    )
+})
+}
+
+open func getSmartFolder(id: SmartFolderIdDto)throws  -> SmartFolderDto  {
+    return try  FfiConverterTypeSmartFolderDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_get_smart_folder(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSmartFolderIdDto_lower(id),uniffiCallStatus
     )
 })
 }
@@ -767,6 +855,20 @@ open func queryLibrary(query: LibraryQueryDto)throws  -> LibraryPageDto  {
     uniffi_folio_ffi_fn_method_folioengine_query_library(
             self.uniffiCloneHandle(),
         FfiConverterTypeLibraryQueryDto_lower(query),uniffiCallStatus
+    )
+})
+}
+
+open func querySmartFolder(id: SmartFolderIdDto, text: String?, facets: [FacetSelectionDto], offset: UInt64, limit: UInt64)throws  -> LibraryPageDto  {
+    return try  FfiConverterTypeLibraryPageDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_query_smart_folder(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSmartFolderIdDto_lower(id),
+        FfiConverterOptionString.lower(text),
+        FfiConverterSequenceTypeFacetSelectionDto.lower(facets),
+        FfiConverterUInt64.lower(offset),
+        FfiConverterUInt64.lower(limit),uniffiCallStatus
     )
 })
 }
@@ -835,6 +937,30 @@ open func updateCollection(id: CollectionIdDto, name: String, icon: String, colo
             self.uniffiCloneHandle(),
         FfiConverterTypeCollectionIdDto_lower(id),
         FfiConverterString.lower(name),
+        FfiConverterString.lower(icon),
+        FfiConverterString.lower(color),uniffiCallStatus
+    )
+}
+}
+
+open func updateSmartFolder(id: SmartFolderIdDto, name: String, query: SmartFolderQueryDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_update_smart_folder(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSmartFolderIdDto_lower(id),
+        FfiConverterString.lower(name),
+        FfiConverterTypeSmartFolderQueryDto_lower(query),uniffiCallStatus
+    )
+}
+}
+
+open func updateSmartFolderWithStyle(id: SmartFolderIdDto, name: String, query: SmartFolderQueryDto, icon: String, color: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_update_smart_folder_with_style(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSmartFolderIdDto_lower(id),
+        FfiConverterString.lower(name),
+        FfiConverterTypeSmartFolderQueryDto_lower(query),
         FfiConverterString.lower(icon),
         FfiConverterString.lower(color),uniffiCallStatus
     )
@@ -2247,17 +2373,19 @@ public struct LibrarySnapshotDto: Equatable, Hashable {
     public var variableFamilyCount: UInt64
     public var recentCount: UInt64
     public var collections: [CollectionDto]
+    public var smartFolders: [SmartFolderSummaryDto]
     public var roots: [RootDto]
     public var health: HealthSummaryDto
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(familyCount: UInt64, faceCount: UInt64, variableFamilyCount: UInt64, recentCount: UInt64, collections: [CollectionDto], roots: [RootDto], health: HealthSummaryDto) {
+    public init(familyCount: UInt64, faceCount: UInt64, variableFamilyCount: UInt64, recentCount: UInt64, collections: [CollectionDto], smartFolders: [SmartFolderSummaryDto], roots: [RootDto], health: HealthSummaryDto) {
         self.familyCount = familyCount
         self.faceCount = faceCount
         self.variableFamilyCount = variableFamilyCount
         self.recentCount = recentCount
         self.collections = collections
+        self.smartFolders = smartFolders
         self.roots = roots
         self.health = health
     }
@@ -2283,6 +2411,7 @@ public struct FfiConverterTypeLibrarySnapshotDto: FfiConverterRustBuffer {
                 variableFamilyCount: FfiConverterUInt64.read(from: &buf),
                 recentCount: FfiConverterUInt64.read(from: &buf),
                 collections: FfiConverterSequenceTypeCollectionDto.read(from: &buf),
+                smartFolders: FfiConverterSequenceTypeSmartFolderSummaryDto.read(from: &buf),
                 roots: FfiConverterSequenceTypeRootDto.read(from: &buf),
                 health: FfiConverterTypeHealthSummaryDto.read(from: &buf)
         )
@@ -2294,6 +2423,7 @@ public struct FfiConverterTypeLibrarySnapshotDto: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.variableFamilyCount, into: &buf)
         FfiConverterUInt64.write(value.recentCount, into: &buf)
         FfiConverterSequenceTypeCollectionDto.write(value.collections, into: &buf)
+        FfiConverterSequenceTypeSmartFolderSummaryDto.write(value.smartFolders, into: &buf)
         FfiConverterSequenceTypeRootDto.write(value.roots, into: &buf)
         FfiConverterTypeHealthSummaryDto.write(value.health, into: &buf)
     }
@@ -2502,6 +2632,246 @@ public func FfiConverterTypeRootIdDto_lift(_ buf: RustBuffer) throws -> RootIdDt
 #endif
 public func FfiConverterTypeRootIdDto_lower(_ value: RootIdDto) -> RustBuffer {
     return FfiConverterTypeRootIdDto.lower(value)
+}
+
+
+public struct SmartFolderDto: Equatable, Hashable {
+    public var id: SmartFolderIdDto
+    public var name: String
+    public var icon: String
+    public var color: String
+    public var query: SmartFolderQueryDto
+    public var matchCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: SmartFolderIdDto, name: String, icon: String, color: String, query: SmartFolderQueryDto, matchCount: UInt64) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.color = color
+        self.query = query
+        self.matchCount = matchCount
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SmartFolderDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSmartFolderDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SmartFolderDto {
+        return
+            try SmartFolderDto(
+                id: FfiConverterTypeSmartFolderIdDto.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                icon: FfiConverterString.read(from: &buf),
+                color: FfiConverterString.read(from: &buf),
+                query: FfiConverterTypeSmartFolderQueryDto.read(from: &buf),
+                matchCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SmartFolderDto, into buf: inout [UInt8]) {
+        FfiConverterTypeSmartFolderIdDto.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.icon, into: &buf)
+        FfiConverterString.write(value.color, into: &buf)
+        FfiConverterTypeSmartFolderQueryDto.write(value.query, into: &buf)
+        FfiConverterUInt64.write(value.matchCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSmartFolderDto_lift(_ buf: RustBuffer) throws -> SmartFolderDto {
+    return try FfiConverterTypeSmartFolderDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSmartFolderDto_lower(_ value: SmartFolderDto) -> RustBuffer {
+    return FfiConverterTypeSmartFolderDto.lower(value)
+}
+
+
+public struct SmartFolderIdDto: Equatable, Hashable {
+    public var value: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: String) {
+        self.value = value
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SmartFolderIdDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSmartFolderIdDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SmartFolderIdDto {
+        return
+            try SmartFolderIdDto(
+                value: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SmartFolderIdDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSmartFolderIdDto_lift(_ buf: RustBuffer) throws -> SmartFolderIdDto {
+    return try FfiConverterTypeSmartFolderIdDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSmartFolderIdDto_lower(_ value: SmartFolderIdDto) -> RustBuffer {
+    return FfiConverterTypeSmartFolderIdDto.lower(value)
+}
+
+
+public struct SmartFolderQueryDto: Equatable, Hashable {
+    public var text: String?
+    public var facets: [FacetSelectionDto]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(text: String?, facets: [FacetSelectionDto]) {
+        self.text = text
+        self.facets = facets
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SmartFolderQueryDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSmartFolderQueryDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SmartFolderQueryDto {
+        return
+            try SmartFolderQueryDto(
+                text: FfiConverterOptionString.read(from: &buf),
+                facets: FfiConverterSequenceTypeFacetSelectionDto.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SmartFolderQueryDto, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.text, into: &buf)
+        FfiConverterSequenceTypeFacetSelectionDto.write(value.facets, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSmartFolderQueryDto_lift(_ buf: RustBuffer) throws -> SmartFolderQueryDto {
+    return try FfiConverterTypeSmartFolderQueryDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSmartFolderQueryDto_lower(_ value: SmartFolderQueryDto) -> RustBuffer {
+    return FfiConverterTypeSmartFolderQueryDto.lower(value)
+}
+
+
+public struct SmartFolderSummaryDto: Equatable, Hashable {
+    public var id: SmartFolderIdDto
+    public var name: String
+    public var icon: String
+    public var color: String
+    public var matchCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: SmartFolderIdDto, name: String, icon: String, color: String, matchCount: UInt64) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.color = color
+        self.matchCount = matchCount
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SmartFolderSummaryDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSmartFolderSummaryDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SmartFolderSummaryDto {
+        return
+            try SmartFolderSummaryDto(
+                id: FfiConverterTypeSmartFolderIdDto.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                icon: FfiConverterString.read(from: &buf),
+                color: FfiConverterString.read(from: &buf),
+                matchCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SmartFolderSummaryDto, into buf: inout [UInt8]) {
+        FfiConverterTypeSmartFolderIdDto.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.icon, into: &buf)
+        FfiConverterString.write(value.color, into: &buf)
+        FfiConverterUInt64.write(value.matchCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSmartFolderSummaryDto_lift(_ buf: RustBuffer) throws -> SmartFolderSummaryDto {
+    return try FfiConverterTypeSmartFolderSummaryDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSmartFolderSummaryDto_lower(_ value: SmartFolderSummaryDto) -> RustBuffer {
+    return FfiConverterTypeSmartFolderSummaryDto.lower(value)
 }
 
 
@@ -2800,6 +3170,11 @@ public enum FacetKindDto: Equatable, Hashable {
     case script
     case foundry
     case license
+    case weight
+    case width
+    case feature
+    case state
+    case multipleVariants
 
 
 
@@ -2829,6 +3204,16 @@ public struct FfiConverterTypeFacetKindDto: FfiConverterRustBuffer {
 
         case 4: return .license
 
+        case 5: return .weight
+
+        case 6: return .width
+
+        case 7: return .feature
+
+        case 8: return .state
+
+        case 9: return .multipleVariants
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2851,6 +3236,26 @@ public struct FfiConverterTypeFacetKindDto: FfiConverterRustBuffer {
 
         case .license:
             writeInt(&buf, Int32(4))
+
+
+        case .weight:
+            writeInt(&buf, Int32(5))
+
+
+        case .width:
+            writeInt(&buf, Int32(6))
+
+
+        case .feature:
+            writeInt(&buf, Int32(7))
+
+
+        case .state:
+            writeInt(&buf, Int32(8))
+
+
+        case .multipleVariants:
+            writeInt(&buf, Int32(9))
 
         }
     }
@@ -3596,6 +4001,31 @@ fileprivate struct FfiConverterSequenceTypeRootIdDto: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSmartFolderSummaryDto: FfiConverterRustBuffer {
+    typealias SwiftType = [SmartFolderSummaryDto]
+
+    public static func write(_ value: [SmartFolderSummaryDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSmartFolderSummaryDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SmartFolderSummaryDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SmartFolderSummaryDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSmartFolderSummaryDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeSyncConflictDto: FfiConverterRustBuffer {
     typealias SwiftType = [SyncConflictDto]
 
@@ -3664,16 +4094,34 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_add_library_root() != 56225) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_convert_collection_to_smart_folder() != 3046) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_convert_smart_folder_to_collection() != 2444) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_create_collection() != 9265) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_create_collection_with_icon() != 2075) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_create_smart_folder() != 12062) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_create_smart_folder_with_style() != 13194) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_delete_collection() != 49319) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_delete_smart_folder() != 3211) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_family_details() != 18619) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_get_smart_folder() != 25565) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_library_face_sources() != 61505) {
@@ -3683,6 +4131,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_query_library() != 13886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_query_smart_folder() != 46254) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_record_recent() != 8378) {
@@ -3704,6 +4155,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_update_collection() != 12557) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_update_smart_folder() != 53750) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_update_smart_folder_with_style() != 63627) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_validate_font_file() != 7645) {

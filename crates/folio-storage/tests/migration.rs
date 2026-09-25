@@ -14,7 +14,7 @@ fn empty_database_migrates_to_current() {
         db.schema_version().expect("version"),
         CURRENT_SCHEMA_VERSION
     );
-    assert_eq!(CURRENT_SCHEMA_VERSION, 7);
+    assert_eq!(CURRENT_SCHEMA_VERSION, 9);
 }
 
 #[test]
@@ -34,6 +34,75 @@ fn reopening_current_schema_is_not_destructive() {
     let roots = reopened.list_roots().expect("roots");
     assert_eq!(roots.len(), 1);
     assert_eq!(roots[0].id, id);
+}
+
+#[test]
+fn v7_upgrade_adds_smart_folders_without_changing_manual_collections() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("folio.sqlite");
+    let identity = FontIdentityId::from_bytes([3; 16]);
+    let collection_id;
+    {
+        let mut db = FolioDatabase::open(&path).expect("open");
+        let collection = db.create_collection("手动收藏").expect("collection");
+        collection_id = collection.id;
+        db.add_collection_members(collection.id, &[identity])
+            .expect("member");
+    }
+    {
+        let conn = rusqlite::Connection::open(&path).expect("open v7");
+        conn.execute_batch("DROP TABLE smart_folders; PRAGMA user_version = 7;")
+            .expect("downgrade schema marker");
+    }
+    let db = FolioDatabase::open(&path).expect("upgrade");
+    assert_eq!(
+        db.schema_version().expect("version"),
+        CURRENT_SCHEMA_VERSION
+    );
+    assert_eq!(
+        db.list_collection_members(collection_id).unwrap(),
+        vec![identity]
+    );
+    let smart = db.create_smart_folder("动态规则", "{}").unwrap();
+    assert_eq!(db.list_smart_folders().unwrap(), vec![smart]);
+}
+
+#[test]
+fn v8_upgrade_adds_default_smart_folder_style_without_changing_members() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("folio.sqlite");
+    let identity = FontIdentityId::from_bytes([4; 16]);
+    let collection_id;
+    {
+        let mut db = FolioDatabase::open(&path).unwrap();
+        let collection = db.create_collection("手动收藏").unwrap();
+        collection_id = collection.id;
+        db.add_collection_members(collection.id, &[identity])
+            .unwrap();
+    }
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "DROP TABLE smart_folders; \
+             CREATE TABLE smart_folders ( \
+               id BLOB PRIMARY KEY NOT NULL CHECK(length(id) = 16), \
+               name TEXT NOT NULL, normalized_name TEXT NOT NULL UNIQUE, \
+               query_json TEXT NOT NULL, created_at_ns INTEGER NOT NULL CHECK(created_at_ns >= 0), \
+               updated_at_ns INTEGER NOT NULL CHECK(updated_at_ns >= created_at_ns)); \
+             INSERT INTO smart_folders VALUES(x'05050505050505050505050505050505','旧规则','旧规则','{}',10,10); \
+             PRAGMA user_version = 8;",
+        )
+        .unwrap();
+    }
+
+    let db = FolioDatabase::open(&path).unwrap();
+    let folder = db.list_smart_folders().unwrap().remove(0);
+    assert_eq!(folder.icon, folio_core::CollectionIcon::Folder);
+    assert_eq!(folder.color, folio_core::CollectionColor::Gray);
+    assert_eq!(
+        db.list_collection_members(collection_id).unwrap(),
+        vec![identity]
+    );
 }
 
 #[test]
@@ -57,12 +126,12 @@ fn v5_user_data_survives_sync_migration() {
         let conn = rusqlite::Connection::open(&path).expect("open v5");
         conn.execute_batch(
             "DROP TABLE sync_conflicts; DROP TABLE sync_remote_cursors; DROP TABLE sync_assets; DROP TABLE sync_events; \
-             DROP TABLE sync_metadata; PRAGMA user_version = 5;",
+             DROP TABLE sync_metadata; DROP TABLE smart_folders; PRAGMA user_version = 5;",
         )
         .expect("restore v5 schema");
     }
     let migrated = FolioDatabase::open(&path).expect("migrate");
-    assert_eq!(migrated.schema_version().unwrap(), 7);
+    assert_eq!(migrated.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
     assert_eq!(migrated.list_roots().unwrap()[0].id, root_id);
     assert_eq!(migrated.list_collections().unwrap()[0].id, collection_id);
     assert_eq!(migrated.list_favorites().unwrap(), vec![identity]);
@@ -91,12 +160,14 @@ fn incomplete_v6_sync_schema_is_repaired_without_losing_data() {
     }
     {
         let conn = rusqlite::Connection::open(&path).expect("open v6");
-        conn.execute_batch("DROP TABLE sync_remote_cursors; PRAGMA user_version = 6;")
-            .expect("simulate incomplete v6");
+        conn.execute_batch(
+            "DROP TABLE sync_remote_cursors; DROP TABLE smart_folders; PRAGMA user_version = 6;",
+        )
+        .expect("simulate incomplete v6");
     }
 
     let db = FolioDatabase::open(&path).expect("repair");
-    assert_eq!(db.schema_version().unwrap(), 7);
+    assert_eq!(db.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
     assert_eq!(db.sync_remote_cursor("other-device").unwrap(), 0);
     assert_eq!(db.list_roots().unwrap()[0].id, root_id);
     assert_eq!(db.list_favorites().unwrap(), vec![identity]);

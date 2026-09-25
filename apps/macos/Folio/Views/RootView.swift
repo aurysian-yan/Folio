@@ -12,10 +12,19 @@ struct RootView: View {
     @AppStorage(AppPreferences.defaultThemeColor) private var defaultThemeColor = DefaultThemeColor.folio.rawValue
 
     private var themeColor: Color {
-        if useCollectionThemeColor,
-           case let .collection(id) = model.selectedDestination,
-           let collection = model.snapshot.collections.first(where: { $0.id == id }) {
-            return collection.color.color
+        if useCollectionThemeColor {
+            switch model.selectedDestination {
+            case let .collection(id):
+                if let folder = model.snapshot.collections.first(where: { $0.id == id }) {
+                    return folder.color.color
+                }
+            case let .smartFolder(id):
+                if let folder = model.snapshot.smartFolders.first(where: { $0.id == id }) {
+                    return folder.color.color
+                }
+            default:
+                break
+            }
         }
         return (DefaultThemeColor(rawValue: defaultThemeColor) ?? .folio).color
     }
@@ -71,8 +80,8 @@ struct RootView: View {
         } message: {
             Text(model.errorMessage ?? "发生未知错误")
         }
-        .sheet(item: $model.collectionEditor) { intent in
-            CollectionEditorView(model: model, intent: intent)
+        .sheet(item: $model.favoriteFolderEditor) { intent in
+            FavoriteFolderEditorView(model: model, intent: intent)
         }
         .confirmationDialog("导入字体", isPresented: $model.isImportChoicePresented) {
             Button("复制到 Folio 字体库") { model.importPending(as: .copy) }
@@ -210,29 +219,40 @@ private struct WindowLayoutPersistenceController: NSViewRepresentable {
     }
 }
 
-private struct CollectionEditorView: View {
+private struct FavoriteFolderEditorView: View {
     @Bindable var model: LibraryViewModel
     @Environment(\.folioThemeColor) private var themeColor
-    let intent: CollectionEditorIntent
-    @FocusState private var focused: Bool
-    @State private var name: String
+    let intent: FavoriteFolderEditorIntent
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var nameFocused: Bool
+    @State private var name = ""
+    @State private var text = ""
+    @State private var options: [FacetOption] = []
+    @State private var selectedFacets: Set<FacetOption> = []
     @State private var icon: CollectionIcon
     @State private var color: CollectionColor
+    @State private var isLoading = true
+    @State private var loadFailed = false
 
-    init(model: LibraryViewModel, intent: CollectionEditorIntent) {
+    init(model: LibraryViewModel, intent: FavoriteFolderEditorIntent) {
         self.model = model
         self.intent = intent
-        _name = State(initialValue: intent.initialName)
         _icon = State(initialValue: intent.initialIcon)
         _color = State(initialValue: intent.initialColor)
+        if case .create = intent {
+            _text = State(initialValue: model.favoriteFolderSeedText)
+            _selectedFacets = State(initialValue: model.favoriteFolderSeedFacets)
+        } else {
+            _name = State(initialValue: intent.initialName)
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(intent.title)
                 .font(.headline)
             TextField("收藏夹名称", text: $name)
-                .focused($focused)
+                .focused($nameFocused)
                 .onSubmit(save)
             Text("图标")
                 .font(.subheadline)
@@ -254,7 +274,7 @@ private struct CollectionEditorView: View {
                     }
                 }
             }
-            .frame(height: 150)
+            .frame(height: 110)
             HStack {
                 Text("颜色")
                     .font(.subheadline)
@@ -268,24 +288,115 @@ private struct CollectionEditorView: View {
                     colorSwatch(option)
                 }
             }
+            TextField("搜索字体", text: $text)
+                .textFieldStyle(.roundedBorder)
+            Text("筛选条件")
+                .font(.subheadline)
+            Text("添加筛选条件后，符合条件的字体会自动显示在此收藏夹中。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(FacetKind.allCases, id: \.self) { kind in
+                            let group = options.filter { $0.kind == kind }
+                            if !group.isEmpty {
+                                facetRow(kind, options: group)
+                            }
+                        }
+                    }
+                }
+            }
             HStack {
                 Spacer()
-                Button("取消") {
-                    model.collectionEditor = nil
-                }
-                .keyboardShortcut(.cancelAction)
+                Button("取消") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Button(intent.isCreate ? "创建" : "保存", action: save)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading || loadFailed)
             }
         }
         .padding()
-        .frame(width: 380)
-        .onAppear { focused = true }
+        .frame(minWidth: 520, minHeight: 540)
+        .task { await load() }
+    }
+
+    private func facetRow(_ kind: FacetKind, options: [FacetOption]) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(kind.title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 72, alignment: .leading)
+                .padding(.top, 5)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(options) { option in
+                        let isSelected = selectedFacets.contains(where: { $0.id == option.id })
+                        Button {
+                            toggle(option)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(option.label)
+                                    .lineLimit(1)
+                                Text(option.familyCount, format: .number)
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(isSelected ? themeColor : .secondary)
+                        .accessibilityLabel("\(option.label)，\(option.familyCount) 个字族")
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    }
+                }
+            }
+        }
+    }
+
+    private func toggle(_ option: FacetOption) {
+        if let existing = selectedFacets.first(where: { $0.id == option.id }) {
+            selectedFacets.remove(existing)
+        } else {
+            selectedFacets.insert(option)
+        }
+    }
+
+    private func load() async {
+        do {
+            options = try await model.loadSmartFolderFacetOptions()
+            if case let .editSmartFolder(folder) = intent,
+               let details = try await model.loadSmartFolderDetails(folder.id, options: options) {
+                name = details.summary.name
+                text = details.text
+                selectedFacets = details.selectedFacets
+            } else {
+                selectedFacets = Set(selectedFacets.map { selected in
+                    options.first(where: { $0.id == selected.id }) ?? selected
+                })
+            }
+            isLoading = false
+            nameFocused = true
+        } catch {
+            isLoading = false
+            loadFailed = true
+            model.errorMessage = error.localizedDescription
+        }
     }
 
     private func save() {
-        model.saveCollection(intent, name: name, icon: icon, color: color)
+        guard !isLoading, !loadFailed else { return }
+        model.saveFavoriteFolder(
+            intent,
+            name: name,
+            text: text,
+            facets: selectedFacets,
+            icon: icon,
+            color: color
+        )
     }
 
     private func colorSwatch(_ option: CollectionColor) -> some View {

@@ -286,6 +286,8 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
 
+    use folio_core::{CollectionColor, CollectionIcon, CollectionId, FontIdentityId};
+
     use super::*;
 
     #[derive(Default)]
@@ -842,5 +844,284 @@ mod tests {
         .unwrap();
         assert_eq!(first.list_collections().unwrap().len(), 2);
         assert_eq!(second.list_collections().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn smart_folder_rules_sync_round_trip_and_survive_reopening_offline() {
+        let server = DavServer::start();
+        let client = server.client("p");
+        let dir = tempfile::tempdir().unwrap();
+        let first_dir = dir.path().join("first");
+        let second_dir = dir.path().join("second");
+        let second_path = dir.path().join("second.sqlite");
+        let mut first =
+            folio_storage::FolioDatabase::open(dir.path().join("first.sqlite")).unwrap();
+        let mut second = folio_storage::FolioDatabase::open(&second_path).unwrap();
+        let folder = first
+            .create_smart_folder_with_style(
+                "可变拉丁字体",
+                r#"{"text":"Inter","scripts":["Latin"],"multiple_variants":false}"#,
+                CollectionIcon::Type,
+                CollectionColor::Blue,
+            )
+            .unwrap();
+        let profile = SyncProfile {
+            server_url: server.url.clone(),
+            remote_directory: String::new(),
+            username: "u".to_owned(),
+            automatic: true,
+        };
+        let cancelled = AtomicBool::new(false);
+        let report: Arc<dyn Fn(crate::SyncProgress) + Send + Sync> = Arc::new(|_| {});
+
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        assert_eq!(second.list_smart_folders().unwrap(), vec![folder.clone()]);
+
+        drop(second);
+        let mut second = folio_storage::FolioDatabase::open(&second_path).unwrap();
+        assert_eq!(second.list_smart_folders().unwrap(), vec![folder.clone()]);
+        first
+            .update_smart_folder_with_style(
+                folder.id,
+                "拉丁字体",
+                r#"{"text":"Inter","scripts":["Latin"],"multiple_variants":true}"#,
+                CollectionIcon::Star,
+                CollectionColor::Purple,
+            )
+            .unwrap();
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        let synced = &second.list_smart_folders().unwrap()[0];
+        assert_eq!(synced.name, "拉丁字体");
+        assert_eq!(synced.icon, CollectionIcon::Star);
+        assert_eq!(synced.color, CollectionColor::Purple);
+        assert!(synced.query_json.contains("multiple_variants\":true"));
+
+        let converted_member = FontIdentityId::from_bytes([77; 16]);
+        first
+            .convert_smart_folder_to_collection(
+                folder.id,
+                "拉丁字体",
+                CollectionIcon::Star,
+                CollectionColor::Purple,
+                &[converted_member],
+            )
+            .unwrap();
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        let manual = &second.list_collections().unwrap()[0];
+        assert_eq!(manual.name, "拉丁字体");
+        assert_eq!(manual.icon, CollectionIcon::Star);
+        assert_eq!(manual.color, CollectionColor::Purple);
+        assert_eq!(
+            second.list_collection_members(manual.id).unwrap(),
+            vec![converted_member]
+        );
+
+        first
+            .convert_collection_to_smart_folder(
+                CollectionId::from_bytes(*folder.id.as_bytes()),
+                "拉丁字体",
+                r#"{"text":"Inter","scripts":["Latin"],"multiple_variants":true}"#,
+                CollectionIcon::Heart,
+                CollectionColor::Cyan,
+            )
+            .unwrap();
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        assert!(second.list_collections().unwrap().is_empty());
+        let converted = &second.list_smart_folders().unwrap()[0];
+        assert_eq!(converted.id.as_bytes(), folder.id.as_bytes());
+        assert_eq!(converted.icon, CollectionIcon::Heart);
+        assert_eq!(converted.color, CollectionColor::Cyan);
+
+        first.delete_smart_folder(folder.id).unwrap();
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        assert!(second.list_smart_folders().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn concurrent_smart_folder_edits_keep_both_rules_on_resolution() {
+        let server = DavServer::start();
+        let client = server.client("p");
+        let dir = tempfile::tempdir().unwrap();
+        let first_dir = dir.path().join("first");
+        let second_dir = dir.path().join("second");
+        let mut first =
+            folio_storage::FolioDatabase::open(dir.path().join("first.sqlite")).unwrap();
+        let mut second =
+            folio_storage::FolioDatabase::open(dir.path().join("second.sqlite")).unwrap();
+        let folder = first
+            .create_smart_folder_with_style(
+                "筛选字体",
+                r#"{"text":"Lato"}"#,
+                CollectionIcon::Books,
+                CollectionColor::Green,
+            )
+            .unwrap();
+        let profile = SyncProfile {
+            server_url: server.url.clone(),
+            remote_directory: String::new(),
+            username: "u".to_owned(),
+            automatic: true,
+        };
+        let cancelled = AtomicBool::new(false);
+        let report: Arc<dyn Fn(crate::SyncProgress) + Send + Sync> = Arc::new(|_| {});
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+
+        first
+            .update_smart_folder_with_style(
+                folder.id,
+                "本机筛选",
+                r#"{"text":"Lato"}"#,
+                CollectionIcon::Star,
+                CollectionColor::Red,
+            )
+            .unwrap();
+        second
+            .update_smart_folder_with_style(
+                folder.id,
+                "另一台设备",
+                r#"{"text":"SourceSerif"}"#,
+                CollectionIcon::Heart,
+                CollectionColor::Purple,
+            )
+            .unwrap();
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+
+        let conflicts = crate::list_conflicts(second.path()).unwrap();
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].kind, "smart_folder");
+        crate::resolve_conflict(
+            second.path(),
+            &conflicts[0].id,
+            crate::ConflictResolution::KeepBoth,
+        )
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+
+        for database in [&first, &second] {
+            let folders = database.list_smart_folders().unwrap();
+            assert_eq!(folders.len(), 2);
+            assert!(folders.iter().any(|item| item.query_json.contains("Lato")));
+            assert!(folders
+                .iter()
+                .any(|item| item.query_json.contains("SourceSerif")));
+            assert!(folders.iter().any(|item| {
+                item.icon == CollectionIcon::Star && item.color == CollectionColor::Red
+            }));
+            assert!(folders.iter().any(|item| {
+                item.icon == CollectionIcon::Heart && item.color == CollectionColor::Purple
+            }));
+        }
     }
 }

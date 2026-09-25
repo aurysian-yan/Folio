@@ -67,5 +67,6 @@ pub const CURRENT_SCHEMA_VERSION: i32 = schema::CURRENT_SCHEMA_VERSION;
 
 mod state;
 pub use folio_core::{
-    Collection, CollectionId, CollectionMembers, LibraryStateSnapshot, RecentFont,
+    Collection, CollectionId, CollectionMembers, LibraryStateSnapshot, RecentFont, SmartFolder,
+    SmartFolderId,
 };

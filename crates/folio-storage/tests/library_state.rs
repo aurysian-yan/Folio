@@ -1,7 +1,9 @@
 //! 持久用户状态、事务与目录生命周期回归。
 mod common;
 use common::*;
-use folio_core::{resolve_identities, Catalog, CollectionId, FontIdentityId};
+use folio_core::{
+    resolve_identities, Catalog, CollectionColor, CollectionIcon, CollectionId, FontIdentityId,
+};
 use folio_storage::{RefreshMode, StorageError};
 fn id(n: u8) -> FontIdentityId {
     FontIdentityId::from_bytes([n; 16])
@@ -48,6 +50,112 @@ fn collections_keep_display_names_and_stable_random_ids() {
         Err(StorageError::CollectionNotFound { .. })
     ));
 }
+
+#[test]
+fn smart_folders_persist_rules_separately_from_manual_members() {
+    let dir = tempfile::tempdir().unwrap();
+    let manual_member = id(24);
+    let manual_id;
+    let smart_id;
+    {
+        let mut db = open_db(dir.path());
+        let manual = db.create_collection("手动收藏").unwrap();
+        manual_id = manual.id;
+        db.add_collection_members(manual.id, &[manual_member])
+            .unwrap();
+        let smart = db
+            .create_smart_folder_with_style(
+                "OFL 可变字体",
+                r#"{"text":""}"#,
+                CollectionIcon::Type,
+                CollectionColor::Blue,
+            )
+            .unwrap();
+        smart_id = smart.id;
+        assert_eq!(smart.query_json, r#"{"text":""}"#);
+        assert!(matches!(
+            db.create_smart_folder(" ofl 可变字体 ", "{}"),
+            Err(StorageError::SmartFolderNameConflict)
+        ));
+        assert!(matches!(
+            db.create_smart_folder(" \n ", "{}"),
+            Err(StorageError::InvalidSmartFolderName)
+        ));
+        db.update_smart_folder_with_style(
+            smart.id,
+            "OFL 字体",
+            r#"{"text":"OFL"}"#,
+            CollectionIcon::Star,
+            CollectionColor::Purple,
+        )
+        .unwrap();
+    }
+
+    let db = open_db(dir.path());
+    let smart = db
+        .list_smart_folders()
+        .unwrap()
+        .into_iter()
+        .find(|folder| folder.id == smart_id)
+        .unwrap();
+    assert_eq!(smart.name, "OFL 字体");
+    assert_eq!(smart.icon, CollectionIcon::Star);
+    assert_eq!(smart.color, CollectionColor::Purple);
+    assert_eq!(smart.query_json, r#"{"text":"OFL"}"#);
+    assert_eq!(
+        db.list_collection_members(manual_id).unwrap(),
+        vec![manual_member]
+    );
+    db.delete_smart_folder(smart_id).unwrap();
+    assert!(db.list_smart_folders().unwrap().is_empty());
+    assert_eq!(
+        db.list_collection_members(manual_id).unwrap(),
+        vec![manual_member]
+    );
+}
+
+#[test]
+fn favorite_folder_type_conversion_keeps_id_style_and_manual_members() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut db = open_db(dir.path());
+    let original = db
+        .create_collection_with_style("设计字体", CollectionIcon::Books, CollectionColor::Blue)
+        .unwrap();
+    db.add_collection_members(original.id, &[id(31), id(32)])
+        .unwrap();
+
+    let smart = db
+        .convert_collection_to_smart_folder(
+            original.id,
+            "设计字体",
+            r#"{"text":"Lato"}"#,
+            CollectionIcon::Star,
+            CollectionColor::Purple,
+        )
+        .unwrap();
+    assert_eq!(smart.id.as_bytes(), original.id.as_bytes());
+    assert!(db.list_collections().unwrap().is_empty());
+    assert_eq!(db.list_smart_folders().unwrap(), vec![smart.clone()]);
+
+    let manual = db
+        .convert_smart_folder_to_collection(
+            smart.id,
+            "设计字体",
+            smart.icon,
+            smart.color,
+            &[id(42), id(43)],
+        )
+        .unwrap();
+    assert_eq!(manual.id.as_bytes(), smart.id.as_bytes());
+    assert_eq!(manual.icon, CollectionIcon::Star);
+    assert_eq!(manual.color, CollectionColor::Purple);
+    assert!(db.list_smart_folders().unwrap().is_empty());
+    assert_eq!(
+        db.list_collection_members(manual.id).unwrap(),
+        vec![id(42), id(43)]
+    );
+}
+
 #[test]
 fn membership_bulk_is_idempotent_and_delete_cascades_only_members() {
     let dir = tempfile::tempdir().unwrap();

@@ -1,6 +1,6 @@
 //! WebDAV 同步的设备本地记录；远端协议由 folio-sync 独立定义。
 
-use folio_core::{normalize_search, Collection, FontIdentityId};
+use folio_core::{normalize_search, Collection, FontIdentityId, SmartFolder};
 use rusqlite::{params, OptionalExtension};
 
 use crate::{FolioDatabase, StorageError};
@@ -240,6 +240,31 @@ impl FolioDatabase {
     pub fn resolve_sync_conflict(&self, id: &str) -> Result<(), StorageError> {
         self.conn
             .execute("UPDATE sync_conflicts SET resolved=1 WHERE id=?1", [id])?;
+        Ok(())
+    }
+
+    pub fn upsert_remote_smart_folder(&self, folder: &SmartFolder) -> Result<(), StorageError> {
+        let key = normalize_search(&folder.name);
+        if key.is_empty() {
+            return Err(StorageError::InvalidSmartFolderName);
+        }
+        serde_json::from_str::<serde_json::Value>(&folder.query_json)?;
+        self.conn.execute(
+            "INSERT INTO smart_folders(id,name,normalized_name,query_json,created_at_ns,updated_at_ns,icon,color) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(id) DO UPDATE SET \
+             name=excluded.name,normalized_name=excluded.normalized_name,query_json=excluded.query_json, \
+             icon=excluded.icon,color=excluded.color, \
+             updated_at_ns=excluded.updated_at_ns",
+            params![folder.id.as_bytes().as_slice(), folder.name, key, folder.query_json,
+                folder.created_at_ns, folder.updated_at_ns, folder.icon.key(), folder.color.key()],
+        ).map_err(|error| {
+            if matches!(&error, rusqlite::Error::SqliteFailure(code, _)
+                if code.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE) {
+                StorageError::SmartFolderNameConflict
+            } else {
+                error.into()
+            }
+        })?;
         Ok(())
     }
 

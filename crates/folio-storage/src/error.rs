@@ -23,6 +23,14 @@ pub enum StorageError {
     CorruptCollectionColor(String),
     #[error("collection not found: {id}")]
     CollectionNotFound { id: folio_core::CollectionId },
+    #[error("smart folder name is empty")]
+    InvalidSmartFolderName,
+    #[error("smart folder name already exists")]
+    SmartFolderNameConflict,
+    #[error("invalid smart folder query JSON: {0}")]
+    SmartFolderQueryJson(#[from] serde_json::Error),
+    #[error("smart folder not found: {id}")]
+    SmartFolderNotFound { id: folio_core::SmartFolderId },
     #[error("system clock cannot be represented as nanoseconds")]
     InvalidTimestamp,
     #[error("random identifier generation failed: {0}")]

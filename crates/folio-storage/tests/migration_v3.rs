@@ -3,7 +3,7 @@
 mod common;
 
 use common::{copy_fixture, open_db};
-use folio_storage::{LibraryRootKind, RefreshMode};
+use folio_storage::{LibraryRootKind, RefreshMode, CURRENT_SCHEMA_VERSION};
 use rusqlite::Connection;
 
 #[test]
@@ -21,7 +21,7 @@ fn v2_directory_and_cache_survive_v3_migration() {
     let path = dir.path().join("folio.sqlite");
     let conn = Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE sync_conflicts; DROP TABLE sync_remote_cursors; DROP TABLE sync_assets; DROP TABLE sync_events; \
+        "DROP TABLE smart_folders; DROP TABLE sync_conflicts; DROP TABLE sync_remote_cursors; DROP TABLE sync_assets; DROP TABLE sync_events; \
          DROP TABLE sync_metadata; DROP TABLE collection_members; DROP TABLE collections; \
          CREATE TABLE collections (id BLOB PRIMARY KEY NOT NULL CHECK(length(id) = 16), \
            name TEXT NOT NULL, normalized_name TEXT NOT NULL UNIQUE, \
@@ -35,7 +35,7 @@ fn v2_directory_and_cache_survive_v3_migration() {
     drop(conn);
 
     let mut reopened = open_db(dir.path());
-    assert_eq!(reopened.schema_version().unwrap(), 7);
+    assert_eq!(reopened.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
     let roots = reopened.list_roots().unwrap();
     assert_eq!(roots.len(), 1);
     assert_eq!(roots[0].id, root.id);

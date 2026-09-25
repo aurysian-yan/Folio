@@ -9,10 +9,11 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use folio_core::{
     Catalog, CollectionColor, CollectionIcon, CollectionId, FontCategory, FontFace, FontFaceId,
-    FontFamilyId, FontIdentityId, LicenseKind,
+    FontFamilyId, FontIdentityId, FontWeight, FontWidth, LicenseKind, SmartFolderId,
 };
 use folio_query::{
-    FacetFilter, FacetValue, FontQuery, FontQueryIndex, FoundryKey, QueryScope, QuerySort,
+    FacetFilter, FacetValue, FontFeature, FontQuery, FontQueryIndex, FontState, FoundryKey,
+    QueryScope, QuerySort, SavedFontQuery,
 };
 use folio_storage::{AddRootOutcome, FolioDatabase, RefreshIssueKind, RefreshMode};
 use folio_sync::{ConflictResolution, SyncProfile, SyncProgress};
@@ -54,6 +55,11 @@ pub struct CollectionIdDto {
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
+pub struct SmartFolderIdDto {
+    pub value: String,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
 pub struct RootIdDto {
     pub value: String,
 }
@@ -73,12 +79,42 @@ pub enum FacetKindDto {
     Script,
     Foundry,
     License,
+    Weight,
+    Width,
+    Feature,
+    State,
+    MultipleVariants,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct FacetSelectionDto {
     pub kind: FacetKindDto,
     pub value: String,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SmartFolderQueryDto {
+    pub text: Option<String>,
+    pub facets: Vec<FacetSelectionDto>,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SmartFolderDto {
+    pub id: SmartFolderIdDto,
+    pub name: String,
+    pub icon: String,
+    pub color: String,
+    pub query: SmartFolderQueryDto,
+    pub match_count: u64,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SmartFolderSummaryDto {
+    pub id: SmartFolderIdDto,
+    pub name: String,
+    pub icon: String,
+    pub color: String,
+    pub match_count: u64,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -214,6 +250,7 @@ pub struct LibrarySnapshotDto {
     pub variable_family_count: u64,
     pub recent_count: u64,
     pub collections: Vec<CollectionDto>,
+    pub smart_folders: Vec<SmartFolderSummaryDto>,
     pub roots: Vec<RootDto>,
     pub health: HealthSummaryDto,
 }
@@ -964,6 +1001,213 @@ impl FolioEngine {
             .map_err(FolioFfiError::operation)
     }
 
+    pub fn create_smart_folder(
+        &self,
+        name: String,
+        query: SmartFolderQueryDto,
+    ) -> Result<SmartFolderIdDto, FolioFfiError> {
+        let query = saved_query_from_dto(query)?;
+        let query_json = serde_json::to_string(&query).map_err(FolioFfiError::operation)?;
+        let state = self.lock()?;
+        let folder = state
+            .database
+            .create_smart_folder(&name, &query_json)
+            .map_err(FolioFfiError::operation)?;
+        Ok(smart_folder_id_dto(folder.id))
+    }
+
+    pub fn create_smart_folder_with_style(
+        &self,
+        name: String,
+        query: SmartFolderQueryDto,
+        icon: String,
+        color: String,
+    ) -> Result<SmartFolderIdDto, FolioFfiError> {
+        let query = saved_query_from_dto(query)?;
+        let query_json = serde_json::to_string(&query).map_err(FolioFfiError::operation)?;
+        let icon = CollectionIcon::from_key(&icon)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection icon"))?;
+        let color = CollectionColor::from_key(&color)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection color"))?;
+        let state = self.lock()?;
+        let folder = state
+            .database
+            .create_smart_folder_with_style(&name, &query_json, icon, color)
+            .map_err(FolioFfiError::operation)?;
+        Ok(smart_folder_id_dto(folder.id))
+    }
+
+    pub fn convert_collection_to_smart_folder(
+        &self,
+        id: CollectionIdDto,
+        name: String,
+        query: SmartFolderQueryDto,
+        icon: String,
+        color: String,
+    ) -> Result<SmartFolderIdDto, FolioFfiError> {
+        let query = saved_query_from_dto(query)?;
+        let query_json = serde_json::to_string(&query).map_err(FolioFfiError::operation)?;
+        let icon = CollectionIcon::from_key(&icon)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection icon"))?;
+        let color = CollectionColor::from_key(&color)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection color"))?;
+        let mut state = self.lock()?;
+        let id = CollectionId::from_bytes(parse_id(&id.value)?);
+        let folder = state
+            .database
+            .convert_collection_to_smart_folder(id, &name, &query_json, icon, color)
+            .map_err(FolioFfiError::operation)?;
+        update_index_state(&mut state)?;
+        Ok(smart_folder_id_dto(folder.id))
+    }
+
+    pub fn update_smart_folder(
+        &self,
+        id: SmartFolderIdDto,
+        name: String,
+        query: SmartFolderQueryDto,
+    ) -> Result<(), FolioFfiError> {
+        let query = saved_query_from_dto(query)?;
+        let query_json = serde_json::to_string(&query).map_err(FolioFfiError::operation)?;
+        let state = self.lock()?;
+        state
+            .database
+            .update_smart_folder(
+                SmartFolderId::from_bytes(parse_id(&id.value)?),
+                &name,
+                &query_json,
+            )
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn update_smart_folder_with_style(
+        &self,
+        id: SmartFolderIdDto,
+        name: String,
+        query: SmartFolderQueryDto,
+        icon: String,
+        color: String,
+    ) -> Result<(), FolioFfiError> {
+        let query = saved_query_from_dto(query)?;
+        let query_json = serde_json::to_string(&query).map_err(FolioFfiError::operation)?;
+        let icon = CollectionIcon::from_key(&icon)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection icon"))?;
+        let color = CollectionColor::from_key(&color)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection color"))?;
+        let state = self.lock()?;
+        state
+            .database
+            .update_smart_folder_with_style(
+                SmartFolderId::from_bytes(parse_id(&id.value)?),
+                &name,
+                &query_json,
+                icon,
+                color,
+            )
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn convert_smart_folder_to_collection(
+        &self,
+        id: SmartFolderIdDto,
+        name: String,
+        icon: String,
+        color: String,
+    ) -> Result<CollectionDto, FolioFfiError> {
+        let icon = CollectionIcon::from_key(&icon)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection icon"))?;
+        let color = CollectionColor::from_key(&color)
+            .ok_or_else(|| FolioFfiError::operation("invalid collection color"))?;
+        let mut state = self.lock()?;
+        let id = SmartFolderId::from_bytes(parse_id(&id.value)?);
+        let folder = state
+            .database
+            .list_smart_folders()
+            .map_err(FolioFfiError::operation)?
+            .into_iter()
+            .find(|folder| folder.id == id)
+            .ok_or_else(|| FolioFfiError::operation("智慧收藏夹不存在"))?;
+        let saved: SavedFontQuery =
+            serde_json::from_str(&folder.query_json).map_err(FolioFfiError::operation)?;
+        let query = saved
+            .into_query(0, None)
+            .map_err(FolioFfiError::operation)?;
+        let identities = state
+            .index
+            .query(&query)
+            .map_err(FolioFfiError::operation)?
+            .families
+            .into_iter()
+            .flat_map(|family| family.matched_identity_ids)
+            .collect::<BTreeSet<_>>();
+        let member_count = identities.len() as u64;
+        let identities = identities.into_iter().collect::<Vec<_>>();
+        let collection = state
+            .database
+            .convert_smart_folder_to_collection(id, &name, icon, color, &identities)
+            .map_err(FolioFfiError::operation)?;
+        update_index_state(&mut state)?;
+        Ok(CollectionDto {
+            id: collection_dto(collection.id),
+            name: collection.name,
+            icon: collection.icon.key().to_owned(),
+            color: collection.color.key().to_owned(),
+            member_count,
+        })
+    }
+
+    pub fn delete_smart_folder(&self, id: SmartFolderIdDto) -> Result<(), FolioFfiError> {
+        let state = self.lock()?;
+        state
+            .database
+            .delete_smart_folder(SmartFolderId::from_bytes(parse_id(&id.value)?))
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn get_smart_folder(&self, id: SmartFolderIdDto) -> Result<SmartFolderDto, FolioFfiError> {
+        let state = self.lock()?;
+        let id = SmartFolderId::from_bytes(parse_id(&id.value)?);
+        let folder = state
+            .database
+            .list_smart_folders()
+            .map_err(FolioFfiError::operation)?
+            .into_iter()
+            .find(|folder| folder.id == id)
+            .ok_or_else(|| FolioFfiError::operation("智慧收藏夹不存在"))?;
+        smart_folder_dto(&state, folder)
+    }
+
+    pub fn query_smart_folder(
+        &self,
+        id: SmartFolderIdDto,
+        text: Option<String>,
+        facets: Vec<FacetSelectionDto>,
+        offset: u64,
+        limit: u64,
+    ) -> Result<LibraryPageDto, FolioFfiError> {
+        let state = self.lock()?;
+        let id = SmartFolderId::from_bytes(parse_id(&id.value)?);
+        let folder = state
+            .database
+            .list_smart_folders()
+            .map_err(FolioFfiError::operation)?
+            .into_iter()
+            .find(|folder| folder.id == id)
+            .ok_or_else(|| FolioFfiError::operation("智慧收藏夹不存在"))?;
+        let saved: SavedFontQuery =
+            serde_json::from_str(&folder.query_json).map_err(FolioFfiError::operation)?;
+        let mut query = saved
+            .into_query(
+                usize::try_from(offset).unwrap_or(usize::MAX),
+                Some(usize::try_from(limit.max(1)).unwrap_or(usize::MAX)),
+            )
+            .map_err(FolioFfiError::operation)?;
+        let extra = facet_filter_from_dto(facets)?;
+        merge_facet_filters(&mut query.facets, extra);
+        query.text = merge_search_text(query.text, text);
+        query_page(&state, query, None, None)
+    }
+
     pub fn set_collection_members(
         &self,
         collection_id: CollectionIdDto,
@@ -1040,6 +1284,31 @@ fn snapshot(state: &mut EngineState) -> Result<LibrarySnapshotDto, FolioFfiError
             }
         })
         .collect();
+    let smart_folders = state
+        .database
+        .list_smart_folders()
+        .map_err(FolioFfiError::operation)?
+        .into_iter()
+        .map(|folder| {
+            let query: SavedFontQuery =
+                serde_json::from_str(&folder.query_json).map_err(FolioFfiError::operation)?;
+            let query = query
+                .into_query(0, Some(0))
+                .map_err(FolioFfiError::operation)?;
+            let match_count = state
+                .index
+                .query(&query)
+                .map_err(FolioFfiError::operation)?
+                .total_matches as u64;
+            Ok(SmartFolderSummaryDto {
+                id: smart_folder_id_dto(folder.id),
+                name: folder.name,
+                icon: folder.icon.key().to_owned(),
+                color: folder.color.key().to_owned(),
+                match_count,
+            })
+        })
+        .collect::<Result<Vec<_>, FolioFfiError>>()?;
     let roots = state
         .database
         .list_roots()
@@ -1055,10 +1324,16 @@ fn snapshot(state: &mut EngineState) -> Result<LibrarySnapshotDto, FolioFfiError
             .catalog
             .families
             .iter()
-            .filter(|family| family.faces.iter().any(|face| face.metadata.is_variable))
+            .filter(|family| {
+                family
+                    .faces
+                    .iter()
+                    .any(|face| !face.metadata.variable_axes.is_empty())
+            })
             .count() as u64,
         recent_count: durable.recent.len() as u64,
         collections,
+        smart_folders,
         roots,
         health: HealthSummaryDto {
             damaged_files: state.damaged_files,
@@ -1094,23 +1369,198 @@ fn query_from_dto(dto: LibraryQueryDto) -> Result<FontQuery, FolioFfiError> {
                 .value,
         )?)),
     };
+    Ok(FontQuery {
+        text: dto.text.filter(|value| !value.trim().is_empty()),
+        scope,
+        facets: facet_filter_from_dto(dto.facets)?,
+        sort: QuerySort::Auto,
+        offset: usize::try_from(dto.offset).unwrap_or(usize::MAX),
+        limit: Some(usize::try_from(dto.limit.max(1)).unwrap_or(usize::MAX)),
+    })
+}
+
+fn saved_query_from_dto(dto: SmartFolderQueryDto) -> Result<SavedFontQuery, FolioFfiError> {
+    let facets = facet_filter_from_dto(dto.facets)?;
+    SavedFontQuery::from_filter(dto.text, facets).map_err(FolioFfiError::operation)
+}
+
+fn facet_filter_from_dto(selections: Vec<FacetSelectionDto>) -> Result<FacetFilter, FolioFfiError> {
     let mut facets = FacetFilter::default();
-    for selection in dto.facets {
+    for selection in selections {
         match selection.kind {
             FacetKindDto::Category => facets.categories.push(parse_category(&selection.value)?),
             FacetKindDto::Script => facets.scripts.push(selection.value),
             FacetKindDto::Foundry => facets.foundries.push(FoundryKey::new(&selection.value)),
             FacetKindDto::License => facets.licenses.push(parse_license(&selection.value)?),
+            FacetKindDto::Weight => {
+                let weight = selection
+                    .value
+                    .parse::<f32>()
+                    .map_err(FolioFfiError::operation)?;
+                if !weight.is_finite() {
+                    return Err(FolioFfiError::operation("invalid weight facet"));
+                }
+                facets.weights.push(FontWeight::new(weight));
+            }
+            FacetKindDto::Width => {
+                let width = selection
+                    .value
+                    .parse::<u16>()
+                    .map_err(FolioFfiError::operation)?;
+                facets.widths.push(
+                    FontWidth::from_width_class(width)
+                        .ok_or_else(|| FolioFfiError::operation("invalid width facet"))?,
+                );
+            }
+            FacetKindDto::Feature => facets.features.push(parse_feature(&selection.value)?),
+            FacetKindDto::State => facets.states.push(parse_state(&selection.value)?),
+            FacetKindDto::MultipleVariants => {
+                if selection.value != "multiple" {
+                    return Err(FolioFfiError::operation("invalid multiple-variant facet"));
+                }
+                facets.multiple_variants = true;
+            }
         }
     }
-    Ok(FontQuery {
-        text: dto.text.filter(|value| !value.trim().is_empty()),
-        scope,
-        facets,
-        sort: QuerySort::Auto,
-        offset: usize::try_from(dto.offset).unwrap_or(usize::MAX),
-        limit: Some(usize::try_from(dto.limit.max(1)).unwrap_or(usize::MAX)),
+    Ok(facets)
+}
+
+fn merge_facet_filters(target: &mut FacetFilter, extra: FacetFilter) {
+    target.categories.extend(extra.categories);
+    target.scripts.extend(extra.scripts);
+    target.licenses.extend(extra.licenses);
+    target.foundries.extend(extra.foundries);
+    target.weights.extend(extra.weights);
+    target.widths.extend(extra.widths);
+    target.features.extend(extra.features);
+    target.roots.extend(extra.roots);
+    target.states.extend(extra.states);
+    target.multiple_variants |= extra.multiple_variants;
+}
+
+fn merge_search_text(saved: Option<String>, current: Option<String>) -> Option<String> {
+    let saved = saved.filter(|value| !value.trim().is_empty());
+    let current = current.filter(|value| !value.trim().is_empty());
+    match (saved, current) {
+        (Some(saved), Some(current)) => Some(format!("{saved} {current}")),
+        (Some(value), None) | (None, Some(value)) => Some(value),
+        (None, None) => None,
+    }
+}
+
+fn query_page(
+    state: &EngineState,
+    query: FontQuery,
+    allowed_face_ids: Option<&BTreeSet<FontFaceId>>,
+    allowed_source_paths: Option<&BTreeSet<String>>,
+) -> Result<LibraryPageDto, FolioFfiError> {
+    let result = state
+        .index
+        .query_with_faces(&query, allowed_face_ids)
+        .map_err(FolioFfiError::operation)?;
+    let favorites = state
+        .database
+        .list_favorites()
+        .map_err(FolioFfiError::operation)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let families = result
+        .families
+        .iter()
+        .filter_map(|matched| {
+            state.catalog.find_family(matched.family_id).map(|family| {
+                family_card(
+                    family,
+                    &matched.matched_face_ids,
+                    &favorites,
+                    &state.database,
+                    allowed_source_paths,
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(LibraryPageDto {
+        total_matches: result.total_matches as u64,
+        families,
+        facets: result
+            .facet_summary
+            .into_iter()
+            .filter_map(facet_count)
+            .collect(),
+        unresolved_scope_items: result.unresolved_scope_items.len() as u64,
+        cloud_only_fonts: Vec::new(),
     })
+}
+
+fn smart_folder_dto(
+    state: &EngineState,
+    folder: folio_core::SmartFolder,
+) -> Result<SmartFolderDto, FolioFfiError> {
+    let query: SavedFontQuery =
+        serde_json::from_str(&folder.query_json).map_err(FolioFfiError::operation)?;
+    let count_query = query
+        .clone()
+        .into_query(0, Some(0))
+        .map_err(FolioFfiError::operation)?;
+    let match_count = state
+        .index
+        .query(&count_query)
+        .map_err(FolioFfiError::operation)?
+        .total_matches as u64;
+    Ok(SmartFolderDto {
+        id: smart_folder_id_dto(folder.id),
+        name: folder.name,
+        icon: folder.icon.key().to_owned(),
+        color: folder.color.key().to_owned(),
+        query: saved_query_to_dto(query),
+        match_count,
+    })
+}
+
+fn saved_query_to_dto(query: SavedFontQuery) -> SmartFolderQueryDto {
+    let mut facets = Vec::new();
+    facets.extend(query.categories.into_iter().map(|value| FacetSelectionDto {
+        kind: FacetKindDto::Category,
+        value: category_key(value).to_owned(),
+    }));
+    facets.extend(query.scripts.into_iter().map(|value| FacetSelectionDto {
+        kind: FacetKindDto::Script,
+        value,
+    }));
+    facets.extend(query.licenses.into_iter().map(|value| FacetSelectionDto {
+        kind: FacetKindDto::License,
+        value: license_key(value).to_owned(),
+    }));
+    facets.extend(query.foundries.into_iter().map(|value| FacetSelectionDto {
+        kind: FacetKindDto::Foundry,
+        value,
+    }));
+    facets.extend(query.weights.into_iter().map(|value| FacetSelectionDto {
+        kind: FacetKindDto::Weight,
+        value: value.to_string(),
+    }));
+    facets.extend(query.widths.into_iter().map(|value| FacetSelectionDto {
+        kind: FacetKindDto::Width,
+        value: value.to_string(),
+    }));
+    facets.extend(query.features.into_iter().map(|value| FacetSelectionDto {
+        kind: FacetKindDto::Feature,
+        value: feature_key(&value),
+    }));
+    facets.extend(query.states.into_iter().map(|value| FacetSelectionDto {
+        kind: FacetKindDto::State,
+        value: state_key(value).to_owned(),
+    }));
+    if query.multiple_variants {
+        facets.push(FacetSelectionDto {
+            kind: FacetKindDto::MultipleVariants,
+            value: "multiple".to_owned(),
+        });
+    }
+    SmartFolderQueryDto {
+        text: query.text,
+        facets,
+    }
 }
 
 fn family_card(
@@ -1139,7 +1589,9 @@ fn family_card(
         identity_ids: identities.iter().copied().map(identity_dto).collect(),
         matched_face_ids: matched_faces.iter().copied().map(face_dto).collect(),
         is_favorite: !identities.is_empty() && identities.iter().all(|id| favorites.contains(id)),
-        is_variable: shown_faces.iter().any(|face| face.metadata.is_variable),
+        is_variable: shown_faces
+            .iter()
+            .any(|face| !face.metadata.variable_axes.is_empty()),
         manufacturer: shown_faces
             .iter()
             .find_map(|face| face.metadata.enrichment.foundry.manufacturer.clone()),
@@ -1207,7 +1659,7 @@ fn face_summary(
         postscript_name: face.metadata.postscript_name.clone(),
         full_name: face.metadata.full_name.clone(),
         format: face.format.label().to_owned(),
-        is_variable: face.metadata.is_variable,
+        is_variable: !face.metadata.variable_axes.is_empty(),
         weight: face.metadata.weight.map(|weight| weight.value() as f64),
         width: face.metadata.width.map(|width| width.ratio() as f64),
         source_path: source.map(|source| source.path().to_string_lossy().into_owned()),
@@ -1270,6 +1722,31 @@ fn facet_count(count: folio_query::FacetCount) -> Option<FacetCountDto> {
             foundry.0.clone(),
             count.display_label.unwrap_or(foundry.0),
         ),
+        FacetValue::Weight(weight) => (
+            FacetKindDto::Weight,
+            weight.clone(),
+            format!("字重 {weight}"),
+        ),
+        FacetValue::Width(width) => (
+            FacetKindDto::Width,
+            width.to_string(),
+            width_label(width).to_owned(),
+        ),
+        FacetValue::Feature(feature) => (
+            FacetKindDto::Feature,
+            feature_key(&feature),
+            feature_label(&feature),
+        ),
+        FacetValue::State(state) => (
+            FacetKindDto::State,
+            state_key(state).to_owned(),
+            state_label(state).to_owned(),
+        ),
+        FacetValue::MultipleVariants => (
+            FacetKindDto::MultipleVariants,
+            "multiple".to_owned(),
+            "多字款".to_owned(),
+        ),
         _ => return None,
     };
     Some(FacetCountDto {
@@ -1305,6 +1782,31 @@ fn parse_license(value: &str) -> Result<LicenseKind, FolioFfiError> {
         _ => Err(FolioFfiError::Operation {
             message: format!("unknown license facet: {value}"),
         }),
+    }
+}
+
+fn parse_feature(value: &str) -> Result<FontFeature, FolioFfiError> {
+    match value {
+        "variable" => Ok(FontFeature::Variable),
+        "italic" => Ok(FontFeature::Italic),
+        "oblique" => Ok(FontFeature::Oblique),
+        "monospace" => Ok(FontFeature::Monospace),
+        "color" => Ok(FontFeature::Color),
+        value if value.starts_with("opentype:") && value.len() > "opentype:".len() => {
+            Ok(FontFeature::OpenType(value["opentype:".len()..].to_owned()))
+        }
+        _ => Err(FolioFfiError::operation("invalid feature facet")),
+    }
+}
+
+fn parse_state(value: &str) -> Result<FontState, FolioFfiError> {
+    match value {
+        "favorite" => Ok(FontState::Favorite),
+        "recent" => Ok(FontState::Recent),
+        "duplicate_sources" => Ok(FontState::DuplicateSources),
+        "multiple_revisions" => Ok(FontState::MultipleRevisions),
+        "metadata_conflict" => Ok(FontState::MetadataConflict),
+        _ => Err(FolioFfiError::operation("invalid state facet")),
     }
 }
 
@@ -1352,6 +1854,63 @@ fn license_label(value: LicenseKind) -> &'static str {
     }
 }
 
+fn feature_key(value: &FontFeature) -> String {
+    match value {
+        FontFeature::Variable => "variable".to_owned(),
+        FontFeature::Italic => "italic".to_owned(),
+        FontFeature::Oblique => "oblique".to_owned(),
+        FontFeature::Monospace => "monospace".to_owned(),
+        FontFeature::Color => "color".to_owned(),
+        FontFeature::OpenType(tag) => format!("opentype:{tag}"),
+    }
+}
+
+fn feature_label(value: &FontFeature) -> String {
+    match value {
+        FontFeature::Variable => "可变字体".to_owned(),
+        FontFeature::Italic => "斜体".to_owned(),
+        FontFeature::Oblique => "倾斜体".to_owned(),
+        FontFeature::Monospace => "等宽".to_owned(),
+        FontFeature::Color => "彩色字体".to_owned(),
+        FontFeature::OpenType(tag) => format!("OpenType {tag}"),
+    }
+}
+
+fn state_key(value: FontState) -> &'static str {
+    match value {
+        FontState::Favorite => "favorite",
+        FontState::Recent => "recent",
+        FontState::DuplicateSources => "duplicate_sources",
+        FontState::MultipleRevisions => "multiple_revisions",
+        FontState::MetadataConflict => "metadata_conflict",
+    }
+}
+
+fn state_label(value: FontState) -> &'static str {
+    match value {
+        FontState::Favorite => "已收藏",
+        FontState::Recent => "最近访问",
+        FontState::DuplicateSources => "多个来源",
+        FontState::MultipleRevisions => "多个版本",
+        FontState::MetadataConflict => "元数据冲突",
+    }
+}
+
+fn width_label(class: u16) -> &'static str {
+    match class {
+        1 => "超窄",
+        2 => "特窄",
+        3 => "窄体",
+        4 => "稍窄",
+        5 => "标准",
+        6 => "稍宽",
+        7 => "宽体",
+        8 => "特宽",
+        9 => "超宽",
+        _ => "其他字宽",
+    }
+}
+
 fn parse_identity_ids(values: &[IdentityIdDto]) -> Result<Vec<FontIdentityId>, FolioFfiError> {
     values
         .iter()
@@ -1393,6 +1952,12 @@ fn identity_dto(id: FontIdentityId) -> IdentityIdDto {
 
 fn collection_dto(id: CollectionId) -> CollectionIdDto {
     CollectionIdDto {
+        value: id.to_string(),
+    }
+}
+
+fn smart_folder_id_dto(id: SmartFolderId) -> SmartFolderIdDto {
+    SmartFolderIdDto {
         value: id.to_string(),
     }
 }
@@ -1676,6 +2241,170 @@ mod tests {
         );
         engine.delete_collection(collection.id).unwrap();
         assert!(engine.load_cached_library().unwrap().collections.is_empty());
+    }
+
+    #[test]
+    fn smart_folder_crud_queries_the_whole_library_and_tracks_refreshes() {
+        let directory = tempfile::tempdir().unwrap();
+        let fonts = directory.path().join("fonts");
+        std::fs::create_dir(&fonts).unwrap();
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts");
+        let lato_path = fonts.join("Lato-Regular.ttf");
+        let source_serif_path = fonts.join("SourceSerif4-Regular.otf");
+        std::fs::copy(fixtures.join("Lato-Regular.ttf"), &lato_path).unwrap();
+        std::fs::copy(
+            fixtures.join("SourceSerif4-Regular.otf"),
+            &source_serif_path,
+        )
+        .unwrap();
+
+        let database_path = directory.path().join("folio.sqlite");
+        let engine = FolioEngine::open(database_path.to_string_lossy().into_owned()).unwrap();
+        engine
+            .add_library_root(fonts.to_string_lossy().into_owned())
+            .unwrap();
+        let refreshed = engine.refresh_library().unwrap();
+        assert_eq!(refreshed.snapshot.family_count, 2);
+
+        let lato = engine
+            .query_library(LibraryQueryDto {
+                text: Some("Lato".to_owned()),
+                scope: QueryScopeDto::All,
+                collection_id: None,
+                facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
+                offset: 0,
+                limit: 10,
+            })
+            .unwrap();
+        engine
+            .set_favorite(lato.families[0].identity_ids.clone(), true)
+            .unwrap();
+
+        let saved = SmartFolderQueryDto {
+            text: Some("SourceSerif".to_owned()),
+            facets: Vec::new(),
+        };
+        let id = engine
+            .create_smart_folder_with_style(
+                "衬线字体".to_owned(),
+                saved.clone(),
+                "books".to_owned(),
+                "blue".to_owned(),
+            )
+            .unwrap();
+        let favorites = engine
+            .query_library(LibraryQueryDto {
+                text: None,
+                scope: QueryScopeDto::Favorites,
+                collection_id: None,
+                facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
+                offset: 0,
+                limit: 10,
+            })
+            .unwrap();
+        assert_eq!(favorites.total_matches, 1);
+        let smart_page = engine
+            .query_smart_folder(id.clone(), None, Vec::new(), 0, 10)
+            .unwrap();
+        assert_eq!(smart_page.total_matches, 1);
+        assert_eq!(smart_page.families[0].display_name, "Source Serif 4");
+
+        engine
+            .update_smart_folder_with_style(
+                id.clone(),
+                "衬线字族".to_owned(),
+                SmartFolderQueryDto {
+                    text: Some("Lato".to_owned()),
+                    facets: Vec::new(),
+                },
+                "star".to_owned(),
+                "purple".to_owned(),
+            )
+            .unwrap();
+        let edited = engine.get_smart_folder(id.clone()).unwrap();
+        assert_eq!(edited.name, "衬线字族");
+        assert_eq!(edited.match_count, 1);
+        assert_eq!(edited.query.text.as_deref(), Some("Lato"));
+        assert_eq!(edited.icon, "star");
+        assert_eq!(edited.color, "purple");
+
+        engine
+            .update_smart_folder_with_style(
+                id.clone(),
+                "衬线字体".to_owned(),
+                saved.clone(),
+                "books".to_owned(),
+                "blue".to_owned(),
+            )
+            .unwrap();
+        std::fs::remove_file(&source_serif_path).unwrap();
+        let missing = engine.refresh_library().unwrap();
+        assert_eq!(missing.snapshot.smart_folders[0].match_count, 0);
+        std::fs::copy(
+            fixtures.join("SourceSerif4-Regular.otf"),
+            &source_serif_path,
+        )
+        .unwrap();
+        let restored = engine.refresh_library().unwrap();
+        assert_eq!(restored.snapshot.smart_folders[0].match_count, 1);
+        assert_eq!(restored.snapshot.smart_folders[0].icon, "books");
+        assert_eq!(restored.snapshot.smart_folders[0].color, "blue");
+
+        let collection = engine
+            .convert_smart_folder_to_collection(
+                id.clone(),
+                "衬线字体".to_owned(),
+                "books".to_owned(),
+                "blue".to_owned(),
+            )
+            .unwrap();
+        assert_eq!(collection.member_count, 1);
+        let manual_page = engine
+            .query_library(LibraryQueryDto {
+                text: None,
+                scope: QueryScopeDto::Collection,
+                collection_id: Some(collection.id.clone()),
+                facets: Vec::new(),
+                allowed_face_ids: None,
+                allowed_source_paths: None,
+                offset: 0,
+                limit: 10,
+            })
+            .unwrap();
+        assert_eq!(manual_page.total_matches, 1);
+        assert_eq!(manual_page.families[0].display_name, "Source Serif 4");
+        assert!(engine
+            .load_cached_library()
+            .unwrap()
+            .smart_folders
+            .is_empty());
+
+        let converted_id = engine
+            .convert_collection_to_smart_folder(
+                collection.id,
+                "衬线字体".to_owned(),
+                saved,
+                "star".to_owned(),
+                "purple".to_owned(),
+            )
+            .unwrap();
+        assert_eq!(converted_id.value, id.value);
+        let converted = engine.get_smart_folder(converted_id.clone()).unwrap();
+        assert_eq!(converted.match_count, 1);
+        assert_eq!(converted.icon, "star");
+        assert_eq!(converted.color, "purple");
+
+        engine.delete_smart_folder(converted_id.clone()).unwrap();
+        assert!(engine
+            .load_cached_library()
+            .unwrap()
+            .smart_folders
+            .is_empty());
+        assert!(engine.get_smart_folder(converted_id).is_err());
     }
 
     #[test]

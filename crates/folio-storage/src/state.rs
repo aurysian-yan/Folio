@@ -4,7 +4,8 @@ use crate::root::{id_bytes, system_time_to_nanos};
 use crate::{cache, FolioDatabase, StorageError};
 use folio_core::{
     normalize_search, Collection, CollectionColor, CollectionIcon, CollectionId, CollectionMembers,
-    FontFaceId, FontIdentityId, LibraryStateSnapshot, RecentFont, RootMembership,
+    FontFaceId, FontIdentityId, LibraryStateSnapshot, RecentFont, RootMembership, SmartFolder,
+    SmartFolderId,
 };
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use std::collections::{BTreeMap, BTreeSet};
@@ -50,10 +51,34 @@ fn collection(row: &Row<'_>) -> Result<Collection, StorageError> {
             .ok_or(StorageError::CorruptCollectionColor(color_key))?,
     })
 }
+fn smart_folder(row: &Row<'_>) -> Result<SmartFolder, StorageError> {
+    let id: Vec<u8> = row.get(0)?;
+    let icon_key: String = row.get(5)?;
+    let color_key: String = row.get(6)?;
+    Ok(SmartFolder {
+        id: SmartFolderId::from_bytes(id_bytes(&id, "smart_folders.id")?),
+        name: row.get(1)?,
+        query_json: row.get(2)?,
+        created_at_ns: row.get(3)?,
+        updated_at_ns: row.get(4)?,
+        icon: CollectionIcon::from_key(&icon_key)
+            .ok_or(StorageError::CorruptCollectionIcon(icon_key))?,
+        color: CollectionColor::from_key(&color_key)
+            .ok_or(StorageError::CorruptCollectionColor(color_key))?,
+    })
+}
 fn name_conflict(error: rusqlite::Error) -> StorageError {
     if matches!(&error, rusqlite::Error::SqliteFailure(code, _) if code.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE)
     {
         StorageError::CollectionNameConflict
+    } else {
+        error.into()
+    }
+}
+fn smart_folder_name_conflict(error: rusqlite::Error) -> StorageError {
+    if matches!(&error, rusqlite::Error::SqliteFailure(code, _) if code.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE)
+    {
+        StorageError::SmartFolderNameConflict
     } else {
         error.into()
     }
@@ -79,6 +104,246 @@ fn members(conn: &Connection, id: CollectionId) -> Result<Vec<FontIdentityId>, S
 }
 
 impl FolioDatabase {
+    pub fn create_smart_folder(
+        &self,
+        name: &str,
+        query_json: &str,
+    ) -> Result<SmartFolder, StorageError> {
+        self.create_smart_folder_with_style(
+            name,
+            query_json,
+            CollectionIcon::Folder,
+            CollectionColor::Gray,
+        )
+    }
+
+    pub fn create_smart_folder_with_style(
+        &self,
+        name: &str,
+        query_json: &str,
+        icon: CollectionIcon,
+        color: CollectionColor,
+    ) -> Result<SmartFolder, StorageError> {
+        let key = normalize_search(name);
+        if key.is_empty() {
+            return Err(StorageError::InvalidSmartFolderName);
+        }
+        serde_json::from_str::<serde_json::Value>(query_json)?;
+        let mut bytes = [0; 16];
+        getrandom::fill(&mut bytes).map_err(StorageError::RandomId)?;
+        let timestamp = now()?;
+        let result = SmartFolder {
+            id: SmartFolderId::from_bytes(bytes),
+            name: name.to_owned(),
+            icon,
+            color,
+            query_json: query_json.to_owned(),
+            created_at_ns: timestamp,
+            updated_at_ns: timestamp,
+        };
+        self.conn
+            .execute(
+                "INSERT INTO smart_folders (id,name,normalized_name,query_json,created_at_ns,updated_at_ns,icon,color) VALUES (?1,?2,?3,?4,?5,?5,?6,?7)",
+                params![
+                    result.id.as_bytes().as_slice(),
+                    name,
+                    key,
+                    query_json,
+                    timestamp,
+                    icon.key(),
+                    color.key(),
+                ],
+            )
+            .map_err(smart_folder_name_conflict)?;
+        Ok(result)
+    }
+
+    pub fn update_smart_folder(
+        &self,
+        id: SmartFolderId,
+        name: &str,
+        query_json: &str,
+    ) -> Result<(), StorageError> {
+        let key = normalize_search(name);
+        if key.is_empty() {
+            return Err(StorageError::InvalidSmartFolderName);
+        }
+        serde_json::from_str::<serde_json::Value>(query_json)?;
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE smart_folders SET name=?2, normalized_name=?3, query_json=?4, updated_at_ns=max(updated_at_ns,?5) WHERE id=?1",
+                params![id.as_bytes().as_slice(), name, key, query_json, now()?],
+            )
+            .map_err(smart_folder_name_conflict)?;
+        if changed == 0 {
+            return Err(StorageError::SmartFolderNotFound { id });
+        }
+        Ok(())
+    }
+
+    pub fn update_smart_folder_with_style(
+        &self,
+        id: SmartFolderId,
+        name: &str,
+        query_json: &str,
+        icon: CollectionIcon,
+        color: CollectionColor,
+    ) -> Result<(), StorageError> {
+        let key = normalize_search(name);
+        if key.is_empty() {
+            return Err(StorageError::InvalidSmartFolderName);
+        }
+        serde_json::from_str::<serde_json::Value>(query_json)?;
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE smart_folders SET name=?2, normalized_name=?3, query_json=?4, icon=?5, color=?6, updated_at_ns=max(updated_at_ns,?7) WHERE id=?1",
+                params![id.as_bytes().as_slice(), name, key, query_json, icon.key(), color.key(), now()?],
+            )
+            .map_err(smart_folder_name_conflict)?;
+        if changed == 0 {
+            return Err(StorageError::SmartFolderNotFound { id });
+        }
+        Ok(())
+    }
+
+    pub fn convert_collection_to_smart_folder(
+        &mut self,
+        id: CollectionId,
+        name: &str,
+        query_json: &str,
+        icon: CollectionIcon,
+        color: CollectionColor,
+    ) -> Result<SmartFolder, StorageError> {
+        let key = normalize_search(name);
+        if key.is_empty() {
+            return Err(StorageError::InvalidSmartFolderName);
+        }
+        serde_json::from_str::<serde_json::Value>(query_json)?;
+        let timestamp = now()?;
+        let tx = self.conn.transaction()?;
+        let created_at_ns = tx
+            .query_row(
+                "SELECT created_at_ns FROM collections WHERE id=?1",
+                [id.as_bytes().as_slice()],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or(StorageError::CollectionNotFound { id })?;
+        let smart_id = SmartFolderId::from_bytes(*id.as_bytes());
+        tx.execute(
+            "INSERT INTO smart_folders (id,name,normalized_name,query_json,created_at_ns,updated_at_ns,icon,color) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![
+                smart_id.as_bytes().as_slice(),
+                name,
+                key,
+                query_json,
+                created_at_ns,
+                timestamp.max(created_at_ns),
+                icon.key(),
+                color.key(),
+            ],
+        )
+        .map_err(smart_folder_name_conflict)?;
+        tx.execute(
+            "DELETE FROM collections WHERE id=?1",
+            [id.as_bytes().as_slice()],
+        )?;
+        tx.commit()?;
+        Ok(SmartFolder {
+            id: smart_id,
+            name: name.to_owned(),
+            icon,
+            color,
+            query_json: query_json.to_owned(),
+            created_at_ns,
+            updated_at_ns: timestamp.max(created_at_ns),
+        })
+    }
+
+    pub fn convert_smart_folder_to_collection(
+        &mut self,
+        id: SmartFolderId,
+        name: &str,
+        icon: CollectionIcon,
+        color: CollectionColor,
+        identities: &[FontIdentityId],
+    ) -> Result<Collection, StorageError> {
+        let key = valid_name(name)?;
+        let timestamp = now()?;
+        let tx = self.conn.transaction()?;
+        let created_at_ns = tx
+            .query_row(
+                "SELECT created_at_ns FROM smart_folders WHERE id=?1",
+                [id.as_bytes().as_slice()],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or(StorageError::SmartFolderNotFound { id })?;
+        let collection_id = CollectionId::from_bytes(*id.as_bytes());
+        tx.execute(
+            "INSERT INTO collections (id,name,normalized_name,created_at_ns,updated_at_ns,icon,color) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                collection_id.as_bytes().as_slice(),
+                name,
+                key,
+                created_at_ns,
+                timestamp.max(created_at_ns),
+                icon.key(),
+                color.key(),
+            ],
+        )
+        .map_err(name_conflict)?;
+        {
+            let mut statement = tx.prepare(
+                "INSERT INTO collection_members (collection_id,identity_id) VALUES (?1,?2) ON CONFLICT(collection_id,identity_id) DO NOTHING",
+            )?;
+            for identity in identities {
+                statement.execute(params![
+                    collection_id.as_bytes().as_slice(),
+                    identity.as_bytes().as_slice(),
+                ])?;
+            }
+        }
+        tx.execute(
+            "DELETE FROM smart_folders WHERE id=?1",
+            [id.as_bytes().as_slice()],
+        )?;
+        tx.commit()?;
+        Ok(Collection {
+            id: collection_id,
+            name: name.to_owned(),
+            icon,
+            color,
+            created_at_ns,
+            updated_at_ns: timestamp.max(created_at_ns),
+        })
+    }
+
+    pub fn delete_smart_folder(&self, id: SmartFolderId) -> Result<(), StorageError> {
+        if self.conn.execute(
+            "DELETE FROM smart_folders WHERE id=?1",
+            [id.as_bytes().as_slice()],
+        )? == 0
+        {
+            return Err(StorageError::SmartFolderNotFound { id });
+        }
+        Ok(())
+    }
+
+    pub fn list_smart_folders(&self) -> Result<Vec<SmartFolder>, StorageError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,name,query_json,created_at_ns,updated_at_ns,icon,color FROM smart_folders ORDER BY normalized_name,id",
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            out.push(smart_folder(row)?);
+        }
+        Ok(out)
+    }
+
     pub fn create_collection(&self, name: &str) -> Result<Collection, StorageError> {
         self.create_collection_with_style(name, CollectionIcon::Folder, CollectionColor::Gray)
     }

@@ -37,6 +37,25 @@ impl std::fmt::Display for CollectionId {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+pub struct SmartFolderId([u8; 16]);
+impl SmartFolderId {
+    pub fn from_bytes(bytes: [u8; 16]) -> Self {
+        Self(bytes)
+    }
+    pub fn as_bytes(&self) -> &[u8; 16] {
+        &self.0
+    }
+}
+impl std::fmt::Display for SmartFolderId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for b in self.0 {
+            write!(f, "{b:02x}")?;
+        }
+        Ok(())
+    }
+}
+
 /// 与存储层 LibraryRootId 字节一一对应的查询键。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct LibraryRootKey(pub [u8; 16]);
@@ -47,6 +66,17 @@ pub struct Collection {
     pub name: String,
     pub icon: CollectionIcon,
     pub color: CollectionColor,
+    pub created_at_ns: i64,
+    pub updated_at_ns: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct SmartFolder {
+    pub id: SmartFolderId,
+    pub name: String,
+    pub icon: CollectionIcon,
+    pub color: CollectionColor,
+    pub query_json: String,
     pub created_at_ns: i64,
     pub updated_at_ns: i64,
 }

@@ -4,7 +4,7 @@
 mod health;
 use folio_core::*;
 pub use health::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
@@ -23,7 +23,7 @@ pub enum QuerySort {
     Relevance,
     Recent,
 }
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum FontFeature {
     Variable,
     Italic,
@@ -32,7 +32,7 @@ pub enum FontFeature {
     Color,
     OpenType(String),
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum FontState {
     Favorite,
     Recent,
@@ -40,7 +40,7 @@ pub enum FontState {
     MultipleRevisions,
     MetadataConflict,
 }
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct FoundryKey(pub String);
 impl FoundryKey {
     pub fn new(label: &str) -> Self {
@@ -60,6 +60,7 @@ pub struct FacetFilter {
     pub features: Vec<FontFeature>,
     pub roots: Vec<LibraryRootKey>,
     pub states: Vec<FontState>,
+    pub multiple_variants: bool,
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct FontQuery {
@@ -69,6 +70,107 @@ pub struct FontQuery {
     pub sort: QuerySort,
     pub offset: usize,
     pub limit: Option<usize>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SavedFontQuery {
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub categories: Vec<FontCategory>,
+    #[serde(default)]
+    pub scripts: Vec<String>,
+    #[serde(default)]
+    pub licenses: Vec<LicenseKind>,
+    #[serde(default)]
+    pub foundries: Vec<String>,
+    #[serde(default)]
+    pub weights: Vec<f32>,
+    #[serde(default)]
+    pub widths: Vec<u16>,
+    #[serde(default)]
+    pub features: Vec<FontFeature>,
+    #[serde(default)]
+    pub states: Vec<FontState>,
+    #[serde(default)]
+    pub multiple_variants: bool,
+}
+
+impl SavedFontQuery {
+    pub fn from_filter(text: Option<String>, facets: FacetFilter) -> Result<Self, QueryError> {
+        if !facets.roots.is_empty() {
+            return Err(QueryError::NonPortableRootFilter);
+        }
+        let mut query = Self {
+            text: text.filter(|value| !value.trim().is_empty()),
+            categories: facets.categories,
+            scripts: facets.scripts,
+            licenses: facets.licenses,
+            foundries: facets
+                .foundries
+                .into_iter()
+                .map(|value| FoundryKey::new(&value.0).0)
+                .collect(),
+            weights: facets.weights.into_iter().map(FontWeight::value).collect(),
+            widths: facets.widths.into_iter().map(FontWidth::class).collect(),
+            features: facets.features,
+            states: facets.states,
+            multiple_variants: facets.multiple_variants,
+        };
+        query.categories.sort();
+        query.categories.dedup();
+        query.scripts.sort();
+        query.scripts.dedup();
+        query.licenses.sort();
+        query.licenses.dedup();
+        query.foundries.sort();
+        query.foundries.dedup();
+        query.weights.sort_by(|left, right| left.total_cmp(right));
+        query.weights.dedup_by(|left, right| *left == *right);
+        query.widths.sort();
+        query.widths.dedup();
+        query.features.sort();
+        query.features.dedup();
+        query.states.sort();
+        query.states.dedup();
+        Ok(query)
+    }
+
+    pub fn into_query(self, offset: usize, limit: Option<usize>) -> Result<FontQuery, QueryError> {
+        let widths = self
+            .widths
+            .into_iter()
+            .map(|class| {
+                FontWidth::from_width_class(class).ok_or(QueryError::InvalidSavedWidth(class))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut weights = Vec::with_capacity(self.weights.len());
+        for value in self.weights {
+            if !value.is_finite() {
+                return Err(QueryError::InvalidSavedWeight);
+            }
+            weights.push(FontWeight::new(value));
+        }
+        Ok(FontQuery {
+            text: self.text,
+            scope: QueryScope::All,
+            facets: FacetFilter {
+                categories: self.categories,
+                scripts: self.scripts,
+                licenses: self.licenses,
+                foundries: self.foundries.into_iter().map(FoundryKey).collect(),
+                weights,
+                widths,
+                features: self.features,
+                roots: Vec::new(),
+                states: self.states,
+                multiple_variants: self.multiple_variants,
+            },
+            sort: QuerySort::Auto,
+            offset,
+            limit,
+        })
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct FamilyMatch {
@@ -90,6 +192,7 @@ pub enum FacetValue {
     Feature(FontFeature),
     Root(LibraryRootKey),
     State(FontState),
+    MultipleVariants,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 /// 统计分页前的匹配家族，每个值在同一家族中只计一次。
@@ -114,6 +217,12 @@ pub enum QueryError {
     InvalidFace(FontFaceId),
     #[error("unknown collection: {0}")]
     CollectionNotFound(CollectionId),
+    #[error("smart folder queries cannot contain device-local library roots")]
+    NonPortableRootFilter,
+    #[error("invalid saved width class: {0}")]
+    InvalidSavedWidth(u16),
+    #[error("invalid saved weight")]
+    InvalidSavedWeight,
 }
 
 #[derive(Debug)]
@@ -135,6 +244,7 @@ struct Document {
     roots: BTreeSet<LibraryRootKey>,
     states: BTreeSet<FontState>,
     recent: Option<i64>,
+    multiple_variants: bool,
 }
 #[derive(Debug)]
 pub struct FontQueryIndex {
@@ -165,6 +275,13 @@ impl FontQueryIndex {
         };
         let mut face_ids = BTreeSet::new();
         for family in &catalog.families {
+            let multiple_variants = family
+                .faces
+                .iter()
+                .map(|face| face.identity_id)
+                .collect::<BTreeSet<_>>()
+                .len()
+                > 1;
             let family_text = normalize_search(family.display_name.as_deref().unwrap_or_default());
             if index
                 .names
@@ -257,7 +374,7 @@ impl FontQueryIndex {
                 fields.sort();
                 fields.dedup();
                 let mut features = Vec::new();
-                if m.is_variable {
+                if !m.variable_axes.is_empty() {
                     features.push(FontFeature::Variable);
                 }
                 match m.style {
@@ -304,6 +421,7 @@ impl FontQueryIndex {
                     roots: BTreeSet::new(),
                     states: BTreeSet::new(),
                     recent: None,
+                    multiple_variants,
                 });
             }
         }
@@ -473,6 +591,7 @@ impl Document {
             && intersects(&f.features, &self.features)
             && (f.roots.is_empty() || f.roots.iter().any(|r| self.roots.contains(r)))
             && (f.states.is_empty() || f.states.iter().any(|s| self.states.contains(s)))
+            && (!f.multiple_variants || self.multiple_variants)
     }
     fn score(&self, text: &str, tokens: &[&str]) -> Option<u32> {
         if tokens.is_empty() {
@@ -526,6 +645,9 @@ impl Document {
         values.extend(self.features.iter().cloned().map(FacetValue::Feature));
         values.extend(self.roots.iter().copied().map(FacetValue::Root));
         values.extend(self.states.iter().copied().map(FacetValue::State));
+        if self.multiple_variants {
+            values.push(FacetValue::MultipleVariants);
+        }
         values
     }
 }

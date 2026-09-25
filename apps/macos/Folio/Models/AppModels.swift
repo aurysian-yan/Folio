@@ -126,6 +126,11 @@ struct CollectionID: Hashable, Identifiable, Sendable {
     var id: String { rawValue }
 }
 
+struct SmartFolderID: Hashable, Identifiable, Sendable {
+    let rawValue: String
+    var id: String { rawValue }
+}
+
 struct RootID: Hashable, Identifiable, Sendable {
     let rawValue: String
     var id: String { rawValue }
@@ -186,6 +191,11 @@ enum FacetKind: String, Hashable, CaseIterable, Sendable {
     case script
     case foundry
     case license
+    case weight
+    case width
+    case feature
+    case state
+    case multipleVariants
 
     var title: String {
         switch self {
@@ -193,6 +203,11 @@ enum FacetKind: String, Hashable, CaseIterable, Sendable {
         case .script: "文字系统"
         case .foundry: "厂牌"
         case .license: "许可"
+        case .weight: "字重"
+        case .width: "字宽"
+        case .feature: "字体特征"
+        case .state: "状态"
+        case .multipleVariants: "字族"
         }
     }
 }
@@ -211,6 +226,70 @@ struct CollectionSummary: Hashable, Identifiable, Sendable {
     let icon: CollectionIcon
     let color: CollectionColor
     let memberCount: UInt64
+}
+
+struct SmartFolderSummary: Hashable, Identifiable, Sendable {
+    let id: SmartFolderID
+    var name: String
+    let icon: CollectionIcon
+    let color: CollectionColor
+    let matchCount: UInt64
+}
+
+struct SmartFolderDetails: Sendable {
+    let summary: SmartFolderSummary
+    let text: String
+    let selectedFacets: Set<FacetOption>
+}
+
+enum FavoriteFolderEditorIntent: Identifiable, Sendable {
+    case create
+    case editCollection(CollectionSummary)
+    case editSmartFolder(SmartFolderSummary)
+
+    var id: String {
+        switch self {
+        case .create: "create-favorite-folder"
+        case let .editCollection(folder): "edit-favorite-folder-\(folder.id.rawValue)"
+        case let .editSmartFolder(folder): "edit-smart-favorite-folder-\(folder.id.rawValue)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .create: "新建收藏夹"
+        case .editCollection, .editSmartFolder: "编辑收藏夹"
+        }
+    }
+
+    var isCreate: Bool {
+        if case .create = self { return true }
+        return false
+    }
+
+    var initialName: String {
+        switch self {
+        case .create: ""
+        case let .editCollection(folder): folder.name
+        case let .editSmartFolder(folder): folder.name
+        }
+    }
+
+    var initialIcon: CollectionIcon {
+        switch self {
+        case .create: .folder
+        case let .editCollection(folder): folder.icon
+        case let .editSmartFolder(folder): folder.icon
+        }
+    }
+
+    var initialColor: CollectionColor {
+        switch self {
+        case .create: .gray
+        case let .editCollection(folder): folder.color
+        case let .editSmartFolder(folder): folder.color
+        }
+    }
 }
 
 enum CollectionIcon: String, CaseIterable, Hashable, Identifiable, Sendable {
@@ -374,51 +453,6 @@ enum CollectionColor: String, CaseIterable, Hashable, Identifiable, Sendable {
     }
 }
 
-enum CollectionEditorIntent: Identifiable, Sendable {
-    case create
-    case edit(CollectionSummary)
-
-    var id: String {
-        switch self {
-        case .create: "create"
-        case let .edit(collection): "edit-\(collection.id.rawValue)"
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .create: "新建收藏夹"
-        case .edit: "编辑收藏夹"
-        }
-    }
-
-    var isCreate: Bool {
-        if case .create = self { return true }
-        return false
-    }
-
-    var initialName: String {
-        switch self {
-        case .create: ""
-        case let .edit(collection): collection.name
-        }
-    }
-
-    var initialIcon: CollectionIcon {
-        switch self {
-        case .create: .folder
-        case let .edit(collection): collection.icon
-        }
-    }
-
-    var initialColor: CollectionColor {
-        switch self {
-        case .create: .gray
-        case let .edit(collection): collection.color
-        }
-    }
-}
-
 struct RootSummary: Hashable, Identifiable, Sendable {
     let id: RootID
     let displayPath: String
@@ -447,6 +481,7 @@ struct LibrarySnapshot: Hashable, Sendable {
     let variableFamilyCount: UInt64
     let recentCount: UInt64
     let collections: [CollectionSummary]
+    let smartFolders: [SmartFolderSummary]
     let roots: [RootSummary]
     let health: HealthSummary
 
@@ -456,6 +491,7 @@ struct LibrarySnapshot: Hashable, Sendable {
         variableFamilyCount: 0,
         recentCount: 0,
         collections: [],
+        smartFolders: [],
         roots: [],
         health: .empty
     )
@@ -477,6 +513,7 @@ enum SidebarDestination: Hashable, Sendable {
     case cloudFonts
     case fontHealth
     case collection(CollectionID)
+    case smartFolder(SmartFolderID)
 }
 
 enum LibraryViewMode: String, CaseIterable, Identifiable, Sendable {

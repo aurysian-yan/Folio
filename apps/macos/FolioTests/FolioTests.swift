@@ -10,6 +10,7 @@ final class FolioTests: XCTestCase {
             variableFamilyCount: 1,
             recentCount: 2,
             collections: [],
+            smartFolders: [],
             roots: [],
             health: HealthSummary(
                 damagedFiles: 1,
@@ -28,6 +29,7 @@ final class FolioTests: XCTestCase {
             variableFamilyCount: 1,
             recentCount: 2,
             collections: [],
+            smartFolders: [],
             roots: [],
             health: HealthSummary(
                 damagedFiles: 0,
@@ -46,6 +48,7 @@ final class FolioTests: XCTestCase {
             variableFamilyCount: 1,
             recentCount: 2,
             collections: [],
+            smartFolders: [],
             roots: [],
             health: HealthSummary(
                 damagedFiles: 0,
@@ -131,5 +134,89 @@ final class FolioTests: XCTestCase {
         let status = await operations.status(for: copied)
         XCTAssertEqual(status.state, .active)
         try await operations.perform(.deactivate, path: copied)
+    }
+
+    func testSmartFolderRepositoryWorkflowTracksRefreshAndKeepsLocalScopesSeparate() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let fonts = directory.appendingPathComponent("fonts", isDirectory: true)
+        try FileManager.default.createDirectory(at: fonts, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let bundle = Bundle(for: Self.self)
+        let lato = try XCTUnwrap(bundle.url(forResource: "Lato-Regular", withExtension: "ttf"))
+        let latoCopy = fonts.appendingPathComponent("Lato-Regular.ttf")
+        try FileManager.default.copyItem(at: lato, to: latoCopy)
+
+        let repository = try FolioRepository(databaseURL: directory.appendingPathComponent("folio.sqlite"))
+        try await repository.addLibraryRoot(fonts)
+        let initialSnapshot = try await repository.refreshLibrary()
+        XCTAssertEqual(initialSnapshot.familyCount, 1)
+
+        let allFonts = try await repository.query(
+            text: "",
+            destination: .allFonts,
+            facets: [],
+            offset: 0,
+            limit: 20
+        )
+        let latoFamily = try XCTUnwrap(allFonts.families.first(where: { $0.displayName == "Lato" }))
+        try await repository.setFavorite(latoFamily, favorite: true)
+
+        let folderID = try await repository.createSmartFolder(
+            name: "Lato 字体",
+            text: "Lato",
+            facets: []
+        )
+        let facetOptions = try await repository.allFacetOptions()
+        XCTAssertTrue(facetOptions.contains(where: { $0.kind == .feature && $0.value == "variable" }))
+        XCTAssertTrue(facetOptions.contains(where: { $0.kind == .multipleVariants }))
+        let recentPage = try await repository.query(
+            text: "",
+            destination: .recent,
+            facets: [],
+            offset: 0,
+            limit: 20
+        )
+        XCTAssertEqual(recentPage.totalMatches, 0)
+        let smartPage = try await repository.query(
+            text: "",
+            destination: .smartFolder(folderID),
+            facets: [],
+            offset: 0,
+            limit: 20
+        )
+        XCTAssertEqual(smartPage.totalMatches, 1)
+        XCTAssertEqual(smartPage.families.first?.displayName, "Lato")
+
+        try FileManager.default.removeItem(at: latoCopy)
+        let removedSnapshot = try await repository.refreshLibrary()
+        XCTAssertEqual(removedSnapshot.smartFolders.first?.matchCount, 0)
+        try FileManager.default.copyItem(at: lato, to: latoCopy)
+        let restoredSnapshot = try await repository.refreshLibrary()
+        XCTAssertEqual(restoredSnapshot.smartFolders.first?.matchCount, 1)
+
+        try await repository.updateSmartFolder(
+            folderID,
+            name: "Lato 字体已编辑",
+            text: "Lato",
+            facets: []
+        )
+        let options = try await repository.allFacetOptions()
+        let details = try await repository.smartFolder(folderID, options: options)
+        XCTAssertEqual(details.summary.name, "Lato 字体已编辑")
+        XCTAssertEqual(details.text, "Lato")
+        XCTAssertEqual(details.summary.matchCount, 1)
+
+        try await repository.deleteSmartFolder(folderID)
+        let deletedSnapshot = try await repository.loadCachedLibrary()
+        XCTAssertTrue(deletedSnapshot.smartFolders.isEmpty)
+        let remainingFavorites = try await repository.query(
+            text: "",
+            destination: .favorites,
+            facets: [],
+            offset: 0,
+            limit: 20
+        )
+        XCTAssertEqual(remainingFavorites.totalMatches, 1)
     }
 }

@@ -58,6 +58,25 @@ struct SidebarView: View {
             }
 
             Section {
+                ForEach(model.snapshot.smartFolders) { folder in
+                    sidebarRow(
+                        folder.name,
+                        symbol: folder.icon.symbolName,
+                        count: folder.matchCount,
+                        destination: .smartFolder(folder.id),
+                        symbolColor: folder.color.color,
+                        trailingSymbol: "sparkles.2"
+                    )
+                    .tag(SidebarDestination.smartFolder(folder.id))
+                    .contextMenu {
+                        Button("编辑收藏夹…") {
+                            model.favoriteFolderEditor = .editSmartFolder(folder)
+                        }
+                        Button("删除收藏夹", role: .destructive) {
+                            model.deleteSmartFolder(folder)
+                        }
+                    }
+                }
                 ForEach(model.snapshot.collections) { collection in
                     sidebarRow(
                         collection.name,
@@ -66,23 +85,23 @@ struct SidebarView: View {
                         destination: .collection(collection.id),
                         symbolColor: collection.color.color
                     )
-                        .tag(SidebarDestination.collection(collection.id))
-                        .contextMenu {
-                            Button("编辑收藏夹…") {
-                                model.collectionEditor = .edit(collection)
-                            }
-                            Button("删除收藏夹", role: .destructive) {
-                                model.deleteCollection(collection)
-                            }
+                    .tag(SidebarDestination.collection(collection.id))
+                    .contextMenu {
+                        Button("编辑收藏夹…") {
+                            model.favoriteFolderEditor = .editCollection(collection)
                         }
+                        Button("删除收藏夹", role: .destructive) {
+                            model.deleteCollection(collection)
+                        }
+                    }
                 }
                 Button {
-                    model.collectionEditor = .create
+                    model.beginFavoriteFolderCreation()
                 } label: {
                     HStack(spacing: 8) {
                         Image.englishSystemName("plus")
                             .foregroundStyle(Color.secondary)
-                        Text("新收藏夹")
+                        Text("新建收藏夹")
                             .foregroundStyle(Color.secondary)
                     }
                 }
@@ -341,7 +360,8 @@ struct SidebarView: View {
         count: UInt64?,
         destination: SidebarDestination,
         speed: Double = 0.76,
-        symbolColor: Color? = nil
+        symbolColor: Color? = nil,
+        trailingSymbol: String? = nil
     ) -> some View {
         let isSelected = model.selectedDestination == destination
         return sidebarRowContent(
@@ -350,7 +370,8 @@ struct SidebarView: View {
             count: count,
             destination: destination,
             speed: speed,
-            symbolColor: symbolColor
+            symbolColor: symbolColor,
+            trailingSymbol: trailingSymbol
         )
         .listRowBackground(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -366,15 +387,23 @@ struct SidebarView: View {
         count: UInt64?,
         destination: SidebarDestination,
         speed: Double = 0.76,
-        symbolColor: Color? = nil
+        symbolColor: Color? = nil,
+        trailingSymbol: String? = nil
     ) -> some View {
         let isSelected = model.selectedDestination == destination
         let symbolScale = destination == .cloudFonts ? 1.25 : 1.0
         return HStack {
             Label {
-                Text(title)
-                    .lineLimit(1)
-                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                HStack(spacing: 4) {
+                    Text(title)
+                        .lineLimit(1)
+                    if let trailingSymbol {
+                        Image.englishSystemName(trailingSymbol)
+                            .font(.caption2)
+                            .accessibilityLabel("智慧收藏夹")
+                    }
+                }
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
             } icon: {
                 if let symbolColor {
                     SidebarSymbolIcon(
@@ -538,6 +567,15 @@ private enum SidebarPreviewModel {
             collections: [
                 CollectionSummary(id: CollectionID(rawValue: "sans"), name: "无衬线", icon: .type, color: .blue, memberCount: 24),
                 CollectionSummary(id: CollectionID(rawValue: "serif"), name: "衬线", icon: .books, color: .purple, memberCount: 18)
+            ],
+            smartFolders: [
+                SmartFolderSummary(
+                    id: SmartFolderID(rawValue: "variable"),
+                    name: "可变字体",
+                    icon: .type,
+                    color: .blue,
+                    matchCount: 96
+                )
             ],
             roots: [],
             health: HealthSummary(

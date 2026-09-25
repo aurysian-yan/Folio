@@ -448,7 +448,6 @@ fn duplicate_sources_multiple_revisions_and_conflicts_are_distinct() {
 fn width_feature_and_weight_multiselect_and_empty_index() {
     let mut c = catalog();
     let face = &mut c.families[0].faces[0];
-    face.metadata.is_variable = true;
     face.metadata.enrichment.monospace = true;
     face.metadata.style = FontStyle::Oblique { angle: Some(-12.0) };
     face.metadata.width = Some(FontWidth::CONDENSED);
@@ -456,7 +455,6 @@ fn width_feature_and_weight_multiselect_and_empty_index() {
     let id = face.id;
     let index = build(&c);
     for feature in [
-        FontFeature::Variable,
         FontFeature::Monospace,
         FontFeature::Oblique,
         FontFeature::OpenType("ss01".into()),
@@ -491,6 +489,136 @@ fn width_feature_and_weight_multiselect_and_empty_index() {
             .total_matches,
         0
     );
+}
+
+#[test]
+fn variable_feature_uses_declared_axes_and_multiple_variants_uses_distinct_identities() {
+    let mut c = catalog();
+    let inter_id = c
+        .families
+        .iter()
+        .find(|family| family.display_name.as_deref() == Some("Inter"))
+        .unwrap()
+        .id;
+    let inter = c
+        .families
+        .iter_mut()
+        .find(|family| family.id == inter_id)
+        .unwrap();
+    assert!(!inter.faces[0].metadata.variable_axes.is_empty());
+    inter.faces[0].metadata.is_variable = false;
+
+    let lato = c
+        .families
+        .iter_mut()
+        .find(|family| family.display_name.as_deref() == Some("Lato"))
+        .unwrap();
+    assert!(lato.faces.len() > 1);
+    lato.faces[0].metadata.is_variable = true;
+    lato.faces[0].metadata.variable_axes.clear();
+
+    let index = build(&c);
+    let variable = query(
+        &index,
+        FacetFilter {
+            features: vec![FontFeature::Variable],
+            ..Default::default()
+        },
+    );
+    assert_eq!(variable.total_matches, 1);
+    assert_eq!(variable.families[0].family_id, inter_id);
+
+    let multiple = query(
+        &index,
+        FacetFilter {
+            multiple_variants: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(multiple.total_matches, 1);
+    assert_eq!(multiple.families[0].display_name.as_deref(), Some("Lato"));
+    assert!(multiple.families[0].matched_identity_ids.len() > 1);
+}
+
+#[test]
+fn saved_query_round_trips_portable_facets_and_excludes_local_roots() {
+    let facets = FacetFilter {
+        categories: vec![FontCategory::SansSerif, FontCategory::Serif],
+        scripts: vec!["Latin".into(), "Han".into()],
+        licenses: vec![LicenseKind::SilOpenFontLicense, LicenseKind::Apache2],
+        foundries: vec![FoundryKey::new("Example Foundry")],
+        weights: vec![FontWeight::REGULAR, FontWeight::BOLD],
+        widths: vec![FontWidth::NORMAL, FontWidth::CONDENSED],
+        features: vec![FontFeature::Italic, FontFeature::OpenType("ss01".into())],
+        states: vec![FontState::Favorite, FontState::Recent],
+        multiple_variants: true,
+        ..Default::default()
+    };
+    let saved = SavedFontQuery::from_filter(Some("  Lato  ".into()), facets.clone()).unwrap();
+    let reversed = SavedFontQuery::from_filter(
+        Some("  Lato  ".into()),
+        FacetFilter {
+            categories: facets.categories.iter().rev().copied().collect(),
+            scripts: facets.scripts.iter().rev().cloned().collect(),
+            licenses: facets.licenses.iter().rev().copied().collect(),
+            foundries: facets.foundries.iter().rev().cloned().collect(),
+            weights: facets.weights.iter().rev().copied().collect(),
+            widths: facets.widths.iter().rev().copied().collect(),
+            features: facets.features.iter().rev().cloned().collect(),
+            states: facets.states.iter().rev().copied().collect(),
+            multiple_variants: facets.multiple_variants,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_string(&saved).unwrap(),
+        serde_json::to_string(&reversed).unwrap()
+    );
+    let json = serde_json::to_string(&saved).unwrap();
+    let decoded: SavedFontQuery = serde_json::from_str(&json).unwrap();
+    let query = decoded.into_query(3, Some(12)).unwrap();
+    assert_eq!(query.text.as_deref(), Some("  Lato  "));
+    assert_eq!(query.scope, QueryScope::All);
+    assert_eq!(query.offset, 3);
+    assert_eq!(query.limit, Some(12));
+    assert_eq!(query.facets.categories, facets.categories);
+    assert_eq!(query.facets.scripts, vec!["Han", "Latin"]);
+    assert_eq!(query.facets.licenses, facets.licenses);
+    assert_eq!(query.facets.foundries, facets.foundries);
+    assert_eq!(query.facets.weights, facets.weights);
+    assert_eq!(
+        query.facets.widths,
+        vec![FontWidth::CONDENSED, FontWidth::NORMAL]
+    );
+    assert_eq!(query.facets.features, facets.features);
+    assert_eq!(query.facets.states, facets.states);
+    assert!(query.facets.multiple_variants);
+
+    let local = FacetFilter {
+        roots: vec![LibraryRootKey([7; 16])],
+        ..Default::default()
+    };
+    assert!(matches!(
+        SavedFontQuery::from_filter(None, local),
+        Err(QueryError::NonPortableRootFilter)
+    ));
+    assert!(matches!(
+        SavedFontQuery {
+            widths: vec![0],
+            ..Default::default()
+        }
+        .into_query(0, None),
+        Err(QueryError::InvalidSavedWidth(0))
+    ));
+    assert!(matches!(
+        SavedFontQuery {
+            weights: vec![f32::NAN],
+            ..Default::default()
+        }
+        .into_query(0, None),
+        Err(QueryError::InvalidSavedWeight)
+    ));
 }
 #[test]
 fn build_rejects_inconsistent_catalog_ids() {

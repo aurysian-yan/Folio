@@ -14,7 +14,7 @@ use rusqlite::{Connection, Transaction};
 use crate::error::StorageError;
 
 /// 当前构建支持的最高 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 7;
+pub const CURRENT_SCHEMA_VERSION: i32 = 9;
 
 /// 将新打开的连接迁移到 [`CURRENT_SCHEMA_VERSION`]。
 pub fn migrate(conn: &mut Connection) -> Result<(), StorageError> {
@@ -59,6 +59,8 @@ fn apply_step(tx: &Transaction<'_>, target: i32) -> Result<(), rusqlite::Error> 
         5 => migrate_to_v5(tx),
         6 => migrate_to_v6(tx),
         7 => migrate_to_v7(tx),
+        8 => migrate_to_v8(tx),
+        9 => migrate_to_v9(tx),
         _ => Ok(()),
     }
 }
@@ -254,6 +256,30 @@ fn migrate_to_v7(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
             payload TEXT NOT NULL,
             resolved INTEGER NOT NULL DEFAULT 0 CHECK(resolved IN (0, 1))
         );
+        "#,
+    )
+}
+
+fn migrate_to_v8(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE smart_folders (
+            id BLOB PRIMARY KEY NOT NULL CHECK(length(id) = 16),
+            name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL UNIQUE,
+            query_json TEXT NOT NULL,
+            created_at_ns INTEGER NOT NULL CHECK(created_at_ns >= 0),
+            updated_at_ns INTEGER NOT NULL CHECK(updated_at_ns >= created_at_ns)
+        );
+        "#,
+    )
+}
+
+fn migrate_to_v9(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        r#"
+        ALTER TABLE smart_folders ADD COLUMN icon TEXT NOT NULL DEFAULT 'folder';
+        ALTER TABLE smart_folders ADD COLUMN color TEXT NOT NULL DEFAULT 'gray';
         "#,
     )
 }
