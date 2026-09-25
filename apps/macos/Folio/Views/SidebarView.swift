@@ -44,20 +44,6 @@ struct SidebarView: View {
             }
 
             Section {
-                Label {
-                    Text("在线字体")
-                } icon: {
-                    Image.englishSystemName("globe")
-                }
-                    .foregroundStyle(.tertiary)
-                    .help("在线字体将在后续版本提供")
-                sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
-                    .tag(SidebarDestination.fontHealth)
-            } header: {
-                sidebarSectionHeader("工具")
-            }
-
-            Section {
                 ForEach(model.snapshot.smartFolders) { folder in
                     sidebarRow(
                         folder.name,
@@ -109,50 +95,50 @@ struct SidebarView: View {
             } header: {
                 sidebarSectionHeader("收藏夹")
             }
+
+            Section {
+                cloudSidebarRowContent(isSelected: model.selectedDestination == .cloudFonts)
+                    .listRowBackground(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(model.selectedDestination == .cloudFonts ? themeColor : .clear)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                    )
+                    .tag(SidebarDestination.cloudFonts)
+                    .contextMenu {
+                        if cloud.isConnected {
+                            Button("重命名…") {
+                                cloudNameDraft = cloud.connectionName
+                                isRenamingCloud = true
+                            }
+                        }
+                    }
+            } header: {
+                sidebarSectionHeader("云端")
+            }
+            
+
+            Section {
+                Label {
+                    Text("在线字体")
+                } icon: {
+                    Image.englishSystemName("globe")
+                }
+                    .foregroundStyle(.tertiary)
+                    .help("在线字体将在后续版本提供")
+                sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
+                    .tag(SidebarDestination.fontHealth)
+            } header: {
+                sidebarSectionHeader("工具")
+            }
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            cloudFooter
+            cloudSyncStatus
         }
         .background(SidebarSelectionHighlightController())
         .environment(\.appearsActive, true)
         .navigationTitle("Folio")
-    }
-
-    private var cloudFooter: some View {
-        let isSelected = model.selectedDestination == .cloudFonts
-        return VStack(alignment: .leading, spacing: 8) {
-            sidebarSectionHeader("云端")
-                .padding(.horizontal, 16)
-            Button {
-                model.selectedDestination = .cloudFonts
-            } label: {
-                cloudSidebarRowContent(isSelected: isSelected)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .frame(minHeight: 28)
-                .contentShape(Rectangle())
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(isSelected ? themeColor : .clear)
-                )
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 10)
-            .contextMenu {
-                if cloud.isConnected {
-                    Button("重命名…") {
-                        cloudNameDraft = cloud.connectionName
-                        isRenamingCloud = true
-                    }
-                }
-            }
-
-            cloudSyncStatus
-        }
-        .padding(.top, 8)
-        .padding(.bottom, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: transientCloudStatusKey) { _, statusKey in
             if statusKey != dismissedCloudStatusKey {
                 dismissedCloudStatusKey = nil
@@ -273,7 +259,7 @@ struct SidebarView: View {
         onDismiss: (() -> Void)? = nil,
         @ViewBuilder detail: () -> Detail
     ) -> some View {
-        HStack(alignment: .center, spacing: 8) {
+        let card = HStack(alignment: .center, spacing: 8) {
             Group {
                 if let icon {
                     Image.englishSystemName(icon)
@@ -312,8 +298,21 @@ struct SidebarView: View {
         .padding(.trailing, 8)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-        .padding(.horizontal, 10)
+
+        return Group {
+            if #available(macOS 26.0, *) {
+                card.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                card
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private func cloudSidebarRowContent(isSelected: Bool) -> some View {
