@@ -291,8 +291,8 @@ full scans are intentional. No cache, concurrency, database or search index.
 Fontations remains `read-fonts 0.44.0` / `skrifa 0.47.0`. No existing dependency
 was upgraded for this audit. `unicode-normalization 0.1.25` supplies tested NFC
 rather than a partial custom normalizer; it adds `tinyvec` transitively. The
-workspace Rust declaration is 1.85 to match existing dependency requirements;
-the actual validation compiler is 1.94.1, not an MSRV execution test.
+阶段 1 的工作区 Rust 声明为 1.85；当前同步依赖要求工作区最低使用 1.91。
+验证使用 Rust 1.94.1，尚未用最低支持版本执行编译。
 
 The Phase 1 core uses no ttf-parser, Tokio, SQLite, HTTP client, Tauri or
 UniFFI. Phase 2A adds SQLite only through `folio-storage`. The JavaScript workspace is separate from the Rust workspace and now

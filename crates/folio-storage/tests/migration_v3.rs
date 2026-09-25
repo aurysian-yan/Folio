@@ -21,13 +21,21 @@ fn v2_directory_and_cache_survive_v3_migration() {
     let path = dir.path().join("folio.sqlite");
     let conn = Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP INDEX source_files_path; ALTER TABLE library_roots DROP COLUMN kind; PRAGMA user_version = 2;",
+        "DROP TABLE sync_conflicts; DROP TABLE sync_remote_cursors; DROP TABLE sync_assets; DROP TABLE sync_events; \
+         DROP TABLE sync_metadata; DROP TABLE collection_members; DROP TABLE collections; \
+         CREATE TABLE collections (id BLOB PRIMARY KEY NOT NULL CHECK(length(id) = 16), \
+           name TEXT NOT NULL, normalized_name TEXT NOT NULL UNIQUE, \
+           created_at_ns INTEGER NOT NULL, updated_at_ns INTEGER NOT NULL); \
+         CREATE TABLE collection_members (collection_id BLOB NOT NULL REFERENCES collections(id) ON DELETE CASCADE, \
+           identity_id BLOB NOT NULL, PRIMARY KEY(collection_id, identity_id)); \
+         DROP INDEX source_files_path; ALTER TABLE library_roots DROP COLUMN kind; \
+         PRAGMA user_version = 2;",
     )
     .unwrap();
     drop(conn);
 
     let mut reopened = open_db(dir.path());
-    assert_eq!(reopened.schema_version().unwrap(), 5);
+    assert_eq!(reopened.schema_version().unwrap(), 7);
     let roots = reopened.list_roots().unwrap();
     assert_eq!(roots.len(), 1);
     assert_eq!(roots[0].id, root.id);

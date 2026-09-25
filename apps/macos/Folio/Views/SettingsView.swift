@@ -1,6 +1,13 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var cloud = CloudSyncModel.shared
+    @State private var serverURL = ""
+    @State private var remoteDirectory = "Folio"
+    @State private var username = ""
+    @State private var password = ""
+    @State private var automaticSync = true
+    @State private var testingConnection = false
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
     @AppStorage(AppPreferences.sliderHaptics) private var sliderHaptics = true
@@ -15,6 +22,50 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("WebDAV 云同步") {
+                TextField("服务器地址", text: $serverURL, prompt: Text("https://"))
+                TextField("远端目录", text: $remoteDirectory)
+                TextField("账号", text: $username)
+                SecureField("密码或应用密码", text: $password)
+                Toggle("自动同步", isOn: $automaticSync)
+                HStack {
+                    Button("测试连接") {
+                        testingConnection = true
+                        Task {
+                            _ = await cloud.testConnection(
+                                serverURL: serverURL,
+                                directory: remoteDirectory,
+                                username: username,
+                                password: password
+                            )
+                            testingConnection = false
+                        }
+                    }
+                    .disabled(testingConnection || serverURL.isEmpty || username.isEmpty)
+                    Button("保存连接") {
+                        cloud.saveConnection(
+                            serverURL: serverURL,
+                            directory: remoteDirectory,
+                            username: username,
+                            password: password,
+                            automatic: automaticSync
+                        )
+                        password = ""
+                    }
+                    .disabled(serverURL.isEmpty || username.isEmpty)
+                    if cloud.isConnected {
+                        Button(cloud.isRunning ? "取消同步" : "立即同步") {
+                            if cloud.isRunning { cloud.cancel() } else { cloud.syncNow() }
+                        }
+                        Button("断开连接", role: .destructive) { cloud.disconnect() }
+                    }
+                }
+                if let message = cloud.message {
+                    Text(message)
+                        .foregroundStyle(cloud.errorMessage == nil ? Color.secondary : Color.red)
+                }
+            }
+
             Section("字体导入") {
                 Toggle("每次询问导入方式", isOn: $askImportMode)
                 Picker("默认导入方式", selection: $defaultImportMode) {
@@ -77,6 +128,15 @@ struct SettingsView: View {
         .tint((DefaultThemeColor(rawValue: defaultThemeColor) ?? .folio).color)
         .accentColor((DefaultThemeColor(rawValue: defaultThemeColor) ?? .folio).color)
         .frame(width: 480, height: 480)
+        .onAppear {
+            cloud.start()
+            if let profile = cloud.profile {
+                serverURL = profile.serverUrl
+                remoteDirectory = profile.remoteDirectory
+                username = profile.username
+                automaticSync = profile.automatic
+            }
+        }
     }
 }
 

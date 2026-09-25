@@ -1,22 +1,21 @@
 [package]
-name = "folio-ffi"
+name = "folio-sync"
+description = "Shared WebDAV font and library-state synchronization for Folio."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-[lib]
-crate-type = ["lib", "staticlib", "cdylib"]
-
 [dependencies]
+blake3.workspace = true
 folio-core = { path = "../folio-core" }
-folio-query = { path = "../folio-query" }
 folio-storage = { path = "../folio-storage" }
-folio-sync = { path = "../folio-sync" }
+quick-xml.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
-uniffi = { workspace = true, features = ["cli"] }
 tokio.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
-tempfile = "3"
+tempfile = "3.27.0"

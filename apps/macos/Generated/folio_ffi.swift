@@ -898,6 +898,367 @@ public func FfiConverterTypeFolioEngine_lower(_ value: FolioEngine) -> UInt64 {
 
 
 
+
+
+public protocol FolioSyncProtocol: AnyObject, Sendable {
+
+    func cancel()
+
+    func cloudFonts() throws  -> [CloudFontDto]
+
+    func conflicts() throws  -> [SyncConflictDto]
+
+    func deleteEverywhere(fingerprint: String) throws
+
+    func disconnect() throws
+
+    func markCloudOnlyForPath(path: String) throws  -> Bool
+
+    func profile() throws  -> SyncProfileDto?
+
+    func resolveConflict(id: String, resolution: SyncResolutionDto) throws
+
+    func restoreCloudFont(fingerprint: String) throws
+
+    func restoreDeletedFont(fingerprint: String) throws
+
+    func saveProfile(profile: SyncProfileDto) throws
+
+    func setCloudOnly(fingerprint: String) throws
+
+    func startSync(password: String) throws  -> Bool
+
+    func status() throws  -> SyncStatusDto
+
+    func testConnection(profile: SyncProfileDto, password: String) throws
+
+}
+open class FolioSync: FolioSyncProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_folio_ffi_fn_clone_foliosync(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_folio_ffi_fn_free_foliosync(handle, $0) }
+    }
+
+
+public static func `open`(databasePath: String, managedDirectory: String)throws  -> FolioSync  {
+    return try  FfiConverterTypeFolioSync_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_constructor_foliosync_open(
+        FfiConverterString.lower(databasePath),
+        FfiConverterString.lower(managedDirectory),uniffiCallStatus
+    )
+})
+}
+
+
+
+open func cancel()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_cancel(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+open func cloudFonts()throws  -> [CloudFontDto]  {
+    return try  FfiConverterSequenceTypeCloudFontDto.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_cloud_fonts(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func conflicts()throws  -> [SyncConflictDto]  {
+    return try  FfiConverterSequenceTypeSyncConflictDto.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_conflicts(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func deleteEverywhere(fingerprint: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_delete_everywhere(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(fingerprint),uniffiCallStatus
+    )
+}
+}
+
+open func disconnect()throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_disconnect(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+open func markCloudOnlyForPath(path: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_mark_cloud_only_for_path(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(path),uniffiCallStatus
+    )
+})
+}
+
+open func profile()throws  -> SyncProfileDto?  {
+    return try  FfiConverterOptionTypeSyncProfileDto.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_profile(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func resolveConflict(id: String, resolution: SyncResolutionDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_resolve_conflict(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),
+        FfiConverterTypeSyncResolutionDto_lower(resolution),uniffiCallStatus
+    )
+}
+}
+
+open func restoreCloudFont(fingerprint: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_restore_cloud_font(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(fingerprint),uniffiCallStatus
+    )
+}
+}
+
+open func restoreDeletedFont(fingerprint: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_restore_deleted_font(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(fingerprint),uniffiCallStatus
+    )
+}
+}
+
+open func saveProfile(profile: SyncProfileDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_save_profile(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSyncProfileDto_lower(profile),uniffiCallStatus
+    )
+}
+}
+
+open func setCloudOnly(fingerprint: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_set_cloud_only(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(fingerprint),uniffiCallStatus
+    )
+}
+}
+
+open func startSync(password: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_start_sync(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(password),uniffiCallStatus
+    )
+})
+}
+
+open func status()throws  -> SyncStatusDto  {
+    return try  FfiConverterTypeSyncStatusDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_status(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func testConnection(profile: SyncProfileDto, password: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_test_connection(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSyncProfileDto_lower(profile),
+        FfiConverterString.lower(password),uniffiCallStatus
+    )
+}
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFolioSync: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FolioSync
+
+    public static func lift(_ handle: UInt64) throws -> FolioSync {
+        return FolioSync(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: FolioSync) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FolioSync {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: FolioSync, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolioSync_lift(_ handle: UInt64) throws -> FolioSync {
+    return try FfiConverterTypeFolioSync.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolioSync_lower(_ value: FolioSync) -> UInt64 {
+    return FfiConverterTypeFolioSync.lower(value)
+}
+
+
+
+
+public struct CloudFontDto: Equatable, Hashable {
+    public var fingerprint: String
+    public var displayName: String
+    public var filename: String
+    public var fileSize: UInt64
+    public var cloudOnly: Bool
+    public var deleted: Bool
+    public var localPath: String?
+    public var identityIds: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(fingerprint: String, displayName: String, filename: String, fileSize: UInt64, cloudOnly: Bool, deleted: Bool, localPath: String?, identityIds: [String]) {
+        self.fingerprint = fingerprint
+        self.displayName = displayName
+        self.filename = filename
+        self.fileSize = fileSize
+        self.cloudOnly = cloudOnly
+        self.deleted = deleted
+        self.localPath = localPath
+        self.identityIds = identityIds
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudFontDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudFontDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudFontDto {
+        return
+            try CloudFontDto(
+                fingerprint: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                filename: FfiConverterString.read(from: &buf),
+                fileSize: FfiConverterUInt64.read(from: &buf),
+                cloudOnly: FfiConverterBool.read(from: &buf),
+                deleted: FfiConverterBool.read(from: &buf),
+                localPath: FfiConverterOptionString.read(from: &buf),
+                identityIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CloudFontDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.fingerprint, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.filename, into: &buf)
+        FfiConverterUInt64.write(value.fileSize, into: &buf)
+        FfiConverterBool.write(value.cloudOnly, into: &buf)
+        FfiConverterBool.write(value.deleted, into: &buf)
+        FfiConverterOptionString.write(value.localPath, into: &buf)
+        FfiConverterSequenceString.write(value.identityIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudFontDto_lift(_ buf: RustBuffer) throws -> CloudFontDto {
+    return try FfiConverterTypeCloudFontDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudFontDto_lower(_ value: CloudFontDto) -> RustBuffer {
+    return FfiConverterTypeCloudFontDto.lower(value)
+}
+
+
 public struct CollectionDto: Equatable, Hashable {
     public var id: CollectionIdDto
     public var name: String
@@ -1741,14 +2102,16 @@ public struct LibraryPageDto: Equatable, Hashable {
     public var families: [FamilyCardDto]
     public var facets: [FacetCountDto]
     public var unresolvedScopeItems: UInt64
+    public var cloudOnlyFonts: [CloudFontDto]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(totalMatches: UInt64, families: [FamilyCardDto], facets: [FacetCountDto], unresolvedScopeItems: UInt64) {
+    public init(totalMatches: UInt64, families: [FamilyCardDto], facets: [FacetCountDto], unresolvedScopeItems: UInt64, cloudOnlyFonts: [CloudFontDto]) {
         self.totalMatches = totalMatches
         self.families = families
         self.facets = facets
         self.unresolvedScopeItems = unresolvedScopeItems
+        self.cloudOnlyFonts = cloudOnlyFonts
     }
 
 
@@ -1770,7 +2133,8 @@ public struct FfiConverterTypeLibraryPageDto: FfiConverterRustBuffer {
                 totalMatches: FfiConverterUInt64.read(from: &buf),
                 families: FfiConverterSequenceTypeFamilyCardDto.read(from: &buf),
                 facets: FfiConverterSequenceTypeFacetCountDto.read(from: &buf),
-                unresolvedScopeItems: FfiConverterUInt64.read(from: &buf)
+                unresolvedScopeItems: FfiConverterUInt64.read(from: &buf),
+                cloudOnlyFonts: FfiConverterSequenceTypeCloudFontDto.read(from: &buf)
         )
     }
 
@@ -1779,6 +2143,7 @@ public struct FfiConverterTypeLibraryPageDto: FfiConverterRustBuffer {
         FfiConverterSequenceTypeFamilyCardDto.write(value.families, into: &buf)
         FfiConverterSequenceTypeFacetCountDto.write(value.facets, into: &buf)
         FfiConverterUInt64.write(value.unresolvedScopeItems, into: &buf)
+        FfiConverterSequenceTypeCloudFontDto.write(value.cloudOnlyFonts, into: &buf)
     }
 }
 
@@ -2140,6 +2505,224 @@ public func FfiConverterTypeRootIdDto_lower(_ value: RootIdDto) -> RustBuffer {
 }
 
 
+public struct SyncConflictDto: Equatable, Hashable {
+    public var id: String
+    public var kind: String
+    public var title: String
+    public var detail: String
+    public var localFingerprint: String?
+    public var remoteFingerprint: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, kind: String, title: String, detail: String, localFingerprint: String?, remoteFingerprint: String?) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.detail = detail
+        self.localFingerprint = localFingerprint
+        self.remoteFingerprint = remoteFingerprint
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SyncConflictDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncConflictDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncConflictDto {
+        return
+            try SyncConflictDto(
+                id: FfiConverterString.read(from: &buf),
+                kind: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                detail: FfiConverterString.read(from: &buf),
+                localFingerprint: FfiConverterOptionString.read(from: &buf),
+                remoteFingerprint: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncConflictDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.detail, into: &buf)
+        FfiConverterOptionString.write(value.localFingerprint, into: &buf)
+        FfiConverterOptionString.write(value.remoteFingerprint, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncConflictDto_lift(_ buf: RustBuffer) throws -> SyncConflictDto {
+    return try FfiConverterTypeSyncConflictDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncConflictDto_lower(_ value: SyncConflictDto) -> RustBuffer {
+    return FfiConverterTypeSyncConflictDto.lower(value)
+}
+
+
+public struct SyncProfileDto: Equatable, Hashable {
+    public var serverUrl: String
+    public var remoteDirectory: String
+    public var username: String
+    public var automatic: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(serverUrl: String, remoteDirectory: String, username: String, automatic: Bool) {
+        self.serverUrl = serverUrl
+        self.remoteDirectory = remoteDirectory
+        self.username = username
+        self.automatic = automatic
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SyncProfileDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncProfileDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncProfileDto {
+        return
+            try SyncProfileDto(
+                serverUrl: FfiConverterString.read(from: &buf),
+                remoteDirectory: FfiConverterString.read(from: &buf),
+                username: FfiConverterString.read(from: &buf),
+                automatic: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncProfileDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.serverUrl, into: &buf)
+        FfiConverterString.write(value.remoteDirectory, into: &buf)
+        FfiConverterString.write(value.username, into: &buf)
+        FfiConverterBool.write(value.automatic, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncProfileDto_lift(_ buf: RustBuffer) throws -> SyncProfileDto {
+    return try FfiConverterTypeSyncProfileDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncProfileDto_lower(_ value: SyncProfileDto) -> RustBuffer {
+    return FfiConverterTypeSyncProfileDto.lower(value)
+}
+
+
+public struct SyncStatusDto: Equatable, Hashable {
+    public var phase: String
+    public var isRunning: Bool
+    public var uploadedFiles: UInt64
+    public var downloadedFiles: UInt64
+    public var uploadedBytes: UInt64
+    public var downloadedBytes: UInt64
+    public var receivedChanges: UInt64
+    public var completionGeneration: UInt64
+    public var lastSyncedAtMs: UInt64?
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(phase: String, isRunning: Bool, uploadedFiles: UInt64, downloadedFiles: UInt64, uploadedBytes: UInt64, downloadedBytes: UInt64, receivedChanges: UInt64, completionGeneration: UInt64, lastSyncedAtMs: UInt64?, errorMessage: String?) {
+        self.phase = phase
+        self.isRunning = isRunning
+        self.uploadedFiles = uploadedFiles
+        self.downloadedFiles = downloadedFiles
+        self.uploadedBytes = uploadedBytes
+        self.downloadedBytes = downloadedBytes
+        self.receivedChanges = receivedChanges
+        self.completionGeneration = completionGeneration
+        self.lastSyncedAtMs = lastSyncedAtMs
+        self.errorMessage = errorMessage
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SyncStatusDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncStatusDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncStatusDto {
+        return
+            try SyncStatusDto(
+                phase: FfiConverterString.read(from: &buf),
+                isRunning: FfiConverterBool.read(from: &buf),
+                uploadedFiles: FfiConverterUInt64.read(from: &buf),
+                downloadedFiles: FfiConverterUInt64.read(from: &buf),
+                uploadedBytes: FfiConverterUInt64.read(from: &buf),
+                downloadedBytes: FfiConverterUInt64.read(from: &buf),
+                receivedChanges: FfiConverterUInt64.read(from: &buf),
+                completionGeneration: FfiConverterUInt64.read(from: &buf),
+                lastSyncedAtMs: FfiConverterOptionUInt64.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncStatusDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.phase, into: &buf)
+        FfiConverterBool.write(value.isRunning, into: &buf)
+        FfiConverterUInt64.write(value.uploadedFiles, into: &buf)
+        FfiConverterUInt64.write(value.downloadedFiles, into: &buf)
+        FfiConverterUInt64.write(value.uploadedBytes, into: &buf)
+        FfiConverterUInt64.write(value.downloadedBytes, into: &buf)
+        FfiConverterUInt64.write(value.receivedChanges, into: &buf)
+        FfiConverterUInt64.write(value.completionGeneration, into: &buf)
+        FfiConverterOptionUInt64.write(value.lastSyncedAtMs, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncStatusDto_lift(_ buf: RustBuffer) throws -> SyncStatusDto {
+    return try FfiConverterTypeSyncStatusDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncStatusDto_lower(_ value: SyncStatusDto) -> RustBuffer {
+    return FfiConverterTypeSyncStatusDto.lower(value)
+}
+
+
 public struct VariableAxisDto: Equatable, Hashable {
     public var tag: String
     public var name: String
@@ -2444,6 +3027,103 @@ public func FfiConverterTypeQueryScopeDto_lower(_ value: QueryScopeDto) -> RustB
 }
 
 
+
+
+public enum SyncResolutionDto: Equatable, Hashable {
+
+    case keepBoth
+    case useLocal
+    case useRemote
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SyncResolutionDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncResolutionDto: FfiConverterRustBuffer {
+    typealias SwiftType = SyncResolutionDto
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncResolutionDto {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .keepBoth
+
+        case 2: return .useLocal
+
+        case 3: return .useRemote
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SyncResolutionDto, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .keepBoth:
+            writeInt(&buf, Int32(1))
+
+
+        case .useLocal:
+            writeInt(&buf, Int32(2))
+
+
+        case .useRemote:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncResolutionDto_lift(_ buf: RustBuffer) throws -> SyncResolutionDto {
+    return try FfiConverterTypeSyncResolutionDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncResolutionDto_lower(_ value: SyncResolutionDto) -> RustBuffer {
+    return FfiConverterTypeSyncResolutionDto.lower(value)
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = UInt64?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt64.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2519,6 +3199,30 @@ fileprivate struct FfiConverterOptionTypeCollectionIdDto: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSyncProfileDto: FfiConverterRustBuffer {
+    typealias SwiftType = SyncProfileDto?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSyncProfileDto.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSyncProfileDto.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]?
 
@@ -2584,6 +3288,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCloudFontDto: FfiConverterRustBuffer {
+    typealias SwiftType = [CloudFontDto]
+
+    public static func write(_ value: [CloudFontDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCloudFontDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CloudFontDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CloudFontDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCloudFontDto.read(from: &buf))
         }
         return seq
     }
@@ -2867,6 +3596,31 @@ fileprivate struct FfiConverterSequenceTypeRootIdDto: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSyncConflictDto: FfiConverterRustBuffer {
+    typealias SwiftType = [SyncConflictDto]
+
+    public static func write(_ value: [SyncConflictDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSyncConflictDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SyncConflictDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SyncConflictDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSyncConflictDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeVariableAxisDto: FfiConverterRustBuffer {
     typealias SwiftType = [VariableAxisDto]
 
@@ -2955,7 +3709,55 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_validate_font_file() != 7645) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_foliosync_cancel() != 59610) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_cloud_fonts() != 62061) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_conflicts() != 19098) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_delete_everywhere() != 49334) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_disconnect() != 2628) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_mark_cloud_only_for_path() != 59230) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_profile() != 22800) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_resolve_conflict() != 30207) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_restore_cloud_font() != 46134) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_restore_deleted_font() != 40435) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_save_profile() != 29051) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_set_cloud_only() != 50712) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_start_sync() != 39377) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_status() != 39761) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_test_connection() != 43960) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_constructor_folioengine_open() != 62270) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_constructor_foliosync_open() != 48468) {
         return InitializationResult.apiChecksumMismatch
     }
 

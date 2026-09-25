@@ -64,7 +64,7 @@ activation/installation, WebDAV/sync, UniFFI/FFI, UI apps, WOFF parsing.
 
 ## Build
 
-Rust 1.85 or newer is required by the dependency set; audited with Rust 1.94.1.
+Rust 1.91 or newer is required by the dependency set; audited with Rust 1.94.1.
 
 ```sh
 cargo build --workspace

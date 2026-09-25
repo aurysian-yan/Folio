@@ -14,7 +14,7 @@ use rusqlite::{Connection, Transaction};
 use crate::error::StorageError;
 
 /// 当前构建支持的最高 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 5;
+pub const CURRENT_SCHEMA_VERSION: i32 = 7;
 
 /// 将新打开的连接迁移到 [`CURRENT_SCHEMA_VERSION`]。
 pub fn migrate(conn: &mut Connection) -> Result<(), StorageError> {
@@ -57,6 +57,8 @@ fn apply_step(tx: &Transaction<'_>, target: i32) -> Result<(), rusqlite::Error> 
         3 => migrate_to_v3(tx),
         4 => migrate_to_v4(tx),
         5 => migrate_to_v5(tx),
+        6 => migrate_to_v6(tx),
+        7 => migrate_to_v7(tx),
         _ => Ok(()),
     }
 }
@@ -176,6 +178,82 @@ fn migrate_to_v5(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
         DROP TABLE collections;
         ALTER TABLE collections_new RENAME TO collections;
         ALTER TABLE collection_members_new RENAME TO collection_members;
+        "#,
+    )
+}
+
+fn migrate_to_v6(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE sync_metadata (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE sync_events (
+            id TEXT PRIMARY KEY NOT NULL,
+            device_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            payload TEXT NOT NULL,
+            published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0, 1)),
+            UNIQUE(device_id, sequence)
+        );
+        CREATE TABLE sync_assets (
+            fingerprint TEXT PRIMARY KEY NOT NULL,
+            filename TEXT NOT NULL,
+            extension TEXT NOT NULL,
+            local_path TEXT,
+            remote_payload TEXT NOT NULL,
+            cloud_only INTEGER NOT NULL DEFAULT 0 CHECK(cloud_only IN (0, 1)),
+            deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0, 1))
+        );
+        CREATE TABLE sync_remote_cursors (
+            device_id TEXT PRIMARY KEY NOT NULL,
+            last_sequence INTEGER NOT NULL DEFAULT 0 CHECK(last_sequence >= 0)
+        );
+        CREATE TABLE sync_conflicts (
+            id TEXT PRIMARY KEY NOT NULL,
+            kind TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            resolved INTEGER NOT NULL DEFAULT 0 CHECK(resolved IN (0, 1))
+        );
+        "#,
+    )
+}
+
+fn migrate_to_v7(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS sync_metadata (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sync_events (
+            id TEXT PRIMARY KEY NOT NULL,
+            device_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            payload TEXT NOT NULL,
+            published INTEGER NOT NULL DEFAULT 0 CHECK(published IN (0, 1)),
+            UNIQUE(device_id, sequence)
+        );
+        CREATE TABLE IF NOT EXISTS sync_assets (
+            fingerprint TEXT PRIMARY KEY NOT NULL,
+            filename TEXT NOT NULL,
+            extension TEXT NOT NULL,
+            local_path TEXT,
+            remote_payload TEXT NOT NULL,
+            cloud_only INTEGER NOT NULL DEFAULT 0 CHECK(cloud_only IN (0, 1)),
+            deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0, 1))
+        );
+        CREATE TABLE IF NOT EXISTS sync_remote_cursors (
+            device_id TEXT PRIMARY KEY NOT NULL,
+            last_sequence INTEGER NOT NULL DEFAULT 0 CHECK(last_sequence >= 0)
+        );
+        CREATE TABLE IF NOT EXISTS sync_conflicts (
+            id TEXT PRIMARY KEY NOT NULL,
+            kind TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            resolved INTEGER NOT NULL DEFAULT 0 CHECK(resolved IN (0, 1))
+        );
         "#,
     )
 }

@@ -465,6 +465,7 @@ struct LibraryPage: Sendable {
     let totalMatches: UInt64
     let families: [FamilyCard]
     let facets: [FacetOption]
+    let cloudOnlyFonts: [CloudFontDto]
 }
 
 enum SidebarDestination: Hashable, Sendable {
@@ -473,6 +474,7 @@ enum SidebarDestination: Hashable, Sendable {
     case recent
     case favorites
     case onlineFonts
+    case cloudFonts
     case fontHealth
     case collection(CollectionID)
 }

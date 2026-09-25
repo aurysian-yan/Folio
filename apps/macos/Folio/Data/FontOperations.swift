@@ -255,6 +255,19 @@ actor FontOperations {
         try save()
     }
 
+    func prepareSyncedRemoval(_ path: String) async throws {
+        guard URL(fileURLWithPath: path).standardizedFileURL.deletingLastPathComponent()
+                == managedDirectory.standardizedFileURL else {
+            throw operationError("只能移除 Folio 管理的字体副本")
+        }
+        if ledger.installed.contains(where: { $0.sourcePath == path }) {
+            try await uninstall(path)
+        }
+        if ledger.activated.contains(path) {
+            try await deactivate(path)
+        }
+    }
+
     private func copyFont(_ source: URL, to directory: URL) throws -> URL {
         let digest = try fingerprint(source)
         let destination = directory.appendingPathComponent("\(digest).\(source.pathExtension.lowercased())")

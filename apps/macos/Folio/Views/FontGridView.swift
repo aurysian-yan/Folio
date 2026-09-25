@@ -5,7 +5,8 @@ struct FontGridView: View {
     @Bindable var model: LibraryViewModel
 
     private var presentation: FontCardPresentation {
-        switch model.viewMode {
+        if model.isSelectingInstalledForCloud, model.viewMode == .stack { return .strip }
+        return switch model.viewMode {
         case .compactGrid: .compact
         case .largeGrid: .large
         case .list: .strip

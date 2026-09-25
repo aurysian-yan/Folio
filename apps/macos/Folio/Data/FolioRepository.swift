@@ -134,7 +134,8 @@ actor FolioRepository {
         return LibraryPage(
             totalMatches: page.totalMatches,
             families: page.families.map(map),
-            facets: page.facets.compactMap(map)
+            facets: page.facets.compactMap(map),
+            cloudOnlyFonts: page.cloudOnlyFonts
         )
     }
 

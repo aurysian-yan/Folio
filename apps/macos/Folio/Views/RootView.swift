@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
     @State private var model = LibraryViewModel()
+    @State private var cloud = CloudSyncModel.shared
+    @Environment(\.scenePhase) private var scenePhase
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage(AppPreferences.libraryViewMode) private var preferredViewMode =
         LibraryViewMode.compactGrid.rawValue
@@ -23,7 +25,11 @@ struct RootView: View {
             SidebarView(model: model)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 240, max: 300)
         } detail: {
-            LibraryView(model: model)
+            if model.selectedDestination == .cloudFonts {
+                CloudLibraryView(model: model)
+            } else {
+                LibraryView(model: model)
+            }
         }
         .inspector(isPresented: $model.inspectorPresented) {
             FontInspectorView(model: model)
@@ -40,7 +46,16 @@ struct RootView: View {
             }
         }
         .background(WindowLayoutPersistenceController())
-        .task { model.start() }
+        .task {
+            cloud.start()
+            model.start()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { cloud.requestAutomaticSync() }
+        }
+        .onChange(of: cloud.libraryGeneration) { _, _ in
+            model.reloadAfterSync()
+        }
         .onOpenURL { model.receiveOpenURL($0) }
         .onChange(of: preferredViewMode) { _, rawValue in
             model.applyPreferredViewMode(rawValue)
@@ -81,10 +96,10 @@ private struct ImportReportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("导入结果")
+            Text(model.isCloudImportReport ? "添加至云端" : "导入结果")
                 .font(.headline)
             List {
-                Section("导入") {
+                Section(model.isCloudImportReport ? "字体" : "导入") {
                     ForEach(model.importOutcomes.indices, id: \.self) { index in
                         outcomeRow(model.importOutcomes[index])
                     }
@@ -102,7 +117,7 @@ private struct ImportReportView: View {
                     || model.batchOutcomes.contains(where: { $0.error != nil }) {
                     Button("重试失败项") { model.retryFailedOutcomes() }
                 }
-                if model.importOutcomes.contains(where: { $0.error == nil }) {
+                if !model.isCloudImportReport, model.importOutcomes.contains(where: { $0.error == nil }) {
                     Button("激活成功导入的字体") {
                         model.performImportedBatch(.activate)
                     }

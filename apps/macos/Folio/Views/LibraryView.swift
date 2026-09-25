@@ -7,22 +7,39 @@ enum LibraryLayout {
 
 struct LibraryView: View {
     @Bindable var model: LibraryViewModel
+    @State private var cloud = CloudSyncModel.shared
 
     var body: some View {
         Group {
-            if model.snapshot.roots.isEmpty, !model.isLoading {
+            if model.snapshot.roots.isEmpty, model.cloudOnlyFonts.isEmpty, !model.isLoading {
                 emptyLibrary
             } else {
                 gridContent
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            PreviewBar(model: model)
+            if model.isSelectingInstalledForCloud {
+                installedCloudSelectionBar
+            } else {
+                PreviewBar(model: model)
+            }
         }
         .navigationTitle("Folio")
         .navigationSubtitle("\(model.totalMatches) 个字族")
         .searchable(text: $model.searchText, placement: .toolbar, prompt: "搜索")
         .toolbar {
+            if model.selectedDestination == .fontState(.installed) {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(model.isSelectingInstalledForCloud ? "取消选择" : "多选") {
+                        if model.isSelectingInstalledForCloud {
+                            model.endInstalledCloudSelection()
+                        } else {
+                            model.beginInstalledCloudSelection()
+                        }
+                    }
+                    .disabled(model.isAddingInstalledToCloud)
+                }
+            }
             ToolbarItem(placement: .navigation) {
                 Picker("浏览方式", selection: $model.viewMode) {
                     ForEach(LibraryViewMode.allCases) { mode in
@@ -95,15 +112,55 @@ struct LibraryView: View {
         }
     }
 
+    private var installedCloudSelectionBar: some View {
+        HStack {
+            Text("已选择 \(model.selectedInstalledFamilyIDs.count) 个字族")
+            Spacer()
+            if model.isAddingInstalledToCloud {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            Button("取消") { model.endInstalledCloudSelection() }
+                .disabled(model.isAddingInstalledToCloud)
+            Button("添加至云端") { model.addSelectedInstalledFontsToCloud() }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    model.selectedInstalledFamilyIDs.isEmpty
+                        || !cloud.isConnected
+                        || model.isAddingInstalledToCloud
+                )
+                .help(cloud.isConnected ? "将所选字体加入云端同步" : "请先连接云端")
+        }
+        .padding()
+        .background(.bar)
+    }
+
     private var gridContent: some View {
         ScrollView {
             VStack(spacing: 0) {
                 libraryHeader
-                if model.families.isEmpty, !model.isLoading {
+                if model.families.isEmpty, model.cloudOnlyFonts.isEmpty, !model.isLoading {
                     noResults
                         .frame(minHeight: 260)
                 } else {
                     FontGridView(model: model)
+                }
+                if !model.cloudOnlyFonts.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("仅在云端")
+                            .font(.headline)
+                        ForEach(model.cloudOnlyFonts, id: \.fingerprint) { font in
+                            HStack {
+                                Image.englishSystemName("icloud")
+                                Text(font.displayName)
+                                Spacer()
+                                Button("下载") { CloudSyncModel.shared.restore(font) }
+                            }
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: LibraryLayout.titleMaxWidth)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }

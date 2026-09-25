@@ -3,20 +3,26 @@ import SwiftUI
 
 struct SidebarView: View {
     @Bindable var model: LibraryViewModel
+    @State private var cloud = CloudSyncModel.shared
+    @State private var dismissedSyncError: String?
+    @State private var isRenamingCloud = false
+    @State private var cloudNameDraft = ""
     @Environment(\.folioThemeColor) private var themeColor
 
     var body: some View {
         List(selection: $model.selectedDestination) {
-            Section("本地") {
+            Section {
                 sidebarRow("全部字体", symbol: "textformat.alt", count: model.snapshot.familyCount, destination: .allFonts)
                     .tag(SidebarDestination.allFonts)
                 sidebarRow("最近", symbol: "clock", count: model.snapshot.recentCount, destination: .recent)
                     .tag(SidebarDestination.recent)
                 sidebarRow("收藏", symbol: "star", count: nil, destination: .favorites)
                     .tag(SidebarDestination.favorites)
+            } header: {
+                sidebarSectionHeader("本地")
             }
 
-            Section("字体状态") {
+            Section {
                 sidebarRow("已挂载", symbol: "checkmark.diamond", count: model.fontStateCounts[.active] ?? 0, destination: .fontState(.active))
                     .tag(SidebarDestination.fontState(.active))
                     .help("当前登录会话已激活")
@@ -33,9 +39,11 @@ struct SidebarView: View {
                     .tag(SidebarDestination.fontState(.system))
                 sidebarRow("文件不可用", symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0, destination: .fontState(.unavailable))
                     .tag(SidebarDestination.fontState(.unavailable))
+            } header: {
+                sidebarSectionHeader("字体状态")
             }
 
-            Section("工具") {
+            Section {
                 Label {
                     Text("在线字体")
                 } icon: {
@@ -45,6 +53,8 @@ struct SidebarView: View {
                     .help("在线字体将在后续版本提供")
                 sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
                     .tag(SidebarDestination.fontHealth)
+            } header: {
+                sidebarSectionHeader("工具")
             }
 
             Section {
@@ -78,18 +88,136 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
             } header: {
-                Text("收藏夹")
+                sidebarSectionHeader("收藏夹")
             }
         }
         .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            cloudFooter
+        }
         .background(SidebarSelectionHighlightController())
         .environment(\.appearsActive, true)
         .navigationTitle("Folio")
     }
 
+    private var cloudFooter: some View {
+        let isSelected = model.selectedDestination == .cloudFonts
+        return VStack(alignment: .leading, spacing: 8) {
+            sidebarSectionHeader("云端")
+                .padding(.horizontal, 16)
+            Button {
+                model.selectedDestination = .cloudFonts
+            } label: {
+                sidebarRowContent(
+                    cloud.connectionName,
+                    symbol: "externaldrive.connected.to.line.below",
+                    count: cloud.isConnected ? UInt64(cloud.fonts.filter { !$0.deleted }.count) : nil,
+                    destination: .cloudFonts,
+                    showsDisclosure: true
+                )
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .contentShape(Rectangle())
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(isSelected ? themeColor : .clear)
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .contextMenu {
+                if cloud.isConnected {
+                    Button("重命名…") {
+                        cloudNameDraft = cloud.connectionName
+                        isRenamingCloud = true
+                    }
+                }
+            }
+
+            if cloud.isConnected {
+                if cloud.isRunning {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                        .tint(themeColor)
+                        .padding(.horizontal, 10)
+                }
+                HStack {
+                    Text("字体占用")
+                    Spacer()
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(clamping: cloud.fonts.filter { !$0.deleted }.reduce(0) { $0 + $1.fileSize }), countStyle: .file))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+            }
+
+            if cloud.isRunning {
+                Text("已上传 \(cloud.status?.uploadedFiles ?? 0) 个 · 已下载 \(cloud.status?.downloadedFiles ?? 0) 个")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
+            } else if let error = cloud.status?.errorMessage, error != dismissedSyncError {
+                HStack(alignment: .top, spacing: 8) {
+                    Image.englishSystemName("exclamationmark.icloud.fill")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(cloud.status?.phase == "已取消" ? "同步已取消" : "同步未完成")
+                            .fontWeight(.medium)
+                        Button {
+                            cloud.syncNow()
+                        } label: {
+                            HStack(spacing: 2) {
+                                Text("立即同步")
+                                Image.englishSystemName("chevron.right")
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.orange)
+                    }
+                    Spacer(minLength: 0)
+                    Button {
+                        dismissedSyncError = error
+                    } label: {
+                        Image.englishSystemName("xmark")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityLabel("关闭同步提示")
+                }
+                .font(.caption)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 10)
+            } else if !cloud.conflicts.isEmpty {
+                Button("\(cloud.conflicts.count) 个同步冲突待处理") {
+                    model.selectedDestination = .cloudFonts
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+                .padding(.horizontal, 16)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .alert("重命名云端", isPresented: $isRenamingCloud) {
+            TextField("名称", text: $cloudNameDraft)
+            Button("取消", role: .cancel) {}
+            Button("保存") { cloud.renameConnection(cloudNameDraft) }
+        } message: {
+            Text("留空则显示服务器名称。")
+        }
+    }
+
     private var healthCount: Int {
         let health = model.snapshot.health
         return Int(health.damagedFiles + health.multipleRevisions + health.metadataConflicts)
+    }
+
+    private func sidebarSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
     }
 
     private func sidebarRow(
@@ -101,9 +229,37 @@ struct SidebarView: View {
         symbolColor: Color? = nil
     ) -> some View {
         let isSelected = model.selectedDestination == destination
+        return sidebarRowContent(
+            title,
+            symbol: symbol,
+            count: count,
+            destination: destination,
+            speed: speed,
+            symbolColor: symbolColor
+        )
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isSelected ? themeColor : .clear)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+        )
+    }
+
+    private func sidebarRowContent(
+        _ title: String,
+        symbol: String,
+        count: UInt64?,
+        destination: SidebarDestination,
+        speed: Double = 0.76,
+        symbolColor: Color? = nil,
+        showsDisclosure: Bool = false
+    ) -> some View {
+        let isSelected = model.selectedDestination == destination
+        let symbolScale = destination == .cloudFonts ? 1.25 : 1.0
         return HStack {
             Label {
                 Text(title)
+                    .lineLimit(1)
                     .foregroundStyle(isSelected ? Color.white : Color.primary)
             } icon: {
                 if let symbolColor {
@@ -113,6 +269,7 @@ struct SidebarView: View {
                         speed: speed
                     )
                     .foregroundStyle(isSelected ? .white : symbolColor)
+                    .scaleEffect(symbolScale)
                 } else {
                     SidebarSymbolIcon(
                         symbol: symbol,
@@ -120,6 +277,7 @@ struct SidebarView: View {
                         speed: speed
                     )
                     .foregroundStyle(isSelected ? .white : themeColor)
+                    .scaleEffect(symbolScale)
                 }
             }
             Spacer()
@@ -128,13 +286,12 @@ struct SidebarView: View {
                     .foregroundStyle(isSelected ? Color.white.opacity(0.88) : Color.secondary)
                     .monospacedDigit()
             }
+            if showsDisclosure {
+                Image.englishSystemName("chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.88) : Color.secondary)
+            }
         }
-        .listRowBackground(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isSelected ? themeColor : .clear)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-        )
     }
 }
 

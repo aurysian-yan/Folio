@@ -19,12 +19,20 @@ private final class FontPreviewSession {
 final class LibraryViewModel {
     var snapshot: LibrarySnapshot = .empty
     var families: [FamilyCard] = []
+    var cloudOnlyFonts: [CloudFontDto] = []
     var carouselTailFamilies: [FamilyCard] = []
     var facetOptions: [FacetOption] = []
     var selectedFacets: Set<FacetOption> = []
     var selectedDestination: SidebarDestination = .allFonts {
-        didSet { scheduleQuery(immediate: true) }
+        didSet {
+            if selectedDestination != .fontState(.installed) { endInstalledCloudSelection() }
+            scheduleQuery(immediate: true)
+        }
     }
+    var isSelectingInstalledForCloud = false
+    var selectedInstalledFamilyIDs: Set<FamilyID> = []
+    var isAddingInstalledToCloud = false
+    var isCloudImportReport = false
     var selectedFamilyID: FamilyID?
     var selectedFaceID: FaceID?
     var selectedSourcePath: String?
@@ -43,7 +51,10 @@ final class LibraryViewModel {
         }
     }
     var searchText = "" {
-        didSet { scheduleQuery(immediate: false) }
+        didSet {
+            selectedInstalledFamilyIDs.removeAll()
+            scheduleQuery(immediate: false)
+        }
     }
     var previewMode: PreviewTextMode = .custom
     var customPreviewText = "Folio 字体预览"
@@ -231,13 +242,92 @@ final class LibraryViewModel {
         }
     }
 
+    func reloadAfterSync() {
+        guard let repository else { return }
+        Task {
+            do {
+                isRefreshing = true
+                snapshot = try await repository.refreshLibrary()
+                try await reloadLibrarySources()
+                try await performQuery(reset: true)
+                isRefreshing = false
+            } catch {
+                isRefreshing = false
+                present(error)
+            }
+        }
+    }
+
     func toggleFacet(_ facet: FacetOption) {
+        selectedInstalledFamilyIDs.removeAll()
         if selectedFacets.contains(facet) {
             selectedFacets.remove(facet)
         } else {
             selectedFacets.insert(facet)
         }
         scheduleQuery(immediate: true)
+    }
+
+    func beginInstalledCloudSelection() {
+        guard selectedDestination == .fontState(.installed) else { return }
+        selectedInstalledFamilyIDs.removeAll()
+        isSelectingInstalledForCloud = true
+    }
+
+    func endInstalledCloudSelection() {
+        isSelectingInstalledForCloud = false
+        selectedInstalledFamilyIDs.removeAll()
+    }
+
+    func toggleInstalledCloudSelection(_ family: FamilyCard) {
+        guard isSelectingInstalledForCloud else { return }
+        if !selectedInstalledFamilyIDs.insert(family.id).inserted {
+            selectedInstalledFamilyIDs.remove(family.id)
+        }
+    }
+
+    func addSelectedInstalledFontsToCloud() {
+        guard let operations, let repository,
+              CloudSyncModel.shared.isConnected,
+              !selectedInstalledFamilyIDs.isEmpty,
+              !isAddingInstalledToCloud else { return }
+        let paths = Set(families
+            .filter { selectedInstalledFamilyIDs.contains($0.id) }
+            .flatMap(\.faces)
+            .flatMap(\.sources)
+            .filter { status(for: $0).state == .installed }
+            .map(\.path))
+            .sorted()
+        guard !paths.isEmpty else {
+            errorMessage = "所选字体文件不可用"
+            return
+        }
+        let urls = paths.map { URL(fileURLWithPath: $0) }
+        lastImportURLs = urls
+        lastImportMode = .copy
+        lastBatchAction = nil
+        batchOutcomes = []
+        isAddingInstalledToCloud = true
+        Task {
+            importOutcomes = await operations.importFiles(urls, mode: .copy)
+            do {
+                isRefreshing = true
+                snapshot = try await repository.refreshLibrary()
+                try await reloadLibrarySources()
+                try await performQuery(reset: true)
+                isRefreshing = false
+            } catch {
+                isRefreshing = false
+                present(error)
+            }
+            isAddingInstalledToCloud = false
+            endInstalledCloudSelection()
+            isCloudImportReport = true
+            isImportReportPresented = true
+            if importOutcomes.contains(where: { $0.error == nil }) {
+                CloudSyncModel.shared.syncNow()
+            }
+        }
     }
 
     func selectFamily(_ family: FamilyCard) {
@@ -252,6 +342,7 @@ final class LibraryViewModel {
             do {
                 try await repository.recordRecent(identityID)
                 snapshot = try await repository.loadCachedLibrary()
+                CloudSyncModel.shared.requestAutomaticSync()
             } catch {
                 present(error)
             }
@@ -267,6 +358,7 @@ final class LibraryViewModel {
             do {
                 try await repository.recordRecent(face.identityID)
                 snapshot = try await repository.loadCachedLibrary()
+                CloudSyncModel.shared.requestAutomaticSync()
             } catch {
                 present(error)
             }
@@ -292,6 +384,7 @@ final class LibraryViewModel {
                 try await repository.setFavorite(family, favorite: favorite)
                 snapshot = try await repository.loadCachedLibrary()
                 try await performQuery(reset: true)
+                CloudSyncModel.shared.requestAutomaticSync()
             } catch {
                 present(error)
             }
@@ -305,6 +398,7 @@ final class LibraryViewModel {
                 try await repository.setCollection(collection.id, family: family, member: member)
                 snapshot = try await repository.loadCachedLibrary()
                 try await performQuery(reset: true)
+                CloudSyncModel.shared.requestAutomaticSync()
             } catch {
                 present(error)
             }
@@ -341,6 +435,7 @@ final class LibraryViewModel {
                 }
                 snapshot = try await repository.loadCachedLibrary()
                 collectionEditor = nil
+                CloudSyncModel.shared.requestAutomaticSync()
             } catch {
                 present(error)
             }
@@ -357,6 +452,7 @@ final class LibraryViewModel {
                 try await repository.deleteCollection(collection.id)
                 snapshot = try await repository.loadCachedLibrary()
                 try await performQuery(reset: true)
+                CloudSyncModel.shared.requestAutomaticSync()
             } catch {
                 present(error)
             }
@@ -429,6 +525,7 @@ final class LibraryViewModel {
         pendingImportURLs.removeAll()
         guard !urls.isEmpty else { return }
         lastImportURLs = urls
+        isCloudImportReport = false
         lastImportMode = mode
         lastBatchAction = nil
         batchOutcomes = []
@@ -445,6 +542,7 @@ final class LibraryViewModel {
                 present(error)
             }
             isImportReportPresented = true
+            if mode == .copy { CloudSyncModel.shared.requestAutomaticSync() }
         }
     }
 
@@ -484,6 +582,9 @@ final class LibraryViewModel {
                 let retried = await operations.importFiles(urls, mode: lastImportMode)
                 for (index, outcome) in zip(failures, retried) {
                     importOutcomes[index] = outcome
+                }
+                if isCloudImportReport, retried.contains(where: { $0.error == nil }) {
+                    CloudSyncModel.shared.syncNow()
                 }
                 if let repository {
                     do {
@@ -543,11 +644,13 @@ final class LibraryViewModel {
             do {
                 try await operations.perform(action, path: source.path)
                 if action == .remove {
+                    CloudSyncModel.shared.markLocalRemoval(at: source.path)
                     isRefreshing = true
                     snapshot = try await repository.refreshLibrary()
                     try await reloadLibrarySources()
                     try await performQuery(reset: true)
                     isRefreshing = false
+                    CloudSyncModel.shared.requestAutomaticSync()
                 } else {
                     await refreshAllStatuses()
                     if case .fontState = selectedDestination {
@@ -569,6 +672,43 @@ final class LibraryViewModel {
     func trashSelectedFace() {
         guard let source = selectedSource, status(for: source).isManagedCopy else { return }
         perform(.remove, on: source)
+    }
+
+    func removeCloudFont(_ font: CloudFontDto) {
+        Task {
+            do {
+                if let path = font.localPath, let operations,
+                   await operations.status(for: path).isManagedCopy {
+                    try await operations.perform(.remove, path: path)
+                    CloudSyncModel.shared.markLocalRemoval(at: path)
+                } else {
+                    if let path = font.localPath, let operations {
+                        try await operations.prepareSyncedRemoval(path)
+                    }
+                    CloudSyncModel.shared.removeLocalCopy(font)
+                }
+                reloadAfterSync()
+            } catch {
+                present(error)
+            }
+        }
+    }
+
+    func deleteCloudFontEverywhere(_ font: CloudFontDto) {
+        Task {
+            do {
+                if let path = font.localPath, let operations,
+                   await operations.status(for: path).isManagedCopy {
+                    try await operations.perform(.remove, path: path)
+                } else if let path = font.localPath, let operations {
+                    try await operations.prepareSyncedRemoval(path)
+                }
+                CloudSyncModel.shared.deleteEverywhere(font)
+                reloadAfterSync()
+            } catch {
+                present(error)
+            }
+        }
     }
 
     func copy(_ value: String?) {
@@ -796,6 +936,7 @@ final class LibraryViewModel {
         if reset {
             families = page.families
             facetOptions = page.facets
+            cloudOnlyFonts = page.cloudOnlyFonts
         } else {
             let existing = Set(families.map(\.id))
             families.append(contentsOf: page.families.filter { !existing.contains($0.id) })

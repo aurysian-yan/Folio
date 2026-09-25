@@ -86,6 +86,14 @@ struct FontFamilyCardView: View {
         model.selectedFamilyID == family.id
     }
 
+    private var cloudSelected: Bool {
+        model.selectedInstalledFamilyIDs.contains(family.id)
+    }
+
+    private var highlighted: Bool {
+        model.isSelectingInstalledForCloud ? cloudSelected : selected
+    }
+
     private var cardShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
@@ -110,7 +118,7 @@ struct FontFamilyCardView: View {
                     if let cardBackgroundColor = model.cardBackgroundColor {
                         cardShape.fill(cardBackgroundColor)
                     }
-                    if selected, presentation != .expanded {
+                    if highlighted, presentation != .expanded {
                         LinearGradient(
                             stops: [
                                 .init(color: .clear, location: 0.53125),
@@ -125,17 +133,25 @@ struct FontFamilyCardView: View {
                 .clipShape(cardShape)
                 .overlay {
                     cardShape.stroke(
-                        selected && presentation != .expanded
+                        highlighted && presentation != .expanded
                             ? themeColor
                             : Color.primary.opacity(presentation == .expanded ? 0.08 : 0.1),
-                        lineWidth: selected && presentation != .expanded ? 3 : 1
+                        lineWidth: highlighted && presentation != .expanded ? 3 : 1
                     )
                     .allowsHitTesting(false)
                 }
 
-            if selected, presentation != .expanded {
+            if selected, !model.isSelectingInstalledForCloud, presentation != .expanded {
                 cardActions
                     .padding(10)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if model.isSelectingInstalledForCloud {
+                Image.englishSystemName(cloudSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(cloudSelected ? themeColor : Color.secondary)
+                    .padding(10)
+                    .accessibilityHidden(true)
             }
         }
         .frame(maxWidth: presentation == .expanded ? cardWidth : nil)
@@ -157,7 +173,11 @@ struct FontFamilyCardView: View {
         )
         .onTapGesture {
             hoverSelectionTask?.cancel()
-            select()
+            if model.isSelectingInstalledForCloud {
+                model.toggleInstalledCloudSelection(family)
+            } else {
+                select()
+            }
         }
         .onHover { hovering in
             updateHoverSelection(hovering)
@@ -505,6 +525,7 @@ struct FontFamilyCardView: View {
         hoverSelectionTask?.cancel()
         hoverSelectionTask = nil
 
+        guard !model.isSelectingInstalledForCloud else { return }
         guard hovering, selectCardsOnHover, !selected else { return }
         hoverSelectionTask = Task { @MainActor in
             do {
@@ -512,7 +533,7 @@ struct FontFamilyCardView: View {
             } catch {
                 return
             }
-            guard !selected else { return }
+            guard !selected, !model.isSelectingInstalledForCloud else { return }
             if hoverSelectionHaptics {
                 NSHapticFeedbackManager.defaultPerformer.perform(
                     .alignment,

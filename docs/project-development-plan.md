@@ -76,7 +76,7 @@ Android 使用 Kotlin、Jetpack Compose 与 MIUIX；iOS/iPadOS 使用 SwiftUI。
 | 阶段 3C：macOS 字体操作与批量导入 | 已实现 | `apps/macos/Folio/Data/FontOperations.swift`、`LibraryViewModel.swift` |
 | 阶段 3D：macOS 增量刷新 | 基础流程已实现；目录监听与热重载延期 | 启动、添加目录、导入等流程调用增量刷新 |
 | Windows/Linux 前端 | 只有依赖基线 | 尚无完整 Tauri 页面与生产流程 |
-| WebDAV/123PAN | 未实现 | 规划能力 |
+| WebDAV/123PAN | macOS 首期已实现；123PAN 实网待验收 | `folio-sync`、UniFFI 与 macOS 云字体库 |
 | 字符表 | 排在 Android 之后的跨平台阶段 | 尚未实现 |
 | 智慧收藏夹 | 未实现 | 后续阶段；基于已保存的查询条件动态匹配 |
 | Android、iOS/iPadOS、Linux 客户端 | 未实现 | 后续平台计划 |

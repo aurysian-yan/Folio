@@ -4,6 +4,7 @@
 
 use std::collections::BTreeSet;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use folio_core::{
@@ -14,6 +15,7 @@ use folio_query::{
     FacetFilter, FacetValue, FontQuery, FontQueryIndex, FoundryKey, QueryScope, QuerySort,
 };
 use folio_storage::{AddRootOutcome, FolioDatabase, RefreshIssueKind, RefreshMode};
+use folio_sync::{ConflictResolution, SyncProfile, SyncProgress};
 
 uniffi::setup_scaffolding!();
 
@@ -167,6 +169,7 @@ pub struct LibraryPageDto {
     pub families: Vec<FamilyCardDto>,
     pub facets: Vec<FacetCountDto>,
     pub unresolved_scope_items: u64,
+    pub cloud_only_fonts: Vec<CloudFontDto>,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -224,6 +227,345 @@ pub struct RefreshOutcomeDto {
     pub files_changed: u64,
     pub files_removed: u64,
     pub issue_count: u64,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SyncProfileDto {
+    pub server_url: String,
+    pub remote_directory: String,
+    pub username: String,
+    pub automatic: bool,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SyncStatusDto {
+    pub phase: String,
+    pub is_running: bool,
+    pub uploaded_files: u64,
+    pub downloaded_files: u64,
+    pub uploaded_bytes: u64,
+    pub downloaded_bytes: u64,
+    pub received_changes: u64,
+    pub completion_generation: u64,
+    pub last_synced_at_ms: Option<u64>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct CloudFontDto {
+    pub fingerprint: String,
+    pub display_name: String,
+    pub filename: String,
+    pub file_size: u64,
+    pub cloud_only: bool,
+    pub deleted: bool,
+    pub local_path: Option<String>,
+    pub identity_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SyncConflictDto {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub detail: String,
+    pub local_fingerprint: Option<String>,
+    pub remote_fingerprint: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, uniffi::Enum)]
+pub enum SyncResolutionDto {
+    KeepBoth,
+    UseLocal,
+    UseRemote,
+}
+
+struct SyncRunState {
+    phase: String,
+    running: bool,
+    progress: SyncProgress,
+    completion_generation: u64,
+    last_synced_at_ms: Option<u64>,
+    error_message: Option<String>,
+}
+
+#[derive(uniffi::Object)]
+pub struct FolioSync {
+    database_path: String,
+    managed_directory: String,
+    state: Arc<Mutex<SyncRunState>>,
+    cancelled: Arc<AtomicBool>,
+}
+
+#[uniffi::export]
+impl FolioSync {
+    #[uniffi::constructor]
+    pub fn open(
+        database_path: String,
+        managed_directory: String,
+    ) -> Result<Arc<Self>, FolioFfiError> {
+        let db = FolioDatabase::open(&database_path).map_err(FolioFfiError::operation)?;
+        let connected = folio_sync::load_profile(&database_path)
+            .map_err(FolioFfiError::operation)?
+            .is_some();
+        let last_synced_at_ms = db
+            .sync_metadata("last_successful_sync_ms")
+            .map_err(FolioFfiError::operation)?
+            .and_then(|value| value.parse().ok());
+        Ok(Arc::new(Self {
+            database_path,
+            managed_directory,
+            state: Arc::new(Mutex::new(SyncRunState {
+                phase: if connected { "待同步" } else { "未连接" }.to_owned(),
+                running: false,
+                progress: SyncProgress::default(),
+                completion_generation: 0,
+                last_synced_at_ms,
+                error_message: None,
+            })),
+            cancelled: Arc::new(AtomicBool::new(false)),
+        }))
+    }
+
+    pub fn profile(&self) -> Result<Option<SyncProfileDto>, FolioFfiError> {
+        folio_sync::load_profile(&self.database_path)
+            .map(|profile| {
+                profile.map(|value| SyncProfileDto {
+                    server_url: value.server_url,
+                    remote_directory: value.remote_directory,
+                    username: value.username,
+                    automatic: value.automatic,
+                })
+            })
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn save_profile(&self, profile: SyncProfileDto) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        folio_sync::save_profile(
+            &self.database_path,
+            &SyncProfile {
+                server_url: profile.server_url,
+                remote_directory: profile.remote_directory,
+                username: profile.username,
+                automatic: profile.automatic,
+            },
+        )
+        .map_err(FolioFfiError::operation)?;
+        self.state.lock().map_err(FolioFfiError::operation)?.phase = "待同步".to_owned();
+        Ok(())
+    }
+
+    pub fn disconnect(&self) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        folio_sync::disconnect(&self.database_path).map_err(FolioFfiError::operation)?;
+        self.state.lock().map_err(FolioFfiError::operation)?.phase = "未连接".to_owned();
+        Ok(())
+    }
+
+    pub fn test_connection(
+        &self,
+        profile: SyncProfileDto,
+        password: String,
+    ) -> Result<(), FolioFfiError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(FolioFfiError::operation)?;
+        runtime
+            .block_on(folio_sync::test_connection(
+                &SyncProfile {
+                    server_url: profile.server_url,
+                    remote_directory: profile.remote_directory,
+                    username: profile.username,
+                    automatic: profile.automatic,
+                },
+                &password,
+            ))
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn start_sync(&self, password: String) -> Result<bool, FolioFfiError> {
+        let mut state = self.state.lock().map_err(FolioFfiError::operation)?;
+        if state.running {
+            return Ok(false);
+        }
+        if folio_sync::load_profile(&self.database_path)
+            .map_err(FolioFfiError::operation)?
+            .is_none()
+        {
+            return Err(FolioFfiError::operation("请先连接 WebDAV"));
+        }
+        state.phase = "同步中".to_owned();
+        state.running = true;
+        state.progress = SyncProgress::default();
+        state.error_message = None;
+        self.cancelled.store(false, Ordering::Relaxed);
+        let database_path = self.database_path.clone();
+        let managed_directory = self.managed_directory.clone();
+        let shared_state = self.state.clone();
+        let cancelled = self.cancelled.clone();
+        std::thread::spawn(move || {
+            let status_for_progress = shared_state.clone();
+            let callback: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(move |progress| {
+                if let Ok(mut state) = status_for_progress.lock() {
+                    state.progress = progress;
+                }
+            });
+            let result = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|error| error.to_string())
+                .and_then(|runtime| {
+                    runtime
+                        .block_on(folio_sync::synchronize(
+                            &database_path,
+                            &managed_directory,
+                            &password,
+                            cancelled,
+                            callback,
+                        ))
+                        .map_err(|error| error.to_string())
+                });
+            if let Ok(mut state) = shared_state.lock() {
+                state.running = false;
+                state.completion_generation += 1;
+                match result {
+                    Ok(progress) => {
+                        state.progress = progress;
+                        state.phase = "已同步".to_owned();
+                        state.last_synced_at_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .ok()
+                            .map(|time| time.as_millis() as u64);
+                    }
+                    Err(error) => {
+                        state.phase = if error == "同步已取消" {
+                            "已取消"
+                        } else {
+                            "同步失败"
+                        }
+                        .to_owned();
+                        state.error_message = Some(error);
+                    }
+                }
+            }
+        });
+        Ok(true)
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+
+    pub fn status(&self) -> Result<SyncStatusDto, FolioFfiError> {
+        let state = self.state.lock().map_err(FolioFfiError::operation)?;
+        Ok(SyncStatusDto {
+            phase: state.phase.clone(),
+            is_running: state.running,
+            uploaded_files: state.progress.uploaded_files,
+            downloaded_files: state.progress.downloaded_files,
+            uploaded_bytes: state.progress.uploaded_bytes,
+            downloaded_bytes: state.progress.downloaded_bytes,
+            received_changes: state.progress.received_changes,
+            completion_generation: state.completion_generation,
+            last_synced_at_ms: state.last_synced_at_ms,
+            error_message: state.error_message.clone(),
+        })
+    }
+
+    pub fn cloud_fonts(&self) -> Result<Vec<CloudFontDto>, FolioFfiError> {
+        folio_sync::list_cloud_fonts(&self.database_path)
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| CloudFontDto {
+                        fingerprint: item.fingerprint,
+                        display_name: item.display_name,
+                        filename: item.filename,
+                        file_size: item.file_size,
+                        cloud_only: item.cloud_only,
+                        deleted: item.deleted,
+                        local_path: item.local_path,
+                        identity_ids: item.identity_ids,
+                    })
+                    .collect()
+            })
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn conflicts(&self) -> Result<Vec<SyncConflictDto>, FolioFfiError> {
+        folio_sync::list_conflicts(&self.database_path)
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| SyncConflictDto {
+                        id: item.id,
+                        kind: item.kind,
+                        title: item.title,
+                        detail: item.detail,
+                        local_fingerprint: item.local_fingerprint,
+                        remote_fingerprint: item.remote_fingerprint,
+                    })
+                    .collect()
+            })
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn resolve_conflict(
+        &self,
+        id: String,
+        resolution: SyncResolutionDto,
+    ) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        let value = match resolution {
+            SyncResolutionDto::KeepBoth => ConflictResolution::KeepBoth,
+            SyncResolutionDto::UseLocal => ConflictResolution::UseLocal,
+            SyncResolutionDto::UseRemote => ConflictResolution::UseRemote,
+        };
+        folio_sync::resolve_conflict(&self.database_path, &id, value)
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn set_cloud_only(&self, fingerprint: String) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        folio_sync::set_cloud_only(&self.database_path, &fingerprint)
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn mark_cloud_only_for_path(&self, path: String) -> Result<bool, FolioFfiError> {
+        self.require_idle()?;
+        folio_sync::mark_cloud_only_for_path(&self.database_path, path)
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn restore_cloud_font(&self, fingerprint: String) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        folio_sync::request_restore(&self.database_path, &fingerprint)
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn restore_deleted_font(&self, fingerprint: String) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        folio_sync::restore_deleted_font(&self.database_path, &fingerprint)
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn delete_everywhere(&self, fingerprint: String) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        folio_sync::delete_everywhere(&self.database_path, &fingerprint)
+            .map_err(FolioFfiError::operation)
+    }
+}
+
+impl FolioSync {
+    fn require_idle(&self) -> Result<(), FolioFfiError> {
+        if self.state.lock().map_err(FolioFfiError::operation)?.running {
+            Err(FolioFfiError::operation("请先取消当前同步"))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 struct EngineState {
@@ -343,6 +685,12 @@ impl FolioEngine {
 
     pub fn query_library(&self, query: LibraryQueryDto) -> Result<LibraryPageDto, FolioFfiError> {
         let state = self.lock()?;
+        let cloud_text = query.text.clone().unwrap_or_default();
+        let cloud_scope = query.scope;
+        let cloud_collection = query.collection_id.clone();
+        let include_cloud = query.allowed_face_ids.is_none()
+            && query.allowed_source_paths.is_none()
+            && query.facets.is_empty();
         let allowed_face_ids = query
             .allowed_face_ids
             .as_ref()
@@ -382,6 +730,72 @@ impl FolioEngine {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let scoped_ids = match cloud_scope {
+            QueryScopeDto::All => None,
+            QueryScopeDto::Favorites => Some(
+                favorites
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<BTreeSet<_>>(),
+            ),
+            QueryScopeDto::Recent => Some(
+                state
+                    .database
+                    .list_recent(usize::MAX)
+                    .map_err(FolioFfiError::operation)?
+                    .into_iter()
+                    .map(|item| item.identity_id.to_string())
+                    .collect(),
+            ),
+            QueryScopeDto::Collection => {
+                let id = cloud_collection.ok_or_else(|| FolioFfiError::operation("收藏夹无效"))?;
+                let collection = CollectionId::from_bytes(parse_id(&id.value)?);
+                Some(
+                    state
+                        .database
+                        .list_collection_members(collection)
+                        .map_err(FolioFfiError::operation)?
+                        .into_iter()
+                        .map(|item| item.to_string())
+                        .collect(),
+                )
+            }
+        };
+        let cloud_only_fonts = if include_cloud {
+            folio_sync::list_cloud_fonts(state.database.path())
+                .map_err(FolioFfiError::operation)?
+                .into_iter()
+                .filter(|font| font.cloud_only && !font.deleted)
+                .filter(|font| {
+                    cloud_text.is_empty()
+                        || font
+                            .display_name
+                            .to_lowercase()
+                            .contains(&cloud_text.to_lowercase())
+                        || font
+                            .filename
+                            .to_lowercase()
+                            .contains(&cloud_text.to_lowercase())
+                })
+                .filter(|font| {
+                    scoped_ids
+                        .as_ref()
+                        .is_none_or(|ids| font.identity_ids.iter().any(|id| ids.contains(id)))
+                })
+                .map(|item| CloudFontDto {
+                    fingerprint: item.fingerprint,
+                    display_name: item.display_name,
+                    filename: item.filename,
+                    file_size: item.file_size,
+                    cloud_only: item.cloud_only,
+                    local_path: item.local_path,
+                    deleted: item.deleted,
+                    identity_ids: item.identity_ids,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         Ok(LibraryPageDto {
             total_matches: result.total_matches as u64,
             families,
@@ -391,6 +805,7 @@ impl FolioEngine {
                 .filter_map(facet_count)
                 .collect(),
             unresolved_scope_items: result.unresolved_scope_items.len() as u64,
+            cloud_only_fonts,
         })
     }
 
@@ -1031,6 +1446,62 @@ mod tests {
             })
             .unwrap();
         assert_eq!(page.total_matches, 0);
+    }
+
+    #[test]
+    fn cloud_only_font_is_visible_in_shared_query() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("folio.sqlite");
+        let engine = FolioEngine::open(path.to_string_lossy().into_owned()).unwrap();
+        let identity = FontIdentityId::from_bytes([1; 16]);
+        let fingerprint = "ab".repeat(32);
+        let mut db = FolioDatabase::open(&path).unwrap();
+        let remote_payload = serde_json::json!({
+            "fingerprint": fingerprint,
+            "filename": "font.otf",
+            "extension": "otf",
+            "file_size": 4,
+            "faces": [{
+                "identity_id": identity.to_string(),
+                "revision_id": "22".repeat(16),
+                "display_name": "云端字体",
+                "style_name": "Regular"
+            }]
+        });
+        db.upsert_sync_asset(&folio_storage::StoredSyncAsset {
+            fingerprint: fingerprint.clone(),
+            filename: "font.otf".to_owned(),
+            extension: "otf".to_owned(),
+            local_path: None,
+            remote_payload: remote_payload.to_string(),
+            cloud_only: true,
+            deleted: false,
+        })
+        .unwrap();
+        let event = db
+            .append_sync_event(
+                &serde_json::json!({"type": "font_added", "data": remote_payload}).to_string(),
+            )
+            .unwrap();
+        db.mark_sync_event_published(&event.id).unwrap();
+        db.set_favorite(identity, true).unwrap();
+        let query = |scope| LibraryQueryDto {
+            text: Some("云端".to_owned()),
+            scope,
+            collection_id: None,
+            facets: vec![],
+            allowed_face_ids: None,
+            allowed_source_paths: None,
+            offset: 0,
+            limit: 120,
+        };
+        let all = engine.query_library(query(QueryScopeDto::All)).unwrap();
+        assert_eq!(all.cloud_only_fonts.len(), 1);
+        assert!(all.cloud_only_fonts[0].cloud_only);
+        let favorite = engine
+            .query_library(query(QueryScopeDto::Favorites))
+            .unwrap();
+        assert_eq!(favorite.cloud_only_fonts.len(), 1);
     }
 
     #[test]
