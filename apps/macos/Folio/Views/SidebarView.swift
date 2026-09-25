@@ -4,7 +4,7 @@ import SwiftUI
 struct SidebarView: View {
     @Bindable var model: LibraryViewModel
     @State private var cloud = CloudSyncModel.shared
-    @State private var dismissedSyncError: String?
+    @State private var dismissedCloudStatusKey: String?
     @State private var isRenamingCloud = false
     @State private var cloudNameDraft = ""
     @Environment(\.folioThemeColor) private var themeColor
@@ -108,15 +108,10 @@ struct SidebarView: View {
             Button {
                 model.selectedDestination = .cloudFonts
             } label: {
-                sidebarRowContent(
-                    cloud.connectionName,
-                    symbol: "externaldrive.connected.to.line.below",
-                    count: cloud.isConnected ? UInt64(cloud.fonts.filter { !$0.deleted }.count) : nil,
-                    destination: .cloudFonts,
-                    showsDisclosure: true
-                )
+                cloudSidebarRowContent(isSelected: isSelected)
                 .padding(.horizontal, 12)
-                .frame(height: 28)
+                .padding(.vertical, 6)
+                .frame(minHeight: 28)
                 .contentShape(Rectangle())
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -134,72 +129,16 @@ struct SidebarView: View {
                 }
             }
 
-            if cloud.isConnected {
-                if cloud.isRunning {
-                    ProgressView()
-                        .progressViewStyle(.linear)
-                        .tint(themeColor)
-                        .padding(.horizontal, 10)
-                }
-                HStack {
-                    Text("字体占用")
-                    Spacer()
-                    Text(ByteCountFormatter.string(fromByteCount: Int64(clamping: cloud.fonts.filter { !$0.deleted }.reduce(0) { $0 + $1.fileSize }), countStyle: .file))
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-            }
-
-            if cloud.isRunning {
-                Text("已上传 \(cloud.status?.uploadedFiles ?? 0) 个 · 已下载 \(cloud.status?.downloadedFiles ?? 0) 个")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-            } else if let error = cloud.status?.errorMessage, error != dismissedSyncError {
-                HStack(alignment: .top, spacing: 8) {
-                    Image.englishSystemName("exclamationmark.icloud.fill")
-                        .foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(cloud.status?.phase == "已取消" ? "同步已取消" : "同步未完成")
-                            .fontWeight(.medium)
-                        Button {
-                            cloud.syncNow()
-                        } label: {
-                            HStack(spacing: 2) {
-                                Text("立即同步")
-                                Image.englishSystemName("chevron.right")
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.orange)
-                    }
-                    Spacer(minLength: 0)
-                    Button {
-                        dismissedSyncError = error
-                    } label: {
-                        Image.englishSystemName("xmark")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.tertiary)
-                    .accessibilityLabel("关闭同步提示")
-                }
-                .font(.caption)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-                .padding(.horizontal, 10)
-            } else if !cloud.conflicts.isEmpty {
-                Button("\(cloud.conflicts.count) 个同步冲突待处理") {
-                    model.selectedDestination = .cloudFonts
-                }
-                .buttonStyle(.link)
-                .font(.caption)
-                .padding(.horizontal, 16)
+            cloudSyncStatus
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: transientCloudStatusKey) { _, statusKey in
+            if statusKey != dismissedCloudStatusKey {
+                dismissedCloudStatusKey = nil
             }
         }
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .alert("重命名云端", isPresented: $isRenamingCloud) {
             TextField("名称", text: $cloudNameDraft)
             Button("取消", role: .cancel) {}
@@ -212,6 +151,182 @@ struct SidebarView: View {
     private var healthCount: Int {
         let health = model.snapshot.health
         return Int(health.damagedFiles + health.multipleRevisions + health.metadataConflicts)
+    }
+
+    private var cloudFontStorage: String {
+        ByteCountFormatter.string(
+            fromByteCount: Int64(clamping: cloud.fonts.filter { !$0.deleted }.reduce(0) { $0 + $1.fileSize }),
+            countStyle: .file
+        )
+    }
+
+    private var transientCloudStatusKey: String? {
+        if cloud.isRunning {
+            return "running"
+        }
+        if let errorMessage = cloud.status?.errorMessage {
+            return "error|\(cloud.status?.phase ?? "")|\(errorMessage)"
+        }
+        if cloud.isConnected, !cloud.conflicts.isEmpty {
+            return "conflicts|\(cloud.conflicts.map(\.id).sorted().joined(separator: "|"))"
+        }
+        return nil
+    }
+
+    @ViewBuilder
+    private var cloudSyncStatus: some View {
+        if let statusKey = transientCloudStatusKey, statusKey != dismissedCloudStatusKey {
+            if cloud.isRunning {
+                cloudStatusCard(
+                    icon: nil,
+                    iconColor: themeColor,
+                    title: "正在同步",
+                    onDismiss: { dismissedCloudStatusKey = statusKey }
+                ) {
+                    Text("上传 \(cloud.status?.uploadedFiles ?? 0) 个 · 下载 \(cloud.status?.downloadedFiles ?? 0) 个")
+                        .foregroundStyle(themeColor)
+                }
+            } else if cloud.status?.errorMessage != nil {
+                cloudStatusCard(
+                    icon: "exclamationmark.icloud.fill",
+                    iconColor: .orange,
+                    title: cloud.status?.phase == "已取消" ? "同步已取消" : "同步未完成",
+                    onDismiss: { dismissedCloudStatusKey = statusKey }
+                ) {
+                    Button {
+                        cloud.syncNow()
+                    } label: {
+                        syncActionLabel("立即同步")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.orange)
+                }
+            } else if cloud.isConnected, !cloud.conflicts.isEmpty {
+                cloudStatusCard(
+                    icon: "exclamationmark.icloud.fill",
+                    iconColor: .orange,
+                    title: "\(cloud.conflicts.count) 个同步冲突待处理",
+                    onDismiss: { dismissedCloudStatusKey = statusKey }
+                ) {
+                    Button {
+                        model.selectedDestination = .cloudFonts
+                    } label: {
+                        syncActionLabel("查看冲突")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.orange)
+                }
+            }
+        } else if cloud.isConnected {
+            cloudStatusCard(
+                icon: "checkmark.icloud.fill",
+                iconColor: themeColor,
+                title: "本地与云端均为最新"
+            ) {
+                Button {
+                    cloud.syncNow()
+                } label: {
+                    syncActionLabel("立即同步")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(themeColor)
+            }
+        } else {
+            cloudStatusCard(icon: "icloud", iconColor: .secondary, title: "未连接云端") {
+                Text("在设置中连接 WebDAV")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func syncActionLabel(_ title: String) -> some View {
+        HStack(spacing: 2) {
+            Text(title)
+            Image.englishSystemName("chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+        }
+    }
+
+    private func cloudStatusCard<Detail: View>(
+        icon: String?,
+        iconColor: Color,
+        title: String,
+        onDismiss: (() -> Void)? = nil,
+        @ViewBuilder detail: () -> Detail
+    ) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Group {
+                if let icon {
+                    Image.englishSystemName(icon)
+                        .font(.system(size: 14))
+                        .foregroundStyle(iconColor)
+                        .accessibilityHidden(true)
+                } else {
+                    RingSyncProgressView(tint: iconColor)
+                }
+            }
+            .frame(width: 22, height: 22)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                detail()
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image.englishSystemName("xmark")
+                        .font(.system(size: 12, weight: .regular))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel("关闭同步状态")
+            }
+        }
+        .frame(height: 35)
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 10)
+    }
+
+    private func cloudSidebarRowContent(isSelected: Bool) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            SidebarSymbolIcon(
+                symbol: "externaldrive.connected.to.line.below",
+                isSelected: isSelected
+            )
+            .foregroundStyle(isSelected ? Color.white : themeColor)
+            .scaleEffect(1.25)
+            .frame(width: 22, height: 22)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(cloud.connectionName)
+                    .lineLimit(1)
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                if cloud.isConnected {
+                    Text("字体占用 \(cloudFontStorage)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(isSelected ? Color.white.opacity(0.88) : Color.secondary)
+                }
+            }
+
+            Spacer(minLength: 0)
+            if cloud.isConnected {
+                Text(cloud.fonts.filter { !$0.deleted }.count, format: .number)
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.88) : Color.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func sidebarSectionHeader(_ title: String) -> some View {
@@ -251,8 +366,7 @@ struct SidebarView: View {
         count: UInt64?,
         destination: SidebarDestination,
         speed: Double = 0.76,
-        symbolColor: Color? = nil,
-        showsDisclosure: Bool = false
+        symbolColor: Color? = nil
     ) -> some View {
         let isSelected = model.selectedDestination == destination
         let symbolScale = destination == .cloudFonts ? 1.25 : 1.0
@@ -286,10 +400,28 @@ struct SidebarView: View {
                     .foregroundStyle(isSelected ? Color.white.opacity(0.88) : Color.secondary)
                     .monospacedDigit()
             }
-            if showsDisclosure {
-                Image.englishSystemName("chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.88) : Color.secondary)
+        }
+    }
+}
+
+private struct RingSyncProgressView: View {
+    let tint: Color
+    @State private var rotation = 0.0
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.secondary.opacity(0.24), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: 0.27)
+                .stroke(tint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+                .rotationEffect(.degrees(rotation - 90))
+        }
+        .frame(width: 14, height: 14)
+        .accessibilityHidden(true)
+        .onAppear {
+            withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
+                rotation = 360
             }
         }
     }
