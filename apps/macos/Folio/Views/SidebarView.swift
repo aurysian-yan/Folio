@@ -84,11 +84,15 @@ struct SidebarView: View {
                 Button {
                     model.beginFavoriteFolderCreation()
                 } label: {
-                    HStack(spacing: 8) {
-                        Image.englishSystemName("plus")
-                            .foregroundStyle(Color.secondary)
-                        Text("新建收藏夹")
-                            .foregroundStyle(Color.secondary)
+                    HStack {
+                        Label {
+                            Text("新建收藏夹")
+                                .foregroundStyle(Color.secondary)
+                        } icon: {
+                            Image.englishSystemName("plus")
+                                .foregroundStyle(Color.secondary)
+                        }
+                        Spacer()
                     }
                 }
                 .buttonStyle(.plain)
@@ -116,7 +120,6 @@ struct SidebarView: View {
             } header: {
                 sidebarSectionHeader("云端")
             }
-            
 
             Section {
                 Label {
@@ -294,24 +297,24 @@ struct SidebarView: View {
             }
         }
         .frame(height: 35)
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
+        .padding(.leading, 8)
+        .padding(.trailing, 14)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
 
         return Group {
             if #available(macOS 26.0, *) {
-                card.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                card.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
                 card
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                     }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 8)
         .padding(.vertical, 8)
     }
 
