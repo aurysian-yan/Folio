@@ -24,6 +24,8 @@ final class CloudSyncModel {
     private var pendingAutomaticSync = false
     private var pendingManualSync = false
     private var wasOffline = false
+    private var cachedCredentialKey: String?
+    private var cachedCredential: String?
 
     var isConnected: Bool { profile != nil }
     var isRunning: Bool { status?.isRunning == true }
@@ -81,12 +83,13 @@ final class CloudSyncModel {
         )
         let databasePath = enginePath
         let managedPath = managedDirectoryPath
-        let candidatePassword = password.isEmpty ? CloudCredentialStore.load(for: candidate) ?? "" : password
+        let candidatePassword = password.isEmpty ? credential(for: candidate) ?? "" : password
         do {
             try await Task.detached(priority: .userInitiated) {
                 let tester = try FolioSync.open(databasePath: databasePath, managedDirectory: managedPath)
                 try tester.testConnection(profile: candidate, password: candidatePassword)
             }.value
+            cacheCredential(candidatePassword, for: candidate)
             errorMessage = nil
             message = "连接成功"
             return true
@@ -105,14 +108,15 @@ final class CloudSyncModel {
             automatic: automatic
         )
         do {
-            let savedPassword = password.isEmpty ? CloudCredentialStore.load(for: next) : password
+            let savedPassword = password.isEmpty ? credential(for: next) : password
             guard let savedPassword, !savedPassword.isEmpty else {
-            errorMessage = "请输入 WebDAV 密码"
-            message = errorMessage
+                errorMessage = "请输入 WebDAV 密码"
+                message = errorMessage
                 return
             }
             try CloudCredentialStore.save(savedPassword, for: next)
             try engine.saveProfile(profile: next)
+            cacheCredential(savedPassword, for: next)
             profile = next
             loadConnectionAlias()
             reloadState()
@@ -141,6 +145,8 @@ final class CloudSyncModel {
             try engine.disconnect()
             profile = nil
             connectionAlias = nil
+            cachedCredentialKey = nil
+            cachedCredential = nil
             status = try engine.status()
             errorMessage = nil
             message = "已断开连接"
@@ -166,7 +172,7 @@ final class CloudSyncModel {
             pendingManualSync = true
             return
         }
-        guard let password = CloudCredentialStore.load(for: profile), !password.isEmpty else {
+        guard let password = credential(for: profile), !password.isEmpty else {
             errorMessage = "WebDAV 密码不可用，请在设置中重新保存"
             message = errorMessage
             return
@@ -314,6 +320,20 @@ final class CloudSyncModel {
     }
 
     private var enginePath: String { libraryDirectory.appendingPathComponent("folio.sqlite").path }
+
+    private func credential(for profile: SyncProfileDto) -> String? {
+        let key = CloudCredentialStore.account(for: profile)
+        if cachedCredentialKey == key { return cachedCredential }
+        guard let password = CloudCredentialStore.load(for: profile), !password.isEmpty else { return nil }
+        cacheCredential(password, for: profile)
+        return password
+    }
+
+    private func cacheCredential(_ password: String, for profile: SyncProfileDto) {
+        cachedCredentialKey = CloudCredentialStore.account(for: profile)
+        cachedCredential = password
+    }
+
     private func record(_ error: Error) {
         errorMessage = error.localizedDescription
         message = errorMessage
@@ -361,7 +381,7 @@ private enum CloudCredentialStore {
         guard code == errSecSuccess else { throw CloudCredentialError.keychain(code) }
     }
 
-    private static func account(for profile: SyncProfileDto) -> String {
+    static func account(for profile: SyncProfileDto) -> String {
         "\(profile.serverUrl)|\(profile.remoteDirectory)|\(profile.username)"
     }
 }
