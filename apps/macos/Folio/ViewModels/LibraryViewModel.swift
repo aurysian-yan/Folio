@@ -66,7 +66,6 @@ final class LibraryViewModel {
     var previewColor = Color.primary
     var cardBackgroundColor: Color?
     var inspectorPresented = true
-    var filterExpanded = false
     var isLoading = true
     var isRefreshing = false
     var errorMessage: String?

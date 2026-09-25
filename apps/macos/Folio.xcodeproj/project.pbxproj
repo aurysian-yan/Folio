@@ -16,6 +16,8 @@
 		B027 /* CloudLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F027 /* CloudLibraryView.swift */; };
 		B028 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F028 /* Assets.xcassets */; };
 		B029 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F029 /* AboutView.swift */; };
+		B030 /* GlassTabPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F030 /* GlassTabPicker.swift */; };
+		B031 /* AnimatedSymbolIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = F031 /* AnimatedSymbolIcon.swift */; };
 		B005 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F005 /* LibraryViewModel.swift */; };
 		B006 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F006 /* RootView.swift */; };
 		B007 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F007 /* SidebarView.swift */; };
@@ -58,6 +60,8 @@
 		F027 /* CloudLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudLibraryView.swift; sourceTree = "<group>"; };
 		F028 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F029 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		F030 /* GlassTabPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTabPicker.swift; sourceTree = "<group>"; };
+		F031 /* AnimatedSymbolIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedSymbolIcon.swift; sourceTree = "<group>"; };
 		F005 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
 		F006 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		F007 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
@@ -178,6 +182,8 @@
 				F025 /* EnglishSystemSymbol.swift */,
 				F027 /* CloudLibraryView.swift */,
 				F029 /* AboutView.swift */,
+				F030 /* GlassTabPicker.swift */,
+				F031 /* AnimatedSymbolIcon.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -368,6 +374,8 @@
 				B020 /* FontOperations.swift in Sources */,
 				B021 /* EnglishSystemSymbol.swift in Sources */,
 				B029 /* AboutView.swift in Sources */,
+				B030 /* GlassTabPicker.swift in Sources */,
+				B031 /* AnimatedSymbolIcon.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

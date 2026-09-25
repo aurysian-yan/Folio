@@ -547,8 +547,8 @@ private struct PreferenceSliderRow: View {
     }
 }
 
-/// 把设置窗口内的滚轮事件转成按页离散切换，避免自由滚动停在两页之间。
-private struct ScrollWheelPager: NSViewRepresentable {
+/// 把滚轮和触控板事件转成按页离散切换，避免自由滚动停在两页之间。
+struct ScrollWheelPager: NSViewRepresentable {
     let onStep: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {

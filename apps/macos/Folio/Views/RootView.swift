@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @State private var model = LibraryViewModel()
     @State private var cloud = CloudSyncModel.shared
+    @State private var sidebarPage = SidebarPage.navigation
     @Environment(\.scenePhase) private var scenePhase
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage(AppPreferences.libraryViewMode) private var preferredViewMode =
@@ -31,7 +32,7 @@ struct RootView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(model: model)
+            SidebarView(model: model, selectedPage: $sidebarPage)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 240, max: 300)
         } detail: {
             if model.selectedDestination == .cloudFonts {
@@ -219,6 +220,20 @@ private struct WindowLayoutPersistenceController: NSViewRepresentable {
     }
 }
 
+private enum FavoriteFolderEditorTab: String, CaseIterable, Identifiable {
+    case general
+    case filters
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general: "常规"
+        case .filters: "筛选条件"
+        }
+    }
+}
+
 private struct FavoriteFolderEditorView: View {
     @Bindable var model: LibraryViewModel
     @Environment(\.folioThemeColor) private var themeColor
@@ -229,6 +244,7 @@ private struct FavoriteFolderEditorView: View {
     @State private var text = ""
     @State private var options: [FacetOption] = []
     @State private var selectedFacets: Set<FacetOption> = []
+    @State private var selectedTab: FavoriteFolderEditorTab = .general
     @State private var icon: CollectionIcon
     @State private var color: CollectionColor
     @State private var isLoading = true
@@ -249,67 +265,10 @@ private struct FavoriteFolderEditorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(intent.title)
-                .font(.headline)
-            TextField("收藏夹名称", text: $name)
-                .focused($nameFocused)
-                .onSubmit(save)
-            Text("图标")
-                .font(.subheadline)
-            ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 6) {
-                    ForEach(CollectionIcon.allCases) { option in
-                        Button {
-                            icon = option
-                        } label: {
-                            Image.englishSystemName(option.symbolName)
-                                .frame(maxWidth: .infinity, minHeight: 28)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(icon == option ? themeColor : .secondary)
-                        .accessibilityLabel(option.title)
-                        .accessibilityAddTraits(icon == option ? .isSelected : [])
-                        .help(option.title)
-                    }
-                }
-            }
-            .frame(height: 110)
-            HStack {
-                Text("颜色")
-                    .font(.subheadline)
-                Spacer()
-                Text(color.title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 8) {
-                ForEach(CollectionColor.allCases) { option in
-                    colorSwatch(option)
-                }
-            }
-            TextField("搜索字体", text: $text)
-                .textFieldStyle(.roundedBorder)
-            Text("筛选条件")
-                .font(.subheadline)
-            Text("添加筛选条件后，符合条件的字体会自动显示在此收藏夹中。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(FacetKind.allCases, id: \.self) { kind in
-                            let group = options.filter { $0.kind == kind }
-                            if !group.isEmpty {
-                                facetRow(kind, options: group)
-                            }
-                        }
-                    }
-                }
-            }
+            favoriteFolderPicker
+                .frame(maxWidth: .infinity, alignment: .center)
+            pager
+
             HStack {
                 Spacer()
                 Button("取消") { dismiss() }
@@ -321,39 +280,190 @@ private struct FavoriteFolderEditorView: View {
         }
         .padding()
         .frame(minWidth: 520, minHeight: 540)
+        .tint(themeColor)
+        .accentColor(themeColor)
         .task { await load() }
     }
 
-    private func facetRow(_ kind: FacetKind, options: [FacetOption]) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(kind.title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-                .padding(.top, 5)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(options) { option in
-                        let isSelected = selectedFacets.contains(where: { $0.id == option.id })
+    private var favoriteFolderPicker: some View {
+        GlassTabPicker(
+            title: "收藏夹设置",
+            options: FavoriteFolderEditorTab.allCases.map {
+                GlassTabPicker<FavoriteFolderEditorTab>.Option(value: $0, title: $0.title)
+            },
+            selection: pickerSelection
+        )
+    }
+
+    private var pageAnimation: Animation {
+        .smooth(duration: 0.45)
+    }
+
+    private var pager: some View {
+        GeometryReader { geometry in
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(FavoriteFolderEditorTab.allCases) { tab in
+                        page(for: tab)
+                            .frame(
+                                width: geometry.size.width,
+                                height: geometry.size.height,
+                                alignment: .topLeading
+                            )
+                            .id(tab)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.never)
+            .scrollPosition(id: scrollSelection)
+            .background(ScrollWheelPager(onStep: step))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func page(for tab: FavoriteFolderEditorTab) -> some View {
+        Group {
+            switch tab {
+            case .general:
+                generalSettings
+            case .filters:
+                filterSettings
+            }
+        }
+        .padding(.top, 14)
+    }
+
+    private func step(_ direction: Int) {
+        let tabs = FavoriteFolderEditorTab.allCases
+        guard let index = tabs.firstIndex(of: selectedTab) else { return }
+        let next = index + direction
+        guard tabs.indices.contains(next) else { return }
+        withAnimation(pageAnimation) {
+            selectedTab = tabs[next]
+        }
+    }
+
+    private var pickerSelection: Binding<FavoriteFolderEditorTab> {
+        Binding(
+            get: { selectedTab },
+            set: { tab in
+                withAnimation(pageAnimation) {
+                    selectedTab = tab
+                }
+            }
+        )
+    }
+
+    private var scrollSelection: Binding<FavoriteFolderEditorTab?> {
+        Binding(
+            get: { selectedTab },
+            set: { tab in
+                guard let tab else { return }
+                selectedTab = tab
+            }
+        )
+    }
+
+    private var generalSettings: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("收藏夹名称", text: $name)
+                    .focused($nameFocused)
+                    .onSubmit(save)
+                Text("图标")
+                    .font(.subheadline)
+                    .padding(.horizontal, 6)
+                    .padding(.top, 8)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
+                    ForEach(CollectionIcon.allCases) { option in
                         Button {
-                            toggle(option)
+                            icon = option
                         } label: {
-                            HStack(spacing: 4) {
-                                Text(option.label)
-                                    .lineLimit(1)
-                                Text(option.familyCount, format: .number)
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                            }
+                            AnimatedSymbolIcon(symbol: option.symbolName, isSelected: icon == option)
+                                .font(.system(size: 18))
+                                .frame(maxWidth: .infinity, minHeight: 32)
                         }
                         .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .tint(isSelected ? themeColor : .secondary)
-                        .accessibilityLabel("\(option.label)，\(option.familyCount) 个字族")
-                        .accessibilityAddTraits(isSelected ? .isSelected : [])
+                        .controlSize(.large)
+                        .tint(icon == option ? themeColor : .secondary)
+                        .accessibilityLabel(option.title)
+                        .accessibilityAddTraits(icon == option ? .isSelected : [])
+                        .help(option.title)
+                    }
+                }
+                HStack {
+                    Text("颜色")
+                        .font(.subheadline)
+                        .padding(.horizontal, 6)
+                    Spacer()
+                    Text(color.title)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                }
+                .padding(.top, 8)
+                HStack(spacing: 8) {
+                    ForEach(CollectionColor.allCases) { option in
+                        colorSwatch(option)
                     }
                 }
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var filterSettings: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("搜索字体")
+                        .font(.system(size: 12))
+                        .padding(.horizontal, 6)
+                        .padding(.top, 8)
+                    Text("按字体名称、设计师或厂商等关键词匹配，多个关键词需同时满足。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                }
+                TextField("输入关键词", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("筛选条件")
+                        .font(.system(size: 12))
+                        .padding(.horizontal, 6)
+                        .padding(.top, 8)
+                    Text("添加筛选条件后，符合条件的字体会自动显示在此收藏夹中。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                }
+                if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 100)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(FacetKind.allCases, id: \.self) { kind in
+                            let facetOptions = options.filter { $0.kind == kind }
+                            if !facetOptions.isEmpty {
+                                FacetDisclosureGroupView(
+                                    kind: kind,
+                                    options: facetOptions,
+                                    selectedFacets: selectedFacets,
+                                    titleFont: .system(size: 12),
+                                    onToggle: toggle
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

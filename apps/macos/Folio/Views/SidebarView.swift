@@ -1,147 +1,88 @@
 import AppKit
 import SwiftUI
 
+enum SidebarPage: String, CaseIterable, Identifiable {
+    case navigation
+    case filters
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .navigation: "导航"
+        case .filters: "筛选"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .navigation: "location"
+        case .filters: "line.3.horizontal.decrease"
+        }
+    }
+}
+
 struct SidebarView: View {
     @Bindable var model: LibraryViewModel
+    @Binding var selectedPage: SidebarPage
     @State private var cloud = CloudSyncModel.shared
     @State private var dismissedCloudStatusKey: String?
     @State private var isRenamingCloud = false
     @State private var cloudNameDraft = ""
     @Environment(\.folioThemeColor) private var themeColor
 
-    var body: some View {
-        List(selection: $model.selectedDestination) {
-            Section {
-                sidebarRow("全部字体", symbol: "textformat.alt", count: model.snapshot.familyCount, destination: .allFonts)
-                    .tag(SidebarDestination.allFonts)
-                sidebarRow("最近", symbol: "clock", count: model.snapshot.recentCount, destination: .recent)
-                    .tag(SidebarDestination.recent)
-                sidebarRow("收藏", symbol: "star", count: nil, destination: .favorites)
-                    .tag(SidebarDestination.favorites)
-            } header: {
-                sidebarSectionHeader("本地")
-            }
+    private var pageAnimation: Animation {
+        .smooth(duration: 0.45)
+    }
 
-            Section {
-                sidebarRow("已挂载", symbol: "checkmark.diamond", count: model.fontStateCounts[.active] ?? 0, destination: .fontState(.active))
-                    .tag(SidebarDestination.fontState(.active))
-                    .help("当前登录会话已激活")
-                sidebarRow("已安装", symbol: "square.and.arrow.down", count: model.fontStateCounts[.installed] ?? 0, destination: .fontState(.installed), speed: 1.29)
-                    .tag(SidebarDestination.fontState(.installed))
-                    .help("包含手动安装和 Folio 安装的字体")
-                sidebarRow("仅在字体库", symbol: "book.closed", count: model.fontStateCounts[.available] ?? 0, destination: .fontState(.available))
-                    .tag(SidebarDestination.fontState(.available))
-                    .help("Folio 字体库中尚未挂载或安装的副本")
-                sidebarRow("外部文件", symbol: "doc", count: model.fontStateCounts[.external] ?? 0, destination: .fontState(.external))
-                    .tag(SidebarDestination.fontState(.external))
-                    .help("引用的文件和已添加文件夹中的字体")
-                sidebarRow("系统字体", symbol: "laptopcomputer.and.arrow.down", count: model.fontStateCounts[.system] ?? 0, destination: .fontState(.system))
-                    .tag(SidebarDestination.fontState(.system))
-                sidebarRow("文件不可用", symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0, destination: .fontState(.unavailable))
-                    .tag(SidebarDestination.fontState(.unavailable))
-            } header: {
-                sidebarSectionHeader("字体状态")
-            }
-
-            Section {
-                ForEach(model.snapshot.smartFolders) { folder in
-                    sidebarRow(
-                        folder.name,
-                        symbol: folder.icon.symbolName,
-                        count: folder.matchCount,
-                        destination: .smartFolder(folder.id),
-                        symbolColor: folder.color.color,
-                        trailingSymbol: "sparkles.2"
-                    )
-                    .tag(SidebarDestination.smartFolder(folder.id))
-                    .contextMenu {
-                        Button("编辑收藏夹…") {
-                            model.favoriteFolderEditor = .editSmartFolder(folder)
-                        }
-                        Button("删除收藏夹", role: .destructive) {
-                            model.deleteSmartFolder(folder)
-                        }
-                    }
-                }
-                ForEach(model.snapshot.collections) { collection in
-                    sidebarRow(
-                        collection.name,
-                        symbol: collection.icon.symbolName,
-                        count: collection.memberCount,
-                        destination: .collection(collection.id),
-                        symbolColor: collection.color.color
-                    )
-                    .tag(SidebarDestination.collection(collection.id))
-                    .contextMenu {
-                        Button("编辑收藏夹…") {
-                            model.favoriteFolderEditor = .editCollection(collection)
-                        }
-                        Button("删除收藏夹", role: .destructive) {
-                            model.deleteCollection(collection)
-                        }
-                    }
-                }
-                Button {
-                    model.beginFavoriteFolderCreation()
-                } label: {
-                    HStack {
-                        Label {
-                            Text("新建收藏夹")
-                                .foregroundStyle(Color.secondary)
-                        } icon: {
-                            Image.englishSystemName("plus")
-                                .foregroundStyle(Color.secondary)
-                        }
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.plain)
-            } header: {
-                sidebarSectionHeader("收藏夹")
-            }
-
-            Section {
-                cloudSidebarRowContent(isSelected: model.selectedDestination == .cloudFonts)
-                    .listRowBackground(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(model.selectedDestination == .cloudFonts ? themeColor : .clear)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                    )
-                    .tag(SidebarDestination.cloudFonts)
-                    .contextMenu {
-                        if cloud.isConnected {
-                            Button("重命名…") {
-                                cloudNameDraft = cloud.connectionName
-                                isRenamingCloud = true
-                            }
-                        }
-                    }
-            } header: {
-                sidebarSectionHeader("云端")
-            }
-
-            Section {
-                Label {
-                    Text("在线字体")
-                } icon: {
-                    Image.englishSystemName("globe")
-                }
-                    .foregroundStyle(.tertiary)
-                    .help("在线字体将在后续版本提供")
-                sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
-                    .tag(SidebarDestination.fontHealth)
-            } header: {
-                sidebarSectionHeader("工具")
+    /// 侧栏分页切换控件；放进侧栏列工具栏，使用系统原生的玻璃分段样式。
+    private var sidebarPagePicker: some View {
+        Picker("侧边栏分类", selection: sidebarPageSelection) {
+            ForEach(SidebarPage.allCases) { page in
+                Image.englishSystemName(page.symbolName)
+                    .accessibilityLabel(page.title)
+                    .tag(page)
             }
         }
-        .listStyle(.sidebar)
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 76)
+    }
+
+    private var sidebarPageSelection: Binding<SidebarPage> {
+        Binding(
+            get: { selectedPage },
+            set: { page in
+                withAnimation(pageAnimation) {
+                    selectedPage = page
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            sidebarPager
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             cloudSyncStatus
         }
-        .background(SidebarSelectionHighlightController())
         .environment(\.appearsActive, true)
         .navigationTitle("Folio")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                sidebarPagePicker
+            }
+        }
+        .onAppear {
+            selectedPage = .navigation
+        }
+        .onChange(of: model.selectedDestination) { _, _ in
+            guard selectedPage != .navigation else { return }
+            withAnimation(pageAnimation) {
+                selectedPage = .navigation
+            }
+        }
         .onChange(of: transientCloudStatusKey) { _, statusKey in
             if statusKey != dismissedCloudStatusKey {
                 dismissedCloudStatusKey = nil
@@ -154,6 +95,204 @@ struct SidebarView: View {
         } message: {
             Text("留空则显示服务器名称。")
         }
+    }
+
+    private var sidebarPager: some View {
+        GeometryReader { geometry in
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(SidebarPage.allCases) { page in
+                        sidebarList(for: page)
+                            .frame(
+                                width: geometry.size.width,
+                                height: geometry.size.height,
+                                alignment: .topLeading
+                            )
+                            .id(page)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.never)
+            .scrollPosition(id: sidebarScrollSelection)
+            .background(ScrollWheelPager(onStep: stepPage))
+        }
+    }
+
+    private func stepPage(_ direction: Int) {
+        let pages = SidebarPage.allCases
+        guard let index = pages.firstIndex(of: selectedPage) else { return }
+        let next = index + direction
+        guard pages.indices.contains(next) else { return }
+        withAnimation(pageAnimation) {
+            selectedPage = pages[next]
+        }
+    }
+
+    private var sidebarScrollSelection: Binding<SidebarPage?> {
+        Binding(
+            get: { selectedPage },
+            set: { page in
+                guard let page else { return }
+                selectedPage = page
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func sidebarList(for page: SidebarPage) -> some View {
+        List(selection: $model.selectedDestination) {
+            switch page {
+            case .navigation:
+                Section {
+                    sidebarRow("全部字体", symbol: "textformat.alt", count: model.snapshot.familyCount, destination: .allFonts)
+                        .tag(SidebarDestination.allFonts)
+                    sidebarRow("最近", symbol: "clock", count: model.snapshot.recentCount, destination: .recent)
+                        .tag(SidebarDestination.recent)
+                    sidebarRow("收藏", symbol: "star", count: nil, destination: .favorites)
+                        .tag(SidebarDestination.favorites)
+                } header: {
+                    sidebarSectionHeader("本地")
+                }
+                Section {
+                    ForEach(model.snapshot.smartFolders) { folder in
+                        sidebarRow(
+                            folder.name,
+                            symbol: folder.icon.symbolName,
+                            count: folder.matchCount,
+                            destination: .smartFolder(folder.id),
+                            symbolColor: folder.color.color,
+                            trailingSymbol: "sparkles.2"
+                        )
+                        .tag(SidebarDestination.smartFolder(folder.id))
+                        .contextMenu {
+                            Button("编辑收藏夹…") {
+                                model.favoriteFolderEditor = .editSmartFolder(folder)
+                            }
+                            Button("删除收藏夹", role: .destructive) {
+                                model.deleteSmartFolder(folder)
+                            }
+                        }
+                    }
+                    ForEach(model.snapshot.collections) { collection in
+                        sidebarRow(
+                            collection.name,
+                            symbol: collection.icon.symbolName,
+                            count: collection.memberCount,
+                            destination: .collection(collection.id),
+                            symbolColor: collection.color.color
+                        )
+                        .tag(SidebarDestination.collection(collection.id))
+                        .contextMenu {
+                            Button("编辑收藏夹…") {
+                                model.favoriteFolderEditor = .editCollection(collection)
+                            }
+                            Button("删除收藏夹", role: .destructive) {
+                                model.deleteCollection(collection)
+                            }
+                        }
+                    }
+                    Button {
+                        model.beginFavoriteFolderCreation()
+                    } label: {
+                        HStack {
+                            Label {
+                                Text("新建收藏夹")
+                                    .foregroundStyle(Color.secondary)
+                            } icon: {
+                                Image.englishSystemName("plus")
+                                    .foregroundStyle(Color.secondary)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } header: {
+                    sidebarSectionHeader("收藏夹")
+                }
+                Section {
+                    cloudSidebarRowContent(isSelected: model.selectedDestination == .cloudFonts)
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(model.selectedDestination == .cloudFonts ? themeColor : .clear)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                        )
+                        .tag(SidebarDestination.cloudFonts)
+                        .contextMenu {
+                            if cloud.isConnected {
+                                Button("重命名…") {
+                                    cloudNameDraft = cloud.connectionName
+                                    isRenamingCloud = true
+                                }
+                            }
+                        }
+                } header: {
+                    sidebarSectionHeader("云端")
+                }
+                Section {
+                    sidebarRow("已挂载", symbol: "checkmark.diamond", count: model.fontStateCounts[.active] ?? 0, destination: .fontState(.active))
+                        .tag(SidebarDestination.fontState(.active))
+                        .help("当前登录会话已激活")
+                    sidebarRow("已安装", symbol: "square.and.arrow.down", count: model.fontStateCounts[.installed] ?? 0, destination: .fontState(.installed), speed: 1.29)
+                        .tag(SidebarDestination.fontState(.installed))
+                        .help("包含手动安装和 Folio 安装的字体")
+                    sidebarRow("仅在字体库", symbol: "book.closed", count: model.fontStateCounts[.available] ?? 0, destination: .fontState(.available))
+                        .tag(SidebarDestination.fontState(.available))
+                        .help("Folio 字体库中尚未挂载或安装的副本")
+                    sidebarRow("外部文件", symbol: "doc", count: model.fontStateCounts[.external] ?? 0, destination: .fontState(.external))
+                        .tag(SidebarDestination.fontState(.external))
+                        .help("引用的文件和已添加文件夹中的字体")
+                    sidebarRow("系统字体", symbol: "laptopcomputer.and.arrow.down", count: model.fontStateCounts[.system] ?? 0, destination: .fontState(.system))
+                        .tag(SidebarDestination.fontState(.system))
+                    sidebarRow("文件不可用", symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0, destination: .fontState(.unavailable))
+                        .tag(SidebarDestination.fontState(.unavailable))
+                } header: {
+                    sidebarSectionHeader("字体状态")
+                }
+                Section {
+                    Label {
+                        Text("在线字体")
+                    } icon: {
+                        Image.englishSystemName("globe")
+                    }
+                    .foregroundStyle(.tertiary)
+                    .help("在线字体将在后续版本提供")
+                    sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
+                        .tag(SidebarDestination.fontHealth)
+                } header: {
+                    sidebarSectionHeader("工具")
+                }
+            case .filters:
+                Section {
+                    ForEach(FacetKind.allCases, id: \.self) { kind in
+                        let options = model.facetOptions.filter { $0.kind == kind }
+                        if !options.isEmpty {
+                            FacetDisclosureGroupView(
+                                kind: kind,
+                                options: options,
+                                selectedFacets: model.selectedFacets,
+                                animatesExpansion: false,
+                                onToggle: model.toggleFacet
+                            )
+                            .listRowInsets(EdgeInsets(
+                                top: 2,
+                                leading: -SidebarLayoutMetrics.sidebarRowExpansion,
+                                bottom: 2,
+                                trailing: -SidebarLayoutMetrics.sidebarRowExpansion
+                            ))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+                } header: {
+                    sidebarSectionHeader("筛选")
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .background(SidebarSelectionHighlightController())
     }
 
     private var healthCount: Int {
@@ -304,23 +443,29 @@ struct SidebarView: View {
 
         return Group {
             if #available(macOS 26.0, *) {
-                card.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                card.glassEffect(
+                    .regular,
+                    in: RoundedRectangle(cornerRadius: SidebarLayoutMetrics.cardCornerRadius, style: .continuous)
+                )
             } else {
                 card
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: SidebarLayoutMetrics.cardCornerRadius, style: .continuous)
+                    )
                     .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: SidebarLayoutMetrics.cardCornerRadius, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                     }
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, SidebarLayoutMetrics.cardHorizontalInset)
         .padding(.vertical, 8)
     }
 
     private func cloudSidebarRowContent(isSelected: Bool) -> some View {
         HStack(alignment: .center, spacing: 8) {
-            SidebarSymbolIcon(
+            AnimatedSymbolIcon(
                 symbol: "externaldrive.connected.to.line.below",
                 isSelected: isSelected
             )
@@ -408,7 +553,7 @@ struct SidebarView: View {
                 .foregroundStyle(isSelected ? Color.white : Color.primary)
             } icon: {
                 if let symbolColor {
-                    SidebarSymbolIcon(
+                    AnimatedSymbolIcon(
                         symbol: symbol,
                         isSelected: isSelected,
                         speed: speed
@@ -416,7 +561,7 @@ struct SidebarView: View {
                     .foregroundStyle(isSelected ? .white : symbolColor)
                     .scaleEffect(symbolScale)
                 } else {
-                    SidebarSymbolIcon(
+                    AnimatedSymbolIcon(
                         symbol: symbol,
                         isSelected: isSelected,
                         speed: speed
@@ -469,91 +614,33 @@ private struct SidebarSelectionHighlightController: NSViewRepresentable {
 }
 
 private final class SidebarSelectionHighlightView: NSView {
-    private weak var sidebar: NSOutlineView?
-
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        sidebar = nil
         updateSelectionHighlight()
     }
 
     func updateSelectionHighlight() {
         DispatchQueue.main.async { [weak self] in
             guard let self, let contentView = self.window?.contentView else { return }
-            let outline = self.sidebar ?? self.findSidebar(in: contentView)
-            self.sidebar = outline
-            if let outline, outline.selectionHighlightStyle != .none {
-                outline.selectionHighlightStyle = .none
+            for sidebar in self.findSidebars(in: contentView) where sidebar.selectionHighlightStyle != .none {
+                sidebar.selectionHighlightStyle = .none
             }
         }
     }
 
-    private func findSidebar(in view: NSView) -> NSOutlineView? {
+    private func findSidebars(in view: NSView) -> [NSOutlineView] {
         if let outline = view as? NSOutlineView, outline.style == .sourceList {
-            return outline
+            return [outline]
         }
-        for subview in view.subviews {
-            if let outline = findSidebar(in: subview) {
-                return outline
-            }
-        }
-        return nil
-    }
-}
-
-/// 侧栏图标：切换到该项时先播消失动画，再紧接着用绘制动画出现。
-/// 绘制效果需要 macOS 26，旧系统与减弱动态效果下直接显示静态图标。
-private struct SidebarSymbolIcon: View {
-    let symbol: String
-    let isSelected: Bool
-    var speed: Double = 0.63
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isVisible = true
-
-    var body: some View {
-        ZStack {
-            Image.englishSystemName(symbol)
-                .opacity(0)
-            icon
-        }
-        .onChange(of: isSelected) { _, selected in
-            guard selected else { return }
-            replay()
-        }
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        if #available(macOS 26.0, *) {
-            if isVisible {
-                Image.englishSystemName(symbol)
-                    .transition(AnyTransition.asymmetric(
-                        insertion: AnyTransition(.symbolEffect(.drawOn, options: .speed(speed))),
-                        removal: AnyTransition(.symbolEffect(.disappear, options: .speed(speed)))
-                    ))
-            }
-        } else {
-            Image.englishSystemName(symbol)
-        }
-    }
-
-    private func replay() {
-        guard #available(macOS 26.0, *), !reduceMotion else { return }
-        withAnimation(.easeOut(duration: 0.33), completionCriteria: .removed) {
-            isVisible = false
-        } completion: {
-            withAnimation(.easeIn(duration: 0.48)) {
-                isVisible = true
-            }
-        }
+        return view.subviews.flatMap(findSidebars(in:))
     }
 }
 
 #if DEBUG
 #Preview("侧边栏") {
     @Previewable @State var model = SidebarPreviewModel.make()
-    SidebarView(model: model)
+    @Previewable @State var selectedPage = SidebarPage.navigation
+    SidebarView(model: model, selectedPage: $selectedPage)
         .frame(width: 240, height: 720)
 }
 

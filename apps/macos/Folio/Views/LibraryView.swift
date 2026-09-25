@@ -79,17 +79,6 @@ struct LibraryView: View {
                 }
                 .accessibilityLabel("添加字体")
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    withAnimation(.default) {
-                        model.filterExpanded.toggle()
-                    }
-                } label: {
-                    Image.englishSystemName("line.3.horizontal.decrease")
-                }
-                .accessibilityLabel("筛选")
-                .help("显示或隐藏筛选")
-            }
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
@@ -166,18 +155,16 @@ struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
     private var libraryHeader: some View {
-        VStack(spacing: 18) {
-            if model.selectedDestination == .allFonts {
-                LibraryHeroView(presentation: model.hero)
-            }
-            FacetFilterView(model: model)
+        if model.selectedDestination == .allFonts {
+            LibraryHeroView(presentation: model.hero)
+                .padding(.horizontal, 48)
+                .padding(.top, 42)
+                .padding(.bottom, 32)
+                .frame(maxWidth: LibraryLayout.titleMaxWidth)
+                .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 48)
-        .padding(.top, 42)
-        .padding(.bottom, 32)
-        .frame(maxWidth: LibraryLayout.titleMaxWidth)
-        .frame(maxWidth: .infinity)
     }
 
     private var emptyLibrary: some View {
