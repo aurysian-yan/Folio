@@ -33,7 +33,7 @@ struct RootView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(model: model, selectedPage: $sidebarPage)
-                .navigationSplitViewColumnWidth(min: 160, ideal: 240, max: 300)
+                .navigationSplitViewColumnWidth(240)
         } detail: {
             if model.selectedDestination == .cloudFonts {
                 CloudLibraryView(model: model)
