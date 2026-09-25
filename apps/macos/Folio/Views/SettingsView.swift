@@ -112,6 +112,16 @@ struct SettingsView: View {
         )
     }
 
+    private var webDAVPresetSelection: Binding<WebDAVPreset> {
+        Binding(
+            get: { draft.webDAVPreset },
+            set: { preset in
+                draft.webDAVPreset = preset
+                draft.serverURL = preset.serverURL ?? ""
+            }
+        )
+    }
+
     private var bottomBar: some View {
         HStack(spacing: 12) {
             circleButton("arrow.counterclockwise", label: "恢复默认值") {
@@ -168,8 +178,17 @@ struct SettingsView: View {
     private var cloudForm: some View {
         Form {
             Section {
+                Picker("服务商", selection: webDAVPresetSelection) {
+                    ForEach(WebDAVPreset.allCases) { preset in
+                        Text(preset.title).tag(preset)
+                    }
+                }
+                .pickerStyle(.segmented)
                 TextField("服务器地址", text: $draft.serverURL, prompt: Text("https://"))
                     .textContentType(.URL)
+                    .onChange(of: draft.serverURL) { _, serverURL in
+                        draft.webDAVPreset = WebDAVPreset.matching(serverURL)
+                    }
                 TextField("远端目录", text: $draft.remoteDirectory)
                 TextField("账号", text: $draft.username)
                 SecureField("密码或应用密码", text: $draft.password)
@@ -337,6 +356,7 @@ struct SettingsView: View {
         draft.defaultThemeColor = defaultThemeColor
         if let profile = cloud.profile {
             draft.serverURL = profile.serverUrl
+            draft.webDAVPreset = WebDAVPreset.matching(profile.serverUrl)
             draft.remoteDirectory = profile.remoteDirectory
             draft.username = profile.username
             draft.automatic = profile.automatic
@@ -379,12 +399,14 @@ struct SettingsView: View {
     private func resetToDefaults() {
         let connection = (
             serverURL: draft.serverURL,
+            preset: draft.webDAVPreset,
             directory: draft.remoteDirectory,
             username: draft.username,
             automatic: draft.automatic
         )
         draft = SettingsDraft()
         draft.serverURL = connection.serverURL
+        draft.webDAVPreset = connection.preset
         draft.remoteDirectory = connection.directory
         draft.username = connection.username
         draft.automatic = connection.automatic
@@ -417,6 +439,41 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     }
 }
 
+private enum WebDAVPreset: String, CaseIterable, Identifiable {
+    case none
+    case pan123
+    case jianguoyun
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: "无"
+        case .pan123: "123 云盘"
+        case .jianguoyun: "坚果云"
+        }
+    }
+
+    var serverURL: String? {
+        switch self {
+        case .none: nil
+        case .pan123: "https://webdav.123pan.cn/webdav"
+        case .jianguoyun: "https://dav.jianguoyun.com/dav"
+        }
+    }
+
+    static func matching(_ serverURL: String) -> Self {
+        let normalized = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
+        return allCases.first { preset in
+            guard let presetURL = preset.serverURL else { return false }
+            return presetURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                .lowercased() == normalized
+        } ?? .none
+    }
+}
+
 /// 设置窗口的编辑草稿；点“好”后写入偏好，点“取消”丢弃。
 private struct SettingsDraft {
     var selectCardsOnHover = true
@@ -430,6 +487,7 @@ private struct SettingsDraft {
     var useCollectionThemeColor = true
     var defaultThemeColor = DefaultThemeColor.folio.rawValue
     var serverURL = ""
+    var webDAVPreset: WebDAVPreset = .none
     var remoteDirectory = "Folio"
     var username = ""
     var password = ""
