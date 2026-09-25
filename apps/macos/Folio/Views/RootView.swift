@@ -300,26 +300,20 @@ private struct FavoriteFolderEditorView: View {
     }
 
     private var pager: some View {
-        GeometryReader { geometry in
-            ScrollView(.horizontal) {
-                HStack(spacing: 0) {
-                    ForEach(FavoriteFolderEditorTab.allCases) { tab in
-                        page(for: tab)
-                            .frame(
-                                width: geometry.size.width,
-                                height: geometry.size.height,
-                                alignment: .topLeading
-                            )
-                            .id(tab)
-                    }
+        ScrollView(.horizontal) {
+            HStack(spacing: 0) {
+                ForEach(FavoriteFolderEditorTab.allCases) { tab in
+                    page(for: tab)
+                        .containerRelativeFrame(.horizontal)
+                        .id(tab)
                 }
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.viewAligned)
-            .scrollIndicators(.never)
-            .scrollPosition(id: scrollSelection)
-            .background(ScrollWheelPager(onStep: step))
+            .scrollTargetLayout()
         }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollIndicators(.never)
+        .scrollPosition(id: scrollSelection)
+        .background(ScrollWheelPager(onStep: step))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

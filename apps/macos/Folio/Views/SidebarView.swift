@@ -29,10 +29,37 @@ struct SidebarView: View {
     @State private var dismissedCloudStatusKey: String?
     @State private var isRenamingCloud = false
     @State private var cloudNameDraft = ""
+    /// 分页切换方向：1 表示向后一页，-1 表示向前一页，用于位移转场的进出边。
+    @State private var pageStep = 1
     @Environment(\.folioThemeColor) private var themeColor
 
     private var pageAnimation: Animation {
         .smooth(duration: 0.45)
+    }
+
+    private var pageTransition: AnyTransition {
+        let forward = pageStep >= 0
+        return .asymmetric(
+            insertion: .move(edge: forward ? .leading : .trailing).combined(with: .opacity),
+            removal: .move(edge: forward ? .trailing : .leading).combined(with: .opacity)
+        )
+    }
+
+    /// 新页各行进入时的水平起始方向：向后翻页从左侧进入，向前翻页从右侧进入。
+    private var rowEntryDirection: CGFloat {
+        pageStep >= 0 ? -1 : 1
+    }
+
+    /// 切换侧栏分页；direction 为空时按页码先后自动判定位移方向。
+    private func selectPage(_ page: SidebarPage, direction: Int? = nil) {
+        guard page != selectedPage else { return }
+        let pages = SidebarPage.allCases
+        let currentIndex = pages.firstIndex(of: selectedPage) ?? 0
+        let targetIndex = pages.firstIndex(of: page) ?? currentIndex
+        pageStep = direction ?? (targetIndex >= currentIndex ? 1 : -1)
+        withAnimation(pageAnimation) {
+            selectedPage = page
+        }
     }
 
     /// 侧栏分页切换控件；放进侧栏列工具栏，使用系统原生的玻璃分段样式。
@@ -52,17 +79,13 @@ struct SidebarView: View {
     private var sidebarPageSelection: Binding<SidebarPage> {
         Binding(
             get: { selectedPage },
-            set: { page in
-                withAnimation(pageAnimation) {
-                    selectedPage = page
-                }
-            }
+            set: { selectPage($0) }
         )
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            sidebarPager
+            sidebarPageContent
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             cloudSyncStatus
@@ -79,9 +102,7 @@ struct SidebarView: View {
         }
         .onChange(of: model.selectedDestination) { _, _ in
             guard selectedPage != .navigation else { return }
-            withAnimation(pageAnimation) {
-                selectedPage = .navigation
-            }
+            selectPage(.navigation)
         }
         .onChange(of: transientCloudStatusKey) { _, statusKey in
             if statusKey != dismissedCloudStatusKey {
@@ -97,27 +118,16 @@ struct SidebarView: View {
         }
     }
 
-    private var sidebarPager: some View {
-        GeometryReader { geometry in
-            ScrollView(.horizontal) {
-                HStack(spacing: 0) {
-                    ForEach(SidebarPage.allCases) { page in
-                        sidebarList(for: page)
-                            .frame(
-                                width: geometry.size.width,
-                                height: geometry.size.height,
-                                alignment: .topLeading
-                            )
-                            .id(page)
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.viewAligned)
-            .scrollIndicators(.never)
-            .scrollPosition(id: sidebarScrollSelection)
-            .background(ScrollWheelPager(onStep: stepPage))
+    /// 侧栏分页内容：同一时刻只渲染一个列表，切换时用位移加淡入淡出做转场。
+    private var sidebarPageContent: some View {
+        ZStack {
+            sidebarList(for: selectedPage)
+                .id(selectedPage)
+                .transition(pageTransition)
         }
+        .clipped()
+        .background(ScrollWheelPager(onStep: stepPage))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func stepPage(_ direction: Int) {
@@ -125,20 +135,20 @@ struct SidebarView: View {
         guard let index = pages.firstIndex(of: selectedPage) else { return }
         let next = index + direction
         guard pages.indices.contains(next) else { return }
-        withAnimation(pageAnimation) {
-            selectedPage = pages[next]
-        }
+        selectPage(pages[next], direction: direction)
     }
 
-    private var sidebarScrollSelection: Binding<SidebarPage?> {
-        Binding(
-            get: { selectedPage },
-            set: { page in
-                guard let page else { return }
-                selectedPage = page
-            }
-        )
+    private var favoriteRowBase: Int { 3 }
+
+    private var favoriteCreateRowIndex: Int {
+        favoriteRowBase + model.snapshot.smartFolders.count + model.snapshot.collections.count
     }
+
+    private var cloudRowIndex: Int { favoriteCreateRowIndex + 1 }
+
+    private var fontStateRowBase: Int { cloudRowIndex + 1 }
+
+    private var toolRowBase: Int { fontStateRowBase + 6 }
 
     @ViewBuilder
     private func sidebarList(for page: SidebarPage) -> some View {
@@ -146,24 +156,25 @@ struct SidebarView: View {
             switch page {
             case .navigation:
                 Section {
-                    sidebarRow("全部字体", symbol: "textformat.alt", count: model.snapshot.familyCount, destination: .allFonts)
+                    sidebarRow("全部字体", symbol: "textformat.alt", count: model.snapshot.familyCount, destination: .allFonts, index: 0)
                         .tag(SidebarDestination.allFonts)
-                    sidebarRow("最近", symbol: "clock", count: model.snapshot.recentCount, destination: .recent)
+                    sidebarRow("最近", symbol: "clock", count: model.snapshot.recentCount, destination: .recent, index: 1)
                         .tag(SidebarDestination.recent)
-                    sidebarRow("收藏", symbol: "star", count: nil, destination: .favorites)
+                    sidebarRow("收藏", symbol: "star", count: nil, destination: .favorites, index: 2)
                         .tag(SidebarDestination.favorites)
                 } header: {
                     sidebarSectionHeader("本地")
                 }
                 Section {
-                    ForEach(model.snapshot.smartFolders) { folder in
+                    ForEach(Array(model.snapshot.smartFolders.enumerated()), id: \.element.id) { offset, folder in
                         sidebarRow(
                             folder.name,
                             symbol: folder.icon.symbolName,
                             count: folder.matchCount,
                             destination: .smartFolder(folder.id),
                             symbolColor: folder.color.color,
-                            trailingSymbol: "sparkles.2"
+                            trailingSymbol: "sparkles.2",
+                            index: favoriteRowBase + offset
                         )
                         .tag(SidebarDestination.smartFolder(folder.id))
                         .contextMenu {
@@ -175,13 +186,14 @@ struct SidebarView: View {
                             }
                         }
                     }
-                    ForEach(model.snapshot.collections) { collection in
+                    ForEach(Array(model.snapshot.collections.enumerated()), id: \.element.id) { offset, collection in
                         sidebarRow(
                             collection.name,
                             symbol: collection.icon.symbolName,
                             count: collection.memberCount,
                             destination: .collection(collection.id),
-                            symbolColor: collection.color.color
+                            symbolColor: collection.color.color,
+                            index: favoriteRowBase + model.snapshot.smartFolders.count + offset
                         )
                         .tag(SidebarDestination.collection(collection.id))
                         .contextMenu {
@@ -208,6 +220,7 @@ struct SidebarView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .modifier(SidebarRowStagger(index: favoriteCreateRowIndex, direction: rowEntryDirection))
                 } header: {
                     sidebarSectionHeader("收藏夹")
                 }
@@ -219,6 +232,7 @@ struct SidebarView: View {
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 2)
                         )
+                        .modifier(SidebarRowStagger(index: cloudRowIndex, direction: rowEntryDirection))
                         .tag(SidebarDestination.cloudFonts)
                         .contextMenu {
                             if cloud.isConnected {
@@ -232,21 +246,21 @@ struct SidebarView: View {
                     sidebarSectionHeader("云端")
                 }
                 Section {
-                    sidebarRow("已挂载", symbol: "checkmark.diamond", count: model.fontStateCounts[.active] ?? 0, destination: .fontState(.active))
+                    sidebarRow("已挂载", symbol: "checkmark.diamond", count: model.fontStateCounts[.active] ?? 0, destination: .fontState(.active), index: fontStateRowBase)
                         .tag(SidebarDestination.fontState(.active))
                         .help("当前登录会话已激活")
-                    sidebarRow("已安装", symbol: "square.and.arrow.down", count: model.fontStateCounts[.installed] ?? 0, destination: .fontState(.installed), speed: 1.29)
+                    sidebarRow("已安装", symbol: "square.and.arrow.down", count: model.fontStateCounts[.installed] ?? 0, destination: .fontState(.installed), speed: 1.29, index: fontStateRowBase + 1)
                         .tag(SidebarDestination.fontState(.installed))
                         .help("包含手动安装和 Folio 安装的字体")
-                    sidebarRow("仅在字体库", symbol: "book.closed", count: model.fontStateCounts[.available] ?? 0, destination: .fontState(.available))
+                    sidebarRow("仅在字体库", symbol: "book.closed", count: model.fontStateCounts[.available] ?? 0, destination: .fontState(.available), index: fontStateRowBase + 2)
                         .tag(SidebarDestination.fontState(.available))
                         .help("Folio 字体库中尚未挂载或安装的副本")
-                    sidebarRow("外部文件", symbol: "doc", count: model.fontStateCounts[.external] ?? 0, destination: .fontState(.external))
+                    sidebarRow("外部文件", symbol: "doc", count: model.fontStateCounts[.external] ?? 0, destination: .fontState(.external), index: fontStateRowBase + 3)
                         .tag(SidebarDestination.fontState(.external))
                         .help("引用的文件和已添加文件夹中的字体")
-                    sidebarRow("系统字体", symbol: "laptopcomputer.and.arrow.down", count: model.fontStateCounts[.system] ?? 0, destination: .fontState(.system))
+                    sidebarRow("系统字体", symbol: "laptopcomputer.and.arrow.down", count: model.fontStateCounts[.system] ?? 0, destination: .fontState(.system), index: fontStateRowBase + 4)
                         .tag(SidebarDestination.fontState(.system))
-                    sidebarRow("文件不可用", symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0, destination: .fontState(.unavailable))
+                    sidebarRow("文件不可用", symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0, destination: .fontState(.unavailable), index: fontStateRowBase + 5)
                         .tag(SidebarDestination.fontState(.unavailable))
                 } header: {
                     sidebarSectionHeader("字体状态")
@@ -259,14 +273,15 @@ struct SidebarView: View {
                     }
                     .foregroundStyle(.tertiary)
                     .help("在线字体将在后续版本提供")
-                    sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
+                    .modifier(SidebarRowStagger(index: toolRowBase, direction: rowEntryDirection))
+                    sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth, index: toolRowBase + 1)
                         .tag(SidebarDestination.fontHealth)
                 } header: {
                     sidebarSectionHeader("工具")
                 }
             case .filters:
                 Section {
-                    ForEach(FacetKind.allCases, id: \.self) { kind in
+                    ForEach(Array(FacetKind.allCases.enumerated()), id: \.element) { offset, kind in
                         let options = model.facetOptions.filter { $0.kind == kind }
                         if !options.isEmpty {
                             FacetDisclosureGroupView(
@@ -284,6 +299,7 @@ struct SidebarView: View {
                             ))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
+                            .modifier(SidebarRowStagger(index: offset, direction: rowEntryDirection))
                         }
                     }
                 } header: {
@@ -508,7 +524,8 @@ struct SidebarView: View {
         destination: SidebarDestination,
         speed: Double = 0.76,
         symbolColor: Color? = nil,
-        trailingSymbol: String? = nil
+        trailingSymbol: String? = nil,
+        index: Int
     ) -> some View {
         let isSelected = model.selectedDestination == destination
         return sidebarRowContent(
@@ -526,6 +543,7 @@ struct SidebarView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
         )
+        .modifier(SidebarRowStagger(index: index, direction: rowEntryDirection))
     }
 
     private func sidebarRowContent(
@@ -600,6 +618,29 @@ private struct RingSyncProgressView: View {
                 rotation = 360
             }
         }
+    }
+}
+
+/// 侧栏翻页时各行按序号依次轻微水平位移进入，序号越大延时越长，形成甩尾感。
+private struct SidebarRowStagger: ViewModifier {
+    let index: Int
+    let direction: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: shown ? 0 : direction * 26)
+            .onAppear {
+                guard !shown else { return }
+                if reduceMotion {
+                    shown = true
+                } else {
+                    withAnimation(.smooth(duration: 0.42).delay(min(Double(index) * 0.02, 0.24))) {
+                        shown = true
+                    }
+                }
+            }
     }
 }
 
