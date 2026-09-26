@@ -1,7 +1,11 @@
 import {
-  CornersInIcon,
-  CornersOutIcon,
+  CopySimpleIcon,
+  SquareIcon,
   ArrowClockwiseIcon,
+  CloudCheckIcon,
+  ClockCounterClockwiseIcon,
+  CopyIcon,
+  FolderIcon,
   FolderPlusIcon,
   GearSixIcon,
   GridFourIcon,
@@ -12,6 +16,7 @@ import {
   StackSimpleIcon,
   SidebarIcon,
   SidebarSimpleIcon,
+  SparkleIcon,
   StarIcon,
   TextAaIcon,
   XIcon,
@@ -147,9 +152,9 @@ export default function App() {
   const [editingSmartFolderName, setEditingSmartFolderName] = useState<
     string | null
   >(null);
-  const [editingSmartFolderId, setEditingSmartFolderId] = useState<string | null>(
-    null,
-  );
+  const [editingSmartFolderId, setEditingSmartFolderId] = useState<
+    string | null
+  >(null);
   const [collectionTargetId, setCollectionTargetId] = useState("");
   const [organizationError, setOrganizationError] = useState<string | null>(
     null,
@@ -164,10 +169,16 @@ export default function App() {
   const [leftSidebarWidth, setLeftSidebarWidth] = useState<number | null>(() =>
     storedSidebarWidth("folio-left-sidebar-width"),
   );
-  const [rightSidebarWidth, setRightSidebarWidth] = useState<number | null>(() =>
-    storedSidebarWidth("folio-right-sidebar-width"),
+  const [rightSidebarWidth, setRightSidebarWidth] = useState<number | null>(
+    () => storedSidebarWidth("folio-right-sidebar-width"),
   );
-  const [resizingSidebar, setResizingSidebar] = useState<"left" | "right" | null>(null);
+  const [resizingSidebar, setResizingSidebar] = useState<
+    "left" | "right" | null
+  >(null);
+  const [dragPreview, setDragPreview] = useState<{
+    side: "left" | "right";
+    width: number;
+  } | null>(null);
   const [snapClosingSidebar, setSnapClosingSidebar] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [windowActionError, setWindowActionError] = useState<string | null>(
@@ -185,8 +196,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [menuMode, setMenuMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
-  const [previewText, setPreviewText] = useState("Aa");
+  const [previewText, setPreviewText] = useState("Folio 字体预览");
   const [previewSize, setPreviewSize] = useState(48);
   const [syncProfile, setSyncProfile] = useState<SyncProfileDto | null>(null);
   const [syncServerUrl, setSyncServerUrl] = useState("");
@@ -203,6 +215,28 @@ export default function App() {
   const queryRevision = useRef(0);
 
   useEffect(() => {
+    if (!menuMode) return;
+    const closeOnOutsidePress = (event: globalThis.PointerEvent) => {
+      if (!(event.target as HTMLElement).closest(".titlebar")) {
+        setMenuMode(false);
+        setMenuOpen(null);
+      }
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuMode(false);
+        setMenuOpen(null);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuMode]);
+
+  useEffect(() => {
     const updateViewport = () => setViewportWidth(window.innerWidth);
     window.addEventListener("resize", updateViewport);
     return () => window.removeEventListener("resize", updateViewport);
@@ -210,19 +244,27 @@ export default function App() {
 
   useEffect(() => {
     if (leftSidebarWidth !== null)
-      localStorage.setItem("folio-left-sidebar-width", String(leftSidebarWidth));
+      localStorage.setItem(
+        "folio-left-sidebar-width",
+        String(leftSidebarWidth),
+      );
   }, [leftSidebarWidth]);
 
   useEffect(() => {
     if (rightSidebarWidth !== null)
-      localStorage.setItem("folio-right-sidebar-width", String(rightSidebarWidth));
+      localStorage.setItem(
+        "folio-right-sidebar-width",
+        String(rightSidebarWidth),
+      );
   }, [rightSidebarWidth]);
 
   useEffect(() => {
     if (!snapClosingSidebar) return;
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => setSnapClosingSidebar(false));
+      secondFrame = window.requestAnimationFrame(() =>
+        setSnapClosingSidebar(false),
+      );
     });
     return () => {
       window.cancelAnimationFrame(firstFrame);
@@ -231,6 +273,7 @@ export default function App() {
   }, [snapClosingSidebar]);
 
   useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
     let active = true;
     let unlisten: (() => void) | undefined;
     const currentWindow = getCurrentWindow();
@@ -486,12 +529,14 @@ export default function App() {
     if (settingsWindow) return;
     let active = true;
     let unlisten: (() => void) | undefined;
-    void listen("library-updated", () => void runRefresh()).then((stop) => {
-      if (active) unlisten = stop;
-      else stop();
-    }).catch((cause) => {
-      if (active) setError(errorMessage(cause));
-    });
+    void listen("library-updated", () => void runRefresh())
+      .then((stop) => {
+        if (active) unlisten = stop;
+        else stop();
+      })
+      .catch((cause) => {
+        if (active) setError(errorMessage(cause));
+      });
     return () => {
       active = false;
       unlisten?.();
@@ -684,7 +729,9 @@ export default function App() {
       return;
     }
     if (selectedFacets.roots?.length) {
-      setOrganizationError("智慧收藏夹暂不支持按来源目录筛选，请先清除该条件。");
+      setOrganizationError(
+        "智慧收藏夹暂不支持按来源目录筛选，请先清除该条件。",
+      );
       return;
     }
     try {
@@ -753,50 +800,100 @@ export default function App() {
   );
   const currentScopeTitle =
     scope === "collection"
-      ? (collections.find((collection) => collection.id === collectionId)?.name ??
-        "手动收藏夹")
+      ? (collections.find((collection) => collection.id === collectionId)
+          ?.name ?? "手动收藏夹")
       : scope === "smartFolder"
         ? (smartFolders.find((folder) => folder.id === smartFolderId)?.name ??
           "智慧收藏夹")
         : scopeTitle(scope);
   const compactViewport = viewportWidth <= 860;
-  const preferredLeftWidth = leftSidebarWidth ?? (compactViewport ? 190 : 256);
-  const preferredRightWidth = rightSidebarWidth ?? (compactViewport ? 222 : 276);
+  const preferredLeftWidth = leftSidebarWidth ?? (compactViewport ? 190 : 240);
+  const preferredRightWidth =
+    rightSidebarWidth ?? (compactViewport ? 222 : 276);
+  const leftMinimumWidth = compactViewport ? 190 : 240;
+  const rightMinimumWidth = compactViewport ? 222 : 256;
   const availableSidebarWidth = Math.max(0, viewportWidth - 288);
-  const leftPaneWidth = leftSidebarOpen
-    ? Math.min(
-        preferredLeftWidth,
-        Math.max(0, availableSidebarWidth - (rightSidebarOpen ? 180 : 0)),
-      )
-    : 0;
-  const rightPaneWidth = rightSidebarOpen
-    ? Math.min(preferredRightWidth, Math.max(0, availableSidebarWidth - leftPaneWidth))
-    : 0;
+  const rightReservation = dragPreview?.side === "right"
+    ? dragPreview.width
+    : rightSidebarOpen ? rightMinimumWidth : 0;
+  const leftPaneWidth = dragPreview?.side === "left"
+    ? Math.min(dragPreview.width, Math.max(0, availableSidebarWidth - (rightSidebarOpen ? rightMinimumWidth : 0)))
+    : leftSidebarOpen
+      ? Math.min(
+          preferredLeftWidth,
+          Math.max(0, availableSidebarWidth - rightReservation),
+        )
+      : 0;
+  const rightPaneWidth = dragPreview?.side === "right"
+    ? Math.min(dragPreview.width, Math.max(0, availableSidebarWidth - leftPaneWidth))
+    : rightSidebarOpen
+      ? Math.min(preferredRightWidth, Math.max(0, availableSidebarWidth - leftPaneWidth))
+      : 0;
+  const leftSidebarVisible = dragPreview?.side === "left" ? leftPaneWidth > 0 : leftSidebarOpen;
+  const rightSidebarVisible = dragPreview?.side === "right" ? rightPaneWidth > 0 : rightSidebarOpen;
+  const maximumSidebarWidth = (side: "left" | "right") =>
+    Math.max(
+      side === "left" ? leftMinimumWidth : rightMinimumWidth,
+      Math.min(
+        side === "left" ? 440 : 480,
+        availableSidebarWidth - (side === "left"
+          ? rightSidebarOpen ? rightMinimumWidth : 0
+          : leftSidebarOpen ? leftMinimumWidth : 0),
+      ),
+    );
   const resizeSidebar = (side: "left" | "right", proposedWidth: number) => {
-    if (proposedWidth < 256) {
+    const minimum = side === "left" ? leftMinimumWidth : rightMinimumWidth;
+    if (proposedWidth < minimum) {
       setSnapClosingSidebar(true);
       if (side === "left") setLeftSidebarOpen(false);
       else setRightSidebarOpen(false);
-      setResizingSidebar(null);
       return;
     }
-    const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width ?? viewportWidth;
-    const minimum = 256;
-    const maximum = Math.max(
-      minimum,
-      Math.min(
-        side === "left" ? 440 : 480,
-        workspaceWidth - 288 - (side === "left" ? rightPaneWidth : leftPaneWidth),
-      ),
-    );
-    const width = Math.round(Math.max(minimum, Math.min(maximum, proposedWidth)));
-    if (side === "left") setLeftSidebarWidth(width);
-    else setRightSidebarWidth(width);
+    const width = Math.round(Math.max(minimum, Math.min(maximumSidebarWidth(side), proposedWidth)));
+    if (side === "left") {
+      setLeftSidebarWidth(width);
+      setLeftSidebarOpen(true);
+    } else {
+      setRightSidebarWidth(width);
+      setRightSidebarOpen(true);
+    }
+  };
+  const sidebarWidthFromPointer = (side: "left" | "right", clientX: number) => {
+    const rect = workspaceRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const proposedWidth = side === "left" ? clientX - rect.left : rect.right - clientX;
+    return Math.round(Math.max(0, Math.min(maximumSidebarWidth(side), proposedWidth)));
   };
   const resizeFromPointer = (side: "left" | "right", clientX: number) => {
-    const rect = workspaceRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    resizeSidebar(side, side === "left" ? clientX - rect.left : rect.right - clientX);
+    const width = sidebarWidthFromPointer(side, clientX);
+    if (width !== null) setDragPreview({ side, width });
+  };
+  const finishPointerResize = (side: "left" | "right", clientX: number) => {
+    const width = sidebarWidthFromPointer(side, clientX);
+    setDragPreview(null);
+    setResizingSidebar(null);
+    if (width === null) return;
+    const minimum = side === "left" ? leftMinimumWidth : rightMinimumWidth;
+    if (width < minimum / 2) {
+      setSnapClosingSidebar(true);
+      if (side === "left") setLeftSidebarOpen(false);
+      else setRightSidebarOpen(false);
+    } else {
+      if (side === "right" && leftSidebarOpen) {
+        setLeftSidebarWidth(Math.max(leftMinimumWidth, Math.min(preferredLeftWidth, availableSidebarWidth - width)));
+      }
+      resizeSidebar(side, Math.max(minimum, width));
+    }
+  };
+  const fileMenuItems = [
+    { label: "添加字体文件夹…", action: chooseFolder },
+    { label: "刷新字体库", action: runRefresh },
+    { label: "设置…", action: openSettings },
+    { label: "退出 Folio", action: quitApp },
+  ];
+  const closeMenu = () => {
+    setMenuOpen(null);
+    setMenuMode(false);
   };
 
   return (
@@ -825,21 +922,59 @@ export default function App() {
           void toggleWindowMaximize();
         }}
       >
-        <div className="window-brand">
-          <span className="brand-mark">
-            <TextAaIcon weight="bold" />
-          </span>
-          <nav className="menubar" aria-label="应用菜单">
+        {!settingsWindow && <Button
+          className="titlebar-sidebar-button"
+          isIconOnly
+          size="sm"
+          variant="tertiary"
+          isDisabled={menuMode}
+          aria-label={leftSidebarOpen ? "收起左侧栏" : "展开左侧栏"}
+          aria-pressed={leftSidebarOpen}
+          onPress={() => setLeftSidebarOpen((open) => !open)}
+        >
+          <SidebarSimpleIcon size={13} />
+        </Button>}
+        <div className="titlebar-leading">
+          <button
+            type="button"
+            className="window-brand"
+            aria-label="文件菜单"
+            aria-expanded={menuMode && menuOpen === "文件"}
+            aria-controls="file-menu"
+            onClick={() => {
+              if (menuMode) closeMenu();
+              else {
+                setMenuMode(true);
+                setMenuOpen("文件");
+              }
+            }}
+            onMouseEnter={() => {
+              if (menuMode) setMenuOpen("文件");
+            }}
+          >
+          <svg height="12" viewBox="0 0 1024 364" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M386.388 112.573C417.93 112.573 444.888 121.213 467.261 138.494C496.236 161.658 510.723 193.83 510.723 235.01C510.723 265.894 501.553 293.103 483.215 316.634C458.641 347.886 424.715 363.513 381.436 363.513C349.893 363.513 322.752 353.953 300.013 334.834C271.404 310.567 257.101 277.66 257.101 236.112C257.101 206.698 265.536 180.961 282.407 158.9C306.614 128.015 341.275 112.573 386.388 112.573ZM899.664 112.573C931.206 112.573 958.164 121.213 980.537 138.494C1009.51 161.658 1024 193.83 1024 235.01C1024 265.894 1014.83 293.103 996.492 316.634C971.919 347.886 937.992 363.513 894.713 363.513C863.171 363.513 836.029 353.953 813.289 334.834C784.681 310.567 770.377 277.66 770.377 236.112C770.377 206.698 778.813 180.961 795.685 158.9C819.892 128.016 854.551 112.573 899.664 112.573ZM270.619 0.615173C273.097 0.615173 275.119 2.59711 275.169 5.07416L277.186 104.62C277.237 107.169 275.185 109.263 272.636 109.264H264.723C262.708 109.264 260.932 107.939 260.359 106.007L249.354 68.9003C249.266 68.6031 249.254 68.3348 249.146 68.0439C248.965 67.5523 248.59 67.0797 248.433 66.58C237.71 32.5309 215.967 15.506 183.203 15.5058H125.586C123.072 15.5058 121.035 17.544 121.035 20.0576V148.282C121.035 150.796 123.072 152.834 125.586 152.834H222.114C224.628 152.834 226.665 154.871 226.665 157.385V164.828C226.665 167.341 224.628 169.379 222.114 169.379H125.586C123.073 169.379 121.035 171.416 121.035 173.93V338.555C121.035 341.068 123.072 343.106 125.586 343.106H181.402C183.916 343.106 185.953 345.144 185.953 347.657V353.446C185.953 355.96 183.916 357.997 181.402 357.997H4.55078C2.0375 357.997 0.000131932 355.96 0 353.446V347.657C6.59676e-05 345.144 2.03746 343.107 4.55078 343.106H39.4619C41.9753 343.106 44.0127 341.068 44.0127 338.555V20.0576C44.0127 17.5442 41.9753 15.506 39.4619 15.5058H4.55078C2.03742 15.5056 0 13.4684 0 10.955V5.16595C0.000226495 2.65275 2.03756 0.615349 4.55078 0.615173H270.619ZM616.606 0.573181C619.417 0.0235637 622.031 2.17596 622.031 5.03998V339.106C622.031 341.62 624.069 343.658 626.582 343.658H649.539C649.897 343.658 650.251 343.664 650.6 343.674C650.895 343.601 651.2 343.554 651.513 343.537C654.461 343.374 657.162 343.047 659.617 342.555C672.454 340.349 678.873 331.157 678.873 314.979V161.797C678.873 159.283 676.836 157.246 674.322 157.246H651.515C649.001 157.246 646.964 155.208 646.964 152.694V146.577C646.964 144.435 648.457 142.583 650.551 142.129L743.228 122.041C746.064 121.426 748.743 123.587 748.743 126.489V339.106C748.743 341.62 750.781 343.658 753.294 343.658H769.099C771.299 343.658 773.317 343.841 775.15 344.209C778.981 344.8 781.273 347.882 782.026 353.456C782.363 355.947 780.265 357.997 777.752 357.997H513.8C511.286 357.997 509.249 355.96 509.249 353.446V348.209C509.249 345.695 511.287 343.665 513.8 343.606C521.985 343.417 528.72 342.699 534.006 341.452C546.109 338.143 552.161 328.951 552.161 313.876V40.4638C552.161 37.9503 550.123 35.912 547.609 35.912H513.8C511.286 35.912 509.249 33.8747 509.249 31.3613V25.3203C509.249 23.1436 510.79 21.2714 512.926 20.8535L616.606 0.573181ZM383.637 126.912C369.699 126.912 358.879 131.141 351.177 139.598C338.707 153.937 332.472 186.844 332.472 238.318C332.472 272.88 334.672 298.066 339.073 313.876C345.675 337.407 360.346 349.173 383.086 349.173C395.923 349.173 406.376 345.312 414.445 337.591C428.383 323.619 435.352 289.793 435.352 236.112C435.352 202.654 433.15 178.203 428.749 162.761C422.147 138.862 407.11 126.912 383.637 126.912ZM896.913 126.912C882.976 126.912 872.156 131.141 864.454 139.598C851.984 153.937 845.749 186.844 845.749 238.318C845.749 272.88 847.949 298.066 852.351 313.876C858.953 337.407 873.623 349.173 896.363 349.173C909.2 349.173 919.654 345.312 927.723 337.591C941.66 323.619 948.628 289.793 948.628 236.112C948.628 202.654 946.428 178.203 942.026 162.761C935.424 138.862 920.386 126.912 896.913 126.912ZM712.433 7.23334C719.401 7.23334 726.003 9.07219 732.238 12.749C746.542 20.4702 753.694 32.4198 753.694 48.5976C753.694 55.5833 751.861 62.2017 748.193 68.4521C740.491 82.056 728.571 88.8574 712.433 88.8574C705.831 88.8573 699.412 87.2036 693.177 83.8945C678.873 76.541 671.721 64.7751 671.721 48.5976C671.721 41.6118 673.372 34.9935 676.673 28.7431C684.742 14.4037 696.661 7.23336 712.433 7.23334Z" fill="white"/>
+          </svg>
+          </button>
+          {menuMode && menuOpen === "文件" && (
+            <div className="menu-popover file-menu-popover" id="file-menu" role="menu" aria-label="文件">
+              {fileMenuItems.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    closeMenu();
+                    void item.action();
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {menuMode && <nav className="menubar" aria-label="应用菜单">
             {[
-              {
-                name: "文件",
-                items: [
-                  { label: "添加字体文件夹…", action: chooseFolder },
-                  { label: "刷新字体库", action: runRefresh },
-                  { label: "设置…", action: openSettings },
-                  { label: "退出 Folio", action: quitApp },
-                ],
-              },
               {
                 name: "编辑",
                 items: [
@@ -892,52 +1027,115 @@ export default function App() {
                 ],
               },
             ].map((menu) => (
-              <details
+              <div
                 className="menu-root"
                 key={menu.name}
-                open={menuOpen === menu.name}
-                onToggle={(event) => {
-                  if ((event.currentTarget as HTMLDetailsElement).open)
-                    setMenuOpen(menu.name);
-                  else if (menuOpen === menu.name) setMenuOpen(null);
-                }}
+                onMouseEnter={() => setMenuOpen(menu.name)}
               >
-                <summary
-                  onClick={(event) => {
-                    event.preventDefault();
-                    setMenuOpen((current) =>
-                      current === menu.name ? null : menu.name,
-                    );
-                  }}
+                <button
+                  type="button"
+                  className="menu-trigger"
+                  aria-expanded={menuOpen === menu.name}
+                  aria-controls={`menu-${menu.name}`}
+                  onFocus={() => setMenuOpen(menu.name)}
+                  onClick={() => setMenuOpen(menu.name)}
                 >
                   {menu.name}
-                </summary>
-                <div className="menu-popover" role="menu">
+                </button>
+                {menuOpen === menu.name && <div className="menu-popover" id={`menu-${menu.name}`} role="menu" aria-label={menu.name}>
                   {menu.items.map((item) => (
                     <button
                       key={item.label}
+                      type="button"
                       role="menuitem"
                       onClick={() => {
-                        setMenuOpen(null);
+                        closeMenu();
                         void item.action();
                       }}
                     >
                       {item.label}
                     </button>
                   ))}
-                </div>
-              </details>
+                </div>}
+              </div>
             ))}
-          </nav>
+          </nav>}
         </div>
-        <span className="window-caption">
+        {!menuMode && !settingsWindow && <div className="titlebar-center">
+          <div className="titlebar-drag-space" aria-hidden="true" />
+          <Toolbar className="titlebar-actions" aria-label="字体库工具">
+          <div className="view-picker" aria-label="浏览方式">
+            {viewModes.map(({ id, label, Icon }) => (
+              <Button
+                key={id}
+                isIconOnly
+                size="sm"
+                variant={viewMode === id ? "secondary" : "tertiary"}
+                className="view-mode-button"
+                aria-label={label}
+                aria-pressed={viewMode === id}
+                onPress={() => setViewMode(id)}
+              >
+                <Icon />
+              </Button>
+            ))}
+          </div>
+          <SearchField
+            className="search-box"
+            aria-label="搜索字体"
+            value={search}
+            onChange={setSearch}
+          >
+            <SearchField.Group>
+              <SearchField.SearchIcon>
+                <MagnifyingGlassIcon />
+              </SearchField.SearchIcon>
+              <SearchField.Input placeholder="搜索字体" />
+            </SearchField.Group>
+          </SearchField>
+          <Button
+            isIconOnly
+            size="sm"
+            aria-label="刷新字体库"
+            variant="tertiary"
+            onPress={() => void runRefresh()}
+            isDisabled={refreshing}
+          >
+            <ArrowClockwiseIcon className={refreshing ? "spin" : ""} />
+          </Button>
+          <Button
+            isIconOnly
+            size="sm"
+            aria-label="添加字体文件夹"
+            variant="tertiary"
+            onPress={() => void chooseFolder()}
+          >
+            <PlusIcon />
+          </Button>
+          </Toolbar>
+          <div className="titlebar-drag-space" aria-hidden="true" />
+        </div>}
+        {menuMode && !settingsWindow && <div className="titlebar-drag-space" aria-hidden="true" />}
+        {settingsWindow && <span className="window-caption">
           {settingsWindow
             ? "设置"
             : page
               ? `字体库 · ${page.totalMatches} 个字族`
               : "字体库"}
-        </span>
+        </span>}
         <div className="window-controls" aria-label="窗口控制">
+          {!settingsWindow && <Button
+            className="titlebar-sidebar-button"
+            isIconOnly
+            size="sm"
+            variant="tertiary"
+            isDisabled={menuMode}
+            aria-label={rightSidebarOpen ? "收起右侧栏" : "展开右侧栏"}
+            aria-pressed={rightSidebarOpen}
+            onPress={() => setRightSidebarOpen((open) => !open)}
+          >
+            <SidebarIcon size={13} />
+          </Button>}
           <Button
             isIconOnly
             variant="tertiary"
@@ -948,7 +1146,7 @@ export default function App() {
                 .catch((cause) => setWindowActionError(errorMessage(cause)))
             }
           >
-            <MinusIcon />
+            <MinusIcon size={13} />
           </Button>
           <Button
             isIconOnly
@@ -956,7 +1154,7 @@ export default function App() {
             aria-label={isMaximized ? "还原窗口" : "最大化窗口"}
             onPress={() => void toggleWindowMaximize()}
           >
-            {isMaximized ? <CornersInIcon /> : <CornersOutIcon />}
+            {isMaximized ? <CopySimpleIcon size={13} /> : <SquareIcon size={13} />}
           </Button>
           <Button
             className="close-control"
@@ -969,7 +1167,7 @@ export default function App() {
                 .catch((cause) => setWindowActionError(errorMessage(cause)))
             }
           >
-            <XIcon />
+            <XIcon size={14} />
           </Button>
         </div>
       </header>
@@ -1281,401 +1479,390 @@ export default function App() {
         <div
           className={`workspace${resizingSidebar ? " is-resizing" : ""}${snapClosingSidebar ? " is-snap-closing" : ""}`}
           ref={workspaceRef}
-          style={{
-            "--left-pane-width": `${leftPaneWidth}px`,
-            "--right-pane-width": `${rightPaneWidth}px`,
-            "--left-content-width": `${leftSidebarOpen ? leftPaneWidth : preferredLeftWidth}px`,
-            "--right-content-width": `${rightSidebarOpen ? rightPaneWidth : preferredRightWidth}px`,
-          } as React.CSSProperties}
+          style={
+            {
+              "--left-pane-width": `${leftPaneWidth}px`,
+              "--right-pane-width": `${rightPaneWidth}px`,
+              "--left-content-width": `${leftSidebarVisible ? leftPaneWidth : preferredLeftWidth}px`,
+              "--right-content-width": `${rightSidebarVisible ? rightPaneWidth : preferredRightWidth}px`,
+            } as React.CSSProperties
+          }
         >
           <aside
             id="left-sidebar"
             className="sidebar"
             aria-label="左侧导航与筛选"
-            aria-hidden={!leftSidebarOpen}
-            inert={!leftSidebarOpen}
-            data-open={leftSidebarOpen}
+            aria-hidden={!leftSidebarVisible}
+            inert={!leftSidebarVisible}
+            data-open={leftSidebarVisible}
           >
             <div className="sidebar-inner">
-            <div
-              className="sidebar-tabs"
-              role="tablist"
-              aria-label="侧边栏页面"
-            >
-              <button
-                role="tab"
-                aria-selected={sidebarPage === "navigation"}
-                onClick={() => setSidebarPage("navigation")}
+              <div
+                className="sidebar-tabs"
+                role="tablist"
+                aria-label="侧边栏页面"
               >
-                导航
-              </button>
-              <button
-                role="tab"
-                aria-selected={sidebarPage === "filters"}
-                onClick={() => setSidebarPage("filters")}
-              >
-                筛选
-              </button>
-            </div>
-            <div className="sidebar-scroll">
-            {sidebarPage === "navigation" ? (
-              <>
-                <div className="sidebar-section-label">本地</div>
                 <button
-                  className={`sidebar-link${scope === "all" ? " selected" : ""}`}
-                  onClick={() => setScope("all")}
+                  role="tab"
+                  aria-selected={sidebarPage === "navigation"}
+                  onClick={() => setSidebarPage("navigation")}
                 >
-                  <TextAaIcon />
-                  全部字体{page && <span>{page.totalMatches}</span>}
+                  导航
                 </button>
                 <button
-                  className={`sidebar-link${scope === "recent" ? " selected" : ""}`}
-                  onClick={() => setScope("recent")}
+                  role="tab"
+                  aria-selected={sidebarPage === "filters"}
+                  onClick={() => setSidebarPage("filters")}
                 >
-                  <ArrowClockwiseIcon />
-                  最近
+                  筛选
                 </button>
-                <button
-                  className={`sidebar-link${scope === "favorites" ? " selected" : ""}`}
-                  onClick={() => setScope("favorites")}
-                >
-                  <TextAaIcon />
-                  收藏
-                </button>
-                <div className="sidebar-section-label sidebar-section-heading">
-                  手动收藏夹
-                </div>
-                <div className="collection-list">
-                  {collections.map((collection) => (
-                    <div className="collection-row" key={collection.id}>
-                      <button
-                        className={`sidebar-link${scope === "collection" && collectionId === collection.id ? " selected" : ""}`}
-                        onClick={() => {
-                          setScope("collection");
-                          setCollectionId(collection.id);
-                          setSelected(null);
-                        }}
-                      >
-                        <FolderPlusIcon />
-                        {collection.name}
-                        <span>{collection.memberCount}</span>
-                      </button>
-                      <div className="collection-row-actions">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="tertiary"
-                          aria-label={`编辑${collection.name}`}
-                          onPress={() => {
-                            setEditingCollectionId(collection.id);
-                            setEditingCollectionName(collection.name);
-                          }}
-                        >
-                          <GearSixIcon />
-                        </Button>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="tertiary"
-                          aria-label={`删除${collection.name}`}
-                          onPress={() => void removeManualCollection(collection)}
-                        >
-                          <XIcon />
-                        </Button>
-                      </div>
+              </div>
+              <div className="sidebar-scroll">
+                {sidebarPage === "navigation" ? (
+                  <>
+                    <div className="sidebar-section-label">本地</div>
+                    <button
+                      className={`sidebar-link${scope === "all" ? " selected" : ""}`}
+                      onClick={() => setScope("all")}
+                    >
+                      <TextAaIcon />
+                      全部字体{page && <span>{page.totalMatches}</span>}
+                    </button>
+                    <button
+                      className={`sidebar-link${scope === "recent" ? " selected" : ""}`}
+                      onClick={() => setScope("recent")}
+                    >
+                      <ClockCounterClockwiseIcon />
+                      最近
+                    </button>
+                    <button
+                      className={`sidebar-link${scope === "favorites" ? " selected" : ""}`}
+                      onClick={() => setScope("favorites")}
+                    >
+                      <StarIcon />
+                      收藏
+                    </button>
+                    <div className="sidebar-section-label sidebar-section-heading">
+                      手动收藏夹
                     </div>
-                  ))}
-                </div>
-                <form
-                  className="sidebar-create-form"
-                  onSubmit={saveManualCollection}
-                >
-                  <TextField className="sidebar-name-field">
-                    <Label>手动收藏夹名称</Label>
-                    <Input
-                      value={editingCollectionName ?? newCollectionName}
-                      onChange={(event) =>
-                        editingCollectionId
-                          ? setEditingCollectionName(event.target.value)
-                          : setNewCollectionName(event.target.value)
-                      }
-                      placeholder="输入名称"
-                    />
-                  </TextField>
-                  <div className="sidebar-form-actions">
-                    <Button size="sm" type="submit">
-                      {editingCollectionId ? "保存名称" : "新建收藏夹"}
-                    </Button>
-                    {editingCollectionId && (
-                      <Button
-                        size="sm"
-                        variant="tertiary"
-                        onPress={() => {
-                          setEditingCollectionId(null);
-                          setEditingCollectionName(null);
-                        }}
-                      >
-                        取消
-                      </Button>
-                    )}
-                  </div>
-                </form>
-                <div className="sidebar-section-label sidebar-section-heading">
-                  智慧收藏夹
-                </div>
-                <div className="collection-list">
-                  {smartFolders.map((folder) => (
-                    <div className="collection-row" key={folder.id}>
-                      <button
-                        className={`sidebar-link${scope === "smartFolder" && smartFolderId === folder.id ? " selected" : ""}`}
-                        onClick={() => openSmartFolder(folder)}
-                      >
-                        <StarIcon />
-                        {folder.name}
-                        <span>{folder.matchCount}</span>
-                      </button>
-                      <div className="collection-row-actions">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="tertiary"
-                          aria-label={`编辑${folder.name}`}
-                          onPress={() => {
-                            openSmartFolder(folder);
-                            setEditingSmartFolderId(folder.id);
-                            setEditingSmartFolderName(folder.name);
-                          }}
-                        >
-                          <GearSixIcon />
-                        </Button>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="tertiary"
-                          aria-label={`删除${folder.name}`}
-                          onPress={() => void removeSmartFolder(folder)}
-                        >
-                          <XIcon />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <form
-                  className="sidebar-create-form"
-                  onSubmit={saveCurrentSmartFolder}
-                >
-                  <TextField className="sidebar-name-field">
-                    <Label>智慧收藏夹名称</Label>
-                    <Input
-                      value={editingSmartFolderName ?? newSmartFolderName}
-                      onChange={(event) =>
-                        editingSmartFolderId
-                          ? setEditingSmartFolderName(event.target.value)
-                          : setNewSmartFolderName(event.target.value)
-                      }
-                      placeholder="保存当前搜索与筛选"
-                    />
-                  </TextField>
-                  <div className="sidebar-form-actions">
-                    <Button size="sm" type="submit">
-                      {editingSmartFolderId ? "更新条件" : "保存条件"}
-                    </Button>
-                    {editingSmartFolderId && (
-                      <Button
-                        size="sm"
-                        variant="tertiary"
-                        onPress={() => {
-                          setEditingSmartFolderId(null);
-                          setEditingSmartFolderName(null);
-                        }}
-                      >
-                        取消
-                      </Button>
-                    )}
-                  </div>
-                </form>
-                {organizationError && (
-                  <p className="sidebar-error" role="alert">
-                    {organizationError}
-                  </p>
-                )}
-                <div className="sidebar-spacer" />
-                <Button
-                  className="add-folder-button"
-                  onPress={() => void chooseFolder()}
-                >
-                  <FolderPlusIcon />
-                  添加字体文件夹
-                </Button>
-              </>
-            ) : (
-              <>
-                <div className="sidebar-section-label">筛选</div>
-                {page?.facets.length ? (
-                  <div className="facet-groups">
-                    {facetGroups(page.facets).map(([kind, options]) => (
-                      <details
-                        className="facet-group"
-                        key={kind}
-                        open={kind === "categories" || kind === "features"}
-                      >
-                        <summary>
-                          {facetGroupTitle(kind)}
-                          <span>{selectedFacets[kind]?.length ?? 0}</span>
-                        </summary>
-                        <div className="facet-options">
-                          {options.slice(0, 24).map((option) => (
-                            <Checkbox
-                              key={`${kind}:${option.value}`}
-                              isSelected={
-                                selectedFacets[kind]?.includes(option.value) ??
-                                false
-                              }
-                              onChange={() =>
-                                setSelectedFacets((current) =>
-                                  toggleFacet(current, kind, option.value),
-                                )
+                    <div className="collection-list">
+                      {collections.map((collection) => (
+                        <div className="collection-row" key={collection.id}>
+                          <button
+                            className={`sidebar-link${scope === "collection" && collectionId === collection.id ? " selected" : ""}`}
+                            onClick={() => {
+                              setScope("collection");
+                              setCollectionId(collection.id);
+                              setSelected(null);
+                            }}
+                          >
+                            <FolderIcon />
+                            {collection.name}
+                            <span>{collection.memberCount}</span>
+                          </button>
+                          <div className="collection-row-actions">
+                            <Button
+                              isIconOnly
+                              size="sm"
+                              variant="tertiary"
+                              aria-label={`编辑${collection.name}`}
+                              onPress={() => {
+                                setEditingCollectionId(collection.id);
+                                setEditingCollectionName(collection.name);
+                              }}
+                            >
+                              <GearSixIcon />
+                            </Button>
+                            <Button
+                              isIconOnly
+                              size="sm"
+                              variant="tertiary"
+                              aria-label={`删除${collection.name}`}
+                              onPress={() =>
+                                void removeManualCollection(collection)
                               }
                             >
-                              <Checkbox.Content>
-                                <Checkbox.Control>
-                                  <Checkbox.Indicator />
-                                </Checkbox.Control>
-                                <span>{option.label}</span>
-                                <small>{option.familyCount}</small>
-                              </Checkbox.Content>
-                            </Checkbox>
-                          ))}
+                              <XIcon />
+                            </Button>
+                          </div>
                         </div>
-                      </details>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                    <details className="sidebar-create-disclosure" open={editingCollectionId !== null}>
+                      <summary>{editingCollectionId ? "编辑收藏夹" : "新建收藏夹"}</summary>
+                    <form
+                      className="sidebar-create-form"
+                      onSubmit={saveManualCollection}
+                    >
+                      <TextField className="sidebar-name-field">
+                        <Label>手动收藏夹名称</Label>
+                        <Input
+                          value={editingCollectionName ?? newCollectionName}
+                          onChange={(event) =>
+                            editingCollectionId
+                              ? setEditingCollectionName(event.target.value)
+                              : setNewCollectionName(event.target.value)
+                          }
+                          placeholder="输入名称"
+                        />
+                      </TextField>
+                      <div className="sidebar-form-actions">
+                        <Button size="sm" type="submit">
+                          {editingCollectionId ? "保存名称" : "新建收藏夹"}
+                        </Button>
+                        {editingCollectionId && (
+                          <Button
+                            size="sm"
+                            variant="tertiary"
+                            onPress={() => {
+                              setEditingCollectionId(null);
+                              setEditingCollectionName(null);
+                            }}
+                          >
+                            取消
+                          </Button>
+                        )}
+                      </div>
+                    </form>
+                    </details>
+                    <div className="sidebar-section-label sidebar-section-heading">
+                      智慧收藏夹
+                    </div>
+                    <div className="collection-list">
+                      {smartFolders.map((folder) => (
+                        <div className="collection-row" key={folder.id}>
+                          <button
+                            className={`sidebar-link${scope === "smartFolder" && smartFolderId === folder.id ? " selected" : ""}`}
+                            onClick={() => openSmartFolder(folder)}
+                          >
+                            <StarIcon />
+                            {folder.name}
+                            <span>{folder.matchCount}</span>
+                          </button>
+                          <div className="collection-row-actions">
+                            <Button
+                              isIconOnly
+                              size="sm"
+                              variant="tertiary"
+                              aria-label={`编辑${folder.name}`}
+                              onPress={() => {
+                                openSmartFolder(folder);
+                                setEditingSmartFolderId(folder.id);
+                                setEditingSmartFolderName(folder.name);
+                              }}
+                            >
+                              <GearSixIcon />
+                            </Button>
+                            <Button
+                              isIconOnly
+                              size="sm"
+                              variant="tertiary"
+                              aria-label={`删除${folder.name}`}
+                              onPress={() => void removeSmartFolder(folder)}
+                            >
+                              <XIcon />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <details className="sidebar-create-disclosure" open={editingSmartFolderId !== null}>
+                      <summary>{editingSmartFolderId ? "编辑智慧收藏夹" : "保存当前筛选"}</summary>
+                    <form
+                      className="sidebar-create-form"
+                      onSubmit={saveCurrentSmartFolder}
+                    >
+                      <TextField className="sidebar-name-field">
+                        <Label>智慧收藏夹名称</Label>
+                        <Input
+                          value={editingSmartFolderName ?? newSmartFolderName}
+                          onChange={(event) =>
+                            editingSmartFolderId
+                              ? setEditingSmartFolderName(event.target.value)
+                              : setNewSmartFolderName(event.target.value)
+                          }
+                          placeholder="保存当前搜索与筛选"
+                        />
+                      </TextField>
+                      <div className="sidebar-form-actions">
+                        <Button size="sm" type="submit">
+                          {editingSmartFolderId ? "更新条件" : "保存条件"}
+                        </Button>
+                        {editingSmartFolderId && (
+                          <Button
+                            size="sm"
+                            variant="tertiary"
+                            onPress={() => {
+                              setEditingSmartFolderId(null);
+                              setEditingSmartFolderName(null);
+                            }}
+                          >
+                            取消
+                          </Button>
+                        )}
+                      </div>
+                    </form>
+                    </details>
+                    {organizationError && (
+                      <p className="sidebar-error" role="alert">
+                        {organizationError}
+                      </p>
+                    )}
+                    <div className="sidebar-spacer" />
+                    <Button
+                      className="add-folder-button"
+                      onPress={() => void chooseFolder()}
+                    >
+                      <FolderPlusIcon />
+                      添加字体文件夹
+                    </Button>
+                  </>
                 ) : (
-                  <p className="sidebar-empty">当前字体库没有可用的筛选项。</p>
+                  <>
+                    <div className="sidebar-section-label">筛选</div>
+                    {page?.facets.length ? (
+                      <div className="facet-groups">
+                        {facetGroups(page.facets).map(([kind, options]) => (
+                          <details
+                            className="facet-group"
+                            key={kind}
+                            open={kind === "categories" || kind === "features"}
+                          >
+                            <summary>
+                              {facetGroupTitle(kind)}
+                              <span>{selectedFacets[kind]?.length ?? 0}</span>
+                            </summary>
+                            <div className="facet-options">
+                              {options.slice(0, 24).map((option) => (
+                                <Checkbox
+                                  key={`${kind}:${option.value}`}
+                                  isSelected={
+                                    selectedFacets[kind]?.includes(
+                                      option.value,
+                                    ) ?? false
+                                  }
+                                  onChange={() =>
+                                    setSelectedFacets((current) =>
+                                      toggleFacet(current, kind, option.value),
+                                    )
+                                  }
+                                >
+                                  <Checkbox.Content>
+                                    <Checkbox.Control>
+                                      <Checkbox.Indicator />
+                                    </Checkbox.Control>
+                                    <span>{option.label}</span>
+                                    <small>{option.familyCount}</small>
+                                  </Checkbox.Content>
+                                </Checkbox>
+                              ))}
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="sidebar-empty">
+                        当前字体库没有可用的筛选项。
+                      </p>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-            </div>
-            <button
-              className="sidebar-settings"
-              onClick={() => void openSettings()}
-            >
-              <GearSixIcon />
-              设置
-            </button>
+              </div>
+              <button
+                className="sidebar-settings"
+                onClick={() => void openSettings()}
+              >
+                <GearSixIcon />
+                设置
+              </button>
             </div>
           </aside>
-          {leftSidebarOpen && (
-            <SidebarResizeHandle
-              side="left"
-              width={leftPaneWidth}
-              min={Math.min(256, leftPaneWidth)}
-              max={Math.max(256, Math.min(440, viewportWidth - 288 - rightPaneWidth))}
-              onResize={resizeSidebar}
-              onPointerResize={resizeFromPointer}
-              onDragChange={(dragging) => setResizingSidebar(dragging ? "left" : null)}
-            />
-          )}
+          <SidebarResizeHandle
+            side="left"
+            width={leftPaneWidth}
+            collapsed={!leftSidebarVisible}
+            reopenWidth={leftMinimumWidth}
+            max={maximumSidebarWidth("left")}
+            onResize={resizeSidebar}
+            onPointerResize={resizeFromPointer}
+            onPointerCommit={finishPointerResize}
+            onPointerCancel={() => setDragPreview(null)}
+            onDragChange={(dragging) =>
+              setResizingSidebar(dragging ? "left" : null)
+            }
+          />
 
           <section className="library-pane">
-            <header className="library-toolbar">
-              <SearchField
-                className="search-box"
-                aria-label="搜索字体"
-                value={search}
-                onChange={setSearch}
-              >
-                <SearchField.Group>
-                  <SearchField.SearchIcon>
-                    <MagnifyingGlassIcon />
-                  </SearchField.SearchIcon>
-                  <SearchField.Input placeholder="搜索字体" />
-                </SearchField.Group>
-              </SearchField>
-              <Toolbar className="toolbar-actions" aria-label="字体库工具">
-                <Button
-                  isIconOnly
-                  size="sm"
-                  variant={leftSidebarOpen ? "secondary" : "tertiary"}
-                  aria-label={leftSidebarOpen ? "收起左侧栏" : "展开左侧栏"}
-                  aria-pressed={leftSidebarOpen}
-                  onPress={() => setLeftSidebarOpen((open) => !open)}
-                >
-                  <SidebarSimpleIcon />
-                </Button>
-                <Button
-                  isIconOnly
-                  size="sm"
-                  variant={rightSidebarOpen ? "secondary" : "tertiary"}
-                  aria-label={rightSidebarOpen ? "收起右侧栏" : "展开右侧栏"}
-                  aria-pressed={rightSidebarOpen}
-                  onPress={() => setRightSidebarOpen((open) => !open)}
-                >
-                  <SidebarIcon />
-                </Button>
-                <div className="view-picker" aria-label="浏览方式">
-                  {viewModes.map(({ id, label, Icon }) => (
-                    <Button
-                      key={id}
-                      isIconOnly
-                      size="sm"
-                      variant={viewMode === id ? "secondary" : "tertiary"}
-                      className="view-mode-button"
-                      aria-label={label}
-                      aria-pressed={viewMode === id}
-                      onPress={() => setViewMode(id)}
-                    >
-                      <Icon />
-                    </Button>
-                  ))}
+            <div className="library-overview">
+              <div className="library-title-row">
+                <div className="library-summary">
+                  <div className="library-summary-heading">
+                    <SparkleIcon aria-hidden="true" />
+                    <h1>
+                      {scope === "all" && page
+                        ? `现有 ${page.totalMatches} 个字族，随时可用`
+                        : currentScopeTitle}
+                    </h1>
+                  </div>
+                  <p>
+                    {page
+                      ? `${page.totalMatches} 个字族 · 搜索、筛选并预览本地字体`
+                      : "正在加载字体库"}
+                  </p>
+                  <span className="library-sync-note">
+                    <CloudCheckIcon aria-hidden="true" />
+                    本地字体目录已就绪
+                  </span>
                 </div>
-                <Button
-                  isIconOnly
-                  aria-label="刷新字体库"
-                  variant="tertiary"
-                  onPress={() => void runRefresh()}
-                  isDisabled={refreshing}
-                >
-                  <ArrowClockwiseIcon className={refreshing ? "spin" : ""} />
-                </Button>
-                <Button
-                  isIconOnly
-                  aria-label="添加字体文件夹"
-                  variant="tertiary"
-                  onPress={() => void chooseFolder()}
-                >
-                  <PlusIcon />
-                </Button>
-                <Button
-                  isIconOnly
-                  aria-label="设置"
-                  variant="tertiary"
-                  onPress={() => void openSettings()}
-                >
-                  <GearSixIcon />
-                </Button>
-              </Toolbar>
-            </header>
-
-            <div className="library-title-row">
-              <div>
-                <h1>{currentScopeTitle}</h1>
-                <p>{page ? `${page.totalMatches} 个字族` : "正在加载字体库"}</p>
+                <div className="sort-button">
+                  <span>排序</span>
+                  <OptionSelect
+                    label="排序方式"
+                    value={sort}
+                    options={[
+                      { id: "name", label: "名称" },
+                      { id: "recent", label: "最近查看" },
+                      { id: "relevance", label: "相关度" },
+                    ]}
+                    onChange={setSort}
+                  />
+                </div>
               </div>
-              <div className="sort-button">
-                <span>排序</span>
-                <OptionSelect
-                  label="排序方式"
-                  value={sort}
-                  options={[
-                    { id: "name", label: "名称" },
-                    { id: "recent", label: "最近查看" },
-                    { id: "relevance", label: "相关度" },
-                  ]}
-                  onChange={setSort}
-                />
-              </div>
+              {page && page.facets.length > 0 && (
+                <section className="quick-filters" aria-label="按分类筛选字体">
+                  <div className="quick-filters-heading">
+                    <span>按分类筛选字体</span>
+                    {Object.values(selectedFacets).some((values) => values.length > 0) && (
+                      <button type="button" onClick={() => setSelectedFacets({})}>
+                        清除筛选
+                      </button>
+                    )}
+                  </div>
+                  {facetGroups(page.facets).slice(0, 4).map(([kind, options]) => (
+                    <div className="quick-filter-row" key={kind}>
+                      <span className="quick-filter-label">{facetGroupTitle(kind)}</span>
+                      <div className="quick-filter-options">
+                        {options.slice(0, 8).map((option) => {
+                          const active = selectedFacets[kind]?.includes(option.value) ?? false;
+                          return (
+                            <button
+                              type="button"
+                              key={`${kind}:${option.value}`}
+                              className={`quick-filter-chip${active ? " active" : ""}`}
+                              aria-pressed={active}
+                              onClick={() => setSelectedFacets((current) => toggleFacet(current, kind, option.value))}
+                            >
+                              {active && <span aria-hidden="true">✓</span>}
+                              {option.label}
+                              <small>{option.familyCount}</small>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </section>
+              )}
             </div>
             {error ? (
               <div className="state-message error-state">
@@ -1798,45 +1985,48 @@ export default function App() {
               <output>{previewSize}px</output>
             </footer>
           </section>
-          {rightSidebarOpen && (
-            <SidebarResizeHandle
-              side="right"
-              width={rightPaneWidth}
-              min={Math.min(256, rightPaneWidth)}
-              max={Math.max(256, Math.min(480, viewportWidth - 288 - leftPaneWidth))}
-              onResize={resizeSidebar}
-              onPointerResize={resizeFromPointer}
-              onDragChange={(dragging) => setResizingSidebar(dragging ? "right" : null)}
-            />
-          )}
+          <SidebarResizeHandle
+            side="right"
+            width={rightPaneWidth}
+            collapsed={!rightSidebarVisible}
+            reopenWidth={rightMinimumWidth}
+            max={maximumSidebarWidth("right")}
+            onResize={resizeSidebar}
+            onPointerResize={resizeFromPointer}
+            onPointerCommit={finishPointerResize}
+            onPointerCancel={() => setDragPreview(null)}
+            onDragChange={(dragging) =>
+              setResizingSidebar(dragging ? "right" : null)
+            }
+          />
           <aside
             id="right-sidebar"
             className="inspector-rail"
             aria-label="右侧字体检查器"
-            aria-hidden={!rightSidebarOpen}
-            inert={!rightSidebarOpen}
-            data-open={rightSidebarOpen}
+            aria-hidden={!rightSidebarVisible}
+            inert={!rightSidebarVisible}
+            data-open={rightSidebarVisible}
           >
             <div className="inspector-inner">
-            {selected ? (
-              <Inspector
-                family={selected}
-                preview={previews[preferredFace(selected)?.id ?? ""]}
-                collections={collections}
-                collectionTargetId={collectionTargetId}
-                onCollectionTargetChange={setCollectionTargetId}
-                onCollectionMembershipChange={
-                  updateSelectedCollectionMembership
-                }
-                onClose={() => setRightSidebarOpen(false)}
-              />
-            ) : (
-              <div className="inspector-empty">
-                <TextAaIcon />
-                <strong>字体检查器</strong>
-                <p>选择一个字族以查看字体信息。</p>
-              </div>
-            )}
+              {selected ? (
+                <Inspector
+                  family={selected}
+                  preview={previews[preferredFace(selected)?.id ?? ""]}
+                  collections={collections}
+                  collectionTargetId={collectionTargetId}
+                  onCollectionTargetChange={setCollectionTargetId}
+                  onCollectionMembershipChange={
+                    updateSelectedCollectionMembership
+                  }
+                  onClose={() => setRightSidebarOpen(false)}
+                />
+              ) : (
+                <div className="inspector-empty">
+                  <TextAaIcon />
+                  <strong>字体检查器</strong>
+                  <p>选择一个字族以查看字体信息。</p>
+                </div>
+              )}
             </div>
           </aside>
         </div>
@@ -1848,23 +2038,31 @@ export default function App() {
 function SidebarResizeHandle({
   side,
   width,
-  min,
+  collapsed,
+  reopenWidth,
   max,
   onResize,
   onPointerResize,
+  onPointerCommit,
+  onPointerCancel,
   onDragChange,
 }: {
   side: "left" | "right";
   width: number;
-  min: number;
+  collapsed: boolean;
+  reopenWidth: number;
   max: number;
   onResize: (side: "left" | "right", width: number) => void;
   onPointerResize: (side: "left" | "right", clientX: number) => void;
+  onPointerCommit: (side: "left" | "right", clientX: number) => void;
+  onPointerCancel: () => void;
   onDragChange: (dragging: boolean) => void;
 }) {
+  const draggingRef = useRef(false);
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    draggingRef.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
     onDragChange(true);
   };
@@ -1873,17 +2071,30 @@ function SidebarResizeHandle({
       onPointerResize(side, event.clientX);
   };
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
+    onPointerCommit(side, event.clientX);
+    onDragChange(false);
+  };
+  const cancelPointerResize = () => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    onPointerCancel();
     onDragChange(false);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     let next: number;
-    if (event.key === "Home") next = min;
+    if (event.key === "Home") next = 0;
     else if (event.key === "End") next = max;
     else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       const direction = event.key === "ArrowRight" ? 1 : -1;
-      next = width + direction * (side === "left" ? 1 : -1) * (event.shiftKey ? 20 : 10);
+      const inward = direction * (side === "left" ? 1 : -1) > 0;
+      if (collapsed && !inward) return;
+      next = collapsed
+        ? reopenWidth
+        : width + direction * (side === "left" ? 1 : -1) * (event.shiftKey ? 20 : 10);
     } else return;
     event.preventDefault();
     onResize(side, next);
@@ -1892,20 +2103,21 @@ function SidebarResizeHandle({
   return (
     <div
       className={`sidebar-resizer sidebar-resizer-${side}`}
+      data-collapsed={collapsed}
       role="separator"
-      aria-label={`调整${side === "left" ? "左" : "右"}侧栏宽度`}
+      aria-label={`${collapsed ? "展开" : "调整"}${side === "left" ? "左" : "右"}侧栏${collapsed ? "" : "宽度"}`}
       aria-controls={`${side}-sidebar`}
       aria-orientation="vertical"
-      aria-valuemin={min}
+      aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={width}
-      aria-valuetext={`${width} 像素`}
+      aria-valuetext={collapsed ? "已收起，向内拖动或按方向键展开" : `${width} 像素`}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onLostPointerCapture={() => onDragChange(false)}
+      onPointerCancel={cancelPointerResize}
+      onLostPointerCapture={cancelPointerResize}
       onKeyDown={onKeyDown}
     />
   );
@@ -1954,12 +2166,13 @@ function FontCard({
       <Card.Content className="font-card-content">
         <Card.Title>{family.displayName}</Card.Title>
         <Card.Description>
-          {face?.styleName ?? `${family.faces.length} 个样式`}
+          {mode === "list"
+            ? (face?.styleName ?? "常规")
+            : `${family.faces.length} 个样式${family.isVariable ? " · VF" : ""}`}
         </Card.Description>
-        {mode !== "compact" && (
+        {(mode === "large" || mode === "expanded") && (
           <div className="font-card-meta">
-            {family.isVariable ? "可变字体" : (face?.format ?? "字体")}
-            {family.faces.length > 1 ? ` · ${family.faces.length} 个样式` : ""}
+            {face?.styleName ?? "常规"} · {face?.format ?? "字体"}
           </div>
         )}
       </Card.Content>
@@ -1996,6 +2209,15 @@ function Inspector({
   onClose: () => void;
 }) {
   const face = preferredFace(family);
+  const [copyMessage, setCopyMessage] = useState("");
+  const copyValue = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyMessage(`已复制${label}`);
+    } catch {
+      setCopyMessage("复制失败，请检查剪贴板权限");
+    }
+  };
   return (
     <section className="inspector-panel" aria-label="字体检查器">
       <button
@@ -2005,21 +2227,42 @@ function Inspector({
       >
         <XIcon />
       </button>
-      <div className="inspector-preview">
-        {preview && <img src={preview} alt="" />}
-      </div>
       <h2>{family.displayName}</h2>
-      <p className="inspector-style">{face?.styleName ?? "常规"}</p>
-      <dl>
-        <dt>字族样式</dt>
-        <dd>{family.faces.length}</dd>
-        <dt>格式</dt>
-        <dd>{face?.format ?? "—"}</dd>
-        <dt>PostScript 名称</dt>
-        <dd>{face?.postscriptName ?? "—"}</dd>
-        <dt>来源</dt>
-        <dd className="source-path">{face?.sources[0]?.path ?? "—"}</dd>
-      </dl>
+      <p className="inspector-style">
+        {face?.styleName ?? "常规"} <span>·</span> {face?.format ?? "字体"} <span>·</span> {family.faces.length} 个样式
+      </p>
+      <details className="inspector-section" open>
+        <summary>预览</summary>
+        <div className="inspector-preview">
+          {preview ? <img src={preview} alt={`${family.displayName} 预览`} /> : <span>预览不可用</span>}
+        </div>
+      </details>
+      {face?.weight != null && (
+        <div className="inspector-weight">
+          <span>字重</span>
+          <strong>{face.weight}</strong>
+        </div>
+      )}
+      <details className="inspector-section" open>
+        <summary>复制为</summary>
+        <div className="inspector-copy-list">
+          <button type="button" onClick={() => void copyValue(`font-family: "${family.displayName}";`, " CSS 样式")}><CopyIcon />CSS</button>
+          <button type="button" onClick={() => void copyValue(`@font-face {\n  font-family: "${family.displayName}";\n  src: url("${face?.sources[0]?.path.split(/[\\/]/).pop() ?? "font-file"}");\n}`, " CSS font-face")}><CopyIcon />CSS font-face</button>
+          <button type="button" onClick={() => void copyValue(`.font(.custom("${face?.postscriptName ?? family.displayName}", size: 16))`, " SwiftUI 代码")}><CopyIcon />SwiftUI</button>
+          <button type="button" onClick={() => void copyValue(family.displayName, "字族名")}><CopyIcon />字族名</button>
+          {face?.postscriptName && <button type="button" onClick={() => void copyValue(face.postscriptName!, " PostScript 名")}><CopyIcon />PostScript 名</button>}
+        </div>
+        <span className="inspector-copy-status" role="status">{copyMessage}</span>
+      </details>
+      <details className="inspector-section" open>
+        <summary>字体信息</summary>
+        <dl>
+          <dt>字族样式</dt><dd>{family.faces.length}</dd>
+          <dt>格式</dt><dd>{face?.format ?? "—"}</dd>
+          <dt>PostScript 名</dt><dd>{face?.postscriptName ?? "—"}</dd>
+          <dt>来源</dt><dd className="source-path">{face?.sources[0]?.path ?? "—"}</dd>
+        </dl>
+      </details>
       {collections.length > 0 && (
         <div className="inspector-membership">
           <h3>手动收藏夹</h3>
@@ -2130,9 +2373,7 @@ function scopeTitle(scope: LibraryScope) {
 
 function storedSidebarWidth(key: string) {
   const value = Number(localStorage.getItem(key));
-  return Number.isFinite(value) && value >= 256 && value <= 480
-    ? value
-    : null;
+  return Number.isFinite(value) && value >= 256 && value <= 480 ? value : null;
 }
 
 function errorMessage(cause: unknown) {
