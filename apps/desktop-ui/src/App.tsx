@@ -1,24 +1,72 @@
 import {
-  CopySimpleIcon,
-  SquareIcon,
+  ArchiveIcon,
   ArrowClockwiseIcon,
-  CloudCheckIcon,
+  BookIcon,
+  BookmarkSimpleIcon,
+  BooksIcon,
+  BriefcaseIcon,
+  CheckIcon,
   ClockCounterClockwiseIcon,
+  CloudCheckIcon,
+  CloudIcon,
   CopyIcon,
+  CopySimpleIcon,
+  DownloadSimpleIcon,
+  FileIcon,
   FolderIcon,
   FolderPlusIcon,
+  FunnelSimpleIcon,
   GearSixIcon,
+  GiftIcon,
+  GlobeIcon,
   GridFourIcon,
+  GridNineIcon,
+  HardDrivesIcon,
+  HeartIcon,
+  LaptopIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
+  MapPinIcon,
   MinusIcon,
+  NumberCircleEightIcon,
+  NumberCircleFiveIcon,
+  NumberCircleFourIcon,
+  NumberCircleNineIcon,
+  NumberCircleOneIcon,
+  NumberCircleSevenIcon,
+  NumberCircleSixIcon,
+  NumberCircleThreeIcon,
+  NumberCircleTwoIcon,
+  NumberCircleZeroIcon,
+  NumberSquareEightIcon,
+  NumberSquareFiveIcon,
+  NumberSquareFourIcon,
+  NumberSquareNineIcon,
+  NumberSquareOneIcon,
+  NumberSquareSevenIcon,
+  NumberSquareSixIcon,
+  NumberSquareThreeIcon,
+  NumberSquareTwoIcon,
+  NumberSquareZeroIcon,
+  PackageIcon,
+  PaperclipIcon,
+  PencilSimpleIcon,
   PlusIcon,
-  StackSimpleIcon,
-  SidebarIcon,
+  SealCheckIcon,
   SidebarSimpleIcon,
+  SignatureIcon,
+  SlidersHorizontalIcon,
   SparkleIcon,
+  SquareIcon,
+  StackIcon,
+  StackSimpleIcon,
   StarIcon,
+  StethoscopeIcon,
+  SwatchesIcon,
+  TagIcon,
   TextAaIcon,
+  TrashIcon,
+  WarningIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import {
@@ -28,6 +76,7 @@ import {
   Input,
   Label,
   ListBox,
+  Modal,
   SearchField,
   Select,
   Slider,
@@ -35,13 +84,16 @@ import {
   TextField,
   Toolbar,
 } from "@heroui/react";
+import { SmoothCorners, useSmoothCorners } from "@lisse/react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
-  type FormEvent,
+  Fragment,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -51,6 +103,8 @@ import {
 import {
   addLibraryRoot,
   cancelSync,
+  convertCollectionToSmartFolder,
+  convertSmartFolderToCollection,
   deleteCollection,
   deleteSmartFolder,
   disconnectSync,
@@ -81,6 +135,7 @@ import type {
   FamilyDto,
   FacetOptionDto,
   LibraryPageDto,
+  LibrarySnapshotDto,
   SmartFolderDto,
   SyncConflictDto,
   SyncProfileDto,
@@ -89,26 +144,328 @@ import type {
 
 type ViewMode = "compact" | "large" | "list" | "expanded";
 type LibraryScope =
-  "all" | "recent" | "favorites" | "collection" | "smartFolder";
+  | "all"
+  | "recent"
+  | "favorites"
+  | "collection"
+  | "smartFolder"
+  | "fontState"
+  | "fontHealth"
+  | "cloudFonts";
 type SettingsPage =
-  "cloud" | "importing" | "display" | "theme" | "cards" | "about";
+  "cloud" | "importing" | "display" | "shortcuts" | "theme" | "cards" | "about";
+type QuitShortcut = "Control+W" | "Control+Q" | "Alt+Q" | "Alt+W";
+type MenuEntry = {
+  label: string;
+  action: () => void | Promise<void>;
+  Icon?: typeof FolderPlusIcon;
+  shortcut?: string;
+  ariaShortcut?: string;
+  separatorBefore?: boolean;
+  checked?: boolean;
+  disabled?: boolean;
+  danger?: boolean;
+};
+
+// 收藏夹编辑意图与草稿，对应 macOS 版本的 FavoriteFolderEditorIntent。
+type FavoriteFolderIntent =
+  | { kind: "create" }
+  | { kind: "editCollection"; collection: CollectionDto }
+  | { kind: "editSmartFolder"; folder: SmartFolderDto };
+
+type FavoriteFolderDraft = {
+  name: string;
+  text: string;
+  facets: Record<string, string[]>;
+  icon: string;
+  color: string;
+};
+
+type FolderContextMenuState = {
+  x: number;
+  y: number;
+  intent: FavoriteFolderIntent;
+};
+
+const quitShortcutOptions: { id: QuitShortcut; label: string }[] = [
+  { id: "Control+W", label: "Ctrl+W" },
+  { id: "Control+Q", label: "Ctrl+Q" },
+  { id: "Alt+Q", label: "Alt+Q" },
+  { id: "Alt+W", label: "Alt+W" },
+];
+
+function parseQuitShortcut(value: string | null): QuitShortcut {
+  return quitShortcutOptions.find((option) => option.id === value)?.id ?? "Control+W";
+}
+
+function matchesQuitShortcut(event: globalThis.KeyboardEvent, shortcut: QuitShortcut) {
+  const [modifier, key] = shortcut.split("+");
+  return event.key.toLowerCase() === key?.toLowerCase() &&
+    event.ctrlKey === (modifier === "Control") &&
+    event.altKey === (modifier === "Alt") &&
+    !event.metaKey && !event.shiftKey;
+}
 
 const viewModes: { id: ViewMode; label: string; Icon: typeof GridFourIcon }[] =
   [
-    { id: "compact", label: "紧凑网格", Icon: GridFourIcon },
+    { id: "compact", label: "紧凑网格", Icon: GridNineIcon },
     { id: "large", label: "大网格", Icon: GridFourIcon },
     { id: "list", label: "长条列表", Icon: ListBulletsIcon },
     { id: "expanded", label: "展开卡片", Icon: StackSimpleIcon },
   ];
 
+const titlebarCapsuleCorners = { radius: 16, smoothing: 0.6 } as const;
+const titlebarThumbCorners = { radius: 13, smoothing: 0.6 } as const;
+// 菜单外壳与菜单项圆角同心：外壳 10px、内边距 3px、菜单项 6px。
+const menuCorners = { radius: 10, smoothing: 0.6 } as const;
+const menuItemCorners = { radius: 6, smoothing: 0.6 } as const;
+
+// 收藏夹图标与颜色选项，与 macOS 版本 CollectionIcon / CollectionColor 一一对应。
+type CollectionIconOption = {
+  id: string;
+  label: string;
+  Icon: typeof FolderIcon;
+};
+
+const collectionIconOptions: CollectionIconOption[] = [
+  { id: "folder", label: "文件夹", Icon: FolderIcon },
+  { id: "books", label: "书籍", Icon: BooksIcon },
+  { id: "type", label: "字体", Icon: TextAaIcon },
+  { id: "star", label: "星标", Icon: StarIcon },
+  { id: "heart", label: "爱心", Icon: HeartIcon },
+  { id: "bookmark", label: "书签", Icon: BookmarkSimpleIcon },
+  { id: "tag", label: "标签", Icon: TagIcon },
+  { id: "briefcase", label: "工作", Icon: BriefcaseIcon },
+  { id: "sparkles", label: "灵感", Icon: SparkleIcon },
+  { id: "sliders-horizontal", label: "调节", Icon: SlidersHorizontalIcon },
+  { id: "signature", label: "签名", Icon: SignatureIcon },
+  { id: "archive", label: "归档", Icon: ArchiveIcon },
+  { id: "book", label: "书本", Icon: BookIcon },
+  { id: "paperclip", label: "回形针", Icon: PaperclipIcon },
+  { id: "package", label: "包裹", Icon: PackageIcon },
+  { id: "swatches", label: "色板", Icon: SwatchesIcon },
+  { id: "gift", label: "礼物", Icon: GiftIcon },
+  { id: "stack", label: "叠层", Icon: StackIcon },
+  { id: "number-circle-0", label: "数字 0", Icon: NumberCircleZeroIcon },
+  { id: "number-circle-1", label: "数字 1", Icon: NumberCircleOneIcon },
+  { id: "number-circle-2", label: "数字 2", Icon: NumberCircleTwoIcon },
+  { id: "number-circle-3", label: "数字 3", Icon: NumberCircleThreeIcon },
+  { id: "number-circle-4", label: "数字 4", Icon: NumberCircleFourIcon },
+  { id: "number-circle-5", label: "数字 5", Icon: NumberCircleFiveIcon },
+  { id: "number-circle-6", label: "数字 6", Icon: NumberCircleSixIcon },
+  { id: "number-circle-7", label: "数字 7", Icon: NumberCircleSevenIcon },
+  { id: "number-circle-8", label: "数字 8", Icon: NumberCircleEightIcon },
+  { id: "number-circle-9", label: "数字 9", Icon: NumberCircleNineIcon },
+  { id: "number-square-0", label: "数字 0", Icon: NumberSquareZeroIcon },
+  { id: "number-square-1", label: "数字 1", Icon: NumberSquareOneIcon },
+  { id: "number-square-2", label: "数字 2", Icon: NumberSquareTwoIcon },
+  { id: "number-square-3", label: "数字 3", Icon: NumberSquareThreeIcon },
+  { id: "number-square-4", label: "数字 4", Icon: NumberSquareFourIcon },
+  { id: "number-square-5", label: "数字 5", Icon: NumberSquareFiveIcon },
+  { id: "number-square-6", label: "数字 6", Icon: NumberSquareSixIcon },
+  { id: "number-square-7", label: "数字 7", Icon: NumberSquareSevenIcon },
+  { id: "number-square-8", label: "数字 8", Icon: NumberSquareEightIcon },
+  { id: "number-square-9", label: "数字 9", Icon: NumberSquareNineIcon },
+];
+
+const collectionIconMap: Record<string, typeof FolderIcon> =
+  Object.fromEntries(collectionIconOptions.map(({ id, Icon }) => [id, Icon]));
+
+type CollectionColorOption = {
+  id: string;
+  label: string;
+  value: string;
+};
+
+const collectionColorOptions: CollectionColorOption[] = [
+  { id: "red", label: "红色", value: "rgb(219, 56, 64)" },
+  { id: "orange", label: "橙色", value: "rgb(232, 99, 31)" },
+  { id: "yellow", label: "黄色", value: "rgb(209, 158, 5)" },
+  { id: "lime", label: "黄绿色", value: "rgb(125, 176, 41)" },
+  { id: "green", label: "绿色", value: "rgb(31, 153, 92)" },
+  { id: "cyan", label: "青色", value: "rgb(0, 150, 161)" },
+  { id: "blue", label: "蓝色", value: "rgb(46, 120, 214)" },
+  { id: "purple", label: "紫色", value: "rgb(125, 79, 207)" },
+  { id: "gray", label: "灰色", value: "rgb(122, 128, 135)" },
+];
+
+const collectionColorMap: Record<string, string> = Object.fromEntries(
+  collectionColorOptions.map(({ id, value }) => [id, value]),
+);
+
+function collectionIconComponent(icon: string) {
+  return collectionIconMap[icon] ?? FolderIcon;
+}
+
+function collectionColorValue(color: string) {
+  return collectionColorMap[color] ?? collectionColorMap.gray;
+}
+
 const settingsPages: { id: SettingsPage; title: string }[] = [
   { id: "cloud", title: "云同步" },
   { id: "importing", title: "导入" },
   { id: "display", title: "显示" },
+  { id: "shortcuts", title: "快捷键" },
   { id: "theme", title: "主题色" },
   { id: "cards", title: "字体卡片" },
   { id: "about", title: "关于" },
 ];
+
+// WebDAV 服务商预设，与 macOS 版本 WebDAVPreset 保持一致。
+const webdavPresets: { id: string; label: string; url: string | null }[] = [
+  { id: "none", label: "无", url: null },
+  { id: "pan123", label: "123 云盘", url: "https://webdav.123pan.cn/webdav" },
+  { id: "jianguoyun", label: "坚果云", url: "https://dav.jianguoyun.com/dav" },
+];
+
+function matchingWebdavPreset(serverUrl: string) {
+  const normalized = serverUrl.trim().replace(/\/+$/, "").toLowerCase();
+  if (!normalized) return "none";
+  return (
+    webdavPresets.find(
+      (preset) =>
+        preset.url !== null &&
+        preset.url.replace(/\/+$/, "").toLowerCase() === normalized,
+    )?.id ?? "none"
+  );
+}
+
+// 字体状态顺序与 macOS 版本一致；跨平台口径见 Rust `FontStateKind`。
+type FontStateId =
+  | "active"
+  | "installed"
+  | "available"
+  | "external"
+  | "system"
+  | "unavailable";
+
+const fontStateOptions: {
+  id: FontStateId;
+  label: string;
+  Icon: typeof FolderIcon;
+  help: string;
+}[] = [
+  {
+    id: "active",
+    label: "已挂载",
+    Icon: SealCheckIcon,
+    help: "操作系统当前可用的字体",
+  },
+  {
+    id: "installed",
+    label: "已安装",
+    Icon: DownloadSimpleIcon,
+    help: "安装到当前用户字体目录的字体",
+  },
+  {
+    id: "available",
+    label: "仅在字体库",
+    Icon: BookIcon,
+    help: "Folio 字体库中尚未安装的副本",
+  },
+  {
+    id: "external",
+    label: "外部文件",
+    Icon: FileIcon,
+    help: "引用的文件和已添加文件夹中的字体",
+  },
+  {
+    id: "system",
+    label: "系统字体",
+    Icon: LaptopIcon,
+    help: "操作系统自带的字体",
+  },
+  {
+    id: "unavailable",
+    label: "文件不可用",
+    Icon: WarningIcon,
+    help: "来源文件已不可访问",
+  },
+];
+
+function fontStateLabel(id: FontStateId) {
+  return fontStateOptions.find((option) => option.id === id)?.label ?? "字体状态";
+}
+
+// 应用 lisse 平滑圆角的外壳；边框与阴影改用 SVG 效果跟随曲线轮廓。
+function MenuPopover({
+  id,
+  label,
+  className,
+  children,
+}: {
+  id: string;
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useSmoothCorners(ref, menuCorners, {
+    autoEffects: false,
+    fallbackBorderRadius: "10px",
+    effects: {
+      innerBorder: { width: 1, color: "var(--line)", opacity: 1 },
+      shadow: {
+        offsetX: 0,
+        offsetY: 8,
+        blur: 28,
+        spread: 0,
+        color: "#141820",
+        opacity: 0.18,
+      },
+    },
+  });
+  return (
+    <div
+      ref={ref}
+      className={`menu-popover${className ? ` ${className}` : ""}`}
+      style={{ borderRadius: 10 }}
+      id={id}
+      role="menu"
+      aria-label={label}
+    >
+      {children}
+    </div>
+  );
+}
+
+function MenuItem({
+  item,
+  onSelect,
+}: {
+  item: MenuEntry;
+  onSelect: (item: MenuEntry) => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useSmoothCorners(ref, menuItemCorners, {
+    autoEffects: false,
+    fallbackBorderRadius: "6px",
+  });
+  const Icon = item.Icon;
+  return (
+    <button
+      ref={ref}
+      type="button"
+      role={item.checked === undefined ? "menuitem" : "menuitemradio"}
+      aria-checked={item.checked}
+      aria-keyshortcuts={item.ariaShortcut}
+      disabled={item.disabled}
+      className={item.danger ? "menu-item-danger" : undefined}
+      style={{ borderRadius: 6 }}
+      onClick={() => onSelect(item)}
+    >
+      <span className="menu-item-icon" aria-hidden="true">
+        {Icon ? <Icon /> : item.checked ? <CheckIcon /> : null}
+      </span>
+      <span className="menu-item-label">{item.label}</span>
+      {item.shortcut && (
+        <kbd className="menu-item-shortcut" aria-hidden="true">
+          {item.shortcut}
+        </kbd>
+      )}
+    </button>
+  );
+}
 
 function isSettingsWindow() {
   return (
@@ -127,6 +484,9 @@ export default function App() {
     () =>
       (localStorage.getItem("folio-view-mode") as ViewMode | null) ?? "compact",
   );
+  const [quitShortcut, setQuitShortcut] = useState<QuitShortcut>(() =>
+    parseQuitShortcut(localStorage.getItem("folio-quit-shortcut")),
+  );
   const [importMode, setImportMode] = useState(
     () => localStorage.getItem("folio-import-mode") ?? "copy",
   );
@@ -141,20 +501,12 @@ export default function App() {
   const [smartFolderId, setSmartFolderId] = useState<string | null>(null);
   const [collections, setCollections] = useState<CollectionDto[]>([]);
   const [smartFolders, setSmartFolders] = useState<SmartFolderDto[]>([]);
-  const [newCollectionName, setNewCollectionName] = useState("");
-  const [newSmartFolderName, setNewSmartFolderName] = useState("");
-  const [editingCollectionName, setEditingCollectionName] = useState<
-    string | null
-  >(null);
-  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(
-    null,
-  );
-  const [editingSmartFolderName, setEditingSmartFolderName] = useState<
-    string | null
-  >(null);
-  const [editingSmartFolderId, setEditingSmartFolderId] = useState<
-    string | null
-  >(null);
+  const [snapshot, setSnapshot] = useState<LibrarySnapshotDto | null>(null);
+  const [fontState, setFontState] = useState<FontStateId>("active");
+  const [favoriteEditor, setFavoriteEditor] =
+    useState<FavoriteFolderIntent | null>(null);
+  const [folderContextMenu, setFolderContextMenu] =
+    useState<FolderContextMenuState | null>(null);
   const [collectionTargetId, setCollectionTargetId] = useState("");
   const [organizationError, setOrganizationError] = useState<string | null>(
     null,
@@ -186,6 +538,19 @@ export default function App() {
   );
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("cloud");
   const [search, setSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchCapsuleRef = useRef<HTMLDivElement>(null);
+  useSmoothCorners(searchCapsuleRef, titlebarCapsuleCorners, {
+    autoEffects: false,
+    fallbackBorderRadius: "16px",
+    effects: {
+      innerBorder: {
+        width: 1,
+        color: searchFocused ? "var(--accent)" : "var(--line)",
+        opacity: 1,
+      },
+    },
+  });
   const [selectedFacets, setSelectedFacets] = useState<
     Record<string, string[]>
   >({});
@@ -340,6 +705,10 @@ export default function App() {
   }, [viewMode]);
 
   useEffect(() => {
+    localStorage.setItem("folio-quit-shortcut", quitShortcut);
+  }, [quitShortcut]);
+
+  useEffect(() => {
     localStorage.setItem("folio-import-mode", importMode);
     localStorage.setItem("folio-card-hover", String(cardHover));
     localStorage.setItem("folio-card-metadata", String(cardMetadata));
@@ -351,6 +720,8 @@ export default function App() {
         setTheme(event.newValue);
       if (event.key === "folio-view-mode" && event.newValue)
         setViewMode(event.newValue as ViewMode);
+      if (event.key === "folio-quit-shortcut")
+        setQuitShortcut(parseQuitShortcut(event.newValue));
     };
     window.addEventListener("storage", syncPreferences);
     return () => window.removeEventListener("storage", syncPreferences);
@@ -358,6 +729,10 @@ export default function App() {
 
   const loadPage = useCallback(
     async (text: string, currentScope: LibraryScope, offset = 0) => {
+      if (currentScope === "cloudFonts") {
+        setLoading(false);
+        return;
+      }
       const revision = ++queryRevision.current;
       setLoading(true);
       setError(null);
@@ -377,6 +752,8 @@ export default function App() {
             currentScope === "smartFolder"
               ? (smartFolderId ?? undefined)
               : undefined,
+          fontState:
+            currentScope === "fontState" ? fontState : undefined,
         });
         if (revision !== queryRevision.current) return;
         setPage((current) =>
@@ -423,6 +800,7 @@ export default function App() {
     },
     [
       collectionId,
+      fontState,
       previewSize,
       previewText,
       selectedFacets,
@@ -444,9 +822,10 @@ export default function App() {
     if (settingsWindow) return;
     let active = true;
     void refreshLibrary()
-      .then(() => {
-        if (active && !settingsWindow)
-          return Promise.all([loadPage(search, scope), reloadOrganization()]);
+      .then((result) => {
+        if (!active || settingsWindow) return;
+        setSnapshot(result);
+        return Promise.all([loadPage(search, scope), reloadOrganization()]);
       })
       .catch((cause) => {
         if (active && !settingsWindow) setError(errorMessage(cause));
@@ -458,10 +837,49 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadOrganization, settingsWindow]);
 
+  // 主窗口维护云端连接状态与云字体列表，供侧栏「云端」区段使用。
+  useEffect(() => {
+    if (settingsWindow) return;
+    let active = true;
+    let previousRunning = false;
+    const loadCloud = async () => {
+      try {
+        const [profile, status, fonts] = await Promise.all([
+          getSyncProfile(),
+          getSyncStatus(),
+          listCloudFonts(),
+        ]);
+        if (!active) return;
+        setSyncProfile(profile);
+        setSyncStatus(status);
+        setCloudFonts(fonts);
+        previousRunning = status.running;
+      } catch {
+        // 云端不可用时保持未连接状态，不打断字体库浏览。
+      }
+    };
+    void loadCloud();
+    const timer = window.setInterval(() => {
+      void getSyncStatus()
+        .then((status) => {
+          if (!active) return;
+          setSyncStatus(status);
+          if (previousRunning && !status.running) void loadCloud();
+          previousRunning = status.running;
+        })
+        .catch(() => {});
+    }, 2000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [settingsWindow]);
+
   const runRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await refreshLibrary();
+      const result = await refreshLibrary();
+      setSnapshot(result);
       await Promise.all([loadPage(search, scope), reloadOrganization()]);
     } catch (cause) {
       setError(errorMessage(cause));
@@ -658,7 +1076,8 @@ export default function App() {
       });
       if (typeof selectedPath !== "string") return;
       setRefreshing(true);
-      await addLibraryRoot(selectedPath);
+      const result = await addLibraryRoot(selectedPath);
+      setSnapshot(result);
       await Promise.all([loadPage(search, scope), reloadOrganization()]);
     } catch (cause) {
       setError(errorMessage(cause));
@@ -667,105 +1086,256 @@ export default function App() {
     }
   }, [loadPage, reloadOrganization, search, scope]);
 
-  const saveManualCollection = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = (editingCollectionName ?? newCollectionName).trim();
-    if (!name) {
-      setOrganizationError("请输入收藏夹名称。");
-      return;
-    }
-    const existing = collections.find(
-      (collection) => collection.id === editingCollectionId,
-    );
-    try {
-      const saved = await saveCollection({
-        id: editingCollectionId ?? undefined,
-        name,
-        icon: existing?.icon ?? "folder",
-        color: existing?.color ?? "gray",
-      });
-      await reloadOrganization();
-      setEditingCollectionId(null);
-      setEditingCollectionName(null);
-      setNewCollectionName("");
-      setOrganizationError(null);
-      setCollectionId(saved.id);
-      setScope("collection");
-      setSelected(null);
-    } catch (cause) {
-      setOrganizationError(errorMessage(cause));
-    }
+  useEffect(() => {
+    const handleShortcut = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.isComposing) return;
+      if (matchesQuitShortcut(event, quitShortcut)) {
+        event.preventDefault();
+        void quitApp();
+        return;
+      }
+      if (settingsWindow || !event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        if (!refreshing) void runRefresh();
+      } else if (event.key === ",") {
+        event.preventDefault();
+        void openSettings();
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [quitShortcut, refreshing, runRefresh, settingsWindow]);
+
+  // 切换页面时清空继承的搜索与筛选条件，避免带出上一页（尤其是智慧收藏夹）的条件。
+  const clearQueryConditions = () => {
+    setSearch("");
+    setSelectedFacets({});
   };
 
-  const removeManualCollection = async (collection: CollectionDto) => {
-    if (!window.confirm(`删除“${collection.name}”？字体文件不会被删除。`))
-      return;
-    try {
-      await deleteCollection(collection.id);
-      await reloadOrganization();
-      if (collectionId === collection.id) {
-        setScope("all");
-        setCollectionId(null);
-      }
-      setOrganizationError(null);
-    } catch (cause) {
-      setOrganizationError(errorMessage(cause));
-    }
+  const selectLibraryScope = (next: LibraryScope) => {
+    if (next !== scope) clearQueryConditions();
+    setScope(next);
+    setSelected(null);
+  };
+
+  const selectFontState = (id: FontStateId) => {
+    if (scope !== "fontState" || fontState !== id) clearQueryConditions();
+    setFontState(id);
+    setScope("fontState");
+    setSelected(null);
+  };
+
+  const selectCollection = (id: string) => {
+    if (scope !== "collection" || collectionId !== id) clearQueryConditions();
+    setScope("collection");
+    setCollectionId(id);
+    setSmartFolderId(null);
+    setSelected(null);
   };
 
   const openSmartFolder = (folder: SmartFolderDto) => {
     setScope("smartFolder");
     setSmartFolderId(folder.id);
+    setCollectionId(null);
     setSearch(folder.queryText ?? "");
     setSelectedFacets(folder.facets);
     setSelected(null);
   };
 
-  const saveCurrentSmartFolder = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = (editingSmartFolderName ?? newSmartFolderName).trim();
+  const beginFavoriteFolderCreation = () => {
+    setOrganizationError(null);
+    setFavoriteEditor({ kind: "create" });
+  };
+
+  const beginFavoriteFolderEditing = (intent: FavoriteFolderIntent) => {
+    setOrganizationError(null);
+    setFavoriteEditor(intent);
+  };
+
+  const closeFavoriteFolderEditor = () => {
+    setFavoriteEditor(null);
+    setOrganizationError(null);
+  };
+
+  // 收藏夹编辑器的初始值：编辑时取原值，新建时沿用当前搜索与筛选。
+  const favoriteFolderSeed = useMemo<FavoriteFolderDraft>(() => {
+    if (favoriteEditor?.kind === "editSmartFolder") {
+      return {
+        name: favoriteEditor.folder.name,
+        text: favoriteEditor.folder.queryText ?? "",
+        facets: favoriteEditor.folder.facets,
+        icon: favoriteEditor.folder.icon,
+        color: favoriteEditor.folder.color,
+      };
+    }
+    if (favoriteEditor?.kind === "editCollection") {
+      return {
+        name: favoriteEditor.collection.name,
+        text: "",
+        facets: {},
+        icon: favoriteEditor.collection.icon,
+        color: favoriteEditor.collection.color,
+      };
+    }
+    let text = search;
+    let facets = selectedFacets;
+    if (scope === "smartFolder") {
+      const folder = smartFolders.find((item) => item.id === smartFolderId);
+      if (folder) {
+        text = [folder.queryText ?? "", search].filter(Boolean).join(" ");
+        facets = mergeFacets(folder.facets, selectedFacets);
+      }
+    }
+    return { name: "", text, facets, icon: "folder", color: "gray" };
+  }, [favoriteEditor, scope, search, selectedFacets, smartFolderId, smartFolders]);
+
+  // 与 macOS 版本一致：有筛选条件保存为智慧收藏夹，否则保存为手动收藏夹。
+  const saveFavoriteFolder = async (draft: FavoriteFolderDraft) => {
+    if (!favoriteEditor) return;
+    const name = draft.name.trim();
     if (!name) {
-      setOrganizationError("请输入智慧收藏夹名称。");
+      setOrganizationError("请输入收藏夹名称。");
       return;
     }
-    if (selectedFacets.roots?.length) {
+    if (draft.facets.roots?.length) {
       setOrganizationError(
         "智慧收藏夹暂不支持按来源目录筛选，请先清除该条件。",
       );
       return;
     }
+    const text = draft.text.trim();
+    const hasRules =
+      text.length > 0 ||
+      Object.values(draft.facets).some((values) => values.length > 0);
     try {
-      const saved = await saveSmartFolder({
-        id: editingSmartFolderId ?? undefined,
-        name,
-        text: search,
-        facets: selectedFacets,
-      });
-      await reloadOrganization();
-      setEditingSmartFolderId(null);
-      setEditingSmartFolderName(null);
-      setNewSmartFolderName("");
+      if (favoriteEditor.kind === "create") {
+        if (hasRules) {
+          const saved = await saveSmartFolder({
+            name,
+            text,
+            facets: draft.facets,
+            icon: draft.icon,
+            color: draft.color,
+          });
+          await reloadOrganization();
+          openSmartFolder(saved);
+        } else {
+          const saved = await saveCollection({
+            name,
+            icon: draft.icon,
+            color: draft.color,
+          });
+          await reloadOrganization();
+          selectCollection(saved.id);
+        }
+      } else if (favoriteEditor.kind === "editCollection") {
+        if (hasRules) {
+          const saved = await convertCollectionToSmartFolder({
+            id: favoriteEditor.collection.id,
+            name,
+            text,
+            facets: draft.facets,
+            icon: draft.icon,
+            color: draft.color,
+          });
+          await reloadOrganization();
+          openSmartFolder(saved);
+        } else {
+          const saved = await saveCollection({
+            id: favoriteEditor.collection.id,
+            name,
+            icon: draft.icon,
+            color: draft.color,
+          });
+          await reloadOrganization();
+          selectCollection(saved.id);
+        }
+      } else if (hasRules) {
+        const saved = await saveSmartFolder({
+          id: favoriteEditor.folder.id,
+          name,
+          text,
+          facets: draft.facets,
+          icon: draft.icon,
+          color: draft.color,
+        });
+        await reloadOrganization();
+        openSmartFolder(saved);
+      } else {
+        const saved = await convertSmartFolderToCollection({
+          id: favoriteEditor.folder.id,
+          name,
+          icon: draft.icon,
+          color: draft.color,
+        });
+        await reloadOrganization();
+        selectCollection(saved.id);
+      }
+      setFavoriteEditor(null);
       setOrganizationError(null);
-      openSmartFolder(saved);
+    } catch (cause) {
+      setOrganizationError(errorMessage(cause));
+    }
+  };
+
+  const removeCollection = async (collection: CollectionDto) => {
+    try {
+      await deleteCollection(collection.id);
+      await reloadOrganization();
+      if (scope === "collection" && collectionId === collection.id) {
+        setScope("all");
+        setCollectionId(null);
+        clearQueryConditions();
+      }
+      setOrganizationError(null);
     } catch (cause) {
       setOrganizationError(errorMessage(cause));
     }
   };
 
   const removeSmartFolder = async (folder: SmartFolderDto) => {
-    if (!window.confirm(`删除智慧收藏夹“${folder.name}”？`)) return;
     try {
       await deleteSmartFolder(folder.id);
       await reloadOrganization();
-      if (smartFolderId === folder.id) {
+      if (scope === "smartFolder" && smartFolderId === folder.id) {
         setScope("all");
         setSmartFolderId(null);
+        clearQueryConditions();
       }
       setOrganizationError(null);
     } catch (cause) {
       setOrganizationError(errorMessage(cause));
     }
   };
+
+  const openFolderContextMenu = (
+    event: MouseEvent<HTMLElement>,
+    intent: FavoriteFolderIntent,
+  ) => {
+    event.preventDefault();
+    setFolderContextMenu({ x: event.clientX, y: event.clientY, intent });
+  };
+
+  useEffect(() => {
+    if (!folderContextMenu) return;
+    const close = () => setFolderContextMenu(null);
+    const closeOnKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", closeOnKey);
+    window.addEventListener("blur", close);
+    window.addEventListener("resize", close);
+    document.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", closeOnKey);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("resize", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, [folderContextMenu]);
 
   const updateSelectedCollectionMembership = async (member: boolean) => {
     if (!selected || !collectionTargetId) return;
@@ -805,8 +1375,19 @@ export default function App() {
       : scope === "smartFolder"
         ? (smartFolders.find((folder) => folder.id === smartFolderId)?.name ??
           "智慧收藏夹")
-        : scopeTitle(scope);
+        : scope === "fontState"
+          ? fontStateLabel(fontState)
+          : scopeTitle(scope);
   const compactViewport = viewportWidth <= 860;
+  const healthCount = snapshot
+    ? snapshot.health.damagedFiles +
+      snapshot.health.multipleRevisions +
+      snapshot.health.metadataConflicts
+    : 0;
+  const activeCloudFonts = cloudFonts.filter((font) => !font.deleted);
+  const cloudFontStorage = formatFileSize(
+    activeCloudFonts.reduce((sum, font) => sum + font.fileSize, 0),
+  );
   const preferredLeftWidth = leftSidebarWidth ?? (compactViewport ? 190 : 240);
   const preferredRightWidth =
     rightSidebarWidth ?? (compactViewport ? 222 : 276);
@@ -885,16 +1466,75 @@ export default function App() {
       resizeSidebar(side, Math.max(minimum, width));
     }
   };
-  const fileMenuItems = [
-    { label: "添加字体文件夹…", action: chooseFolder },
-    { label: "刷新字体库", action: runRefresh },
-    { label: "设置…", action: openSettings },
-    { label: "退出 Folio", action: quitApp },
+  const fileMenuItems: MenuEntry[] = [
+    { label: "添加字体文件夹…", action: chooseFolder, Icon: FolderPlusIcon },
+    { label: "刷新字体库", action: runRefresh, Icon: ArrowClockwiseIcon, shortcut: "Ctrl+R", ariaShortcut: "Control+R", disabled: refreshing },
+    { label: "设置…", action: openSettings, shortcut: "Ctrl+,", ariaShortcut: "Control+,", separatorBefore: true },
+    { label: "退出 Folio", action: quitApp, shortcut: quitShortcutOptions.find((option) => option.id === quitShortcut)?.label, ariaShortcut: quitShortcut, separatorBefore: true },
+  ];
+  const appMenus: { name: string; items: MenuEntry[] }[] = [
+    {
+      name: "编辑",
+      items: [
+        {
+          label: "全选字体",
+          action: () => document.querySelector<HTMLElement>(".font-grid")?.focus(),
+        },
+      ],
+    },
+    {
+      name: "显示",
+      items: [
+        ...viewModes.map(({ id, label }) => ({
+          label,
+          action: () => setViewMode(id),
+          checked: viewMode === id,
+        })),
+        {
+          label: `${leftSidebarOpen ? "收起" : "展开"}左侧侧边栏`,
+          action: () => setLeftSidebarOpen((open) => !open),
+          separatorBefore: true,
+        },
+        {
+          label: `${rightSidebarOpen ? "收起" : "展开"}右侧侧边栏`,
+          action: () => setRightSidebarOpen((open) => !open),
+        },
+      ],
+    },
+    {
+      name: "窗口",
+      items: [
+        { label: "字体库", action: () => window.location.assign("index.html") },
+        { label: "设置…", action: openSettings, shortcut: "Ctrl+,", ariaShortcut: "Control+,", separatorBefore: true },
+      ],
+    },
+    {
+      name: "帮助",
+      items: [
+        {
+          label: "关于 Folio",
+          action: () => settingsWindow ? setSettingsPage("about") : void openSettings(),
+        },
+      ],
+    },
   ];
   const closeMenu = () => {
     setMenuOpen(null);
     setMenuMode(false);
   };
+  const renderMenuItems = (items: MenuEntry[]) =>
+    items.map((item) => (
+      <Fragment key={item.label}>
+        {item.separatorBefore && <div className="menu-separator" role="separator" />}
+        <MenuItem
+          item={item}
+          onSelect={(selectedItem) => {
+            closeMenu();
+            void selectedItem.action();
+          }}
+        />
+      </Fragment>
+    ));
 
   return (
     <main className={`app-window${settingsWindow ? " settings-window" : ""}`}>
@@ -932,7 +1572,7 @@ export default function App() {
           aria-pressed={leftSidebarOpen}
           onPress={() => setLeftSidebarOpen((open) => !open)}
         >
-          <SidebarSimpleIcon size={13} />
+          <SidebarSimpleIcon size={14} />
         </Button>}
         <div className="titlebar-leading">
           <button
@@ -957,76 +1597,12 @@ export default function App() {
           </svg>
           </button>
           {menuMode && menuOpen === "文件" && (
-            <div className="menu-popover file-menu-popover" id="file-menu" role="menu" aria-label="文件">
-              {fileMenuItems.map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenu();
-                    void item.action();
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+            <MenuPopover className="file-menu-popover" id="file-menu" label="文件">
+              {renderMenuItems(fileMenuItems)}
+            </MenuPopover>
           )}
           {menuMode && <nav className="menubar" aria-label="应用菜单">
-            {[
-              {
-                name: "编辑",
-                items: [
-                  {
-                    label: "全选字体",
-                    action: () =>
-                      document
-                        .querySelector<HTMLElement>(".font-grid")
-                        ?.focus(),
-                  },
-                ],
-              },
-              {
-                name: "显示",
-                items: [
-                  ...viewModes.map(({ id, label }) => ({
-                    label,
-                    action: () => setViewMode(id),
-                  })),
-                  {
-                    label: `${leftSidebarOpen ? "收起" : "展开"}左侧侧边栏`,
-                    action: () => setLeftSidebarOpen((open) => !open),
-                  },
-                  {
-                    label: `${rightSidebarOpen ? "收起" : "展开"}右侧侧边栏`,
-                    action: () => setRightSidebarOpen((open) => !open),
-                  },
-                ],
-              },
-              {
-                name: "窗口",
-                items: [
-                  {
-                    label: "字体库",
-                    action: () => window.location.assign("index.html"),
-                  },
-                  { label: "设置…", action: openSettings },
-                ],
-              },
-              {
-                name: "帮助",
-                items: [
-                  {
-                    label: "关于 Folio",
-                    action: () =>
-                      settingsWindow
-                        ? setSettingsPage("about")
-                        : void openSettings(),
-                  },
-                ],
-              },
-            ].map((menu) => (
+            {appMenus.map((menu) => (
               <div
                 className="menu-root"
                 key={menu.name}
@@ -1042,21 +1618,11 @@ export default function App() {
                 >
                   {menu.name}
                 </button>
-                {menuOpen === menu.name && <div className="menu-popover" id={`menu-${menu.name}`} role="menu" aria-label={menu.name}>
-                  {menu.items.map((item) => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        closeMenu();
-                        void item.action();
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>}
+                {menuOpen === menu.name && (
+                  <MenuPopover id={`menu-${menu.name}`} label={menu.name}>
+                    {renderMenuItems(menu.items)}
+                  </MenuPopover>
+                )}
               </div>
             ))}
           </nav>}
@@ -1064,54 +1630,95 @@ export default function App() {
         {!menuMode && !settingsWindow && <div className="titlebar-center">
           <div className="titlebar-drag-space" aria-hidden="true" />
           <Toolbar className="titlebar-actions" aria-label="字体库工具">
-          <div className="view-picker" aria-label="浏览方式">
-            {viewModes.map(({ id, label, Icon }) => (
+          <SmoothCorners
+            className="view-picker"
+            corners={titlebarCapsuleCorners}
+            autoEffects={false}
+            aria-label="浏览方式"
+          >
+            <SmoothCorners
+              className="view-picker-thumb"
+              corners={titlebarThumbCorners}
+              autoEffects={false}
+              aria-hidden="true"
+              style={{ transform: `translateX(${viewModes.findIndex(({ id }) => id === viewMode) * 34}px)` }}
+            />
+            {viewModes.map(({ id, label, Icon }, index) => (
+              <Fragment key={id}>
+                {index > 0 && <span className="view-picker-divider" aria-hidden="true" />}
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant={viewMode === id ? "secondary" : "tertiary"}
+                  className="view-mode-button"
+                  aria-label={label}
+                  aria-pressed={viewMode === id}
+                  onPress={() => setViewMode(id)}
+                >
+                  <Icon />
+                </Button>
+              </Fragment>
+            ))}
+          </SmoothCorners>
+          <div
+            ref={searchCapsuleRef}
+            className="search-capsule"
+            style={{ borderRadius: 16 }}
+            onFocusCapture={() => setSearchFocused(true)}
+            onBlurCapture={() => setSearchFocused(false)}
+          >
+            <SearchField
+              className="search-box"
+              aria-label="搜索字体"
+              value={search}
+              onChange={setSearch}
+            >
+              <SearchField.Group>
+                <SearchField.SearchIcon>
+                  <MagnifyingGlassIcon />
+                </SearchField.SearchIcon>
+                <SearchField.Input placeholder="搜索字体" />
+              </SearchField.Group>
+            </SearchField>
+          </div>
+          <SmoothCorners
+            className="titlebar-action-capsule"
+            corners={titlebarCapsuleCorners}
+            autoEffects={false}
+          >
+            <SmoothCorners
+              className="titlebar-action-item"
+              corners={titlebarThumbCorners}
+              autoEffects={false}
+            >
               <Button
-                key={id}
                 isIconOnly
                 size="sm"
-                variant={viewMode === id ? "secondary" : "tertiary"}
-                className="view-mode-button"
-                aria-label={label}
-                aria-pressed={viewMode === id}
-                onPress={() => setViewMode(id)}
+                aria-label="刷新字体库"
+                variant="tertiary"
+                onPress={() => void runRefresh()}
+                isDisabled={refreshing}
               >
-                <Icon />
+                <ArrowClockwiseIcon className={refreshing ? "spin" : ""} />
               </Button>
-            ))}
-          </div>
-          <SearchField
-            className="search-box"
-            aria-label="搜索字体"
-            value={search}
-            onChange={setSearch}
-          >
-            <SearchField.Group>
-              <SearchField.SearchIcon>
-                <MagnifyingGlassIcon />
-              </SearchField.SearchIcon>
-              <SearchField.Input placeholder="搜索字体" />
-            </SearchField.Group>
-          </SearchField>
-          <Button
-            isIconOnly
-            size="sm"
-            aria-label="刷新字体库"
-            variant="tertiary"
-            onPress={() => void runRefresh()}
-            isDisabled={refreshing}
-          >
-            <ArrowClockwiseIcon className={refreshing ? "spin" : ""} />
-          </Button>
-          <Button
-            isIconOnly
-            size="sm"
-            aria-label="添加字体文件夹"
-            variant="tertiary"
-            onPress={() => void chooseFolder()}
-          >
-            <PlusIcon />
-          </Button>
+            </SmoothCorners>
+            <span className="titlebar-action-divider" aria-hidden="true" />
+            <SmoothCorners
+              className="titlebar-action-item"
+              corners={titlebarThumbCorners}
+              autoEffects={false}
+            >
+              <Button
+                isIconOnly
+                size="sm"
+                aria-label="添加字体文件夹"
+                variant="tertiary"
+                onPress={() => void chooseFolder()}
+              >
+                <PlusIcon />
+              </Button>
+            </SmoothCorners>
+          </SmoothCorners>
           </Toolbar>
           <div className="titlebar-drag-space" aria-hidden="true" />
         </div>}
@@ -1134,7 +1741,7 @@ export default function App() {
             aria-pressed={rightSidebarOpen}
             onPress={() => setRightSidebarOpen((open) => !open)}
           >
-            <SidebarIcon size={13} />
+            <SidebarSimpleIcon size={14} mirrored />
           </Button>}
           <Button
             isIconOnly
@@ -1243,6 +1850,19 @@ export default function App() {
                   <output>{previewSize}px</output>
                 </label>
               </>
+            ) : settingsPage === "shortcuts" ? (
+              <>
+                <p>选择退出 Folio 时使用的快捷键。</p>
+                <label className="setting-field">
+                  退出应用
+                  <OptionSelect
+                    label="退出应用快捷键"
+                    value={quitShortcut}
+                    options={quitShortcutOptions}
+                    onChange={(value) => setQuitShortcut(parseQuitShortcut(value))}
+                  />
+                </label>
+              </>
             ) : settingsPage === "importing" ? (
               <>
                 <p>选择添加字体文件时使用的默认方式。</p>
@@ -1294,12 +1914,30 @@ export default function App() {
             ) : settingsPage === "cloud" ? (
               <>
                 <p>连接 WebDAV 或 123PAN，同步字体文件与收藏状态。</p>
+                <div className="setting-field">
+                  <span>服务商</span>
+                  <div className="setting-choice-row setting-preset-row">
+                    {webdavPresets.map((preset) => (
+                      <Button
+                        key={preset.id}
+                        variant={
+                          matchingWebdavPreset(syncServerUrl) === preset.id
+                            ? "primary"
+                            : "secondary"
+                        }
+                        onPress={() => setSyncServerUrl(preset.url ?? "")}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                 <TextField className="setting-field">
                   <Label>服务器地址</Label>
                   <Input
                     type="url"
                     autoComplete="url"
-                    placeholder="https://dav.example.com"
+                    placeholder="https://"
                     value={syncServerUrl}
                     onChange={(event) => setSyncServerUrl(event.target.value)}
                   />
@@ -1505,16 +2143,20 @@ export default function App() {
                 <button
                   role="tab"
                   aria-selected={sidebarPage === "navigation"}
+                  aria-label="导航"
+                  title="导航"
                   onClick={() => setSidebarPage("navigation")}
                 >
-                  导航
+                  <MapPinIcon />
                 </button>
                 <button
                   role="tab"
                   aria-selected={sidebarPage === "filters"}
+                  aria-label="筛选"
+                  title="筛选"
                   onClick={() => setSidebarPage("filters")}
                 >
-                  筛选
+                  <FunnelSimpleIcon />
                 </button>
               </div>
               <div className="sidebar-scroll">
@@ -1523,199 +2165,171 @@ export default function App() {
                     <div className="sidebar-section-label">本地</div>
                     <button
                       className={`sidebar-link${scope === "all" ? " selected" : ""}`}
-                      onClick={() => setScope("all")}
+                      onClick={() => selectLibraryScope("all")}
                     >
                       <TextAaIcon />
-                      全部字体{page && <span>{page.totalMatches}</span>}
+                      全部字体{snapshot && <span>{snapshot.familyCount}</span>}
                     </button>
                     <button
                       className={`sidebar-link${scope === "recent" ? " selected" : ""}`}
-                      onClick={() => setScope("recent")}
+                      onClick={() => selectLibraryScope("recent")}
                     >
                       <ClockCounterClockwiseIcon />
                       最近
                     </button>
                     <button
                       className={`sidebar-link${scope === "favorites" ? " selected" : ""}`}
-                      onClick={() => setScope("favorites")}
+                      onClick={() => selectLibraryScope("favorites")}
                     >
                       <StarIcon />
                       收藏
                     </button>
                     <div className="sidebar-section-label sidebar-section-heading">
-                      手动收藏夹
+                      收藏夹
                     </div>
                     <div className="collection-list">
-                      {collections.map((collection) => (
-                        <div className="collection-row" key={collection.id}>
+                      {smartFolders.map((folder) => {
+                        const Icon = collectionIconComponent(folder.icon);
+                        return (
                           <button
-                            className={`sidebar-link${scope === "collection" && collectionId === collection.id ? " selected" : ""}`}
-                            onClick={() => {
-                              setScope("collection");
-                              setCollectionId(collection.id);
-                              setSelected(null);
-                            }}
+                            key={folder.id}
+                            className={`sidebar-link sidebar-folder${scope === "smartFolder" && smartFolderId === folder.id ? " selected" : ""}`}
+                            onClick={() => openSmartFolder(folder)}
+                            onContextMenu={(event) =>
+                              openFolderContextMenu(event, {
+                                kind: "editSmartFolder",
+                                folder,
+                              })
+                            }
                           >
-                            <FolderIcon />
-                            {collection.name}
-                            <span>{collection.memberCount}</span>
-                          </button>
-                          <div className="collection-row-actions">
-                            <Button
-                              isIconOnly
-                              size="sm"
-                              variant="tertiary"
-                              aria-label={`编辑${collection.name}`}
-                              onPress={() => {
-                                setEditingCollectionId(collection.id);
-                                setEditingCollectionName(collection.name);
+                            <span
+                              className="sidebar-link-icon"
+                              style={{
+                                color: collectionColorValue(folder.color),
                               }}
                             >
-                              <GearSixIcon />
-                            </Button>
-                            <Button
-                              isIconOnly
-                              size="sm"
-                              variant="tertiary"
-                              aria-label={`删除${collection.name}`}
-                              onPress={() =>
-                                void removeManualCollection(collection)
-                              }
+                              <Icon />
+                            </span>
+                            <span className="sidebar-folder-name">
+                              {folder.name}
+                            </span>
+                            <span
+                              className="sidebar-folder-trailing"
+                              aria-hidden="true"
                             >
-                              <XIcon />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <details className="sidebar-create-disclosure" open={editingCollectionId !== null}>
-                      <summary>{editingCollectionId ? "编辑收藏夹" : "新建收藏夹"}</summary>
-                    <form
-                      className="sidebar-create-form"
-                      onSubmit={saveManualCollection}
-                    >
-                      <TextField className="sidebar-name-field">
-                        <Label>手动收藏夹名称</Label>
-                        <Input
-                          value={editingCollectionName ?? newCollectionName}
-                          onChange={(event) =>
-                            editingCollectionId
-                              ? setEditingCollectionName(event.target.value)
-                              : setNewCollectionName(event.target.value)
-                          }
-                          placeholder="输入名称"
-                        />
-                      </TextField>
-                      <div className="sidebar-form-actions">
-                        <Button size="sm" type="submit">
-                          {editingCollectionId ? "保存名称" : "新建收藏夹"}
-                        </Button>
-                        {editingCollectionId && (
-                          <Button
-                            size="sm"
-                            variant="tertiary"
-                            onPress={() => {
-                              setEditingCollectionId(null);
-                              setEditingCollectionName(null);
-                            }}
-                          >
-                            取消
-                          </Button>
-                        )}
-                      </div>
-                    </form>
-                    </details>
-                    <div className="sidebar-section-label sidebar-section-heading">
-                      智慧收藏夹
-                    </div>
-                    <div className="collection-list">
-                      {smartFolders.map((folder) => (
-                        <div className="collection-row" key={folder.id}>
-                          <button
-                            className={`sidebar-link${scope === "smartFolder" && smartFolderId === folder.id ? " selected" : ""}`}
-                            onClick={() => openSmartFolder(folder)}
-                          >
-                            <StarIcon />
-                            {folder.name}
+                              <SparkleIcon />
+                            </span>
                             <span>{folder.matchCount}</span>
                           </button>
-                          <div className="collection-row-actions">
-                            <Button
-                              isIconOnly
-                              size="sm"
-                              variant="tertiary"
-                              aria-label={`编辑${folder.name}`}
-                              onPress={() => {
-                                openSmartFolder(folder);
-                                setEditingSmartFolderId(folder.id);
-                                setEditingSmartFolderName(folder.name);
+                        );
+                      })}
+                      {collections.map((collection) => {
+                        const Icon = collectionIconComponent(collection.icon);
+                        return (
+                          <button
+                            key={collection.id}
+                            className={`sidebar-link sidebar-folder${scope === "collection" && collectionId === collection.id ? " selected" : ""}`}
+                            onClick={() => selectCollection(collection.id)}
+                            onContextMenu={(event) =>
+                              openFolderContextMenu(event, {
+                                kind: "editCollection",
+                                collection,
+                              })
+                            }
+                          >
+                            <span
+                              className="sidebar-link-icon"
+                              style={{
+                                color: collectionColorValue(collection.color),
                               }}
                             >
-                              <GearSixIcon />
-                            </Button>
-                            <Button
-                              isIconOnly
-                              size="sm"
-                              variant="tertiary"
-                              aria-label={`删除${folder.name}`}
-                              onPress={() => void removeSmartFolder(folder)}
-                            >
-                              <XIcon />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                              <Icon />
+                            </span>
+                            <span className="sidebar-folder-name">
+                              {collection.name}
+                            </span>
+                            <span>{collection.memberCount}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    <details className="sidebar-create-disclosure" open={editingSmartFolderId !== null}>
-                      <summary>{editingSmartFolderId ? "编辑智慧收藏夹" : "保存当前筛选"}</summary>
-                    <form
-                      className="sidebar-create-form"
-                      onSubmit={saveCurrentSmartFolder}
+                    <button
+                      className="sidebar-new-folder"
+                      onClick={beginFavoriteFolderCreation}
                     >
-                      <TextField className="sidebar-name-field">
-                        <Label>智慧收藏夹名称</Label>
-                        <Input
-                          value={editingSmartFolderName ?? newSmartFolderName}
-                          onChange={(event) =>
-                            editingSmartFolderId
-                              ? setEditingSmartFolderName(event.target.value)
-                              : setNewSmartFolderName(event.target.value)
-                          }
-                          placeholder="保存当前搜索与筛选"
-                        />
-                      </TextField>
-                      <div className="sidebar-form-actions">
-                        <Button size="sm" type="submit">
-                          {editingSmartFolderId ? "更新条件" : "保存条件"}
-                        </Button>
-                        {editingSmartFolderId && (
-                          <Button
-                            size="sm"
-                            variant="tertiary"
-                            onPress={() => {
-                              setEditingSmartFolderId(null);
-                              setEditingSmartFolderName(null);
-                            }}
-                          >
-                            取消
-                          </Button>
-                        )}
-                      </div>
-                    </form>
-                    </details>
-                    {organizationError && (
+                      <PlusIcon />
+                      新建收藏夹
+                    </button>
+                    {organizationError && !favoriteEditor && (
                       <p className="sidebar-error" role="alert">
                         {organizationError}
                       </p>
                     )}
-                    <div className="sidebar-spacer" />
-                    <Button
-                      className="add-folder-button"
-                      onPress={() => void chooseFolder()}
+                    <div className="sidebar-section-label sidebar-section-heading">
+                      云端
+                    </div>
+                    {syncProfile ? (
+                      <button
+                        className={`sidebar-cloud${scope === "cloudFonts" ? " selected" : ""}`}
+                        onClick={() => selectLibraryScope("cloudFonts")}
+                      >
+                        <span className="sidebar-cloud-icon" aria-hidden="true">
+                          <HardDrivesIcon />
+                        </span>
+                        <span className="sidebar-cloud-text">
+                          <span className="sidebar-cloud-name">
+                            {cloudConnectionName(syncProfile)}
+                          </span>
+                          <span className="sidebar-cloud-detail">
+                            字体占用 {cloudFontStorage}
+                          </span>
+                        </span>
+                        <span className="sidebar-cloud-count">
+                          {activeCloudFonts.length}
+                        </span>
+                      </button>
+                    ) : (
+                      <p className="sidebar-empty">未连接云端</p>
+                    )}
+                    <div className="sidebar-section-label sidebar-section-heading">
+                      字体状态
+                    </div>
+                    {fontStateOptions.map((option) => {
+                      const StateIcon = option.Icon;
+                      return (
+                        <button
+                          key={option.id}
+                          className={`sidebar-link${scope === "fontState" && fontState === option.id ? " selected" : ""}`}
+                          title={option.help}
+                          onClick={() => selectFontState(option.id)}
+                        >
+                          <StateIcon />
+                          {option.label}
+                          <span>
+                            {snapshot?.fontStateCounts[option.id] ?? 0}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    <div className="sidebar-section-label sidebar-section-heading">
+                      工具
+                    </div>
+                    <button
+                      className="sidebar-link sidebar-link-disabled"
+                      disabled
+                      title="在线字体将在后续版本提供"
                     >
-                      <FolderPlusIcon />
-                      添加字体文件夹
-                    </Button>
+                      <GlobeIcon />
+                      在线字体
+                    </button>
+                    <button
+                      className={`sidebar-link${scope === "fontHealth" ? " selected" : ""}`}
+                      onClick={() => selectLibraryScope("fontHealth")}
+                    >
+                      <StethoscopeIcon />
+                      字体健康
+                      <span>{healthCount}</span>
+                    </button>
                   </>
                 ) : (
                   <>
@@ -1768,13 +2382,14 @@ export default function App() {
                   </>
                 )}
               </div>
-              <button
-                className="sidebar-settings"
-                onClick={() => void openSettings()}
-              >
-                <GearSixIcon />
-                设置
-              </button>
+              <div className="sidebar-status">
+                <CloudStatusPanel
+                  status={syncStatus}
+                  connected={syncProfile !== null}
+                  onSync={() => void startCloudSync()}
+                  onOpenSettings={() => void openSettings()}
+                />
+              </div>
             </div>
           </aside>
           <SidebarResizeHandle
@@ -1793,6 +2408,16 @@ export default function App() {
           />
 
           <section className="library-pane">
+            {scope === "cloudFonts" ? (
+              <CloudFontsPane
+                fonts={cloudFonts}
+                connected={syncProfile !== null}
+                status={syncStatus}
+                onSync={() => void startCloudSync()}
+                onOpenSettings={() => void openSettings()}
+              />
+            ) : (
+              <>
             <div className="library-overview">
               <div className="library-title-row">
                 <div className="library-summary">
@@ -1828,41 +2453,6 @@ export default function App() {
                   />
                 </div>
               </div>
-              {page && page.facets.length > 0 && (
-                <section className="quick-filters" aria-label="按分类筛选字体">
-                  <div className="quick-filters-heading">
-                    <span>按分类筛选字体</span>
-                    {Object.values(selectedFacets).some((values) => values.length > 0) && (
-                      <button type="button" onClick={() => setSelectedFacets({})}>
-                        清除筛选
-                      </button>
-                    )}
-                  </div>
-                  {facetGroups(page.facets).slice(0, 4).map(([kind, options]) => (
-                    <div className="quick-filter-row" key={kind}>
-                      <span className="quick-filter-label">{facetGroupTitle(kind)}</span>
-                      <div className="quick-filter-options">
-                        {options.slice(0, 8).map((option) => {
-                          const active = selectedFacets[kind]?.includes(option.value) ?? false;
-                          return (
-                            <button
-                              type="button"
-                              key={`${kind}:${option.value}`}
-                              className={`quick-filter-chip${active ? " active" : ""}`}
-                              aria-pressed={active}
-                              onClick={() => setSelectedFacets((current) => toggleFacet(current, kind, option.value))}
-                            >
-                              {active && <span aria-hidden="true">✓</span>}
-                              {option.label}
-                              <small>{option.familyCount}</small>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </section>
-              )}
             </div>
             {error ? (
               <div className="state-message error-state">
@@ -1984,6 +2574,8 @@ export default function App() {
               />
               <output>{previewSize}px</output>
             </footer>
+              </>
+            )}
           </section>
           <SidebarResizeHandle
             side="right"
@@ -2031,7 +2623,415 @@ export default function App() {
           </aside>
         </div>
       )}
+
+      {!settingsWindow && folderContextMenu && (
+        <FolderContextMenu
+          menu={folderContextMenu}
+          onEdit={() => {
+            const intent = folderContextMenu.intent;
+            setFolderContextMenu(null);
+            beginFavoriteFolderEditing(intent);
+          }}
+          onDelete={() => {
+            const intent = folderContextMenu.intent;
+            setFolderContextMenu(null);
+            if (intent.kind === "editCollection") {
+              void removeCollection(intent.collection);
+            } else if (intent.kind === "editSmartFolder") {
+              void removeSmartFolder(intent.folder);
+            }
+          }}
+        />
+      )}
+
+      {!settingsWindow && favoriteEditor && (
+        <FavoriteFolderEditor
+          key={favoriteFolderEditorKey(favoriteEditor)}
+          intent={favoriteEditor}
+          seed={favoriteFolderSeed}
+          facetOptions={page?.facets ?? []}
+          error={organizationError}
+          onClose={closeFavoriteFolderEditor}
+          onSave={saveFavoriteFolder}
+        />
+      )}
     </main>
+  );
+}
+
+function FolderContextMenu({
+  menu,
+  onEdit,
+  onDelete,
+}: {
+  menu: FolderContextMenuState;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="menu-popover context-menu"
+      role="menu"
+      aria-label="收藏夹操作"
+      style={{ left: menu.x, top: menu.y }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <MenuItem
+        item={{ label: "编辑收藏夹…", Icon: PencilSimpleIcon, action: onEdit }}
+        onSelect={() => onEdit()}
+      />
+      <div className="menu-separator" role="separator" />
+      <MenuItem
+        item={{
+          label: "删除收藏夹",
+          Icon: TrashIcon,
+          action: onDelete,
+          danger: true,
+        }}
+        onSelect={() => onDelete()}
+      />
+    </div>
+  );
+}
+
+function FavoriteFolderEditor({
+  intent,
+  seed,
+  facetOptions,
+  error,
+  onClose,
+  onSave,
+}: {
+  intent: FavoriteFolderIntent;
+  seed: FavoriteFolderDraft;
+  facetOptions: FacetOptionDto[];
+  error: string | null;
+  onClose: () => void;
+  onSave: (draft: FavoriteFolderDraft) => void;
+}) {
+  const isCreate = intent.kind === "create";
+  const [tab, setTab] = useState<"general" | "filters">("general");
+  const [name, setName] = useState(seed.name);
+  const [text, setText] = useState(seed.text);
+  const [facets, setFacets] = useState<Record<string, string[]>>(seed.facets);
+  const [icon, setIcon] = useState(seed.icon);
+  const [color, setColor] = useState(seed.color);
+  const groups = facetGroups(facetOptions);
+  const selectedColorLabel =
+    collectionColorOptions.find((option) => option.id === color)?.label ?? "灰色";
+
+  const submit = () => {
+    onSave({ name, text, facets, icon, color });
+  };
+
+  return (
+    <Modal
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal.Backdrop className="favorite-editor-backdrop">
+        <Modal.Container
+          placement="center"
+          className="favorite-editor-container"
+        >
+          <Modal.Dialog
+            className="favorite-editor-dialog"
+            aria-label={isCreate ? "新建收藏夹" : "编辑收藏夹"}
+          >
+            <div
+              className="favorite-editor-tabs"
+              role="tablist"
+              aria-label="收藏夹设置"
+            >
+              <button
+                role="tab"
+                aria-selected={tab === "general"}
+                onClick={() => setTab("general")}
+              >
+                常规
+              </button>
+              <button
+                role="tab"
+                aria-selected={tab === "filters"}
+                onClick={() => setTab("filters")}
+              >
+                筛选条件
+              </button>
+            </div>
+
+            <div className="favorite-editor-body">
+              {tab === "general" ? (
+                <div className="favorite-editor-page">
+                  <TextField
+                    className="favorite-editor-name"
+                    aria-label="收藏夹名称"
+                  >
+                    <Input
+                      autoFocus
+                      aria-label="收藏夹名称"
+                      placeholder="收藏夹名称"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                    />
+                  </TextField>
+                  <div className="favorite-editor-label">图标</div>
+                  <div className="favorite-icon-grid">
+                    {collectionIconOptions.map((option) => {
+                      const Icon = option.Icon;
+                      const selected = icon === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className={`favorite-icon-option${selected ? " selected" : ""}`}
+                          aria-label={option.label}
+                          aria-pressed={selected}
+                          title={option.label}
+                          onClick={() => setIcon(option.id)}
+                        >
+                          <Icon />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="favorite-editor-label-row">
+                    <span className="favorite-editor-label">颜色</span>
+                    <span className="favorite-editor-color-name">
+                      {selectedColorLabel}
+                    </span>
+                  </div>
+                  <div className="favorite-color-row">
+                    {collectionColorOptions.map((option) => {
+                      const selected = color === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className={`favorite-color-option${selected ? " selected" : ""}`}
+                          style={{ background: option.value }}
+                          aria-label={option.label}
+                          aria-pressed={selected}
+                          title={option.label}
+                          onClick={() => setColor(option.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="favorite-editor-page">
+                  <div className="favorite-editor-field-heading">
+                    <span className="favorite-editor-label">搜索字体</span>
+                    <p className="favorite-editor-hint">
+                      按字体名称、设计师或厂商等关键词匹配，多个关键词需同时满足。
+                    </p>
+                  </div>
+                  <TextField
+                    className="favorite-editor-search"
+                    aria-label="筛选关键词"
+                  >
+                    <Input
+                      aria-label="筛选关键词"
+                      placeholder="输入关键词"
+                      value={text}
+                      onChange={(event) => setText(event.target.value)}
+                    />
+                  </TextField>
+                  <div className="favorite-editor-field-heading">
+                    <span className="favorite-editor-label">筛选条件</span>
+                    <p className="favorite-editor-hint">
+                      添加筛选条件后，符合条件的字体会自动显示在此收藏夹中。
+                    </p>
+                  </div>
+                  {groups.length ? (
+                    <div className="facet-groups">
+                      {groups.map(([kind, options]) => (
+                        <details
+                          className="facet-group"
+                          key={kind}
+                          open={kind === "categories" || kind === "features"}
+                        >
+                          <summary>
+                            {facetGroupTitle(kind)}
+                            <span>{facets[kind]?.length ?? 0}</span>
+                          </summary>
+                          <div className="facet-options">
+                            {options.slice(0, 24).map((option) => (
+                              <Checkbox
+                                key={`${kind}:${option.value}`}
+                                isSelected={
+                                  facets[kind]?.includes(option.value) ?? false
+                                }
+                                onChange={() =>
+                                  setFacets((current) =>
+                                    toggleFacet(current, kind, option.value),
+                                  )
+                                }
+                              >
+                                <Checkbox.Content>
+                                  <Checkbox.Control>
+                                    <Checkbox.Indicator />
+                                  </Checkbox.Control>
+                                  <span>{option.label}</span>
+                                  <small>{option.familyCount}</small>
+                                </Checkbox.Content>
+                              </Checkbox>
+                            ))}
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="sidebar-empty">
+                      当前字体库没有可用的筛选项。
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {error && (
+              <p className="favorite-editor-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            <div className="favorite-editor-footer">
+              <Button variant="tertiary" onPress={onClose}>
+                取消
+              </Button>
+              <Button onPress={submit} isDisabled={!name.trim()}>
+                {isCreate ? "创建" : "保存"}
+              </Button>
+            </div>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
+function CloudStatusPanel({
+  status,
+  connected,
+  onSync,
+  onOpenSettings,
+}: {
+  status: SyncStatusDto | null;
+  connected: boolean;
+  onSync: () => void;
+  onOpenSettings: () => void;
+}) {
+  if (!connected) {
+    return (
+      <div className="sidebar-status-card">
+        <CloudIcon aria-hidden="true" />
+        <span className="sidebar-status-text">
+          <strong>未连接云端</strong>
+          <button type="button" onClick={onOpenSettings}>
+            在设置中连接 WebDAV
+          </button>
+        </span>
+      </div>
+    );
+  }
+  const running = status?.running ?? false;
+  const error = status?.error ?? null;
+  return (
+    <div className={`sidebar-status-card${error ? " has-error" : ""}`}>
+      {running ? (
+        <span className="sidebar-status-spinner" aria-hidden="true" />
+      ) : error ? (
+        <WarningIcon aria-hidden="true" />
+      ) : (
+        <CloudCheckIcon aria-hidden="true" />
+      )}
+      <span className="sidebar-status-text">
+        <strong>
+          {running ? "正在同步" : error ? "同步未完成" : "本地与云端均为最新"}
+        </strong>
+        {running ? (
+          <span>
+            上传 {status?.uploadedFiles ?? 0} · 下载 {status?.downloadedFiles ?? 0}
+          </span>
+        ) : (
+          <button type="button" onClick={onSync}>
+            立即同步 ›
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function CloudFontsPane({
+  fonts,
+  connected,
+  status,
+  onSync,
+  onOpenSettings,
+}: {
+  fonts: CloudFontDto[];
+  connected: boolean;
+  status: SyncStatusDto | null;
+  onSync: () => void;
+  onOpenSettings: () => void;
+}) {
+  if (!connected) {
+    return (
+      <div className="state-message empty-state">
+        <div className="empty-icon">
+          <CloudIcon />
+        </div>
+        <h2>未连接云端</h2>
+        <p>在设置中连接 WebDAV，即可在此浏览与同步云字体。</p>
+        <Button onPress={onOpenSettings}>
+          <GearSixIcon />
+          打开设置
+        </Button>
+      </div>
+    );
+  }
+  const active = fonts.filter((font) => !font.deleted);
+  const running = status?.running ?? false;
+  return (
+    <div className="cloud-pane">
+      <header className="cloud-pane-header">
+        <div>
+          <h1>云端字体</h1>
+          <p>
+            {active.length} 个字体 ·{" "}
+            {running ? "正在同步" : (status?.phase ?? "已连接")}
+          </p>
+        </div>
+        <Button onPress={onSync} isDisabled={running}>
+          {running ? "正在同步…" : "立即同步"}
+        </Button>
+      </header>
+      {active.length ? (
+        <ul className="cloud-font-list">
+          {active.map((font) => (
+            <li key={font.fingerprint}>
+              <span className="cloud-font-name">{font.displayName}</span>
+              <span className="cloud-font-meta">
+                {font.cloudOnly ? "仅在云端" : "已同步到本机"} ·{" "}
+                {formatFileSize(font.fileSize)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="state-message empty-state">
+          <div className="empty-icon">
+            <CloudIcon />
+          </div>
+          <h2>云端尚无字体</h2>
+          <p>同步后，云端字体记录会显示在这里。</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2368,7 +3368,20 @@ function preferredFace(family: FamilyDto) {
 }
 
 function scopeTitle(scope: LibraryScope) {
-  return scope === "all" ? "全部字体" : scope === "recent" ? "最近" : "收藏";
+  switch (scope) {
+    case "all":
+      return "全部字体";
+    case "recent":
+      return "最近";
+    case "favorites":
+      return "收藏";
+    case "fontHealth":
+      return "字体健康";
+    case "cloudFonts":
+      return "云端字体";
+    default:
+      return "字体";
+  }
 }
 
 function storedSidebarWidth(key: string) {
@@ -2384,6 +3397,16 @@ function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function cloudConnectionName(profile: SyncProfileDto) {
+  const directory = profile.remoteDirectory.trim();
+  if (directory) return directory;
+  try {
+    return new URL(profile.serverUrl).host || "云端";
+  } catch {
+    return profile.serverUrl.trim() || "云端";
+  }
 }
 
 function facetGroups(facets: FacetOptionDto[]) {
@@ -2427,4 +3450,26 @@ function toggleFacet(
   if (next.length) result[kind] = next;
   else delete result[kind];
   return result;
+}
+
+function mergeFacets(
+  base: Record<string, string[]>,
+  extra: Record<string, string[]>,
+) {
+  const result: Record<string, string[]> = { ...base };
+  for (const [kind, values] of Object.entries(extra)) {
+    result[kind] = [...new Set([...(result[kind] ?? []), ...values])];
+  }
+  return result;
+}
+
+function favoriteFolderEditorKey(intent: FavoriteFolderIntent) {
+  switch (intent.kind) {
+    case "create":
+      return "create";
+    case "editCollection":
+      return `collection-${intent.collection.id}`;
+    case "editSmartFolder":
+      return `smart-folder-${intent.folder.id}`;
+  }
 }

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CloudFontDto, CollectionDto, FontPreviewDto, LibraryPageDto, SmartFolderDto, SyncConflictDto, SyncProfileDto, SyncStatusDto } from "./types";
+import type { CloudFontDto, CollectionDto, FontPreviewDto, LibraryPageDto, LibrarySnapshotDto, SmartFolderDto, SyncConflictDto, SyncProfileDto, SyncStatusDto } from "./types";
 
 export interface QueryRequest {
   text: string;
@@ -10,17 +10,18 @@ export interface QueryRequest {
   sort: string;
   collectionId?: string;
   smartFolderId?: string;
+  fontState?: string;
 }
 
 export function queryLibrary(request: QueryRequest): Promise<LibraryPageDto> {
   return invoke("query_library", { request });
 }
 
-export function refreshLibrary(): Promise<{ familyCount: number; faceCount: number; roots: string[] }> {
+export function refreshLibrary(): Promise<LibrarySnapshotDto> {
   return invoke("refresh_library");
 }
 
-export function addLibraryRoot(path: string): Promise<{ familyCount: number; faceCount: number; roots: string[] }> {
+export function addLibraryRoot(path: string): Promise<LibrarySnapshotDto> {
   return invoke("add_library_root", { path });
 }
 
@@ -56,12 +57,20 @@ export function listSmartFolders(): Promise<SmartFolderDto[]> {
   return invoke("list_smart_folders");
 }
 
-export function saveSmartFolder(request: { id?: string; name: string; text: string; facets: Record<string, string[]> }): Promise<SmartFolderDto> {
+export function saveSmartFolder(request: { id?: string; name: string; text: string; facets: Record<string, string[]>; icon?: string; color?: string }): Promise<SmartFolderDto> {
   return invoke("save_smart_folder", { request });
 }
 
 export function deleteSmartFolder(id: string): Promise<void> {
   return invoke("delete_smart_folder", { id });
+}
+
+export function convertCollectionToSmartFolder(request: { id: string; name: string; text: string; facets: Record<string, string[]>; icon: string; color: string }): Promise<SmartFolderDto> {
+  return invoke("convert_collection_to_smart_folder", { request });
+}
+
+export function convertSmartFolderToCollection(request: { id: string; name: string; icon: string; color: string }): Promise<CollectionDto> {
+  return invoke("convert_smart_folder_to_collection", { request });
 }
 
 export function openSettings(): Promise<void> {

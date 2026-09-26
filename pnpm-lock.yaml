@@ -16,6 +16,9 @@ importers:
       '@heroui/styles':
         specifier: 3.2.6
         version: 3.2.6(tailwindcss@4.3.3)
+      '@lisse/react':
+        specifier: 0.7.2
+        version: 0.7.2(react@19.3.0)
       '@phosphor-icons/react':
         specifier: 2.1.10
         version: 2.1.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -281,6 +284,16 @@ packages:
 
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
+
+  '@lisse/core@0.7.2':
+    resolution: {integrity: sha512-YjGQ1JprtAry68U3jM532roxFcug8GCisQGQhcAVyC2r3WloILFECTi24eZtM2RRq8i7yQ+aDF2Cx6q+ffIGxg==}
+    engines: {node: '>=18'}
+
+  '@lisse/react@0.7.2':
+    resolution: {integrity: sha512-Bpke6mYifeKe4I8rNwB9/xB0th2+PBEaFnoR0FafcAMZwuBvgUCLT7uZNFfwc1Ko1Kvlt3rX4HtHtylCaX/kpA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: '>=18.0.0'
 
   '@oxc-project/types@0.150.0':
     resolution: {integrity: sha512-rDS5/31E9HfPl/CIzGrn0DOlvBbXFseQ5URJ9sYMfstbKLD/c6Gm9vmRzRGDdAXyOIL4zmO37lc9RIwYqVruZw==}
@@ -1775,6 +1788,13 @@ snapshots:
       keyv: 5.6.0
 
   '@keyv/serialize@1.1.1': {}
+
+  '@lisse/core@0.7.2': {}
+
+  '@lisse/react@0.7.2(react@19.3.0)':
+    dependencies:
+      '@lisse/core': 0.7.2
+      react: 19.3.0
 
   '@oxc-project/types@0.150.0': {}
 
