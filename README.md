@@ -135,16 +135,46 @@ Folio/
 * `PHASE2B_REPORT.md` – library state, metadata and query verification report
 * `AGENTS.md` – project rules for the shared Windows/Linux React front end
 
-## Desktop UI dependency baseline
+## Windows/Linux 桌面开发
 
-The Windows and Linux front end is planned to use React, TypeScript, Vite,
-Tauri 2 and HeroUI v3 with Tailwind CSS v4. The repository currently contains
-only the dependency manifest at `apps/desktop-ui/package.json`; UI source is
-intentionally deferred.
+桌面端使用 React、TypeScript、Vite 和 Tauri 2。Windows 与未来的 Linux 版本
+共用 `apps/desktop-ui` 前端，提供字体库浏览、筛选、收藏与云同步界面。
+
+### Windows 环境
+
+安装以下工具：
+
+* Visual Studio 2022 Build Tools，并选择 **Desktop development with C++** 工作负载和 Windows SDK
+* Rust stable MSVC 工具链：`rustup default stable-msvc`
+* Node.js 20.19+ 或 22.12+，以及 pnpm 11.19.0（版本由根目录 `package.json` 固定）
+* WebView2 Runtime（Windows 10/11 通常已预装）
+
+在仓库根目录安装前端依赖并启动桌面端：
 
 ```sh
 pnpm install
+pnpm -C apps/desktop-ui tauri dev
 ```
+
+构建 Windows 安装包：
+
+```sh
+pnpm -C apps/desktop-ui tauri build
+```
+
+### Linux 环境
+
+Linux 继续使用同一个 React/Tauri 工程。Debian/Ubuntu 开发环境需要先安装 Tauri
+系统依赖：
+
+```sh
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+随后安装 Linux Rust 工具链及 Node.js/pnpm，再运行同样的 `pnpm install` 和
+`pnpm -C apps/desktop-ui tauri dev` 命令。
 
 HeroUI is the only default React component library. Fluent UI, Chakra UI, MUI,
 Radix, Ant Design and Mantine are excluded for this project. PrimeReact remains
@@ -154,7 +184,7 @@ component systems.
 ## Planned
 
 * Folio v2: WOFF/WOFF2 support, managed library storage, collection
-* Desktop apps (macOS first, then Windows/Linux shared React UI), Android,
+* Windows desktop app first, then Linux using the shared React UI; Android,
   iOS/iPadOS
 * Activate/deactivate, install/uninstall, hot reload, duplicate and
   revision detection, WebDAV sync
