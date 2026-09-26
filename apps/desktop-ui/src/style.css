@@ -528,7 +528,6 @@ button {
     margin: 1px 0;
     padding: 0 10px;
     border: 0;
-    border-radius: 7px;
     text-align: left;
     color: var(--text);
     background: transparent;
@@ -538,6 +537,7 @@ button {
 .sidebar-link svg {
     width: 16px;
     height: 16px;
+    flex: none;
     color: var(--text-muted);
 }
 .sidebar-link span {
@@ -567,6 +567,10 @@ button {
     flex-direction: column;
     overflow: auto;
     scrollbar-width: thin;
+}
+/* 列表项保持自身高度，内容超出时由 side-scroll 滚动而不是压缩。 */
+.sidebar-scroll > * {
+    flex: none;
 }
 .sidebar-section-heading {
     margin-top: 15px;
@@ -1445,7 +1449,6 @@ button {
     height: 32px;
     margin: 0;
     padding: 0 9px;
-    border-radius: 8px;
     font-size: 12px;
     font-weight: 550;
 }
@@ -1787,7 +1790,6 @@ button {
     margin-top: 2px;
     padding: 0 9px;
     border: 0;
-    border-radius: 8px;
     color: var(--text-muted);
     background: transparent;
     cursor: pointer;
@@ -1801,6 +1803,7 @@ button {
 .sidebar-new-folder svg {
     width: 16px;
     height: 16px;
+    flex: none;
     color: var(--accent);
 }
 .context-menu {
@@ -1935,6 +1938,29 @@ button {
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
+/* 侧边栏与收藏夹图标在选中时按路径绘制一次，pathLength 已归一化为 1。 */
+.sidebar-link.selected .animated-icon :is(path, line, polyline, polygon, circle, ellipse, rect),
+.sidebar-cloud.selected .animated-icon :is(path, line, polyline, polygon, circle, ellipse, rect),
+.favorite-icon-option.selected .animated-icon :is(path, line, polyline, polygon, circle, ellipse, rect) {
+    --phosphor-draw: 1;
+    stroke-dasharray: var(--phosphor-draw);
+    stroke-dashoffset: var(--phosphor-draw);
+    animation: phosphor-icon-draw-in 620ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes phosphor-icon-draw-in {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .sidebar-link.selected .animated-icon :is(path, line, polyline, polygon, circle, ellipse, rect),
+    .sidebar-cloud.selected .animated-icon :is(path, line, polyline, polygon, circle, ellipse, rect),
+    .favorite-icon-option.selected .animated-icon :is(path, line, polyline, polygon, circle, ellipse, rect) {
+        animation: none;
+        stroke-dasharray: none;
+        stroke-dashoffset: 0;
+    }
+}
 .favorite-color-row {
     display: grid;
     grid-template-columns: repeat(9, 1fr);
@@ -1983,7 +2009,6 @@ button {
     min-height: 44px;
     padding: 5px 9px;
     border: 0;
-    border-radius: 8px;
     color: var(--text);
     background: transparent;
     cursor: pointer;

@@ -35,6 +35,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint src",
+    "generate:icons": "node scripts/generate-animated-icons.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   }

@@ -1,69 +1,24 @@
 import {
-  ArchiveIcon,
   ArrowClockwiseIcon,
-  BookIcon,
-  BookmarkSimpleIcon,
-  BooksIcon,
-  BriefcaseIcon,
   CheckIcon,
-  ClockCounterClockwiseIcon,
   CloudCheckIcon,
   CloudIcon,
   CopyIcon,
   CopySimpleIcon,
-  DownloadSimpleIcon,
-  FileIcon,
-  FolderIcon,
   FolderPlusIcon,
-  FunnelSimpleIcon,
   GearSixIcon,
-  GiftIcon,
-  GlobeIcon,
   GridFourIcon,
   GridNineIcon,
-  HardDrivesIcon,
-  HeartIcon,
-  LaptopIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
-  MapPinIcon,
   MinusIcon,
-  NumberCircleEightIcon,
-  NumberCircleFiveIcon,
-  NumberCircleFourIcon,
-  NumberCircleNineIcon,
-  NumberCircleOneIcon,
-  NumberCircleSevenIcon,
-  NumberCircleSixIcon,
-  NumberCircleThreeIcon,
-  NumberCircleTwoIcon,
-  NumberCircleZeroIcon,
-  NumberSquareEightIcon,
-  NumberSquareFiveIcon,
-  NumberSquareFourIcon,
-  NumberSquareNineIcon,
-  NumberSquareOneIcon,
-  NumberSquareSevenIcon,
-  NumberSquareSixIcon,
-  NumberSquareThreeIcon,
-  NumberSquareTwoIcon,
-  NumberSquareZeroIcon,
-  PackageIcon,
-  PaperclipIcon,
   PencilSimpleIcon,
   PlusIcon,
-  SealCheckIcon,
   SidebarSimpleIcon,
-  SignatureIcon,
-  SlidersHorizontalIcon,
   SparkleIcon,
   SquareIcon,
-  StackIcon,
   StackSimpleIcon,
   StarIcon,
-  StethoscopeIcon,
-  SwatchesIcon,
-  TagIcon,
   TextAaIcon,
   TrashIcon,
   WarningIcon,
@@ -90,6 +45,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   Fragment,
+  type ButtonHTMLAttributes,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
@@ -143,6 +99,8 @@ import type {
   SyncProfileDto,
   SyncStatusDto,
 } from "./types";
+import { AnimatedIcon } from "./animated-icons";
+import type { AnimatedIconName } from "./animated-icons-data";
 
 type ViewMode = "compact" | "large" | "list" | "expanded";
 type LibraryScope =
@@ -221,57 +179,60 @@ const titlebarThumbCorners = { radius: 13, smoothing: 0.6 } as const;
 // 菜单外壳与菜单项圆角同心：外壳 10px、内边距 3px、菜单项 6px。
 const menuCorners = { radius: 10, smoothing: 0.6 } as const;
 const menuItemCorners = { radius: 6, smoothing: 0.6 } as const;
+// 侧边栏菜单项使用 lisse 平滑圆角。
+const sidebarItemCorners = { radius: 8, smoothing: 0.6 } as const;
 
 // 收藏夹图标与颜色选项，与 macOS 版本 CollectionIcon / CollectionColor 一一对应。
 type CollectionIconOption = {
   id: string;
   label: string;
-  Icon: typeof FolderIcon;
+  animatedName: AnimatedIconName;
 };
 
 const collectionIconOptions: CollectionIconOption[] = [
-  { id: "folder", label: "文件夹", Icon: FolderIcon },
-  { id: "books", label: "书籍", Icon: BooksIcon },
-  { id: "type", label: "字体", Icon: TextAaIcon },
-  { id: "star", label: "星标", Icon: StarIcon },
-  { id: "heart", label: "爱心", Icon: HeartIcon },
-  { id: "bookmark", label: "书签", Icon: BookmarkSimpleIcon },
-  { id: "tag", label: "标签", Icon: TagIcon },
-  { id: "briefcase", label: "工作", Icon: BriefcaseIcon },
-  { id: "sparkles", label: "灵感", Icon: SparkleIcon },
-  { id: "sliders-horizontal", label: "调节", Icon: SlidersHorizontalIcon },
-  { id: "signature", label: "签名", Icon: SignatureIcon },
-  { id: "archive", label: "归档", Icon: ArchiveIcon },
-  { id: "book", label: "书本", Icon: BookIcon },
-  { id: "paperclip", label: "回形针", Icon: PaperclipIcon },
-  { id: "package", label: "包裹", Icon: PackageIcon },
-  { id: "swatches", label: "色板", Icon: SwatchesIcon },
-  { id: "gift", label: "礼物", Icon: GiftIcon },
-  { id: "stack", label: "叠层", Icon: StackIcon },
-  { id: "number-circle-0", label: "数字 0", Icon: NumberCircleZeroIcon },
-  { id: "number-circle-1", label: "数字 1", Icon: NumberCircleOneIcon },
-  { id: "number-circle-2", label: "数字 2", Icon: NumberCircleTwoIcon },
-  { id: "number-circle-3", label: "数字 3", Icon: NumberCircleThreeIcon },
-  { id: "number-circle-4", label: "数字 4", Icon: NumberCircleFourIcon },
-  { id: "number-circle-5", label: "数字 5", Icon: NumberCircleFiveIcon },
-  { id: "number-circle-6", label: "数字 6", Icon: NumberCircleSixIcon },
-  { id: "number-circle-7", label: "数字 7", Icon: NumberCircleSevenIcon },
-  { id: "number-circle-8", label: "数字 8", Icon: NumberCircleEightIcon },
-  { id: "number-circle-9", label: "数字 9", Icon: NumberCircleNineIcon },
-  { id: "number-square-0", label: "数字 0", Icon: NumberSquareZeroIcon },
-  { id: "number-square-1", label: "数字 1", Icon: NumberSquareOneIcon },
-  { id: "number-square-2", label: "数字 2", Icon: NumberSquareTwoIcon },
-  { id: "number-square-3", label: "数字 3", Icon: NumberSquareThreeIcon },
-  { id: "number-square-4", label: "数字 4", Icon: NumberSquareFourIcon },
-  { id: "number-square-5", label: "数字 5", Icon: NumberSquareFiveIcon },
-  { id: "number-square-6", label: "数字 6", Icon: NumberSquareSixIcon },
-  { id: "number-square-7", label: "数字 7", Icon: NumberSquareSevenIcon },
-  { id: "number-square-8", label: "数字 8", Icon: NumberSquareEightIcon },
-  { id: "number-square-9", label: "数字 9", Icon: NumberSquareNineIcon },
+  { id: "folder", label: "文件夹", animatedName: "folder" },
+  { id: "books", label: "书籍", animatedName: "books" },
+  { id: "type", label: "字体", animatedName: "text-aa" },
+  { id: "star", label: "星标", animatedName: "star" },
+  { id: "heart", label: "爱心", animatedName: "heart" },
+  { id: "bookmark", label: "书签", animatedName: "bookmark-simple" },
+  { id: "tag", label: "标签", animatedName: "tag" },
+  { id: "briefcase", label: "工作", animatedName: "briefcase" },
+  { id: "sparkles", label: "灵感", animatedName: "sparkle" },
+  { id: "sliders-horizontal", label: "调节", animatedName: "sliders-horizontal" },
+  { id: "signature", label: "签名", animatedName: "signature" },
+  { id: "archive", label: "归档", animatedName: "archive" },
+  { id: "book", label: "书本", animatedName: "book" },
+  { id: "paperclip", label: "回形针", animatedName: "paperclip" },
+  { id: "package", label: "包裹", animatedName: "package" },
+  { id: "swatches", label: "色板", animatedName: "swatches" },
+  { id: "gift", label: "礼物", animatedName: "gift" },
+  { id: "stack", label: "叠层", animatedName: "stack" },
+  { id: "number-circle-0", label: "数字 0", animatedName: "number-circle-zero" },
+  { id: "number-circle-1", label: "数字 1", animatedName: "number-circle-one" },
+  { id: "number-circle-2", label: "数字 2", animatedName: "number-circle-two" },
+  { id: "number-circle-3", label: "数字 3", animatedName: "number-circle-three" },
+  { id: "number-circle-4", label: "数字 4", animatedName: "number-circle-four" },
+  { id: "number-circle-5", label: "数字 5", animatedName: "number-circle-five" },
+  { id: "number-circle-6", label: "数字 6", animatedName: "number-circle-six" },
+  { id: "number-circle-7", label: "数字 7", animatedName: "number-circle-seven" },
+  { id: "number-circle-8", label: "数字 8", animatedName: "number-circle-eight" },
+  { id: "number-circle-9", label: "数字 9", animatedName: "number-circle-nine" },
+  { id: "number-square-0", label: "数字 0", animatedName: "number-square-zero" },
+  { id: "number-square-1", label: "数字 1", animatedName: "number-square-one" },
+  { id: "number-square-2", label: "数字 2", animatedName: "number-square-two" },
+  { id: "number-square-3", label: "数字 3", animatedName: "number-square-three" },
+  { id: "number-square-4", label: "数字 4", animatedName: "number-square-four" },
+  { id: "number-square-5", label: "数字 5", animatedName: "number-square-five" },
+  { id: "number-square-6", label: "数字 6", animatedName: "number-square-six" },
+  { id: "number-square-7", label: "数字 7", animatedName: "number-square-seven" },
+  { id: "number-square-8", label: "数字 8", animatedName: "number-square-eight" },
+  { id: "number-square-9", label: "数字 9", animatedName: "number-square-nine" },
 ];
 
-const collectionIconMap: Record<string, typeof FolderIcon> =
-  Object.fromEntries(collectionIconOptions.map(({ id, Icon }) => [id, Icon]));
+const collectionIconMap: Record<string, AnimatedIconName> = Object.fromEntries(
+  collectionIconOptions.map(({ id, animatedName }) => [id, animatedName]),
+);
 
 type CollectionColorOption = {
   id: string;
@@ -295,8 +256,8 @@ const collectionColorMap: Record<string, string> = Object.fromEntries(
   collectionColorOptions.map(({ id, value }) => [id, value]),
 );
 
-function collectionIconComponent(icon: string) {
-  return collectionIconMap[icon] ?? FolderIcon;
+function collectionIconName(icon: string): AnimatedIconName {
+  return collectionIconMap[icon] ?? "folder";
 }
 
 function collectionColorValue(color: string) {
@@ -344,43 +305,43 @@ type FontStateId =
 const fontStateOptions: {
   id: FontStateId;
   label: string;
-  Icon: typeof FolderIcon;
+  animatedName: AnimatedIconName;
   help: string;
 }[] = [
   {
     id: "active",
     label: "已挂载",
-    Icon: SealCheckIcon,
+    animatedName: "seal-check",
     help: "操作系统当前可用的字体",
   },
   {
     id: "installed",
     label: "已安装",
-    Icon: DownloadSimpleIcon,
+    animatedName: "download-simple",
     help: "安装到当前用户字体目录的字体",
   },
   {
     id: "available",
     label: "仅在字体库",
-    Icon: BookIcon,
+    animatedName: "book",
     help: "Folio 字体库中尚未安装的副本",
   },
   {
     id: "external",
     label: "外部文件",
-    Icon: FileIcon,
+    animatedName: "file",
     help: "引用的文件和已添加文件夹中的字体",
   },
   {
     id: "system",
     label: "系统字体",
-    Icon: LaptopIcon,
+    animatedName: "laptop",
     help: "操作系统自带的字体",
   },
   {
     id: "unavailable",
     label: "文件不可用",
-    Icon: WarningIcon,
+    animatedName: "warning",
     help: "来源文件已不可访问",
   },
 ];
@@ -465,6 +426,30 @@ function MenuItem({
           {item.shortcut}
         </kbd>
       )}
+    </button>
+  );
+}
+
+// 侧边栏可点击项：在原生 button 上应用 lisse 平滑圆角，保持原有的 flex 布局。
+function SidebarItem({
+  className,
+  children,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement>) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useSmoothCorners(ref, sidebarItemCorners, {
+    autoEffects: false,
+    fallbackBorderRadius: "8px",
+  });
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={className}
+      style={{ borderRadius: sidebarItemCorners.radius }}
+      {...props}
+    >
+      {children}
     </button>
   );
 }
@@ -2175,7 +2160,7 @@ export default function App() {
                   title="导航"
                   onClick={() => setSidebarPage("navigation")}
                 >
-                  <MapPinIcon />
+                  <AnimatedIcon name="map-pin" />
                 </button>
                 <button
                   role="tab"
@@ -2184,42 +2169,42 @@ export default function App() {
                   title="筛选"
                   onClick={() => setSidebarPage("filters")}
                 >
-                  <FunnelSimpleIcon />
+                  <AnimatedIcon name="funnel-simple" />
                 </button>
               </div>
               <div className="sidebar-scroll">
                 {sidebarPage === "navigation" ? (
                   <>
                     <div className="sidebar-section-label">本地</div>
-                    <button
+                    <SidebarItem
                       className={`sidebar-link${scope === "all" ? " selected" : ""}`}
                       onClick={() => selectLibraryScope("all")}
                     >
-                      <TextAaIcon />
+                      <AnimatedIcon name="text-aa" />
                       全部字体{snapshot && <span>{snapshot.familyCount}</span>}
-                    </button>
-                    <button
+                    </SidebarItem>
+                    <SidebarItem
                       className={`sidebar-link${scope === "recent" ? " selected" : ""}`}
                       onClick={() => selectLibraryScope("recent")}
                     >
-                      <ClockCounterClockwiseIcon />
+                      <AnimatedIcon name="clock-counter-clockwise" />
                       最近
-                    </button>
-                    <button
+                    </SidebarItem>
+                    <SidebarItem
                       className={`sidebar-link${scope === "favorites" ? " selected" : ""}`}
                       onClick={() => selectLibraryScope("favorites")}
                     >
-                      <StarIcon />
+                      <AnimatedIcon name="star" />
                       收藏
-                    </button>
+                    </SidebarItem>
                     <div className="sidebar-section-label sidebar-section-heading">
                       收藏夹
                     </div>
                     <div className="collection-list">
                       {smartFolders.map((folder) => {
-                        const Icon = collectionIconComponent(folder.icon);
+                        const iconName = collectionIconName(folder.icon);
                         return (
-                          <button
+                          <SidebarItem
                             key={folder.id}
                             className={`sidebar-link sidebar-folder${scope === "smartFolder" && smartFolderId === folder.id ? " selected" : ""}`}
                             onClick={() => openSmartFolder(folder)}
@@ -2236,7 +2221,7 @@ export default function App() {
                                 color: collectionColorValue(folder.color),
                               }}
                             >
-                              <Icon />
+                              <AnimatedIcon name={iconName} />
                             </span>
                             <span className="sidebar-folder-name">
                               {folder.name}
@@ -2248,13 +2233,13 @@ export default function App() {
                               <SparkleIcon />
                             </span>
                             <span>{folder.matchCount}</span>
-                          </button>
+                          </SidebarItem>
                         );
                       })}
                       {collections.map((collection) => {
-                        const Icon = collectionIconComponent(collection.icon);
+                        const iconName = collectionIconName(collection.icon);
                         return (
-                          <button
+                          <SidebarItem
                             key={collection.id}
                             className={`sidebar-link sidebar-folder${scope === "collection" && collectionId === collection.id ? " selected" : ""}`}
                             onClick={() => selectCollection(collection.id)}
@@ -2271,23 +2256,23 @@ export default function App() {
                                 color: collectionColorValue(collection.color),
                               }}
                             >
-                              <Icon />
+                              <AnimatedIcon name={iconName} />
                             </span>
                             <span className="sidebar-folder-name">
                               {collection.name}
                             </span>
                             <span>{collection.memberCount}</span>
-                          </button>
+                          </SidebarItem>
                         );
                       })}
                     </div>
-                    <button
+                    <SidebarItem
                       className="sidebar-new-folder"
                       onClick={beginFavoriteFolderCreation}
                     >
-                      <PlusIcon />
+                      <AnimatedIcon name="plus" />
                       新建收藏夹
-                    </button>
+                    </SidebarItem>
                     {organizationError && !favoriteEditor && (
                       <p className="sidebar-error" role="alert">
                         {organizationError}
@@ -2297,12 +2282,12 @@ export default function App() {
                       云端
                     </div>
                     {syncProfile ? (
-                      <button
+                      <SidebarItem
                         className={`sidebar-cloud${scope === "cloudFonts" ? " selected" : ""}`}
                         onClick={() => selectLibraryScope("cloudFonts")}
                       >
                         <span className="sidebar-cloud-icon" aria-hidden="true">
-                          <HardDrivesIcon />
+                          <AnimatedIcon name="hard-drives" />
                         </span>
                         <span className="sidebar-cloud-text">
                           <span className="sidebar-cloud-name">
@@ -2315,7 +2300,7 @@ export default function App() {
                         <span className="sidebar-cloud-count">
                           {activeCloudFonts.length}
                         </span>
-                      </button>
+                      </SidebarItem>
                     ) : (
                       <p className="sidebar-empty">未连接云端</p>
                     )}
@@ -2323,41 +2308,40 @@ export default function App() {
                       字体状态
                     </div>
                     {fontStateOptions.map((option) => {
-                      const StateIcon = option.Icon;
                       return (
-                        <button
+                        <SidebarItem
                           key={option.id}
                           className={`sidebar-link${scope === "fontState" && fontState === option.id ? " selected" : ""}`}
                           title={option.help}
                           onClick={() => selectFontState(option.id)}
                         >
-                          <StateIcon />
+                          <AnimatedIcon name={option.animatedName} />
                           {option.label}
                           <span>
                             {snapshot?.fontStateCounts[option.id] ?? 0}
                           </span>
-                        </button>
+                        </SidebarItem>
                       );
                     })}
                     <div className="sidebar-section-label sidebar-section-heading">
                       工具
                     </div>
-                    <button
+                    <SidebarItem
                       className="sidebar-link sidebar-link-disabled"
                       disabled
                       title="在线字体将在后续版本提供"
                     >
-                      <GlobeIcon />
+                      <AnimatedIcon name="globe" />
                       在线字体
-                    </button>
-                    <button
+                    </SidebarItem>
+                    <SidebarItem
                       className={`sidebar-link${scope === "fontHealth" ? " selected" : ""}`}
                       onClick={() => selectLibraryScope("fontHealth")}
                     >
-                      <StethoscopeIcon />
+                      <AnimatedIcon name="stethoscope" />
                       字体健康
                       <span>{healthCount}</span>
-                    </button>
+                    </SidebarItem>
                   </>
                 ) : (
                   <>
@@ -2808,7 +2792,6 @@ function FavoriteFolderEditor({
                   <div className="favorite-editor-label">图标</div>
                   <div className="favorite-icon-grid">
                     {collectionIconOptions.map((option) => {
-                      const Icon = option.Icon;
                       const selected = icon === option.id;
                       return (
                         <button
@@ -2820,7 +2803,7 @@ function FavoriteFolderEditor({
                           title={option.label}
                           onClick={() => setIcon(option.id)}
                         >
-                          <Icon />
+                          <AnimatedIcon name={option.animatedName} />
                         </button>
                       );
                     })}
