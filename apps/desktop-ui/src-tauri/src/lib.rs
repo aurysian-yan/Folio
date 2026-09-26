@@ -279,6 +279,36 @@ fn delete_smart_folder(
 }
 
 #[tauri::command]
+fn convert_collection_to_smart_folder(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    request: SmartFolderMutation,
+) -> Result<library::SmartFolderDto, String> {
+    require_main_window(&window)?;
+    state
+        .library
+        .lock()
+        .map_err(|_| "字体库暂时不可用".to_owned())?
+        .convert_collection_to_smart_folder(request)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn convert_smart_folder_to_collection(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    request: CollectionMutation,
+) -> Result<library::CollectionDto, String> {
+    require_main_window(&window)?;
+    state
+        .library
+        .lock()
+        .map_err(|_| "字体库暂时不可用".to_owned())?
+        .convert_smart_folder_to_collection(request)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_sync_profile(
     window: WebviewWindow,
     state: State<'_, AppState>,
@@ -463,7 +493,7 @@ fn list_cloud_fonts(
     window: WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<Vec<CloudFontDto>, String> {
-    require_settings_window(&window)?;
+    require_sync_window(&window)?;
     folio_sync::list_cloud_fonts(&state.database_path)
         .map(|fonts| {
             fonts
@@ -566,8 +596,9 @@ fn require_sync_window(window: &WebviewWindow) -> Result<(), String> {
     }
 }
 
+// 必须为 async：创建窗口需回主线程执行，同步命令在主线程内会自锁。
 #[tauri::command]
-fn open_settings(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+async fn open_settings(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     require_main_window(&window)?;
     if let Some(window) = app.get_webview_window("settings") {
         window.show().map_err(|error| error.to_string())?;
@@ -679,6 +710,8 @@ pub fn run() {
             list_smart_folders,
             save_smart_folder,
             delete_smart_folder,
+            convert_collection_to_smart_folder,
+            convert_smart_folder_to_collection,
             get_sync_profile,
             get_sync_status,
             test_sync_connection,
