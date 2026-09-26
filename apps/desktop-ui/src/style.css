@@ -269,7 +269,8 @@ button {
     flex: 1;
     transition: grid-template-columns 220ms ease;
 }
-.workspace.is-resizing {
+.workspace.is-resizing,
+.workspace.is-snap-closing {
     transition: none;
 }
 .sidebar {
@@ -289,6 +290,10 @@ button {
 .sidebar[data-open="false"] .sidebar-inner {
     transform: translateX(-18px);
     opacity: 0;
+}
+.workspace.is-snap-closing .sidebar-inner,
+.workspace.is-snap-closing .inspector-inner {
+    transition: none;
 }
 .sidebar-resizer {
     position: absolute;

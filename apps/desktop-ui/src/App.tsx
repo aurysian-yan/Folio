@@ -168,6 +168,7 @@ export default function App() {
     storedSidebarWidth("folio-right-sidebar-width"),
   );
   const [resizingSidebar, setResizingSidebar] = useState<"left" | "right" | null>(null);
+  const [snapClosingSidebar, setSnapClosingSidebar] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [windowActionError, setWindowActionError] = useState<string | null>(
     null,
@@ -216,6 +217,18 @@ export default function App() {
     if (rightSidebarWidth !== null)
       localStorage.setItem("folio-right-sidebar-width", String(rightSidebarWidth));
   }, [rightSidebarWidth]);
+
+  useEffect(() => {
+    if (!snapClosingSidebar) return;
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => setSnapClosingSidebar(false));
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [snapClosingSidebar]);
 
   useEffect(() => {
     let active = true;
@@ -761,6 +774,7 @@ export default function App() {
     : 0;
   const resizeSidebar = (side: "left" | "right", proposedWidth: number) => {
     if (proposedWidth < 256) {
+      setSnapClosingSidebar(true);
       if (side === "left") setLeftSidebarOpen(false);
       else setRightSidebarOpen(false);
       setResizingSidebar(null);
@@ -1265,7 +1279,7 @@ export default function App() {
         </section>
       ) : (
         <div
-          className={`workspace${resizingSidebar ? " is-resizing" : ""}`}
+          className={`workspace${resizingSidebar ? " is-resizing" : ""}${snapClosingSidebar ? " is-snap-closing" : ""}`}
           ref={workspaceRef}
           style={{
             "--left-pane-width": `${leftPaneWidth}px`,
