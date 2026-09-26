@@ -166,6 +166,9 @@ impl WebDavClient {
                 .map_err(|_| SyncError::InvalidServerUrl)?
                 .pop_if_empty()
                 .push(segment);
+            if self.exists_url(url.clone()).await? {
+                continue;
+            }
             let request = self
                 .http
                 .request(
@@ -185,6 +188,9 @@ impl WebDavClient {
 
     pub(crate) async fn ensure_directory(&self, segments: &[&str]) -> Result<(), SyncError> {
         for length in 1..=segments.len() {
+            if self.exists(&segments[..length]).await? {
+                continue;
+            }
             let request = self.request(
                 Method::from_bytes(b"MKCOL").expect("fixed method"),
                 &segments[..length],
@@ -289,11 +295,14 @@ impl WebDavClient {
     }
 
     pub(crate) async fn exists(&self, segments: &[&str]) -> Result<bool, SyncError> {
+        self.exists_url(self.url(segments)?).await
+    }
+
+    async fn exists_url(&self, url: Url) -> Result<bool, SyncError> {
         let request = self
-            .request(
-                Method::from_bytes(b"PROPFIND").expect("fixed method"),
-                segments,
-            )?
+            .http
+            .request(Method::from_bytes(b"PROPFIND").expect("fixed method"), url)
+            .basic_auth(&self.username, Some(&self.password))
             .header("Depth", "0");
         let response = self.send(request).await?;
         if response.status() == StatusCode::NOT_FOUND {
@@ -339,6 +348,7 @@ mod tests {
         files: BTreeMap<String, Vec<u8>>,
         redirects: BTreeMap<(String, String), String>,
         auth_seen: Vec<(String, bool)>,
+        existing_mkcol_forbidden: bool,
         full: bool,
         malformed: bool,
         interrupt_next_get: bool,
@@ -502,7 +512,14 @@ mod tests {
                     (207, body.into_bytes())
                 }
                 "PROPFIND" => (404, Vec::new()),
-                "MKCOL" if state.directories.contains(path) => (405, Vec::new()),
+                "MKCOL" if state.directories.contains(path) => (
+                    if state.existing_mkcol_forbidden {
+                        403
+                    } else {
+                        405
+                    },
+                    Vec::new(),
+                ),
                 "MKCOL" => {
                     let parent = path
                         .rsplit_once('/')
@@ -560,6 +577,12 @@ mod tests {
             server.client("wrong").test_connection().await,
             Err(SyncError::Authentication)
         ));
+        client.ensure_root("Library").await.unwrap();
+        client
+            .ensure_directory(&["Library", "objects"])
+            .await
+            .unwrap();
+        server.state.lock().unwrap().existing_mkcol_forbidden = true;
         client.ensure_root("Library").await.unwrap();
         client
             .ensure_directory(&["Library", "objects"])
@@ -721,6 +744,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(first_progress.uploaded_files, 1);
+        server.state.lock().unwrap().existing_mkcol_forbidden = true;
 
         let mut second = FolioDatabase::open(dir.path().join("second.sqlite")).unwrap();
         let second_progress = crate::synchronize_with_client(
