@@ -29,9 +29,23 @@ struct SyncStatusDto {
     configured: bool,
     running: bool,
     phase: String,
+    stage: String,
+    percent: u8,
+    stage_completed: u64,
+    stage_total: u64,
     uploaded_files: u64,
     downloaded_files: u64,
+    published_events: u64,
+    items: Vec<SyncItemDto>,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncItemDto {
+    fingerprint: String,
+    action: String,
+    status: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -424,8 +438,14 @@ fn sync_now(
         status.configured = true;
         status.running = true;
         status.phase = "正在连接云端…".to_owned();
+        status.stage = "连接云端".to_owned();
+        status.percent = 0;
+        status.stage_completed = 0;
+        status.stage_total = 0;
         status.uploaded_files = 0;
         status.downloaded_files = 0;
+        status.published_events = 0;
+        status.items.clear();
         status.error = None;
     }
     state.sync_cancel.store(false, Ordering::Relaxed);
@@ -440,12 +460,23 @@ fn sync_now(
                 let progress_status = Arc::clone(&sync_status);
                 let report = Arc::new(move |progress: folio_sync::SyncProgress| {
                     if let Ok(mut status) = progress_status.lock() {
-                        status.phase = format!(
-                            "已上传 {} 个 · 已下载 {} 个",
-                            progress.uploaded_files, progress.downloaded_files
-                        );
+                        status.phase = progress.phase.label().to_owned();
+                        status.stage = progress.phase.label().to_owned();
+                        status.percent = progress.percent;
+                        status.stage_completed = progress.phase_completed;
+                        status.stage_total = progress.phase_total;
                         status.uploaded_files = progress.uploaded_files;
                         status.downloaded_files = progress.downloaded_files;
+                        status.published_events = progress.published_events;
+                        status.items = progress
+                            .items
+                            .iter()
+                            .map(|item| SyncItemDto {
+                                fingerprint: item.fingerprint.clone(),
+                                action: item.action.code().to_owned(),
+                                status: item.status.code().to_owned(),
+                            })
+                            .collect();
                     }
                 });
                 let result = folio_sync::synchronize(
@@ -464,8 +495,14 @@ fn sync_now(
                                 "同步完成：上传 {} 个，下载 {} 个",
                                 progress.uploaded_files, progress.downloaded_files
                             );
+                            status.stage = "已同步".to_owned();
+                            status.percent = 100;
+                            status.stage_completed = progress.phase_completed;
+                            status.stage_total = progress.phase_total;
                             status.uploaded_files = progress.uploaded_files;
                             status.downloaded_files = progress.downloaded_files;
+                            status.published_events = progress.published_events;
+                            status.items.clear();
                             status.error = None;
                             if let Some(app_state) = app.try_state::<AppState>() {
                                 if let Ok(mut library) = app_state.library.lock() {
@@ -476,6 +513,7 @@ fn sync_now(
                         }
                         Err(error) => {
                             status.phase = "同步未完成".to_owned();
+                            status.stage = "同步未完成".to_owned();
                             status.error = Some(error.to_string());
                         }
                     }

@@ -278,15 +278,28 @@ pub struct SyncProfileDto {
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct SyncStatusDto {
     pub phase: String,
+    pub stage: String,
+    pub percent: u8,
+    pub stage_completed: u64,
+    pub stage_total: u64,
     pub is_running: bool,
     pub uploaded_files: u64,
     pub downloaded_files: u64,
     pub uploaded_bytes: u64,
     pub downloaded_bytes: u64,
     pub received_changes: u64,
+    pub published_events: u64,
+    pub items: Vec<SyncItemDto>,
     pub completion_generation: u64,
     pub last_synced_at_ms: Option<u64>,
     pub error_message: Option<String>,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SyncItemDto {
+    pub fingerprint: String,
+    pub action: String,
+    pub status: String,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -765,14 +778,33 @@ impl FolioSync {
 
     pub fn status(&self) -> Result<SyncStatusDto, FolioFfiError> {
         let state = self.state.lock().map_err(FolioFfiError::operation)?;
+        let progress = &state.progress;
         Ok(SyncStatusDto {
             phase: state.phase.clone(),
+            stage: if state.running {
+                progress.phase.label().to_owned()
+            } else {
+                state.phase.clone()
+            },
+            percent: progress.percent,
+            stage_completed: progress.phase_completed,
+            stage_total: progress.phase_total,
             is_running: state.running,
-            uploaded_files: state.progress.uploaded_files,
-            downloaded_files: state.progress.downloaded_files,
-            uploaded_bytes: state.progress.uploaded_bytes,
-            downloaded_bytes: state.progress.downloaded_bytes,
-            received_changes: state.progress.received_changes,
+            uploaded_files: progress.uploaded_files,
+            downloaded_files: progress.downloaded_files,
+            uploaded_bytes: progress.uploaded_bytes,
+            downloaded_bytes: progress.downloaded_bytes,
+            received_changes: progress.received_changes,
+            published_events: progress.published_events,
+            items: progress
+                .items
+                .iter()
+                .map(|item| SyncItemDto {
+                    fingerprint: item.fingerprint.clone(),
+                    action: item.action.code().to_owned(),
+                    status: item.status.code().to_owned(),
+                })
+                .collect(),
             completion_generation: state.completion_generation,
             last_synced_at_ms: state.last_synced_at_ms,
             error_message: state.error_message.clone(),

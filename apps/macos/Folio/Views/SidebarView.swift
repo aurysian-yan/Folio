@@ -274,18 +274,27 @@ struct SidebarView: View {
         return nil
     }
 
+    private var runningSyncSummary: String {
+        guard let status = cloud.status else { return "正在同步" }
+        var parts = ["\(status.stage) \(status.stageCompleted)/\(status.stageTotal)"]
+        if status.uploadedFiles > 0 { parts.append("上传 \(status.uploadedFiles) 个") }
+        if status.downloadedFiles > 0 { parts.append("下载 \(status.downloadedFiles) 个") }
+        return parts.joined(separator: " · ")
+    }
+
     @ViewBuilder
     private var cloudSyncStatus: some View {
         if let statusKey = transientCloudStatusKey, statusKey != dismissedCloudStatusKey {
             if cloud.isRunning {
                 cloudStatusCard(
-                    icon: nil,
+                    icon: "arrow.triangle.2.circlepath",
                     iconColor: themeColor,
-                    title: "正在同步",
+                    title: "正在同步 \(cloud.status?.percent ?? 0)%",
+                    ringProgress: Double(cloud.status?.percent ?? 0) / 100,
                     onDismiss: { dismissedCloudStatusKey = statusKey }
                 ) {
-                    Text("上传 \(cloud.status?.uploadedFiles ?? 0) 个 · 下载 \(cloud.status?.downloadedFiles ?? 0) 个")
-                        .foregroundStyle(themeColor)
+                    Text(runningSyncSummary)
+                        .foregroundStyle(.secondary)
                 }
             } else if cloud.status?.errorMessage != nil {
                 cloudStatusCard(
@@ -349,21 +358,27 @@ struct SidebarView: View {
     }
 
     private func cloudStatusCard<Detail: View>(
-        icon: String?,
+        icon: String,
         iconColor: Color,
         title: String,
+        ringProgress: Double? = nil,
         onDismiss: (() -> Void)? = nil,
         @ViewBuilder detail: () -> Detail
     ) -> some View {
         let card = HStack(alignment: .center, spacing: 8) {
             Group {
-                if let icon {
+                if let ringProgress {
+                    RingSyncProgressView(
+                        tint: iconColor,
+                        progress: ringProgress,
+                        size: 16,
+                        lineWidth: 2
+                    )
+                } else {
                     Image.englishSystemName(icon)
                         .font(.system(size: 14))
                         .foregroundStyle(iconColor)
                         .accessibilityHidden(true)
-                } else {
-                    RingSyncProgressView(tint: iconColor)
                 }
             }
             .frame(width: 22, height: 22)
@@ -389,7 +404,7 @@ struct SidebarView: View {
                 .accessibilityLabel("关闭同步状态")
             }
         }
-        .frame(height: 35)
+        .frame(minHeight: 35)
         .padding(.leading, 8)
         .padding(.trailing, 14)
         .padding(.vertical, 8)
@@ -534,26 +549,25 @@ struct SidebarView: View {
     }
 }
 
-private struct RingSyncProgressView: View {
+struct RingSyncProgressView: View {
     let tint: Color
-    @State private var rotation = 0.0
+    let progress: Double
+    var size: CGFloat = 20
+    var lineWidth: CGFloat = 2.4
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.secondary.opacity(0.24), lineWidth: 2)
+                .stroke(Color.secondary.opacity(0.24), lineWidth: lineWidth)
             Circle()
-                .trim(from: 0, to: 0.27)
-                .stroke(tint, style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
-                .rotationEffect(.degrees(rotation - 90))
+                .trim(from: 0, to: min(max(progress, 0), 1))
+                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
         }
-        .frame(width: 14, height: 14)
+        .frame(width: size, height: size)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: progress)
         .accessibilityHidden(true)
-        .onAppear {
-            withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-                rotation = 360
-            }
-        }
     }
 }
 

@@ -97,6 +97,7 @@ import type {
   SmartFolderDto,
   SyncConflictDto,
   SyncProfileDto,
+  SyncItemDto,
   SyncStatusDto,
 } from "./types";
 import { AnimatedIcon } from "./animated-icons";
@@ -2003,14 +2004,27 @@ export default function App() {
                     className={`sync-status${syncStatus.error ? " has-error" : ""}`}
                     role="status"
                   >
-                    <strong>
-                      {syncStatus.configured
-                        ? syncStatus.running
-                          ? "正在同步"
-                          : "已连接"
-                        : "未连接"}
-                    </strong>
+                    <div className="sync-status-row">
+                      {syncStatus.running && (
+                        <RingSyncProgress
+                          progress={syncStatus.percent / 100}
+                          size={14}
+                        />
+                      )}
+                      <strong>
+                        {syncStatus.configured
+                          ? syncStatus.running
+                            ? `正在同步 ${syncStatus.percent}%`
+                            : "已连接"
+                          : "未连接"}
+                      </strong>
+                    </div>
                     <span>{syncStatus.error ?? syncStatus.phase}</span>
+                    {syncStatus.running && (
+                      <span className="sync-progress-detail">
+                        {describeSyncStage(syncStatus)}
+                      </span>
+                    )}
                   </div>
                 )}
                 {syncMessage && (
@@ -2925,6 +2939,72 @@ function FavoriteFolderEditor({
   );
 }
 
+function describeSyncStage(status: SyncStatusDto | null): string {
+  if (!status) return "";
+  const parts = [`${status.stage} ${status.stageCompleted}/${status.stageTotal}`];
+  if (status.uploadedFiles > 0) parts.push(`上传 ${status.uploadedFiles} 个`);
+  if (status.downloadedFiles > 0) parts.push(`下载 ${status.downloadedFiles} 个`);
+  return parts.join(" · ");
+}
+
+function describeSyncItem(item: SyncItemDto): string {
+  const action = item.action === "download" ? "下载" : "上传";
+  switch (item.status) {
+    case "running":
+      return `${action}中`;
+    case "done":
+      return `${action}完成`;
+    default:
+      return `等待${action}`;
+  }
+}
+
+function RingSyncProgress({
+  progress,
+  size = 16,
+  lineWidth = 2,
+}: {
+  progress: number;
+  size?: number;
+  lineWidth?: number;
+}) {
+  const clamped = Math.min(Math.max(progress, 0), 1);
+  const radius = (size - lineWidth) / 2;
+  const center = size / 2;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <svg
+      className="sync-ring"
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      style={{ width: size, height: size }}
+      aria-hidden="true"
+    >
+      <circle
+        className="sync-ring-track"
+        cx={center}
+        cy={center}
+        r={radius}
+        fill="none"
+        strokeWidth={lineWidth}
+      />
+      <circle
+        className="sync-ring-arc"
+        cx={center}
+        cy={center}
+        r={radius}
+        fill="none"
+        strokeWidth={lineWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - clamped)}
+        transform={`rotate(-90 ${center} ${center})`}
+      />
+    </svg>
+  );
+}
+
 function CloudStatusPanel({
   status,
   connected,
@@ -2951,10 +3031,11 @@ function CloudStatusPanel({
   }
   const running = status?.running ?? false;
   const error = status?.error ?? null;
+  const percent = status?.percent ?? 0;
   return (
     <div className={`sidebar-status-card${error ? " has-error" : ""}`}>
       {running ? (
-        <span className="sidebar-status-spinner" aria-hidden="true" />
+        <RingSyncProgress progress={percent / 100} size={16} />
       ) : error ? (
         <WarningIcon aria-hidden="true" />
       ) : (
@@ -2962,11 +3043,15 @@ function CloudStatusPanel({
       )}
       <span className="sidebar-status-text">
         <strong>
-          {running ? "正在同步" : error ? "同步未完成" : "本地与云端均为最新"}
+          {running
+            ? `正在同步 ${percent}%`
+            : error
+              ? "同步未完成"
+              : "本地与云端均为最新"}
         </strong>
         {running ? (
-          <span>
-            上传 {status?.uploadedFiles ?? 0} · 下载 {status?.downloadedFiles ?? 0}
+          <span className="sync-progress-detail">
+            {describeSyncStage(status)}
           </span>
         ) : (
           <button type="button" onClick={onSync}>
@@ -3026,25 +3111,36 @@ function CloudFontsPane({
       </header>
       {active.length ? (
         <ul className="cloud-font-list">
-          {active.map((font) => (
-            <li key={font.fingerprint}>
-              <span className="cloud-font-name">{font.displayName}</span>
-              <span className="cloud-font-meta">
-                {font.cloudOnly ? "仅在云端" : "已同步到本机"} ·{" "}
-                {formatFileSize(font.fileSize)}
-              </span>
-              {font.cloudOnly && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  isDisabled={running}
-                  onPress={() => onRestore(font)}
-                >
-                  下载
-                </Button>
-              )}
-            </li>
-          ))}
+          {active.map((font) => {
+            const item = status?.items.find(
+              (entry) => entry.fingerprint === font.fingerprint,
+            );
+            return (
+              <li key={font.fingerprint}>
+                <span className="cloud-font-name">{font.displayName}</span>
+                <span className="cloud-font-meta">
+                  {item ? (
+                    <span className={`cloud-font-sync ${item.status}`}>
+                      {describeSyncItem(item)}
+                    </span>
+                  ) : (
+                    <span>{font.cloudOnly ? "仅在云端" : "已同步到本机"}</span>
+                  )}{" "}
+                  · {formatFileSize(font.fileSize)}
+                </span>
+                {font.cloudOnly && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    isDisabled={running}
+                    onPress={() => onRestore(font)}
+                  >
+                    下载
+                  </Button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <div className="state-message empty-state">

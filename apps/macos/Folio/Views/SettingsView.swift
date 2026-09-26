@@ -239,14 +239,27 @@ struct SettingsView: View {
             if cloud.isConnected {
                 Section("同步状态") {
                     HStack(spacing: 10) {
-                        Image.englishSystemName(cloud.isRunning ? "arrow.triangle.2.circlepath" : "checkmark.icloud")
-                            .foregroundStyle(cloud.isRunning ? themeColor : Color.green)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(cloud.isRunning ? "正在同步…" : "已连接 \(cloud.connectionName)")
+                        Group {
                             if cloud.isRunning {
-                                Text("已上传 \(cloud.status?.uploadedFiles ?? 0) 个 · 已下载 \(cloud.status?.downloadedFiles ?? 0) 个")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                RingSyncProgressView(
+                                    tint: themeColor,
+                                    progress: Double(cloud.status?.percent ?? 0) / 100,
+                                    size: 14,
+                                    lineWidth: 2
+                                )
+                            } else {
+                                Image.englishSystemName("checkmark.icloud")
+                                    .foregroundStyle(Color.green)
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(cloud.isRunning ? "正在同步 \(cloud.status?.percent ?? 0)%" : "已连接 \(cloud.connectionName)")
+                            if cloud.isRunning {
+                                if let status = cloud.status {
+                                    Text("\(status.stage) \(status.stageCompleted)/\(status.stageTotal) · 上传 \(status.uploadedFiles) 个 · 下载 \(status.downloadedFiles) 个")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             } else if let phase = cloud.status?.phase, !phase.isEmpty {
                                 Text(phase)
                                     .font(.caption)

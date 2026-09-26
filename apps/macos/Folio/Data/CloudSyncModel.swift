@@ -29,6 +29,9 @@ final class CloudSyncModel {
 
     var isConnected: Bool { profile != nil }
     var isRunning: Bool { status?.isRunning == true }
+    func syncItem(for fingerprint: String) -> SyncItemDto? {
+        status?.items.first { $0.fingerprint == fingerprint }
+    }
     var connectionName: String {
         if let connectionAlias, !connectionAlias.isEmpty { return connectionAlias }
         guard let profile, let host = URL(string: profile.serverUrl)?.host else { return "WebDAV" }

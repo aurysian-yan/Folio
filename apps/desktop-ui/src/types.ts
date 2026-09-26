@@ -92,9 +92,21 @@ export interface SyncStatusDto {
   configured: boolean;
   running: boolean;
   phase: string;
+  stage: string;
+  percent: number;
+  stageCompleted: number;
+  stageTotal: number;
   uploadedFiles: number;
   downloadedFiles: number;
+  publishedEvents: number;
+  items: SyncItemDto[];
   error: string | null;
+}
+
+export interface SyncItemDto {
+  fingerprint: string;
+  action: "upload" | "download";
+  status: "pending" | "running" | "done";
 }
 
 export interface CloudFontDto {

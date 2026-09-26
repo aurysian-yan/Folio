@@ -15,6 +15,30 @@ struct CloudLibraryView: View {
         }
     }
 
+    private func syncItemLabel(_ item: SyncItemDto) -> String {
+        let action = item.action == "download" ? "下载" : "上传"
+        switch item.status {
+        case "running": return "\(action)中"
+        case "done": return "\(action)完成"
+        default: return "等待\(action)"
+        }
+    }
+
+    private func syncItemSymbol(_ item: SyncItemDto) -> String {
+        if item.action == "download" {
+            return item.status == "done" ? "checkmark.circle.fill" : "arrow.down.circle"
+        }
+        return item.status == "done" ? "checkmark.circle.fill" : "arrow.up.circle"
+    }
+
+    private func syncItemTint(_ item: SyncItemDto) -> Color {
+        switch item.status {
+        case "running": return .accentColor
+        case "done": return .green
+        default: return .secondary
+        }
+    }
+
     var body: some View {
         List {
             if !cloud.conflicts.isEmpty {
@@ -41,9 +65,19 @@ struct CloudLibraryView: View {
                         Image.englishSystemName(font.cloudOnly ? "icloud" : "checkmark.icloud")
                         VStack(alignment: .leading) {
                             Text(font.displayName)
-                            Text(font.cloudOnly ? "仅在云端" : "本机可用")
+                            if let item = cloud.syncItem(for: font.fingerprint) {
+                                Label {
+                                    Text(syncItemLabel(item))
+                                } icon: {
+                                    Image.englishSystemName(syncItemSymbol(item))
+                                }
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(syncItemTint(item))
+                            } else {
+                                Text(font.cloudOnly ? "仅在云端" : "本机可用")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
                         if font.cloudOnly {

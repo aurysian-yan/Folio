@@ -465,6 +465,22 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
+    typealias FfiType = UInt8
+    typealias SwiftType = UInt8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: UInt8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
     typealias FfiType = UInt16
     typealias SwiftType = UInt16
@@ -3474,6 +3490,64 @@ public func FfiConverterTypeSyncConflictDto_lower(_ value: SyncConflictDto) -> R
 }
 
 
+public struct SyncItemDto: Equatable, Hashable {
+    public var fingerprint: String
+    public var action: String
+    public var status: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(fingerprint: String, action: String, status: String) {
+        self.fingerprint = fingerprint
+        self.action = action
+        self.status = status
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SyncItemDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncItemDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncItemDto {
+        return
+            try SyncItemDto(
+                fingerprint: FfiConverterString.read(from: &buf),
+                action: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncItemDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.fingerprint, into: &buf)
+        FfiConverterString.write(value.action, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncItemDto_lift(_ buf: RustBuffer) throws -> SyncItemDto {
+    return try FfiConverterTypeSyncItemDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncItemDto_lower(_ value: SyncItemDto) -> RustBuffer {
+    return FfiConverterTypeSyncItemDto.lower(value)
+}
+
+
 public struct SyncProfileDto: Equatable, Hashable {
     public var serverUrl: String
     public var remoteDirectory: String
@@ -3538,26 +3612,38 @@ public func FfiConverterTypeSyncProfileDto_lower(_ value: SyncProfileDto) -> Rus
 
 public struct SyncStatusDto: Equatable, Hashable {
     public var phase: String
+    public var stage: String
+    public var percent: UInt8
+    public var stageCompleted: UInt64
+    public var stageTotal: UInt64
     public var isRunning: Bool
     public var uploadedFiles: UInt64
     public var downloadedFiles: UInt64
     public var uploadedBytes: UInt64
     public var downloadedBytes: UInt64
     public var receivedChanges: UInt64
+    public var publishedEvents: UInt64
+    public var items: [SyncItemDto]
     public var completionGeneration: UInt64
     public var lastSyncedAtMs: UInt64?
     public var errorMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(phase: String, isRunning: Bool, uploadedFiles: UInt64, downloadedFiles: UInt64, uploadedBytes: UInt64, downloadedBytes: UInt64, receivedChanges: UInt64, completionGeneration: UInt64, lastSyncedAtMs: UInt64?, errorMessage: String?) {
+    public init(phase: String, stage: String, percent: UInt8, stageCompleted: UInt64, stageTotal: UInt64, isRunning: Bool, uploadedFiles: UInt64, downloadedFiles: UInt64, uploadedBytes: UInt64, downloadedBytes: UInt64, receivedChanges: UInt64, publishedEvents: UInt64, items: [SyncItemDto], completionGeneration: UInt64, lastSyncedAtMs: UInt64?, errorMessage: String?) {
         self.phase = phase
+        self.stage = stage
+        self.percent = percent
+        self.stageCompleted = stageCompleted
+        self.stageTotal = stageTotal
         self.isRunning = isRunning
         self.uploadedFiles = uploadedFiles
         self.downloadedFiles = downloadedFiles
         self.uploadedBytes = uploadedBytes
         self.downloadedBytes = downloadedBytes
         self.receivedChanges = receivedChanges
+        self.publishedEvents = publishedEvents
+        self.items = items
         self.completionGeneration = completionGeneration
         self.lastSyncedAtMs = lastSyncedAtMs
         self.errorMessage = errorMessage
@@ -3580,12 +3666,18 @@ public struct FfiConverterTypeSyncStatusDto: FfiConverterRustBuffer {
         return
             try SyncStatusDto(
                 phase: FfiConverterString.read(from: &buf),
+                stage: FfiConverterString.read(from: &buf),
+                percent: FfiConverterUInt8.read(from: &buf),
+                stageCompleted: FfiConverterUInt64.read(from: &buf),
+                stageTotal: FfiConverterUInt64.read(from: &buf),
                 isRunning: FfiConverterBool.read(from: &buf),
                 uploadedFiles: FfiConverterUInt64.read(from: &buf),
                 downloadedFiles: FfiConverterUInt64.read(from: &buf),
                 uploadedBytes: FfiConverterUInt64.read(from: &buf),
                 downloadedBytes: FfiConverterUInt64.read(from: &buf),
                 receivedChanges: FfiConverterUInt64.read(from: &buf),
+                publishedEvents: FfiConverterUInt64.read(from: &buf),
+                items: FfiConverterSequenceTypeSyncItemDto.read(from: &buf),
                 completionGeneration: FfiConverterUInt64.read(from: &buf),
                 lastSyncedAtMs: FfiConverterOptionUInt64.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
@@ -3594,12 +3686,18 @@ public struct FfiConverterTypeSyncStatusDto: FfiConverterRustBuffer {
 
     public static func write(_ value: SyncStatusDto, into buf: inout [UInt8]) {
         FfiConverterString.write(value.phase, into: &buf)
+        FfiConverterString.write(value.stage, into: &buf)
+        FfiConverterUInt8.write(value.percent, into: &buf)
+        FfiConverterUInt64.write(value.stageCompleted, into: &buf)
+        FfiConverterUInt64.write(value.stageTotal, into: &buf)
         FfiConverterBool.write(value.isRunning, into: &buf)
         FfiConverterUInt64.write(value.uploadedFiles, into: &buf)
         FfiConverterUInt64.write(value.downloadedFiles, into: &buf)
         FfiConverterUInt64.write(value.uploadedBytes, into: &buf)
         FfiConverterUInt64.write(value.downloadedBytes, into: &buf)
         FfiConverterUInt64.write(value.receivedChanges, into: &buf)
+        FfiConverterUInt64.write(value.publishedEvents, into: &buf)
+        FfiConverterSequenceTypeSyncItemDto.write(value.items, into: &buf)
         FfiConverterUInt64.write(value.completionGeneration, into: &buf)
         FfiConverterOptionUInt64.write(value.lastSyncedAtMs, into: &buf)
         FfiConverterOptionString.write(value.errorMessage, into: &buf)
@@ -4622,6 +4720,31 @@ fileprivate struct FfiConverterSequenceTypeSyncConflictDto: FfiConverterRustBuff
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSyncConflictDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSyncItemDto: FfiConverterRustBuffer {
+    typealias SwiftType = [SyncItemDto]
+
+    public static func write(_ value: [SyncItemDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSyncItemDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SyncItemDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SyncItemDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSyncItemDto.read(from: &buf))
         }
         return seq
     }

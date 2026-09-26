@@ -2118,6 +2118,44 @@ button {
     border-radius: 50%;
     animation: spin 900ms linear infinite;
 }
+.sync-ring {
+    display: block;
+    flex: 0 0 auto;
+}
+.sync-ring-track {
+    stroke: color-mix(in srgb, var(--text) 24%, transparent);
+}
+.sync-ring-arc {
+    stroke: var(--accent);
+    transition: stroke-dashoffset 200ms ease-out;
+}
+.sync-status-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.sync-progress-detail {
+    display: block;
+    overflow: hidden;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: default;
+}
+.cloud-font-sync.running {
+    color: var(--accent);
+}
+.cloud-font-sync.done {
+    color: #2f9e44;
+}
+.cloud-font-sync.pending {
+    color: var(--text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+    .sync-ring-arc {
+        transition: none;
+    }
+}
 
 /* 云字体面板 */
 .cloud-pane {

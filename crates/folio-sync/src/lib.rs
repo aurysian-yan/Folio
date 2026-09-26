@@ -77,12 +77,151 @@ pub struct SyncProfile {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SyncPhase {
+    #[default]
+    Idle,
+    Connecting,
+    Scanning,
+    Uploading,
+    Receiving,
+    Downloading,
+    Finishing,
+}
+
+impl SyncPhase {
+    pub fn label(self) -> &'static str {
+        match self {
+            SyncPhase::Idle => "待同步",
+            SyncPhase::Connecting => "连接云端",
+            SyncPhase::Scanning => "检查本地改动",
+            SyncPhase::Uploading => "上传字体",
+            SyncPhase::Receiving => "接收云端变更",
+            SyncPhase::Downloading => "下载字体",
+            SyncPhase::Finishing => "收尾处理",
+        }
+    }
+
+    fn range(self) -> (f64, f64) {
+        match self {
+            SyncPhase::Idle => (0.0, 0.0),
+            SyncPhase::Connecting => (0.0, 5.0),
+            SyncPhase::Scanning => (5.0, 5.0),
+            SyncPhase::Uploading => (10.0, 40.0),
+            SyncPhase::Receiving => (50.0, 20.0),
+            SyncPhase::Downloading => (70.0, 25.0),
+            SyncPhase::Finishing => (95.0, 5.0),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SyncItemAction {
+    Upload,
+    Download,
+}
+
+impl SyncItemAction {
+    pub fn label(self) -> &'static str {
+        match self {
+            SyncItemAction::Upload => "上传",
+            SyncItemAction::Download => "下载",
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            SyncItemAction::Upload => "upload",
+            SyncItemAction::Download => "download",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SyncItemStatus {
+    Pending,
+    Running,
+    Done,
+}
+
+impl SyncItemStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            SyncItemStatus::Pending => "等待中",
+            SyncItemStatus::Running => "进行中",
+            SyncItemStatus::Done => "已完成",
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            SyncItemStatus::Pending => "pending",
+            SyncItemStatus::Running => "running",
+            SyncItemStatus::Done => "done",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SyncItemProgress {
+    pub fingerprint: String,
+    pub action: SyncItemAction,
+    pub status: SyncItemStatus,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SyncProgress {
+    pub phase: SyncPhase,
+    pub percent: u8,
+    pub phase_completed: u64,
+    pub phase_total: u64,
     pub uploaded_files: u64,
     pub downloaded_files: u64,
     pub uploaded_bytes: u64,
     pub downloaded_bytes: u64,
     pub received_changes: u64,
+    pub published_events: u64,
+    pub items: Vec<SyncItemProgress>,
+}
+
+impl SyncProgress {
+    fn set_phase(&mut self, phase: SyncPhase, total: u64) {
+        self.phase = phase;
+        self.phase_completed = 0;
+        self.phase_total = total;
+        self.items.clear();
+    }
+
+    fn advance(&mut self) {
+        self.phase_completed += 1;
+    }
+
+    fn refresh_percent(&mut self) {
+        let (base, span) = self.phase.range();
+        let fraction = if self.phase_total == 0 {
+            1.0
+        } else {
+            (self.phase_completed as f64 / self.phase_total as f64).clamp(0.0, 1.0)
+        };
+        self.percent = (base + span * fraction).round().clamp(0.0, 100.0) as u8;
+    }
+
+    fn set_item_status(&mut self, fingerprint: &str, status: SyncItemStatus) {
+        if let Some(item) = self
+            .items
+            .iter_mut()
+            .find(|item| item.fingerprint == fingerprint)
+        {
+            item.status = status;
+        }
+    }
+}
+
+fn emit_progress(
+    progress: &mut SyncProgress,
+    report: &Arc<dyn Fn(SyncProgress) + Send + Sync>,
+) {
+    progress.refresh_percent();
+    (report)(progress.clone());
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -964,9 +1103,17 @@ async fn synchronize_with_client(
     std::fs::create_dir_all(managed_directory)?;
     let mut progress = SyncProgress::default();
 
+    progress.set_phase(SyncPhase::Connecting, 4);
+    emit_progress(&mut progress, report);
     run_or_cancel(remote.test_connection(), &cancelled).await?;
+    progress.advance();
+    emit_progress(&mut progress, report);
     run_or_cancel(remote.ensure_root(&profile.remote_directory), &cancelled).await?;
+    progress.advance();
+    emit_progress(&mut progress, report);
     run_or_cancel(remote.ensure_directory(&["Folio"]), cancelled).await?;
+    progress.advance();
+    emit_progress(&mut progress, report);
     let versions = run_or_cancel(remote.list(&["Folio"]), cancelled).await?;
     if versions
         .iter()
@@ -987,9 +1134,16 @@ async fn synchronize_with_client(
         &cancelled,
     )
     .await?;
+    progress.advance();
+    emit_progress(&mut progress, report);
 
+    progress.set_phase(SyncPhase::Scanning, 1);
+    emit_progress(&mut progress, report);
     stage_user_changes(db)?;
     stage_managed_fonts(db, managed_directory)?;
+    progress.advance();
+    emit_progress(&mut progress, report);
+
     publish_local_events(db, remote, cancelled, report, &mut progress).await?;
     receive_remote_events(db, remote, cancelled, report, &mut progress).await?;
     apply_remote_events(
@@ -1008,7 +1162,9 @@ async fn synchronize_with_client(
     if let Ok(elapsed) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
         db.set_sync_metadata("last_successful_sync_ms", &elapsed.as_millis().to_string())?;
     }
-    (report)(progress);
+    progress.set_phase(SyncPhase::Finishing, 1);
+    progress.advance();
+    emit_progress(&mut progress, report);
     Ok(progress)
 }
 
@@ -1409,7 +1565,42 @@ async fn publish_local_events(
             .await?
             .into_iter()
             .collect::<BTreeSet<_>>();
-    for event in db.list_sync_events()? {
+    let events = db.list_sync_events()?;
+    let mut upload_targets = Vec::<(String, PathBuf)>::new();
+    let mut staged_uploads = BTreeSet::new();
+    let mut pending_events = BTreeSet::new();
+    for event in &events {
+        let change: Change = serde_json::from_str(&event.payload)?;
+        if let Change::FontAdded(asset) = &change {
+            if !remote_objects.contains(&asset.fingerprint)
+                && staged_uploads.insert(asset.fingerprint.clone())
+            {
+                if let Some(path) = assets
+                    .get(&asset.fingerprint)
+                    .and_then(|record| record.local_path.as_ref())
+                {
+                    upload_targets.push((asset.fingerprint.clone(), PathBuf::from(path)));
+                }
+            }
+        }
+        if event.device_id == device_id && !remote_events.contains(&format!("{}.json", event.id)) {
+            pending_events.insert(event.id.clone());
+        }
+    }
+    progress.set_phase(
+        SyncPhase::Uploading,
+        (upload_targets.len() + pending_events.len()) as u64,
+    );
+    progress.items = upload_targets
+        .iter()
+        .map(|(fingerprint, _)| SyncItemProgress {
+            fingerprint: fingerprint.clone(),
+            action: SyncItemAction::Upload,
+            status: SyncItemStatus::Pending,
+        })
+        .collect();
+    emit_progress(progress, report);
+    for event in events {
         if cancelled.load(Ordering::Relaxed) {
             return Err(SyncError::Cancelled);
         }
@@ -1426,11 +1617,15 @@ async fn publish_local_events(
                         return Err(SyncError::InvalidFont);
                     }
                     let length = bytes.len() as u64;
+                    progress.set_item_status(&asset.fingerprint, SyncItemStatus::Running);
+                    emit_progress(progress, report);
                     run_or_cancel(remote.put(&object_path, bytes), cancelled).await?;
                     remote_objects.insert(asset.fingerprint.clone());
                     progress.uploaded_files += 1;
                     progress.uploaded_bytes += length;
-                    (report)(*progress);
+                    progress.advance();
+                    progress.set_item_status(&asset.fingerprint, SyncItemStatus::Done);
+                    emit_progress(progress, report);
                 }
             }
         }
@@ -1453,6 +1648,9 @@ async fn publish_local_events(
                 )
                 .await?;
                 remote_events.insert(filename);
+                progress.published_events += 1;
+                progress.advance();
+                emit_progress(progress, report);
             }
         }
         if !event.published {
@@ -1475,6 +1673,7 @@ async fn receive_remote_events(
         .map(|event| event.id)
         .collect::<BTreeSet<_>>();
     let devices = run_or_cancel(remote.list(&["Folio", "v1", "events"]), cancelled).await?;
+    let mut pending = Vec::<(String, String, String, i64)>::new();
     for device in devices {
         if device.len() != 32 || !device.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(SyncError::InvalidDavResponse);
@@ -1483,9 +1682,6 @@ async fn receive_remote_events(
         let names =
             run_or_cancel(remote.list(&["Folio", "v1", "events", &device]), cancelled).await?;
         for name in names {
-            if cancelled.load(Ordering::Relaxed) {
-                return Err(SyncError::Cancelled);
-            }
             let Some(id) = name.strip_suffix(".json") else {
                 return Err(SyncError::InvalidDavResponse);
             };
@@ -1500,31 +1696,40 @@ async fn receive_remote_events(
             if known.contains(id) {
                 continue;
             }
-            let bytes = run_or_cancel(
-                remote.get(&["Folio", "v1", "events", &device, &name]),
-                cancelled,
-            )
-            .await?;
-            let wire: RemoteEvent = serde_json::from_slice(&bytes)?;
-            if wire.format_version != FORMAT_VERSION {
-                return Err(SyncError::UnsupportedFormat);
-            }
-            if wire.id != id || wire.device_id != device || wire.sequence != sequence {
-                return Err(SyncError::InvalidDavResponse);
-            }
-            let inserted = db.insert_remote_sync_event(&StoredSyncEvent {
-                id: wire.id.clone(),
-                device_id: wire.device_id,
-                sequence: wire.sequence,
-                payload: serde_json::to_string(&wire.change)?,
-                published: true,
-            })?;
-            known.insert(wire.id);
-            if inserted {
-                progress.received_changes += 1;
-                (report)(*progress);
-            }
+            pending.push((device.clone(), name.clone(), id.to_owned(), sequence));
         }
+    }
+    progress.set_phase(SyncPhase::Receiving, pending.len() as u64);
+    emit_progress(progress, report);
+    for (device, name, id, sequence) in pending {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(SyncError::Cancelled);
+        }
+        let bytes = run_or_cancel(
+            remote.get(&["Folio", "v1", "events", &device, &name]),
+            cancelled,
+        )
+        .await?;
+        let wire: RemoteEvent = serde_json::from_slice(&bytes)?;
+        if wire.format_version != FORMAT_VERSION {
+            return Err(SyncError::UnsupportedFormat);
+        }
+        if wire.id != id || wire.device_id != device || wire.sequence != sequence {
+            return Err(SyncError::InvalidDavResponse);
+        }
+        let inserted = db.insert_remote_sync_event(&StoredSyncEvent {
+            id: wire.id.clone(),
+            device_id: wire.device_id,
+            sequence: wire.sequence,
+            payload: serde_json::to_string(&wire.change)?,
+            published: true,
+        })?;
+        known.insert(wire.id);
+        if inserted {
+            progress.received_changes += 1;
+        }
+        progress.advance();
+        emit_progress(progress, report);
     }
     Ok(())
 }
@@ -1845,6 +2050,29 @@ async fn apply_remote_events(
         .into_iter()
         .map(|asset| (asset.fingerprint.clone(), asset))
         .collect::<BTreeMap<_, _>>();
+    let mut download_targets = Vec::new();
+    for (fingerprint, remote_asset) in &font_assets {
+        if asset_add_tags(&events, fingerprint).is_empty() {
+            continue;
+        }
+        let needs_download = match existing_assets.get(fingerprint) {
+            Some(record) => !record.cloud_only && !local_asset_is_valid(record, remote_asset)?,
+            None => true,
+        };
+        if needs_download {
+            download_targets.push(fingerprint.clone());
+        }
+    }
+    progress.set_phase(SyncPhase::Downloading, download_targets.len() as u64);
+    progress.items = download_targets
+        .iter()
+        .map(|fingerprint| SyncItemProgress {
+            fingerprint: fingerprint.clone(),
+            action: SyncItemAction::Download,
+            status: SyncItemStatus::Pending,
+        })
+        .collect();
+    emit_progress(progress, report);
     let mut catalog_changed = false;
     for (fingerprint, remote_asset) in &font_assets {
         if cancelled.load(Ordering::Relaxed) {
@@ -1876,11 +2104,15 @@ async fn apply_remote_events(
         asset.remote_payload = serde_json::to_string(remote_asset)?;
         asset.deleted = false;
         if !asset.cloud_only && !local_asset_is_valid(&asset, remote_asset)? {
+            progress.set_item_status(fingerprint, SyncItemStatus::Running);
+            emit_progress(progress, report);
             let path = download_asset(remote, directory, remote_asset, cancelled).await?;
             asset.local_path = Some(path.to_string_lossy().into_owned());
             progress.downloaded_files += 1;
             progress.downloaded_bytes += remote_asset.file_size;
-            (report)(*progress);
+            progress.advance();
+            progress.set_item_status(fingerprint, SyncItemStatus::Done);
+            emit_progress(progress, report);
             catalog_changed = true;
         }
         db.upsert_sync_asset(&asset)?;
