@@ -279,6 +279,36 @@ fn delete_smart_folder(
 }
 
 #[tauri::command]
+fn convert_collection_to_smart_folder(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    request: SmartFolderMutation,
+) -> Result<library::SmartFolderDto, String> {
+    require_main_window(&window)?;
+    state
+        .library
+        .lock()
+        .map_err(|_| "字体库暂时不可用".to_owned())?
+        .convert_collection_to_smart_folder(request)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn convert_smart_folder_to_collection(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    request: CollectionMutation,
+) -> Result<library::CollectionDto, String> {
+    require_main_window(&window)?;
+    state
+        .library
+        .lock()
+        .map_err(|_| "字体库暂时不可用".to_owned())?
+        .convert_smart_folder_to_collection(request)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_sync_profile(
     window: WebviewWindow,
     state: State<'_, AppState>,
@@ -331,9 +361,20 @@ fn save_sync_connection(
     password: String,
 ) -> Result<(), String> {
     require_settings_window(&window)?;
-    if password.trim().is_empty() {
-        return Err("请输入 WebDAV 密码".to_owned());
-    }
+    let password = if password.trim().is_empty() {
+        let previous = folio_sync::load_profile(&state.database_path)
+            .map_err(|error| error.to_string())?;
+        if !previous.is_some_and(|saved| {
+            saved.server_url == profile.server_url
+                && saved.remote_directory == profile.remote_directory
+                && saved.username == profile.username
+        }) {
+            return Err("请输入 WebDAV 密码".to_owned());
+        }
+        load_credential().map_err(|_| "请输入 WebDAV 密码".to_owned())?
+    } else {
+        password
+    };
     save_credential(&password).map_err(|error| error.to_string())?;
     folio_sync::save_profile(&state.database_path, &profile.into())
         .map_err(|error| error.to_string())?;
@@ -463,7 +504,7 @@ fn list_cloud_fonts(
     window: WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<Vec<CloudFontDto>, String> {
-    require_settings_window(&window)?;
+    require_sync_window(&window)?;
     folio_sync::list_cloud_fonts(&state.database_path)
         .map(|fonts| {
             fonts
@@ -479,6 +520,28 @@ fn list_cloud_fonts(
                 })
                 .collect()
         })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn restore_cloud_font(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    fingerprint: String,
+) -> Result<(), String> {
+    require_sync_window(&window)?;
+    folio_sync::request_restore(&state.database_path, &fingerprint)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn restore_deleted_cloud_font(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    fingerprint: String,
+) -> Result<(), String> {
+    require_sync_window(&window)?;
+    folio_sync::restore_deleted_font(&state.database_path, &fingerprint)
         .map_err(|error| error.to_string())
 }
 
@@ -566,8 +629,9 @@ fn require_sync_window(window: &WebviewWindow) -> Result<(), String> {
     }
 }
 
+// 必须为 async：创建窗口需回主线程执行，同步命令在主线程内会自锁。
 #[tauri::command]
-fn open_settings(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+async fn open_settings(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     require_main_window(&window)?;
     if let Some(window) = app.get_webview_window("settings") {
         window.show().map_err(|error| error.to_string())?;
@@ -679,6 +743,8 @@ pub fn run() {
             list_smart_folders,
             save_smart_folder,
             delete_smart_folder,
+            convert_collection_to_smart_folder,
+            convert_smart_folder_to_collection,
             get_sync_profile,
             get_sync_status,
             test_sync_connection,
@@ -687,6 +753,8 @@ pub fn run() {
             sync_now,
             cancel_sync,
             list_cloud_fonts,
+            restore_cloud_font,
+            restore_deleted_cloud_font,
             list_sync_conflicts,
             resolve_sync_conflict,
             open_settings,

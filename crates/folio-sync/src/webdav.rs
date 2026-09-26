@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use reqwest::{Method, StatusCode, Url};
+use reqwest::{header, Method, RequestBuilder, Response, StatusCode, Url};
 
 use crate::{SyncError, SyncProfile};
 
@@ -93,8 +93,56 @@ impl WebDavClient {
             .basic_auth(&self.username, Some(&self.password)))
     }
 
+    // WebDAV 方法在 301/302 后不能改成 GET；跨站下载不能携带 WebDAV 凭据。
+    async fn send(&self, builder: RequestBuilder) -> Result<Response, SyncError> {
+        let mut request = builder.build()?;
+        let origin = request.url().origin();
+        for hop in 0..=5 {
+            let response = self
+                .http
+                .execute(request.try_clone().ok_or(SyncError::InvalidRedirect)?)
+                .await?;
+            if !matches!(
+                response.status(),
+                StatusCode::MOVED_PERMANENTLY
+                    | StatusCode::FOUND
+                    | StatusCode::SEE_OTHER
+                    | StatusCode::TEMPORARY_REDIRECT
+                    | StatusCode::PERMANENT_REDIRECT
+            ) {
+                return Ok(response);
+            }
+            if hop == 5
+                || response.status() == StatusCode::SEE_OTHER && request.method() != Method::GET
+            {
+                return Err(SyncError::InvalidRedirect);
+            }
+            let location = response
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or(SyncError::InvalidRedirect)?;
+            let next = response
+                .url()
+                .join(location)
+                .map_err(|_| SyncError::InvalidRedirect)?;
+            if next.scheme() != self.server.scheme()
+                || !next.username().is_empty()
+                || next.password().is_some()
+                || request.method() != Method::GET && next.origin() != origin
+            {
+                return Err(SyncError::InvalidRedirect);
+            }
+            if next.origin() != request.url().origin() {
+                request.headers_mut().remove(header::AUTHORIZATION);
+            }
+            *request.url_mut() = next;
+        }
+        Err(SyncError::InvalidRedirect)
+    }
+
     pub(crate) async fn test_connection(&self) -> Result<(), SyncError> {
-        let response = self
+        let request = self
             .http
             .request(
                 Method::from_bytes(b"PROPFIND").expect("fixed method"),
@@ -102,9 +150,8 @@ impl WebDavClient {
             )
             .basic_auth(&self.username, Some(&self.password))
             .header("Depth", "0")
-            .body("<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:allprop/></d:propfind>")
-            .send()
-            .await?;
+            .body("<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:allprop/></d:propfind>");
+        let response = self.send(request).await?;
         check_status(response.status())?;
         Ok(())
     }
@@ -119,15 +166,17 @@ impl WebDavClient {
                 .map_err(|_| SyncError::InvalidServerUrl)?
                 .pop_if_empty()
                 .push(segment);
-            let response = self
+            if self.exists_url(url.clone()).await? {
+                continue;
+            }
+            let request = self
                 .http
                 .request(
                     Method::from_bytes(b"MKCOL").expect("fixed method"),
                     url.clone(),
                 )
-                .basic_auth(&self.username, Some(&self.password))
-                .send()
-                .await?;
+                .basic_auth(&self.username, Some(&self.password));
+            let response = self.send(request).await?;
             if !response.status().is_success()
                 && response.status() != StatusCode::METHOD_NOT_ALLOWED
             {
@@ -138,17 +187,16 @@ impl WebDavClient {
     }
 
     pub(crate) async fn ensure_directory(&self, segments: &[&str]) -> Result<(), SyncError> {
-        for length in 0..=segments.len() {
-            let response = self
-                .request(
-                    Method::from_bytes(b"MKCOL").expect("fixed method"),
-                    &segments[..length],
-                )?
-                .send()
-                .await?;
-            if response.status().is_success()
-                || response.status() == StatusCode::METHOD_NOT_ALLOWED
-                || response.status() == StatusCode::CONFLICT && length == 0
+        for length in 1..=segments.len() {
+            if self.exists(&segments[..length]).await? {
+                continue;
+            }
+            let request = self.request(
+                Method::from_bytes(b"MKCOL").expect("fixed method"),
+                &segments[..length],
+            )?;
+            let response = self.send(request).await?;
+            if response.status().is_success() || response.status() == StatusCode::METHOD_NOT_ALLOWED
             {
                 continue;
             }
@@ -162,15 +210,18 @@ impl WebDavClient {
         if !directory.path().ends_with('/') {
             directory.set_path(&format!("{}/", directory.path()));
         }
-        let response = self
+        let request = self
             .http
             .request(Method::from_bytes(b"PROPFIND").expect("fixed method"), directory.clone())
             .basic_auth(&self.username, Some(&self.password))
             .header("Depth", "1")
-            .body("<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/></d:prop></d:propfind>")
-            .send()
-            .await?;
+            .body("<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/></d:prop></d:propfind>");
+        let response = self.send(request).await?;
         check_status(response.status())?;
+        directory = response.url().clone();
+        if !directory.path().ends_with('/') {
+            directory.set_path(&format!("{}/", directory.path()));
+        }
         let bytes = response.bytes().await?;
         let mut reader = Reader::from_reader(bytes.as_ref());
         let mut hrefs = Vec::new();
@@ -223,18 +274,17 @@ impl WebDavClient {
     }
 
     pub(crate) async fn get(&self, segments: &[&str]) -> Result<Vec<u8>, SyncError> {
-        let response = self.request(Method::GET, segments)?.send().await?;
+        let response = self.send(self.request(Method::GET, segments)?).await?;
         check_status(response.status())?;
         Ok(response.bytes().await?.to_vec())
     }
 
     pub(crate) async fn put(&self, segments: &[&str], body: Vec<u8>) -> Result<(), SyncError> {
-        let response = self
+        let request = self
             .request(Method::PUT, segments)?
             .header("If-None-Match", "*")
-            .body(body.clone())
-            .send()
-            .await?;
+            .body(body.clone());
+        let response = self.send(request).await?;
         if response.status() == StatusCode::PRECONDITION_FAILED {
             if self.get(segments).await? == body {
                 return Ok(());
@@ -245,14 +295,16 @@ impl WebDavClient {
     }
 
     pub(crate) async fn exists(&self, segments: &[&str]) -> Result<bool, SyncError> {
-        let response = self
-            .request(
-                Method::from_bytes(b"PROPFIND").expect("fixed method"),
-                segments,
-            )?
-            .header("Depth", "0")
-            .send()
-            .await?;
+        self.exists_url(self.url(segments)?).await
+    }
+
+    async fn exists_url(&self, url: Url) -> Result<bool, SyncError> {
+        let request = self
+            .http
+            .request(Method::from_bytes(b"PROPFIND").expect("fixed method"), url)
+            .basic_auth(&self.username, Some(&self.password))
+            .header("Depth", "0");
+        let response = self.send(request).await?;
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(false);
         }
@@ -294,6 +346,9 @@ mod tests {
     struct DavState {
         directories: BTreeSet<String>,
         files: BTreeMap<String, Vec<u8>>,
+        redirects: BTreeMap<(String, String), String>,
+        auth_seen: Vec<(String, bool)>,
+        existing_mkcol_forbidden: bool,
         full: bool,
         malformed: bool,
         interrupt_next_get: bool,
@@ -410,11 +465,19 @@ mod tests {
             .lines()
             .any(|line| line.eq_ignore_ascii_case("authorization: Basic dTpw"));
         let mut state = state.lock().unwrap();
+        state.auth_seen.push((path.to_owned(), authorized));
+        if let Some(location) = state.redirects.get(&(method.to_owned(), path.to_owned())) {
+            let response = format!(
+                "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            return;
+        }
         if method == "GET" && state.interrupt_next_get {
             state.interrupt_next_get = false;
             return;
         }
-        let (status, body) = if !authorized {
+        let (status, body) = if !authorized && path != "/download" {
             (401, Vec::new())
         } else {
             match method {
@@ -449,7 +512,14 @@ mod tests {
                     (207, body.into_bytes())
                 }
                 "PROPFIND" => (404, Vec::new()),
-                "MKCOL" if state.directories.contains(path) => (405, Vec::new()),
+                "MKCOL" if state.directories.contains(path) => (
+                    if state.existing_mkcol_forbidden {
+                        403
+                    } else {
+                        405
+                    },
+                    Vec::new(),
+                ),
                 "MKCOL" => {
                     let parent = path
                         .rsplit_once('/')
@@ -512,6 +582,12 @@ mod tests {
             .ensure_directory(&["Library", "objects"])
             .await
             .unwrap();
+        server.state.lock().unwrap().existing_mkcol_forbidden = true;
+        client.ensure_root("Library").await.unwrap();
+        client
+            .ensure_directory(&["Library", "objects"])
+            .await
+            .unwrap();
         let path = &["Library", "objects", "a"];
         assert!(!client.exists(path).await.unwrap());
         client.put(path, b"font".to_vec()).await.unwrap();
@@ -540,6 +616,71 @@ mod tests {
         ));
     }
 
+    #[tokio::test]
+    async fn redirects_preserve_dav_methods_and_strip_cross_origin_credentials() {
+        let server = DavServer::start();
+        let download = DavServer::start();
+        let client = server.client("p");
+        client.ensure_root("Library").await.unwrap();
+        client
+            .ensure_directory(&["Library", "objects"])
+            .await
+            .unwrap();
+        {
+            let mut state = server.state.lock().unwrap();
+            state.redirects.insert(
+                ("PROPFIND".to_owned(), "/dav".to_owned()),
+                "/dav/Library".to_owned(),
+            );
+            state.redirects.insert(
+                ("PUT".to_owned(), "/dav/Library/objects/alias".to_owned()),
+                "/dav/Library/objects/object".to_owned(),
+            );
+            state.redirects.insert(
+                ("GET".to_owned(), "/dav/Library/objects/object".to_owned()),
+                format!("{}/download", download.url.trim_end_matches("/dav")),
+            );
+        }
+        download
+            .state
+            .lock()
+            .unwrap()
+            .files
+            .insert("/download".to_owned(), b"font".to_vec());
+        client.test_connection().await.unwrap();
+        client
+            .put(&["Library", "objects", "alias"], b"font".to_vec())
+            .await
+            .unwrap();
+        assert!(server
+            .state
+            .lock()
+            .unwrap()
+            .files
+            .contains_key("/dav/Library/objects/object"));
+        assert_eq!(
+            client.get(&["Library", "objects", "object"]).await.unwrap(),
+            b"font"
+        );
+        assert!(download
+            .state
+            .lock()
+            .unwrap()
+            .auth_seen
+            .iter()
+            .any(|(path, authorized)| path == "/download" && !authorized));
+        server.state.lock().unwrap().redirects.insert(
+            ("PUT".to_owned(), "/dav/Library/objects/denied".to_owned()),
+            format!("{}/download", download.url.trim_end_matches("/dav")),
+        );
+        assert!(matches!(
+            client
+                .put(&["Library", "objects", "denied"], b"font".to_vec())
+                .await,
+            Err(SyncError::InvalidRedirect)
+        ));
+    }
+
     #[test]
     fn configured_collection_url_keeps_a_trailing_slash() {
         let profile = SyncProfile {
@@ -559,6 +700,12 @@ mod tests {
         use folio_storage::FolioDatabase;
 
         let server = DavServer::start();
+        server
+            .state
+            .lock()
+            .unwrap()
+            .redirects
+            .insert(("MKCOL".to_owned(), "/dav".to_owned()), "/login".to_owned());
         let client = server.client("p");
         let dir = tempfile::tempdir().unwrap();
         let first_directory = dir.path().join("first");
@@ -597,6 +744,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(first_progress.uploaded_files, 1);
+        server.state.lock().unwrap().existing_mkcol_forbidden = true;
 
         let mut second = FolioDatabase::open(dir.path().join("second.sqlite")).unwrap();
         let second_progress = crate::synchronize_with_client(
@@ -660,8 +808,42 @@ mod tests {
             .unwrap();
         assert!(std::path::Path::new(&downloaded).is_file());
         assert_eq!(
-            std::fs::read(font).unwrap(),
+            std::fs::read(&font).unwrap(),
             std::fs::read(&downloaded).unwrap()
+        );
+        std::fs::write(&downloaded, b"broken").unwrap();
+        let repair = crate::synchronize_with_client(
+            &mut second,
+            &second_directory,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        assert_eq!(repair.downloaded_files, 1);
+        assert_eq!(
+            std::fs::read(&downloaded).unwrap(),
+            std::fs::read(&font).unwrap()
+        );
+        let mut damaged = std::fs::read(&downloaded).unwrap();
+        damaged[0] ^= 1;
+        std::fs::write(&downloaded, damaged).unwrap();
+        let repair = crate::synchronize_with_client(
+            &mut second,
+            &second_directory,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        assert_eq!(repair.downloaded_files, 1);
+        assert_eq!(
+            std::fs::read(&downloaded).unwrap(),
+            std::fs::read(&font).unwrap()
         );
 
         let fingerprint = second.list_sync_assets().unwrap()[0].fingerprint.clone();

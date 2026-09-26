@@ -52,6 +52,22 @@ export interface LibraryPageDto {
   facets: FacetOptionDto[];
 }
 
+export interface HealthDto {
+  damagedFiles: number;
+  duplicateSources: number;
+  multipleRevisions: number;
+  metadataConflicts: number;
+}
+
+export interface LibrarySnapshotDto {
+  familyCount: number;
+  faceCount: number;
+  recentCount: number;
+  roots: string[];
+  fontStateCounts: Record<string, number>;
+  health: HealthDto;
+}
+
 export interface FacetOptionDto {
   kind: string;
   value: string;

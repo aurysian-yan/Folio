@@ -1,12 +1,13 @@
 use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
+    collections::{BTreeSet, HashMap, HashSet},
+    path::{Path, PathBuf},
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use folio_core::{
-    Catalog, CollectionColor, CollectionIcon, CollectionId, FontCategory, FontFace, FontIdentityId,
-    FontWeight, FontWidth, LibraryRootKey, LicenseKind, SmartFolder, SmartFolderId,
+    Catalog, CollectionColor, CollectionIcon, CollectionId, FontCategory, FontFace, FontFaceId,
+    FontFamilyId, FontIdentityId, FontWeight, FontWidth, LibraryRootKey, LicenseKind, SmartFolder,
+    SmartFolderId,
 };
 use folio_query::{
     FacetFilter, FacetValue, FontFeature, FontQuery, FontQueryIndex, FontState, FoundryKey,
@@ -55,6 +56,8 @@ pub struct PageRequest {
     pub collection_id: Option<String>,
     #[serde(default)]
     pub smart_folder_id: Option<String>,
+    #[serde(default)]
+    pub font_state: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -183,7 +186,19 @@ pub struct FacetOptionDto {
 pub struct LibrarySnapshotDto {
     pub family_count: usize,
     pub face_count: usize,
+    pub recent_count: usize,
     pub roots: Vec<String>,
+    pub font_state_counts: HashMap<String, usize>,
+    pub health: HealthDto,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthDto {
+    pub damaged_files: usize,
+    pub duplicate_sources: usize,
+    pub multiple_revisions: usize,
+    pub metadata_conflicts: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -223,10 +238,15 @@ pub struct LibraryService {
     state: LibraryStateSnapshot,
     query_index: FontQueryIndex,
     preview_cache: HashMap<(String, String, u32), String>,
+    managed_directory: PathBuf,
 }
 
 impl LibraryService {
     pub fn open(path: PathBuf) -> Result<Self, LibraryError> {
+        let managed_directory = path
+            .parent()
+            .map(|parent| parent.join("ManagedFonts"))
+            .unwrap_or_else(|| PathBuf::from("ManagedFonts"));
         let mut database = FolioDatabase::open(path)?;
         let catalog = database.load_cached_catalog()?;
         let state = database.library_state_snapshot()?;
@@ -237,6 +257,7 @@ impl LibraryService {
             state,
             query_index,
             preview_cache: HashMap::new(),
+            managed_directory,
         })
     }
 
@@ -309,10 +330,22 @@ impl LibraryService {
                 limit,
             }
         };
-        let result = self.query_index.query(&query)?;
+        let restricted_faces: Option<BTreeSet<_>> = match request.scope.as_str() {
+            "fontState" => {
+                Some(self.face_ids_for_state(request.font_state.as_deref().unwrap_or("")))
+            }
+            "fontHealth" => Some(self.face_ids_for_health()),
+            _ => None,
+        };
+        let result = self
+            .query_index
+            .query_with_faces(&query, restricted_faces.as_ref())?;
         let mut facet_query = query.clone();
         facet_query.facets = FacetFilter::default();
-        let facet_summary = self.query_index.query(&facet_query)?.facet_summary;
+        let facet_summary = self
+            .query_index
+            .query_with_faces(&facet_query, restricted_faces.as_ref())?
+            .facet_summary;
         let favorite_ids: HashSet<FontIdentityId> = self.state.favorites.iter().copied().collect();
         let collection_members: HashSet<FontIdentityId> = collection_id
             .and_then(|id| {
@@ -526,6 +559,90 @@ impl LibraryService {
         Ok(())
     }
 
+    /// 将手动收藏夹转换为智慧收藏夹，保留原收藏夹标识。
+    pub fn convert_collection_to_smart_folder(
+        &mut self,
+        request: SmartFolderMutation,
+    ) -> Result<SmartFolderDto, LibraryError> {
+        let id = request
+            .id
+            .as_deref()
+            .ok_or_else(|| LibraryError::Message("收藏夹标识无效".to_owned()))?;
+        let icon = CollectionIcon::from_key(&request.icon)
+            .ok_or_else(|| LibraryError::Message("收藏夹图标无效".to_owned()))?;
+        let color = CollectionColor::from_key(&request.color)
+            .ok_or_else(|| LibraryError::Message("收藏夹颜色无效".to_owned()))?;
+        let query = SavedFontQuery::from_filter(
+            (!request.text.trim().is_empty()).then_some(request.text),
+            query_facets(request.facets),
+        )?;
+        let query_json = serde_json::to_string(&query)
+            .map_err(|error| LibraryError::Message(error.to_string()))?;
+        let folder = self.database.convert_collection_to_smart_folder(
+            parse_collection_id(id)?,
+            &request.name,
+            &query_json,
+            icon,
+            color,
+        )?;
+        self.refresh_query_state()?;
+        let saved: SavedFontQuery = serde_json::from_str(&folder.query_json)
+            .map_err(|error| LibraryError::Message(error.to_string()))?;
+        let match_count = self
+            .query_index
+            .query(&saved.clone().into_query(0, None)?)?
+            .total_matches;
+        Ok(smart_folder_dto(folder, match_count, saved))
+    }
+
+    /// 将智慧收藏夹转换为手动收藏夹，把当前命中的字族写入成员。
+    pub fn convert_smart_folder_to_collection(
+        &mut self,
+        request: CollectionMutation,
+    ) -> Result<CollectionDto, LibraryError> {
+        let id = request
+            .id
+            .as_deref()
+            .ok_or_else(|| LibraryError::Message("智慧收藏夹标识无效".to_owned()))?;
+        let icon = CollectionIcon::from_key(&request.icon)
+            .ok_or_else(|| LibraryError::Message("收藏夹图标无效".to_owned()))?;
+        let color = CollectionColor::from_key(&request.color)
+            .ok_or_else(|| LibraryError::Message("收藏夹颜色无效".to_owned()))?;
+        let folder_id = parse_smart_folder_id(id)?;
+        let folder = self
+            .database
+            .list_smart_folders()?
+            .into_iter()
+            .find(|folder| folder.id == folder_id)
+            .ok_or_else(|| LibraryError::Message("智慧收藏夹不存在".to_owned()))?;
+        let saved: SavedFontQuery = serde_json::from_str(&folder.query_json)
+            .map_err(|error| LibraryError::Message(format!("智慧收藏夹条件无效：{error}")))?;
+        let identities = self
+            .query_index
+            .query(&saved.clone().into_query(0, None)?)?
+            .families
+            .into_iter()
+            .flat_map(|family| family.matched_identity_ids)
+            .collect::<HashSet<_>>();
+        let member_count = identities.len();
+        let identities = identities.into_iter().collect::<Vec<_>>();
+        let collection = self.database.convert_smart_folder_to_collection(
+            folder_id,
+            &request.name,
+            icon,
+            color,
+            &identities,
+        )?;
+        self.refresh_query_state()?;
+        Ok(CollectionDto {
+            id: collection.id.to_string(),
+            name: collection.name,
+            icon: collection.icon.key().to_owned(),
+            color: collection.color.key().to_owned(),
+            member_count,
+        })
+    }
+
     fn refresh_query_state(&mut self) -> Result<(), LibraryError> {
         self.state = self.database.library_state_snapshot()?;
         self.query_index.update_state(&self.state);
@@ -612,10 +729,187 @@ impl LibraryService {
             .into_iter()
             .map(|root| root.display_path)
             .collect();
+        let mut font_state_counts = HashMap::new();
+        for (key, count) in self.font_state_counts() {
+            font_state_counts.insert(key.to_owned(), count);
+        }
         LibrarySnapshotDto {
             family_count: self.catalog.family_count(),
             face_count: self.catalog.face_count(),
+            recent_count: self.state.recent.len(),
             roots,
+            font_state_counts,
+            health: self.health_overview().0,
+        }
+    }
+
+    /// 按字体来源目录统计每个状态下的字族数量。
+    fn font_state_counts(&self) -> Vec<(&'static str, usize)> {
+        let managed = self.managed_directory.as_path();
+        let system = system_font_roots();
+        let user = user_font_roots();
+        let mut counts: HashMap<&'static str, usize> = HashMap::new();
+        for family in &self.catalog.families {
+            let mut kinds = BTreeSet::new();
+            for face in &family.faces {
+                kinds.insert(classify_face(face, managed, &system, &user));
+            }
+            let mut keys: Vec<&'static str> = kinds.iter().map(|kind| kind.key()).collect();
+            if kinds.contains(&FontStateKind::Installed) || kinds.contains(&FontStateKind::System) {
+                keys.push(FontStateKind::Active.key());
+            }
+            keys.sort_unstable();
+            keys.dedup();
+            for key in keys {
+                *counts.entry(key).or_default() += 1;
+            }
+        }
+        FontStateKind::ALL
+            .iter()
+            .map(|kind| (kind.key(), counts.get(kind.key()).copied().unwrap_or(0)))
+            .collect()
+    }
+
+    /// 健康概览与问题字款集合；数量口径与 macOS 版本一致。
+    fn health_overview(&self) -> (HealthDto, BTreeSet<FontFaceId>) {
+        let mut family_by_face: HashMap<FontFaceId, FontFamilyId> = HashMap::new();
+        for family in &self.catalog.families {
+            for face in &family.faces {
+                family_by_face.insert(face.id, family.id);
+            }
+        }
+        let mut health = HealthDto::default();
+        let mut face_ids = BTreeSet::new();
+        let mut revisions = BTreeSet::new();
+        let mut conflicts = BTreeSet::new();
+        let mut duplicates = BTreeSet::new();
+        for identity in &self.query_index.health().identities {
+            if !identity.duplicate_source_faces.is_empty() {
+                duplicates.extend(family_ids_for_faces(
+                    &family_by_face,
+                    &identity.duplicate_source_faces,
+                ));
+            }
+            if identity.revision_ids.len() > 1 {
+                revisions.extend(family_ids_for_faces(&family_by_face, &identity.face_ids));
+            }
+            if !identity.conflicts.is_empty() {
+                conflicts.extend(family_ids_for_faces(&family_by_face, &identity.face_ids));
+            }
+            face_ids.extend(identity.face_ids.iter().copied());
+            face_ids.extend(identity.duplicate_source_faces.iter().copied());
+        }
+        health.damaged_files = 0;
+        health.duplicate_sources = duplicates.len();
+        health.multiple_revisions = revisions.len();
+        health.metadata_conflicts = conflicts.len();
+        (health, face_ids)
+    }
+
+    fn face_ids_for_state(&self, state: &str) -> BTreeSet<FontFaceId> {
+        let kinds = FontStateKind::matching(state);
+        if kinds.is_empty() {
+            return BTreeSet::new();
+        }
+        let managed = self.managed_directory.as_path();
+        let system = system_font_roots();
+        let user = user_font_roots();
+        self.catalog
+            .families
+            .iter()
+            .flat_map(|family| family.faces.iter())
+            .filter(|face| kinds.contains(&classify_face(face, managed, &system, &user)))
+            .map(|face| face.id)
+            .collect()
+    }
+
+    fn face_ids_for_health(&self) -> BTreeSet<FontFaceId> {
+        self.health_overview().1
+    }
+}
+
+fn classify_face(
+    face: &FontFace,
+    managed: &Path,
+    system: &[PathBuf],
+    user: &[PathBuf],
+) -> FontStateKind {
+    for source in &face.sources {
+        let path = source.path();
+        if !path.exists() {
+            continue;
+        }
+        if path.starts_with(managed) {
+            return FontStateKind::Available;
+        }
+        if user.iter().any(|root| path.starts_with(root)) {
+            return FontStateKind::Installed;
+        }
+        if system.iter().any(|root| path.starts_with(root)) {
+            return FontStateKind::System;
+        }
+        return FontStateKind::External;
+    }
+    FontStateKind::Unavailable
+}
+
+fn family_ids_for_faces(
+    family_by_face: &HashMap<FontFaceId, FontFamilyId>,
+    face_ids: &[FontFaceId],
+) -> BTreeSet<FontFamilyId> {
+    face_ids
+        .iter()
+        .filter_map(|face_id| family_by_face.get(face_id).copied())
+        .collect()
+}
+
+/// 字族在跨平台字体来源模型下的状态。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum FontStateKind {
+    /// 操作系统当前可用的字体（系统目录或用户字体目录）。
+    Active,
+    /// 安装到当前用户字体目录。
+    Installed,
+    /// 位于 Folio 管理目录、尚未安装。
+    Available,
+    /// 引用的外部文件或用户添加的文件夹。
+    External,
+    /// 操作系统自带的字体目录。
+    System,
+    /// 来源文件已不可访问。
+    Unavailable,
+}
+
+impl FontStateKind {
+    const ALL: [Self; 6] = [
+        Self::Active,
+        Self::Installed,
+        Self::Available,
+        Self::External,
+        Self::System,
+        Self::Unavailable,
+    ];
+
+    fn key(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Installed => "installed",
+            Self::Available => "available",
+            Self::External => "external",
+            Self::System => "system",
+            Self::Unavailable => "unavailable",
+        }
+    }
+
+    fn matching(state: &str) -> Vec<Self> {
+        match state {
+            "active" => vec![Self::Installed, Self::System],
+            "installed" => vec![Self::Installed],
+            "available" => vec![Self::Available],
+            "external" => vec![Self::External],
+            "system" => vec![Self::System],
+            "unavailable" => vec![Self::Unavailable],
+            _ => Vec::new(),
         }
     }
 }
@@ -978,13 +1272,30 @@ fn render_face_preview(face: &FontFace, sample: &str, size: f32) -> Result<Strin
     Ok(format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
 }
 
-fn default_font_roots() -> Vec<PathBuf> {
+fn system_font_roots() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let mut roots = Vec::new();
         if let Some(windows) = std::env::var_os("WINDIR") {
             roots.push(PathBuf::from(windows).join("Fonts"));
         }
+        return roots;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return vec![
+            PathBuf::from("/usr/share/fonts"),
+            PathBuf::from("/usr/local/share/fonts"),
+        ];
+    }
+    #[allow(unreachable_code)]
+    Vec::new()
+}
+
+fn user_font_roots() -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut roots = Vec::new();
         if let Some(local) = std::env::var_os("LOCALAPPDATA") {
             roots.push(PathBuf::from(local).join("Microsoft/Windows/Fonts"));
         }
@@ -992,10 +1303,7 @@ fn default_font_roots() -> Vec<PathBuf> {
     }
     #[cfg(target_os = "linux")]
     {
-        let mut roots = vec![
-            PathBuf::from("/usr/share/fonts"),
-            PathBuf::from("/usr/local/share/fonts"),
-        ];
+        let mut roots = Vec::new();
         if let Some(home) = std::env::var_os("HOME") {
             roots.push(PathBuf::from(&home).join(".local/share/fonts"));
             roots.push(PathBuf::from(&home).join(".fonts"));
@@ -1004,4 +1312,10 @@ fn default_font_roots() -> Vec<PathBuf> {
     }
     #[allow(unreachable_code)]
     Vec::new()
+}
+
+fn default_font_roots() -> Vec<PathBuf> {
+    let mut roots = system_font_roots();
+    roots.extend(user_font_roots());
+    roots
 }

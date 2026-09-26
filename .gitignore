@@ -7,3 +7,4 @@ apps/desktop-ui/src-tauri/gen/schemas/
 apps/desktop-ui/src-tauri/target/
 .DS_Store
 xcuserdata/
+.openchamber/
