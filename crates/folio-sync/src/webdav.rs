@@ -1306,4 +1306,73 @@ mod tests {
             }));
         }
     }
+
+    #[tokio::test]
+    async fn wiped_remote_is_repaired_on_next_sync() {
+        use folio_core::parse_font_file;
+        use folio_storage::FolioDatabase;
+
+        let server = DavServer::start();
+        let client = server.client("p");
+        let dir = tempfile::tempdir().unwrap();
+        let library = dir.path().join("library");
+        std::fs::create_dir_all(&library).unwrap();
+        let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/fonts/Lato-Regular.ttf");
+        let font = library.join("Lato-Regular.ttf");
+        std::fs::copy(source, &font).unwrap();
+        let fingerprint = parse_font_file(&font).unwrap().fingerprint.to_hex();
+        let profile = SyncProfile {
+            server_url: server.url.clone(),
+            remote_directory: String::new(),
+            username: "u".to_owned(),
+            automatic: true,
+        };
+        let cancelled = AtomicBool::new(false);
+        let report: Arc<dyn Fn(crate::SyncProgress) + Send + Sync> = Arc::new(|_| {});
+        let mut db = FolioDatabase::open(dir.path().join("library.sqlite")).unwrap();
+        let first = crate::synchronize_with_client(
+            &mut db,
+            &library,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        assert_eq!(first.uploaded_files, 1);
+        let object_path = format!("/dav/Folio/v1/objects/{fingerprint}");
+        assert!(server
+            .state
+            .lock()
+            .unwrap()
+            .files
+            .contains_key(&object_path));
+
+        // 模拟用户清空云端 Folio 文件夹
+        {
+            let mut state = server.state.lock().unwrap();
+            state.files.clear();
+            state.directories = ["/dav".to_owned()].into_iter().collect();
+        }
+
+        let repair = crate::synchronize_with_client(
+            &mut db,
+            &library,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        assert_eq!(repair.uploaded_files, 1);
+        let state = server.state.lock().unwrap();
+        assert!(state.files.contains_key(&object_path));
+        assert!(state
+            .files
+            .keys()
+            .any(|path| path.starts_with("/dav/Folio/v1/events/")));
+    }
 }

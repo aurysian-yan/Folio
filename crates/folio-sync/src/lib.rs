@@ -1398,50 +1398,66 @@ async fn publish_local_events(
         .into_iter()
         .map(|asset| (asset.fingerprint.clone(), asset))
         .collect::<BTreeMap<_, _>>();
-    for event in db
-        .list_sync_events()?
+    let device_id = db.sync_device_id()?;
+    // 远端数据可能被清空或部分丢失，先取一次清单，再补传缺失的对象与本机事件。
+    let mut remote_objects = run_or_cancel(remote.list(&["Folio", "v1", "objects"]), cancelled)
+        .await?
         .into_iter()
-        .filter(|event| !event.published)
-    {
+        .collect::<BTreeSet<_>>();
+    let mut remote_events =
+        run_or_cancel(remote.list(&["Folio", "v1", "events", &device_id]), cancelled)
+            .await?
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+    for event in db.list_sync_events()? {
         if cancelled.load(Ordering::Relaxed) {
             return Err(SyncError::Cancelled);
         }
         let change: Change = serde_json::from_str(&event.payload)?;
         if let Change::FontAdded(asset) = &change {
             let object_path = ["Folio", "v1", "objects", asset.fingerprint.as_str()];
-            if !run_or_cancel(remote.exists(&object_path), cancelled).await? {
-                let path = assets
+            if !remote_objects.contains(&asset.fingerprint) {
+                if let Some(path) = assets
                     .get(&asset.fingerprint)
                     .and_then(|record| record.local_path.as_ref())
-                    .ok_or(SyncError::InvalidFont)?;
-                let bytes = std::fs::read(path)?;
-                if ContentFingerprint::from_bytes(&bytes).to_hex() != asset.fingerprint {
-                    return Err(SyncError::InvalidFont);
+                {
+                    let bytes = std::fs::read(path)?;
+                    if ContentFingerprint::from_bytes(&bytes).to_hex() != asset.fingerprint {
+                        return Err(SyncError::InvalidFont);
+                    }
+                    let length = bytes.len() as u64;
+                    run_or_cancel(remote.put(&object_path, bytes), cancelled).await?;
+                    remote_objects.insert(asset.fingerprint.clone());
+                    progress.uploaded_files += 1;
+                    progress.uploaded_bytes += length;
+                    (report)(*progress);
                 }
-                let length = bytes.len() as u64;
-                run_or_cancel(remote.put(&object_path, bytes), cancelled).await?;
-                progress.uploaded_files += 1;
-                progress.uploaded_bytes += length;
-                (report)(*progress);
             }
         }
-        let wire = RemoteEvent {
-            format_version: FORMAT_VERSION,
-            id: event.id.clone(),
-            device_id: event.device_id.clone(),
-            sequence: event.sequence,
-            change,
-        };
-        let filename = format!("{}.json", event.id);
-        run_or_cancel(
-            remote.put(
-                &["Folio", "v1", "events", &event.device_id, &filename],
-                serde_json::to_vec(&wire)?,
-            ),
-            cancelled,
-        )
-        .await?;
-        db.mark_sync_event_published(&event.id)?;
+        if event.device_id == device_id {
+            let filename = format!("{}.json", event.id);
+            if !remote_events.contains(&filename) {
+                let wire = RemoteEvent {
+                    format_version: FORMAT_VERSION,
+                    id: event.id.clone(),
+                    device_id: event.device_id.clone(),
+                    sequence: event.sequence,
+                    change,
+                };
+                run_or_cancel(
+                    remote.put(
+                        &["Folio", "v1", "events", &event.device_id, &filename],
+                        serde_json::to_vec(&wire)?,
+                    ),
+                    cancelled,
+                )
+                .await?;
+                remote_events.insert(filename);
+            }
+        }
+        if !event.published {
+            db.mark_sync_event_published(&event.id)?;
+        }
     }
     Ok(())
 }
