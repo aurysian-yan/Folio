@@ -361,9 +361,20 @@ fn save_sync_connection(
     password: String,
 ) -> Result<(), String> {
     require_settings_window(&window)?;
-    if password.trim().is_empty() {
-        return Err("请输入 WebDAV 密码".to_owned());
-    }
+    let password = if password.trim().is_empty() {
+        let previous = folio_sync::load_profile(&state.database_path)
+            .map_err(|error| error.to_string())?;
+        if !previous.is_some_and(|saved| {
+            saved.server_url == profile.server_url
+                && saved.remote_directory == profile.remote_directory
+                && saved.username == profile.username
+        }) {
+            return Err("请输入 WebDAV 密码".to_owned());
+        }
+        load_credential().map_err(|_| "请输入 WebDAV 密码".to_owned())?
+    } else {
+        password
+    };
     save_credential(&password).map_err(|error| error.to_string())?;
     folio_sync::save_profile(&state.database_path, &profile.into())
         .map_err(|error| error.to_string())?;
@@ -509,6 +520,28 @@ fn list_cloud_fonts(
                 })
                 .collect()
         })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn restore_cloud_font(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    fingerprint: String,
+) -> Result<(), String> {
+    require_sync_window(&window)?;
+    folio_sync::request_restore(&state.database_path, &fingerprint)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn restore_deleted_cloud_font(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    fingerprint: String,
+) -> Result<(), String> {
+    require_sync_window(&window)?;
+    folio_sync::restore_deleted_font(&state.database_path, &fingerprint)
         .map_err(|error| error.to_string())
 }
 
@@ -720,6 +753,8 @@ pub fn run() {
             sync_now,
             cancel_sync,
             list_cloud_fonts,
+            restore_cloud_font,
+            restore_deleted_cloud_font,
             list_sync_conflicts,
             resolve_sync_conflict,
             open_settings,

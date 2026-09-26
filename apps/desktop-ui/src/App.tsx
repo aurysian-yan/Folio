@@ -121,6 +121,8 @@ import {
   refreshLibrary,
   renderPreviews,
   resolveSyncConflict,
+  restoreCloudFont,
+  restoreDeletedCloudFont,
   saveCollection,
   saveSmartFolder,
   saveSyncConnection,
@@ -1024,6 +1026,7 @@ export default function App() {
       setSyncProfile(profile);
       setSyncPassword("");
       setSyncMessage("连接配置已安全保存。");
+      if (profile.automatic) await syncNow();
       setSyncStatus(await getSyncStatus());
     } catch (cause) {
       setSyncMessage(errorMessage(cause));
@@ -1032,11 +1035,26 @@ export default function App() {
 
   const startCloudSync = async () => {
     try {
+      // 由用户操作触发，同步完成前避免自动任务重复启动。
+      // eslint-disable-next-line react-hooks/purity
       lastAutomaticSyncAt.current = Date.now();
       await syncNow();
       setSyncStatus(await getSyncStatus());
       setSyncMessage("");
       wasSyncRunning.current = true;
+    } catch (cause) {
+      setSyncMessage(errorMessage(cause));
+    }
+  };
+
+  const restoreCloudCopy = async (font: CloudFontDto) => {
+    try {
+      if (font.deleted) {
+        await restoreDeletedCloudFont(font.fingerprint);
+      } else {
+        await restoreCloudFont(font.fingerprint);
+      }
+      await startCloudSync();
     } catch (cause) {
       setSyncMessage(errorMessage(cause));
     }
@@ -2059,6 +2077,16 @@ export default function App() {
                               : "已同步到本机"}{" "}
                           · {formatFileSize(font.fileSize)}
                         </span>
+                        {(font.deleted || font.cloudOnly) && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            isDisabled={syncStatus?.running}
+                            onPress={() => void restoreCloudCopy(font)}
+                          >
+                            {font.deleted ? "恢复" : "下载"}
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2414,6 +2442,7 @@ export default function App() {
                 connected={syncProfile !== null}
                 status={syncStatus}
                 onSync={() => void startCloudSync()}
+                onRestore={(font) => void restoreCloudCopy(font)}
                 onOpenSettings={() => void openSettings()}
               />
             ) : (
@@ -2971,12 +3000,14 @@ function CloudFontsPane({
   connected,
   status,
   onSync,
+  onRestore,
   onOpenSettings,
 }: {
   fonts: CloudFontDto[];
   connected: boolean;
   status: SyncStatusDto | null;
   onSync: () => void;
+  onRestore: (font: CloudFontDto) => void;
   onOpenSettings: () => void;
 }) {
   if (!connected) {
@@ -3019,6 +3050,16 @@ function CloudFontsPane({
                 {font.cloudOnly ? "仅在云端" : "已同步到本机"} ·{" "}
                 {formatFileSize(font.fileSize)}
               </span>
+              {font.cloudOnly && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  isDisabled={running}
+                  onPress={() => onRestore(font)}
+                >
+                  下载
+                </Button>
+              )}
             </li>
           ))}
         </ul>

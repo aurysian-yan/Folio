@@ -42,6 +42,8 @@ pub enum SyncError {
     RemoteStorageFull,
     #[error("WebDAV 请求失败，状态码 {0}")]
     HttpStatus(u16),
+    #[error("WebDAV 返回了不安全或过多的重定向")]
+    InvalidRedirect,
     #[error("WebDAV 返回了无法识别的目录数据")]
     InvalidDavResponse,
     #[error("远端同步数据版本不受支持")]
@@ -948,7 +950,6 @@ async fn synchronize_with_client(
 
     run_or_cancel(remote.test_connection(), &cancelled).await?;
     run_or_cancel(remote.ensure_root(&profile.remote_directory), &cancelled).await?;
-    run_or_cancel(remote.ensure_directory(&[]), cancelled).await?;
     run_or_cancel(remote.ensure_directory(&["Folio"]), cancelled).await?;
     let versions = run_or_cancel(remote.list(&["Folio"]), cancelled).await?;
     if versions
@@ -1263,6 +1264,10 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
         .into_iter()
         .map(|asset| (asset.fingerprint.clone(), asset))
         .collect::<BTreeMap<_, _>>();
+    let tracked_paths = assets
+        .values()
+        .filter_map(|asset| asset.local_path.as_ref().map(PathBuf::from))
+        .collect::<BTreeSet<_>>();
     for entry in std::fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
@@ -1275,6 +1280,9 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
             .unwrap_or_default()
             .to_ascii_lowercase();
         if !matches!(extension.as_str(), "ttf" | "otf" | "ttc" | "otc") {
+            continue;
+        }
+        if tracked_paths.contains(&path) {
             continue;
         }
         let parsed = parse_font_file(&path)?;
@@ -1802,12 +1810,7 @@ async fn apply_remote_events(
         });
         asset.remote_payload = serde_json::to_string(remote_asset)?;
         asset.deleted = false;
-        if !asset.cloud_only
-            && asset
-                .local_path
-                .as_ref()
-                .is_none_or(|path| !Path::new(path).is_file())
-        {
+        if !asset.cloud_only && !local_asset_is_valid(&asset, remote_asset)? {
             let path = download_asset(remote, directory, remote_asset, cancelled).await?;
             asset.local_path = Some(path.to_string_lossy().into_owned());
             progress.downloaded_files += 1;
@@ -1824,6 +1827,18 @@ async fn apply_remote_events(
     }
     detect_font_conflicts(db, &font_assets, &events)?;
     Ok(())
+}
+
+fn local_asset_is_valid(asset: &StoredSyncAsset, remote: &RemoteAsset) -> Result<bool, SyncError> {
+    let Some(path) = asset.local_path.as_ref() else {
+        return Ok(false);
+    };
+    let path = Path::new(path);
+    if !path.is_file() || std::fs::metadata(path)?.len() != remote.file_size {
+        return Ok(false);
+    }
+    let bytes = std::fs::read(path)?;
+    Ok(ContentFingerprint::from_bytes(&bytes).to_hex() == remote.fingerprint)
 }
 
 fn record_conflict(db: &FolioDatabase, conflict: SyncConflict) -> Result<(), SyncError> {
@@ -1883,11 +1898,10 @@ async fn download_asset(
         std::process::id()
     ));
     std::fs::write(&temporary, bytes)?;
-    if !destination.exists() {
-        std::fs::rename(&temporary, &destination)?;
-    } else {
-        std::fs::remove_file(&temporary)?;
+    if destination.exists() {
+        std::fs::remove_file(&destination)?;
     }
+    std::fs::rename(&temporary, &destination)?;
     Ok(destination)
 }
 

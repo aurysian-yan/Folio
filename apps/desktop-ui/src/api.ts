@@ -113,6 +113,14 @@ export function listCloudFonts(): Promise<CloudFontDto[]> {
   return invoke("list_cloud_fonts");
 }
 
+export function restoreCloudFont(fingerprint: string): Promise<void> {
+  return invoke("restore_cloud_font", { fingerprint });
+}
+
+export function restoreDeletedCloudFont(fingerprint: string): Promise<void> {
+  return invoke("restore_deleted_cloud_font", { fingerprint });
+}
+
 export function listSyncConflicts(): Promise<SyncConflictDto[]> {
   return invoke("list_sync_conflicts");
 }
