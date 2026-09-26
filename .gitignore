@@ -2,5 +2,8 @@
 node_modules/
 dist/
 **/*.rs.bk
+*.tsbuildinfo
+apps/desktop-ui/src-tauri/gen/schemas/
+apps/desktop-ui/src-tauri/target/
 .DS_Store
 xcuserdata/

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/folio-core", "crates/folio-cli", "crates/folio-storage", "crates/folio-query", "crates/folio-ffi", "crates/folio-sync"]
+exclude = ["apps/desktop-ui/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
