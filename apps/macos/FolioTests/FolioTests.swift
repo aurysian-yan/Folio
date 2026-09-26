@@ -199,7 +199,9 @@ final class FolioTests: XCTestCase {
             folderID,
             name: "Lato 字体已编辑",
             text: "Lato",
-            facets: []
+            facets: [],
+            icon: .folder,
+            color: .gray
         )
         let options = try await repository.allFacetOptions()
         let details = try await repository.smartFolder(folderID, options: options)
@@ -218,5 +220,16 @@ final class FolioTests: XCTestCase {
             limit: 20
         )
         XCTAssertEqual(remainingFavorites.totalMatches, 1)
+    }
+
+    func testOnlineCatalogAndMirrorValidationThroughSwiftBridge() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let online = try FolioOnline.open(cacheDirectory: directory.path)
+        let page = online.query(text: "Lato", category: nil, subset: nil, offset: 0, limit: 20)
+        XCTAssertTrue(page.families.contains(where: { $0.name == "Lato" }))
+        XCTAssertEqual(online.catalogCommit().count, 40)
+        XCTAssertNoThrow(try online.validateMirror(template: "https://cdn.example.org/{commit}/{path}"))
+        XCTAssertThrowsError(try online.validateMirror(template: "http://cdn.example.org/{commit}/{path}"))
     }
 }

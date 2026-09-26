@@ -211,13 +211,8 @@ struct SidebarView: View {
                     sidebarSectionHeader("字体状态")
                 }
                 Section {
-                    Label {
-                        Text("在线字体")
-                    } icon: {
-                        Image.englishSystemName("globe")
-                    }
-                    .foregroundStyle(.tertiary)
-                    .help("在线字体将在后续版本提供")
+                    sidebarRow("在线字体", symbol: "globe", count: nil, destination: .onlineFonts)
+                        .tag(SidebarDestination.onlineFonts)
                     sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
                         .tag(SidebarDestination.fontHealth)
                 } header: {

@@ -35,6 +35,7 @@
 		B019 /* SliderHaptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F023 /* SliderHaptics.swift */; };
 		B020 /* FontOperations.swift in Sources */ = {isa = PBXBuildFile; fileRef = F024 /* FontOperations.swift */; };
 		B021 /* EnglishSystemSymbol.swift in Sources */ = {isa = PBXBuildFile; fileRef = F025 /* EnglishSystemSymbol.swift */; };
+		B032 /* OnlineFontsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F032 /* OnlineFontsView.swift */; };
 		BT02 /* Lato-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FT02 /* Lato-Regular.ttf */; };
 		BT01 /* FolioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FT01 /* FolioTests.swift */; };
 		BX01 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FX01 /* XCTest.framework */; };
@@ -83,6 +84,7 @@
 		F023 /* SliderHaptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SliderHaptics.swift; sourceTree = "<group>"; };
 		F024 /* FontOperations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontOperations.swift; sourceTree = "<group>"; };
 		F025 /* EnglishSystemSymbol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishSystemSymbol.swift; sourceTree = "<group>"; };
+		F032 /* OnlineFontsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnlineFontsView.swift; sourceTree = "<group>"; };
 		FT01 /* FolioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioTests.swift; sourceTree = "<group>"; };
 		FT02 /* Lato-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../../../fixtures/fonts/Lato-Regular.ttf; sourceTree = "<group>"; };
 		FX01 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
@@ -178,6 +180,7 @@
 				F015 /* PreviewBar.swift */,
 				F016 /* FontPreviewView.swift */,
 				F022 /* SettingsView.swift */,
+				F032 /* OnlineFontsView.swift */,
 				F023 /* SliderHaptics.swift */,
 				F025 /* EnglishSystemSymbol.swift */,
 				F027 /* CloudLibraryView.swift */,
@@ -370,6 +373,7 @@
 				B016 /* FontPreviewView.swift in Sources */,
 				B017 /* folio_ffi.swift in Sources */,
 				B018 /* SettingsView.swift in Sources */,
+				B032 /* OnlineFontsView.swift in Sources */,
 				B019 /* SliderHaptics.swift in Sources */,
 				B020 /* FontOperations.swift in Sources */,
 				B021 /* EnglishSystemSymbol.swift in Sources */,

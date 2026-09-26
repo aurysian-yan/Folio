@@ -6,6 +6,8 @@ struct SettingsView: View {
     @State private var selection: SettingsSection = .cloud
     @State private var draft = SettingsDraft()
     @State private var testingConnection = false
+    @State private var testingMirror = false
+    @State private var mirrorMessage: String?
     @State private var showResetConfirmation = false
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
@@ -18,6 +20,7 @@ struct SettingsView: View {
     @AppStorage(AppPreferences.defaultImportMode) private var defaultImportMode = FontImportMode.copy.rawValue
     @AppStorage(AppPreferences.useCollectionThemeColor) private var useCollectionThemeColor = true
     @AppStorage(AppPreferences.defaultThemeColor) private var defaultThemeColor = DefaultThemeColor.folio.rawValue
+    @AppStorage(AppPreferences.googleFontsMirrorTemplate) private var googleFontsMirrorTemplate = ""
 
     private var themeColor: Color {
         (DefaultThemeColor(rawValue: draft.defaultThemeColor) ?? .folio).color
@@ -167,6 +170,7 @@ struct SettingsView: View {
     private func content(for section: SettingsSection) -> some View {
         switch section {
         case .cloud: cloudForm
+        case .onlineFonts: onlineFontsForm
         case .importing: importForm
         case .display: displayForm
         case .theme: themeForm
@@ -282,6 +286,69 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
+    private var onlineFontsForm: some View {
+        Form {
+            Section {
+                Picker("地址", selection: $draft.useCustomGoogleFontsMirror) {
+                    Text("官方地址").tag(false)
+                    Text("自定义下载镜像").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: draft.useCustomGoogleFontsMirror) { _, enabled in
+                    if enabled && draft.googleFontsMirrorTemplate.isEmpty {
+                        draft.googleFontsMirrorTemplate = "https://raw.githubusercontent.com/google/fonts/{commit}/{path}"
+                    }
+                }
+                if draft.useCustomGoogleFontsMirror {
+                    TextField("HTTPS 地址模板", text: $draft.googleFontsMirrorTemplate)
+                        .textContentType(.URL)
+                        .disabled(testingMirror)
+                        .onChange(of: draft.googleFontsMirrorTemplate) { _, _ in
+                            mirrorMessage = nil
+                        }
+                    Text("地址需包含 {commit} 和 {path}，用于获取同一版本的字体文件。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button("测试镜像") { testMirror() }
+                            .disabled(testingMirror)
+                        if testingMirror { ProgressView().controlSize(.small) }
+                        if let mirrorMessage {
+                            Text(mirrorMessage).font(.callout).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text("字体下载地址")
+            } footer: {
+                Text("镜像不可用或文件校验失败时，将尝试官方地址。")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func testMirror() {
+        let template = draft.googleFontsMirrorTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cacheDirectory = OnlineFontsView.cacheDirectory
+        testingMirror = true
+        mirrorMessage = nil
+        Task.detached {
+            let message: String
+            do {
+                let online = try FolioOnline.open(cacheDirectory: cacheDirectory)
+                try online.validateMirror(template: template)
+                try online.testMirror(template: template)
+                message = "镜像可用"
+            } catch {
+                message = error.localizedDescription
+            }
+            await MainActor.run {
+                mirrorMessage = message
+                testingMirror = false
+            }
+        }
+    }
+
     private var displayForm: some View {
         Form {
             Section {
@@ -344,6 +411,8 @@ struct SettingsView: View {
 
     /// 用已保存的偏好与连接信息初始化草稿。
     private func loadDraft() {
+        draft.googleFontsMirrorTemplate = googleFontsMirrorTemplate
+        draft.useCustomGoogleFontsMirror = !googleFontsMirrorTemplate.isEmpty
         draft.selectCardsOnHover = selectCardsOnHover
         draft.hoverSelectionHaptics = hoverSelectionHaptics
         draft.sliderHaptics = sliderHaptics
@@ -366,6 +435,19 @@ struct SettingsView: View {
 
     /// 写入草稿并关闭窗口。
     private func commit() {
+        let template = draft.useCustomGoogleFontsMirror
+            ? draft.googleFontsMirrorTemplate.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        if draft.useCustomGoogleFontsMirror {
+            do {
+                let online = try FolioOnline.open(cacheDirectory: OnlineFontsView.cacheDirectory)
+                try online.validateMirror(template: template)
+            } catch {
+                mirrorMessage = error.localizedDescription
+                selection = .onlineFonts
+                return
+            }
+        }
+        googleFontsMirrorTemplate = template
         selectCardsOnHover = draft.selectCardsOnHover
         hoverSelectionHaptics = draft.hoverSelectionHaptics
         sliderHaptics = draft.sliderHaptics
@@ -419,6 +501,7 @@ struct SettingsView: View {
 
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case cloud
+    case onlineFonts
     case importing
     case display
     case theme
@@ -430,6 +513,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .cloud: "云同步"
+        case .onlineFonts: "在线字体"
         case .importing: "导入"
         case .display: "显示"
         case .theme: "主题色"
@@ -476,6 +560,8 @@ private enum WebDAVPreset: String, CaseIterable, Identifiable {
 
 /// 设置窗口的编辑草稿；点“好”后写入偏好，点“取消”丢弃。
 private struct SettingsDraft {
+    var useCustomGoogleFontsMirror = false
+    var googleFontsMirrorTemplate = ""
     var selectCardsOnHover = true
     var hoverSelectionHaptics = true
     var sliderHaptics = true

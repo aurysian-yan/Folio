@@ -12,6 +12,7 @@ enum AppPreferences {
     static let expandedCardWheelSpeed = "expandedCardWheelSpeed"
     static let askImportMode = "askImportMode"
     static let defaultImportMode = "defaultImportMode"
+    static let googleFontsMirrorTemplate = "googleFontsMirrorTemplate"
 }
 
 enum DefaultThemeColor: String, CaseIterable, Identifiable {

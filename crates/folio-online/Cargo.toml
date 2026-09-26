@@ -1,0 +1,16 @@
+[package]
+name = "folio-online"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+folio-core = { path = "../folio-core" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tempfile = "3.27.0"

@@ -127,6 +127,22 @@ struct RemoteAsset {
     extension: String,
     file_size: u64,
     faces: Vec<RemoteFace>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    online_origin: Option<OnlineOrigin>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OnlineOrigin {
+    provider: String,
+    commit: String,
+    family: String,
+    style: String,
+    git_oid: String,
+    license: String,
+    license_text: String,
+    source_url: String,
+    downloaded_via: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1255,8 +1271,30 @@ fn stage_user_changes(db: &mut FolioDatabase) -> Result<(), SyncError> {
     Ok(())
 }
 
+fn read_online_origins(directory: &Path) -> Result<BTreeMap<String, OnlineOrigin>, SyncError> {
+    let path = directory.join(".online-fonts.json");
+    if !path.is_file() {
+        return Ok(BTreeMap::new());
+    }
+    Ok(serde_json::from_slice(&std::fs::read(path)?)?)
+}
+
+fn store_online_origin(
+    directory: &Path,
+    filename: &str,
+    origin: &OnlineOrigin,
+) -> Result<(), SyncError> {
+    let mut origins = read_online_origins(directory)?;
+    origins.insert(filename.to_owned(), origin.clone());
+    let temporary = directory.join(".online-fonts.json.tmp");
+    std::fs::write(&temporary, serde_json::to_vec(&origins)?)?;
+    std::fs::rename(temporary, directory.join(".online-fonts.json"))?;
+    Ok(())
+}
+
 fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), SyncError> {
     let known = decoded_events(db)?;
+    let origins = read_online_origins(directory)?;
     let mut staged = BTreeSet::new();
     let assets = db
         .list_sync_assets()?
@@ -1312,8 +1350,19 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
                     style_name: face.metadata.subfamily_name.unwrap_or_default(),
                 })
                 .collect(),
+            online_origin: origins.get(&filename).cloned(),
         };
-        if asset_add_tags(&known, &fingerprint).is_empty() && staged.insert(fingerprint.clone()) {
+        let origin_added = remote_asset.online_origin.as_ref().is_some_and(|origin| {
+            assets
+                .get(&fingerprint)
+                .and_then(|asset| serde_json::from_str::<RemoteAsset>(&asset.remote_payload).ok())
+                .and_then(|asset| asset.online_origin)
+                .as_ref()
+                != Some(origin)
+        });
+        if (asset_add_tags(&known, &fingerprint).is_empty() || origin_added)
+            && staged.insert(fingerprint.clone())
+        {
             stage_change(db, &Change::FontAdded(remote_asset.clone()))?;
         }
         db.upsert_sync_asset(&StoredSyncAsset {
@@ -1888,6 +1937,11 @@ async fn download_asset(
     } else {
         std::fs::remove_file(&temporary)?;
     }
+    if let Some(origin) = &asset.online_origin {
+        if let Some(filename) = destination.file_name().and_then(|value| value.to_str()) {
+            store_online_origin(directory, filename, origin)?;
+        }
+    }
     Ok(destination)
 }
 
@@ -1906,6 +1960,14 @@ fn move_to_recovery(directory: &Path, asset: &StoredSyncAsset) -> Result<(), Syn
         std::fs::remove_file(path)?;
     } else {
         std::fs::rename(path, target)?;
+    }
+    if let Some(filename) = path.file_name().and_then(|value| value.to_str()) {
+        let mut origins = read_online_origins(directory)?;
+        if origins.remove(filename).is_some() {
+            let temporary = directory.join(".online-fonts.json.tmp");
+            std::fs::write(&temporary, serde_json::to_vec(&origins)?)?;
+            std::fs::rename(temporary, directory.join(".online-fonts.json"))?;
+        }
     }
     Ok(())
 }

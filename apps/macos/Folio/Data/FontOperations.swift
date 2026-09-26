@@ -10,6 +10,18 @@ struct FontSourceStatus: Sendable {
     let canUninstall: Bool
 }
 
+struct OnlineFontOrigin: Codable, Sendable {
+    let provider: String
+    let commit: String
+    let family: String
+    let style: String
+    let gitOid: String
+    let license: String
+    let licenseText: String
+    let sourceURL: String
+    let downloadedVia: String
+}
+
 actor FontOperations {
     private struct ImportedFile: Codable {
         let path: String
@@ -33,6 +45,7 @@ actor FontOperations {
     private let managedDirectory: URL
     private let installedDirectory: URL
     private let ledgerURL: URL
+    private let onlineOriginsURL: URL
     private let userFontsDirectory: URL
     private var ledger: Ledger
 
@@ -52,6 +65,7 @@ actor FontOperations {
         managedDirectory = location.appendingPathComponent("ManagedFonts", isDirectory: true)
         installedDirectory = location.appendingPathComponent("InstalledFonts", isDirectory: true)
         ledgerURL = location.appendingPathComponent("font-operations.json")
+        onlineOriginsURL = managedDirectory.appendingPathComponent(".online-fonts.json")
         let accountHome = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) }
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
             ?? FileManager.default.homeDirectoryForCurrentUser
@@ -76,6 +90,21 @@ actor FontOperations {
             }
         }
         return outcomes
+    }
+
+    func recordOnlineOrigin(path: String, origin: OnlineFontOrigin) throws {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        guard url.deletingLastPathComponent() == managedDirectory.standardizedFileURL,
+              manager.fileExists(atPath: path) else {
+            throw operationError("字体未收集到 Folio 字体库")
+        }
+        var origins: [String: OnlineFontOrigin] = [:]
+        if manager.fileExists(atPath: onlineOriginsURL.path) {
+            origins = try JSONDecoder().decode([String: OnlineFontOrigin].self,
+                                               from: Data(contentsOf: onlineOriginsURL))
+        }
+        origins[url.lastPathComponent] = origin
+        try JSONEncoder().encode(origins).write(to: onlineOriginsURL, options: .atomic)
     }
 
     func performBatch(_ action: FontAction, paths: [String]) async -> [FontOperationOutcome] {
@@ -253,6 +282,12 @@ actor FontOperations {
         try manager.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
         ledger.imported.removeAll { $0.path == path && $0.mode == FontImportMode.copy.rawValue }
         try save()
+        if manager.fileExists(atPath: onlineOriginsURL.path) {
+            var origins = try JSONDecoder().decode([String: OnlineFontOrigin].self,
+                                                   from: Data(contentsOf: onlineOriginsURL))
+            origins.removeValue(forKey: URL(fileURLWithPath: path).lastPathComponent)
+            try JSONEncoder().encode(origins).write(to: onlineOriginsURL, options: .atomic)
+        }
     }
 
     func prepareSyncedRemoval(_ path: String) async throws {

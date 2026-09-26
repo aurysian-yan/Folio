@@ -648,6 +648,45 @@ final class LibraryViewModel {
         }
     }
 
+    func onlineLocalPaths() -> [String] {
+        let managedDirectory = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                        in: .userDomainMask)[0]
+            .appendingPathComponent("Folio/ManagedFonts", isDirectory: true).standardizedFileURL
+        return Array(Set(libraryFaceSources.flatMap(\.paths))).filter {
+            URL(fileURLWithPath: $0).standardizedFileURL.deletingLastPathComponent() == managedDirectory
+        }
+    }
+
+    func importOnlineFiles(_ urls: [URL], origin: OnlineFontOrigin) async -> [FontOperationOutcome] {
+        guard let operations, let repository, !urls.isEmpty else { return [] }
+        var outcomes = await operations.importFiles(urls, mode: .copy)
+        for index in outcomes.indices {
+            guard let path = outcomes[index].path, outcomes[index].error == nil else { continue }
+            do {
+                try await operations.recordOnlineOrigin(path: path, origin: origin)
+            } catch {
+                outcomes[index] = .init(name: outcomes[index].name,
+                                        error: error.localizedDescription, path: path)
+            }
+        }
+        do {
+            isRefreshing = true
+            snapshot = try await repository.refreshLibrary()
+            try await reloadLibrarySources()
+            if selectedDestination != .onlineFonts {
+                try await performQuery(reset: true)
+            }
+            isRefreshing = false
+        } catch {
+            isRefreshing = false
+            present(error)
+        }
+        if outcomes.contains(where: { $0.error == nil }) {
+            CloudSyncModel.shared.requestAutomaticSync()
+        }
+        return outcomes
+    }
+
     func performImportedBatch(_ action: FontAction) {
         guard let operations else { return }
         let paths = importOutcomes.compactMap { $0.error == nil ? $0.path : nil }
@@ -933,6 +972,7 @@ final class LibraryViewModel {
     private func scheduleQuery(immediate: Bool) {
         guard hasStarted else { return }
         queryTask?.cancel()
+        guard selectedDestination != .onlineFonts else { return }
         queryTask = Task { [weak self] in
             guard let self else { return }
             if !immediate {

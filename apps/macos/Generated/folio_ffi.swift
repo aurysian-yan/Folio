@@ -465,6 +465,22 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
+    typealias FfiType = UInt16
+    typealias SwiftType = UInt16
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt16 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -1019,6 +1035,243 @@ public func FfiConverterTypeFolioEngine_lift(_ handle: UInt64) throws -> FolioEn
 #endif
 public func FfiConverterTypeFolioEngine_lower(_ value: FolioEngine) -> UInt64 {
     return FfiConverterTypeFolioEngine.lower(value)
+}
+
+
+
+
+
+
+public protocol FolioOnlineProtocol: AnyObject, Sendable {
+
+    func cancelJob(id: UInt64)
+
+    func catalogCommit()  -> String
+
+    func collectedGitOids(paths: [String]) throws  -> [String]
+
+    func family(id: String) throws  -> OnlineFamilyDto
+
+    func forgetJob(id: UInt64)
+
+    func job(id: UInt64) throws  -> OnlineJobDto
+
+    func query(text: String, category: String?, subset: String?, offset: UInt64, limit: UInt64)  -> OnlinePageDto
+
+    func startDownload(familyId: String, styleId: String, mirrorTemplate: String?, collect: Bool) throws  -> UInt64
+
+    func testMirror(template: String) throws
+
+    func validateMirror(template: String) throws
+
+}
+open class FolioOnline: FolioOnlineProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_folio_ffi_fn_clone_folioonline(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_folio_ffi_fn_free_folioonline(handle, $0) }
+    }
+
+
+public static func `open`(cacheDirectory: String)throws  -> FolioOnline  {
+    return try  FfiConverterTypeFolioOnline_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_constructor_folioonline_open(
+        FfiConverterString.lower(cacheDirectory),uniffiCallStatus
+    )
+})
+}
+
+
+
+open func cancelJob(id: UInt64)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_cancel_job(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(id),uniffiCallStatus
+    )
+}
+}
+
+open func catalogCommit() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_catalog_commit(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func collectedGitOids(paths: [String])throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_collected_git_oids(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(paths),uniffiCallStatus
+    )
+})
+}
+
+open func family(id: String)throws  -> OnlineFamilyDto  {
+    return try  FfiConverterTypeOnlineFamilyDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_family(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
+    )
+})
+}
+
+open func forgetJob(id: UInt64)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_forget_job(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(id),uniffiCallStatus
+    )
+}
+}
+
+open func job(id: UInt64)throws  -> OnlineJobDto  {
+    return try  FfiConverterTypeOnlineJobDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_job(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(id),uniffiCallStatus
+    )
+})
+}
+
+open func query(text: String, category: String?, subset: String?, offset: UInt64, limit: UInt64) -> OnlinePageDto  {
+    return try!  FfiConverterTypeOnlinePageDto_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_query(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(text),
+        FfiConverterOptionString.lower(category),
+        FfiConverterOptionString.lower(subset),
+        FfiConverterUInt64.lower(offset),
+        FfiConverterUInt64.lower(limit),uniffiCallStatus
+    )
+})
+}
+
+open func startDownload(familyId: String, styleId: String, mirrorTemplate: String?, collect: Bool)throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_start_download(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(familyId),
+        FfiConverterString.lower(styleId),
+        FfiConverterOptionString.lower(mirrorTemplate),
+        FfiConverterBool.lower(collect),uniffiCallStatus
+    )
+})
+}
+
+open func testMirror(template: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_test_mirror(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(template),uniffiCallStatus
+    )
+}
+}
+
+open func validateMirror(template: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_validate_mirror(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(template),uniffiCallStatus
+    )
+}
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFolioOnline: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FolioOnline
+
+    public static func lift(_ handle: UInt64) throws -> FolioOnline {
+        return FolioOnline(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: FolioOnline) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FolioOnline {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: FolioOnline, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolioOnline_lift(_ handle: UInt64) throws -> FolioOnline {
+    return try FfiConverterTypeFolioOnline.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFolioOnline_lower(_ value: FolioOnline) -> UInt64 {
+    return FfiConverterTypeFolioOnline.lower(value)
 }
 
 
@@ -2442,6 +2695,282 @@ public func FfiConverterTypeLibrarySnapshotDto_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeLibrarySnapshotDto_lower(_ value: LibrarySnapshotDto) -> RustBuffer {
     return FfiConverterTypeLibrarySnapshotDto.lower(value)
+}
+
+
+public struct OnlineFamilyDto: Equatable, Hashable {
+    public var id: String
+    public var name: String
+    public var designer: String
+    public var category: String
+    public var subsets: [String]
+    public var license: String
+    public var licenseText: String
+    public var styles: [OnlineStyleDto]
+    public var sourceUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, name: String, designer: String, category: String, subsets: [String], license: String, licenseText: String, styles: [OnlineStyleDto], sourceUrl: String) {
+        self.id = id
+        self.name = name
+        self.designer = designer
+        self.category = category
+        self.subsets = subsets
+        self.license = license
+        self.licenseText = licenseText
+        self.styles = styles
+        self.sourceUrl = sourceUrl
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OnlineFamilyDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnlineFamilyDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnlineFamilyDto {
+        return
+            try OnlineFamilyDto(
+                id: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                designer: FfiConverterString.read(from: &buf),
+                category: FfiConverterString.read(from: &buf),
+                subsets: FfiConverterSequenceString.read(from: &buf),
+                license: FfiConverterString.read(from: &buf),
+                licenseText: FfiConverterString.read(from: &buf),
+                styles: FfiConverterSequenceTypeOnlineStyleDto.read(from: &buf),
+                sourceUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnlineFamilyDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.designer, into: &buf)
+        FfiConverterString.write(value.category, into: &buf)
+        FfiConverterSequenceString.write(value.subsets, into: &buf)
+        FfiConverterString.write(value.license, into: &buf)
+        FfiConverterString.write(value.licenseText, into: &buf)
+        FfiConverterSequenceTypeOnlineStyleDto.write(value.styles, into: &buf)
+        FfiConverterString.write(value.sourceUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnlineFamilyDto_lift(_ buf: RustBuffer) throws -> OnlineFamilyDto {
+    return try FfiConverterTypeOnlineFamilyDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnlineFamilyDto_lower(_ value: OnlineFamilyDto) -> RustBuffer {
+    return FfiConverterTypeOnlineFamilyDto.lower(value)
+}
+
+
+public struct OnlineJobDto: Equatable, Hashable {
+    public var id: UInt64
+    public var phase: String
+    public var received: UInt64
+    public var total: UInt64
+    public var path: String?
+    public var source: String?
+    public var error: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: UInt64, phase: String, received: UInt64, total: UInt64, path: String?, source: String?, error: String?) {
+        self.id = id
+        self.phase = phase
+        self.received = received
+        self.total = total
+        self.path = path
+        self.source = source
+        self.error = error
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OnlineJobDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnlineJobDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnlineJobDto {
+        return
+            try OnlineJobDto(
+                id: FfiConverterUInt64.read(from: &buf),
+                phase: FfiConverterString.read(from: &buf),
+                received: FfiConverterUInt64.read(from: &buf),
+                total: FfiConverterUInt64.read(from: &buf),
+                path: FfiConverterOptionString.read(from: &buf),
+                source: FfiConverterOptionString.read(from: &buf),
+                error: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnlineJobDto, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.id, into: &buf)
+        FfiConverterString.write(value.phase, into: &buf)
+        FfiConverterUInt64.write(value.received, into: &buf)
+        FfiConverterUInt64.write(value.total, into: &buf)
+        FfiConverterOptionString.write(value.path, into: &buf)
+        FfiConverterOptionString.write(value.source, into: &buf)
+        FfiConverterOptionString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnlineJobDto_lift(_ buf: RustBuffer) throws -> OnlineJobDto {
+    return try FfiConverterTypeOnlineJobDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnlineJobDto_lower(_ value: OnlineJobDto) -> RustBuffer {
+    return FfiConverterTypeOnlineJobDto.lower(value)
+}
+
+
+public struct OnlinePageDto: Equatable, Hashable {
+    public var total: UInt64
+    public var families: [OnlineFamilyDto]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(total: UInt64, families: [OnlineFamilyDto]) {
+        self.total = total
+        self.families = families
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OnlinePageDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnlinePageDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnlinePageDto {
+        return
+            try OnlinePageDto(
+                total: FfiConverterUInt64.read(from: &buf),
+                families: FfiConverterSequenceTypeOnlineFamilyDto.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnlinePageDto, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.total, into: &buf)
+        FfiConverterSequenceTypeOnlineFamilyDto.write(value.families, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnlinePageDto_lift(_ buf: RustBuffer) throws -> OnlinePageDto {
+    return try FfiConverterTypeOnlinePageDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnlinePageDto_lower(_ value: OnlinePageDto) -> RustBuffer {
+    return FfiConverterTypeOnlinePageDto.lower(value)
+}
+
+
+public struct OnlineStyleDto: Equatable, Hashable {
+    public var id: String
+    public var style: String
+    public var weight: UInt16
+    public var variable: Bool
+    public var gitOid: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, style: String, weight: UInt16, variable: Bool, gitOid: String) {
+        self.id = id
+        self.style = style
+        self.weight = weight
+        self.variable = variable
+        self.gitOid = gitOid
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension OnlineStyleDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnlineStyleDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnlineStyleDto {
+        return
+            try OnlineStyleDto(
+                id: FfiConverterString.read(from: &buf),
+                style: FfiConverterString.read(from: &buf),
+                weight: FfiConverterUInt16.read(from: &buf),
+                variable: FfiConverterBool.read(from: &buf),
+                gitOid: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnlineStyleDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.style, into: &buf)
+        FfiConverterUInt16.write(value.weight, into: &buf)
+        FfiConverterBool.write(value.variable, into: &buf)
+        FfiConverterString.write(value.gitOid, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnlineStyleDto_lift(_ buf: RustBuffer) throws -> OnlineStyleDto {
+    return try FfiConverterTypeOnlineStyleDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnlineStyleDto_lower(_ value: OnlineStyleDto) -> RustBuffer {
+    return FfiConverterTypeOnlineStyleDto.lower(value)
 }
 
 
@@ -3951,6 +4480,56 @@ fileprivate struct FfiConverterSequenceTypeLibraryFaceSourcesDto: FfiConverterRu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeOnlineFamilyDto: FfiConverterRustBuffer {
+    typealias SwiftType = [OnlineFamilyDto]
+
+    public static func write(_ value: [OnlineFamilyDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOnlineFamilyDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OnlineFamilyDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OnlineFamilyDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOnlineFamilyDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeOnlineStyleDto: FfiConverterRustBuffer {
+    typealias SwiftType = [OnlineStyleDto]
+
+    public static func write(_ value: [OnlineStyleDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOnlineStyleDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OnlineStyleDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OnlineStyleDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOnlineStyleDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRootDto: FfiConverterRustBuffer {
     typealias SwiftType = [RootDto]
 
@@ -4166,6 +4745,36 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_validate_font_file() != 7645) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioonline_cancel_job() != 48708) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_catalog_commit() != 33060) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_collected_git_oids() != 12898) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_family() != 5248) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_forget_job() != 65146) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_job() != 31367) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_query() != 63643) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_start_download() != 6478) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_test_mirror() != 59703) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioonline_validate_mirror() != 54688) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_foliosync_cancel() != 59610) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4212,6 +4821,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_constructor_folioengine_open() != 62270) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_constructor_folioonline_open() != 41862) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_constructor_foliosync_open() != 48468) {

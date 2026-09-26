@@ -2,15 +2,16 @@
 
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use folio_core::{
     Catalog, CollectionColor, CollectionIcon, CollectionId, FontCategory, FontFace, FontFaceId,
     FontFamilyId, FontIdentityId, FontWeight, FontWidth, LicenseKind, SmartFolderId,
 };
+use folio_online::{DownloadSource, DownloadUse, OnlineClient};
 use folio_query::{
     FacetFilter, FacetValue, FontFeature, FontQuery, FontQueryIndex, FontState, FoundryKey,
     QueryScope, QuerySort, SavedFontQuery,
@@ -315,6 +316,273 @@ pub enum SyncResolutionDto {
     KeepBoth,
     UseLocal,
     UseRemote,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct OnlineStyleDto {
+    pub id: String,
+    pub style: String,
+    pub weight: u16,
+    pub variable: bool,
+    pub git_oid: String,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct OnlineFamilyDto {
+    pub id: String,
+    pub name: String,
+    pub designer: String,
+    pub category: String,
+    pub subsets: Vec<String>,
+    pub license: String,
+    pub license_text: String,
+    pub styles: Vec<OnlineStyleDto>,
+    pub source_url: String,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct OnlinePageDto {
+    pub total: u64,
+    pub families: Vec<OnlineFamilyDto>,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct OnlineJobDto {
+    pub id: u64,
+    pub phase: String,
+    pub received: u64,
+    pub total: u64,
+    pub path: Option<String>,
+    pub source: Option<String>,
+    pub error: Option<String>,
+}
+
+struct OnlineJob {
+    state: Arc<Mutex<OnlineJobDto>>,
+    cancelled: Arc<AtomicBool>,
+}
+
+#[derive(uniffi::Object)]
+pub struct FolioOnline {
+    client: Arc<OnlineClient>,
+    jobs: Mutex<HashMap<u64, OnlineJob>>,
+    next_id: AtomicU64,
+}
+
+#[uniffi::export]
+impl FolioOnline {
+    #[uniffi::constructor]
+    pub fn open(cache_directory: String) -> Result<Arc<Self>, FolioFfiError> {
+        Ok(Arc::new(Self {
+            client: Arc::new(OnlineClient::new(cache_directory).map_err(FolioFfiError::operation)?),
+            jobs: Mutex::new(HashMap::new()),
+            next_id: AtomicU64::new(1),
+        }))
+    }
+
+    pub fn catalog_commit(&self) -> String {
+        folio_online::catalog().commit.clone()
+    }
+
+    pub fn query(
+        &self,
+        text: String,
+        category: Option<String>,
+        subset: Option<String>,
+        offset: u64,
+        limit: u64,
+    ) -> OnlinePageDto {
+        let (total, families) = folio_online::query_families(
+            &text,
+            category.as_deref(),
+            subset.as_deref(),
+            offset as usize,
+            limit as usize,
+        );
+        OnlinePageDto {
+            total: total as u64,
+            families: families.iter().map(online_family_dto).collect(),
+        }
+    }
+
+    pub fn family(&self, id: String) -> Result<OnlineFamilyDto, FolioFfiError> {
+        folio_online::family(&id)
+            .map(online_family_dto)
+            .ok_or_else(|| FolioFfiError::operation("没有找到所选字族"))
+    }
+
+    pub fn validate_mirror(&self, template: String) -> Result<(), FolioFfiError> {
+        folio_online::validate_mirror(&template).map_err(FolioFfiError::operation)
+    }
+
+    pub fn test_mirror(&self, template: String) -> Result<(), FolioFfiError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(FolioFfiError::operation)?;
+        runtime
+            .block_on(self.client.test_mirror(&template))
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn start_download(
+        &self,
+        family_id: String,
+        style_id: String,
+        mirror_template: Option<String>,
+        collect: bool,
+    ) -> Result<u64, FolioFfiError> {
+        if let Some(template) = &mirror_template {
+            folio_online::validate_mirror(template).map_err(FolioFfiError::operation)?;
+        }
+        let family = folio_online::family(&family_id)
+            .ok_or_else(|| FolioFfiError::operation("没有找到所选字族"))?;
+        if !family.styles.iter().any(|style| style.id == style_id) {
+            return Err(FolioFfiError::operation("没有找到所选字款"));
+        }
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let state = Arc::new(Mutex::new(OnlineJobDto {
+            id,
+            phase: "等待下载".to_owned(),
+            received: 0,
+            total: 0,
+            path: None,
+            source: None,
+            error: None,
+        }));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        self.jobs.lock().map_err(FolioFfiError::operation)?.insert(
+            id,
+            OnlineJob {
+                state: state.clone(),
+                cancelled: cancelled.clone(),
+            },
+        );
+        let client = self.client.clone();
+        std::thread::spawn(move || {
+            let result = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|error| error.to_string())
+                .and_then(|runtime| {
+                    let progress_state = state.clone();
+                    runtime
+                        .block_on(client.download(
+                            &family_id,
+                            &style_id,
+                            mirror_template.as_deref(),
+                            if collect {
+                                DownloadUse::Collect
+                            } else {
+                                DownloadUse::Preview
+                            },
+                            &cancelled,
+                            move |received, total| {
+                                if let Ok(mut value) = progress_state.lock() {
+                                    value.phase = "下载中".to_owned();
+                                    value.received = received;
+                                    value.total = total;
+                                }
+                            },
+                        ))
+                        .map_err(|error| error.to_string())
+                });
+            if let Ok(mut value) = state.lock() {
+                match result {
+                    Ok(downloaded) => {
+                        value.phase = "已完成".to_owned();
+                        value.path = Some(downloaded.path.to_string_lossy().into_owned());
+                        value.source = Some(
+                            match downloaded.source {
+                                DownloadSource::Cache => "缓存",
+                                DownloadSource::Mirror => "镜像",
+                                DownloadSource::Official => "官方地址",
+                            }
+                            .to_owned(),
+                        );
+                    }
+                    Err(error) => {
+                        value.phase = if cancelled.load(Ordering::Relaxed) {
+                            "已取消"
+                        } else {
+                            "失败"
+                        }
+                        .to_owned();
+                        value.error = Some(error);
+                    }
+                }
+            }
+        });
+        Ok(id)
+    }
+
+    pub fn job(&self, id: u64) -> Result<OnlineJobDto, FolioFfiError> {
+        let jobs = self.jobs.lock().map_err(FolioFfiError::operation)?;
+        let job = jobs
+            .get(&id)
+            .ok_or_else(|| FolioFfiError::operation("下载任务不存在"))?;
+        job.state
+            .lock()
+            .map(|value| value.clone())
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn cancel_job(&self, id: u64) {
+        if let Ok(jobs) = self.jobs.lock() {
+            if let Some(job) = jobs.get(&id) {
+                job.cancelled.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+
+    pub fn forget_job(&self, id: u64) {
+        if let Ok(mut jobs) = self.jobs.lock() {
+            if let Some(job) = jobs.remove(&id) {
+                job.cancelled.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+
+    pub fn collected_git_oids(&self, paths: Vec<String>) -> Result<Vec<String>, FolioFfiError> {
+        let paths = paths
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .collect::<Vec<_>>();
+        let statuses = folio_online::local_statuses(&paths, folio_online::catalog())
+            .map_err(FolioFfiError::operation)?;
+        Ok(statuses
+            .into_iter()
+            .filter_map(|(oid, exists)| exists.then_some(oid))
+            .collect())
+    }
+}
+
+fn online_family_dto(family: &folio_online::Family) -> OnlineFamilyDto {
+    OnlineFamilyDto {
+        id: family.id.clone(),
+        name: family.name.clone(),
+        designer: family.designer.clone(),
+        category: family.category.clone(),
+        subsets: family.subsets.clone(),
+        license: family.license.clone(),
+        license_text: family.license_text.clone(),
+        styles: family
+            .styles
+            .iter()
+            .map(|style| OnlineStyleDto {
+                id: style.id.clone(),
+                style: style.style.clone(),
+                weight: style.weight,
+                variable: style.variable,
+                git_oid: style.git_oid.clone(),
+            })
+            .collect(),
+        source_url: format!(
+            "https://github.com/google/fonts/tree/{}/{}",
+            folio_online::catalog().commit,
+            family.id,
+        ),
+    }
 }
 
 struct SyncRunState {

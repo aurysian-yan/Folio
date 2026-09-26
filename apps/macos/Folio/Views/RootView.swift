@@ -35,7 +35,9 @@ struct RootView: View {
             SidebarView(model: model, selectedPage: $sidebarPage)
                 .navigationSplitViewColumnWidth(240)
         } detail: {
-            if model.selectedDestination == .cloudFonts {
+            if model.selectedDestination == .onlineFonts {
+                OnlineFontsView(model: model)
+            } else if model.selectedDestination == .cloudFonts {
                 CloudLibraryView(model: model)
             } else {
                 LibraryView(model: model)

@@ -13,6 +13,7 @@ folio-core = { path = "../folio-core" }
 folio-query = { path = "../folio-query" }
 folio-storage = { path = "../folio-storage" }
 folio-sync = { path = "../folio-sync" }
+folio-online = { path = "../folio-online" }
 serde_json.workspace = true
 thiserror.workspace = true
 uniffi = { workspace = true, features = ["cli"] }

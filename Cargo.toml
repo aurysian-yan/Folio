@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/folio-core", "crates/folio-cli", "crates/folio-storage", "crates/folio-query", "crates/folio-ffi", "crates/folio-sync"]
+members = ["crates/folio-core", "crates/folio-cli", "crates/folio-storage", "crates/folio-query", "crates/folio-ffi", "crates/folio-sync", "crates/folio-online"]
 exclude = ["apps/desktop-ui/src-tauri"]
 
 [workspace.package]
@@ -29,3 +29,4 @@ uniffi = "=0.32.1"
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls", "json"] }
 tokio = { version = "=1.53.1", features = ["rt-multi-thread", "time", "sync", "fs", "macros"] }
 quick-xml = "=0.42.0"
+sha1 = "=0.10.6"

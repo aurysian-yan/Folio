@@ -108,6 +108,7 @@ fn local_eviction_and_explicit_global_delete_are_distinct() {
         extension: "otf".to_owned(),
         file_size: 4,
         faces: vec![],
+        online_origin: None,
     })
     .unwrap();
     let mut db = FolioDatabase::open(&path).unwrap();
@@ -129,6 +130,7 @@ fn local_eviction_and_explicit_global_delete_are_distinct() {
             extension: "otf".to_owned(),
             file_size: 4,
             faces: vec![],
+            online_origin: None,
         }),
     )
     .unwrap();
@@ -159,6 +161,36 @@ fn local_eviction_and_explicit_global_delete_are_distinct() {
     let db = FolioDatabase::open(&path).unwrap();
     assert_eq!(db.list_sync_events().unwrap().len(), 2);
     assert!(db.list_sync_assets().unwrap()[0].deleted);
+}
+
+#[test]
+fn older_remote_asset_without_online_origin_is_compatible() {
+    let asset: RemoteAsset = serde_json::from_str(
+        r#"{"fingerprint":"ab","filename":"font.ttf","extension":"ttf","file_size":4,"faces":[]}"#,
+    )
+    .unwrap();
+    assert!(asset.online_origin.is_none());
+}
+
+#[test]
+fn online_origin_sidecar_round_trips() {
+    let directory = tempfile::tempdir().unwrap();
+    let origin = OnlineOrigin {
+        provider: "Google Fonts".to_owned(),
+        commit: "a".repeat(40),
+        family: "Lato".to_owned(),
+        style: "常规 · 正体".to_owned(),
+        git_oid: "b".repeat(40),
+        license: "OFL".to_owned(),
+        license_text: "License text".to_owned(),
+        source_url: "https://github.com/google/fonts".to_owned(),
+        downloaded_via: "官方地址".to_owned(),
+    };
+    store_online_origin(directory.path(), "font.ttf", &origin).unwrap();
+    assert_eq!(
+        read_online_origins(directory.path()).unwrap()["font.ttf"],
+        origin
+    );
 }
 
 #[tokio::test]
