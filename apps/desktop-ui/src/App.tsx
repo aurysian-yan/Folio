@@ -44,6 +44,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createPortal } from "react-dom";
+import { SegmentedTabs } from "./components/SegmentedTabs";
 import {
   Fragment,
   type ButtonHTMLAttributes,
@@ -116,7 +117,12 @@ type LibraryScope =
   | "fontHealth"
   | "cloudFonts";
 type SettingsPage =
-  "cloud" | "importing" | "appearance" | "shortcuts" | "about";
+  | "cloud"
+  | "importing"
+  | "display"
+  | "font-cards"
+  | "shortcuts"
+  | "about";
 type QuitShortcut = "Control+W" | "Control+Q" | "Alt+Q" | "Alt+W";
 type MenuEntry = {
   label: string;
@@ -270,7 +276,8 @@ function collectionColorValue(color: string) {
 const settingsPages: { id: SettingsPage; title: string }[] = [
   { id: "cloud", title: "云同步" },
   { id: "importing", title: "导入" },
-  { id: "appearance", title: "外观" },
+  { id: "display", title: "显示" },
+  { id: "font-cards", title: "字体卡片" },
   { id: "shortcuts", title: "快捷键" },
   { id: "about", title: "关于" },
 ];
@@ -1623,7 +1630,7 @@ export default function App() {
       className={`app-window${settingsWindow ? " settings-window" : ""}`}
     >
       <header
-        className="titlebar"
+        className={`titlebar${settingsWindow ? " settings-titlebar" : ""}`}
         onMouseDown={(event) => {
           if (
             event.button !== 0 ||
@@ -1637,6 +1644,7 @@ export default function App() {
             .catch((cause) => setWindowActionError(errorMessage(cause)));
         }}
         onDoubleClick={(event) => {
+          if (settingsWindow) return;
           if (
             (event.target as HTMLElement).closest(
               "button, input, summary, a, [role='menu']",
@@ -1646,78 +1654,88 @@ export default function App() {
           void toggleWindowMaximize();
         }}
       >
-        {!settingsWindow && <Button
-          className="titlebar-sidebar-button"
-          isIconOnly
-          size="sm"
-          variant="tertiary"
-          isDisabled={menuMode}
-          aria-label={leftSidebarOpen ? "收起左侧栏" : "展开左侧栏"}
-          aria-pressed={leftSidebarOpen}
-          onPress={() => setLeftSidebarOpen((open) => !open)}
-        >
-          <SidebarSimpleIcon size={14} />
-        </Button>}
-        <div className="titlebar-leading">
-          <button
-            type="button"
-            className="window-brand"
-            aria-label="文件菜单"
-            aria-expanded={menuMode && menuOpen === "文件"}
-            aria-controls="file-menu"
-            onClick={() => {
-              if (menuMode) closeMenu();
-              else {
-                setMenuMode(true);
-                setMenuOpen("文件");
-              }
-            }}
-            onMouseEnter={() => {
-              if (menuMode) setMenuOpen("文件");
-            }}
-          >
-          <FolioWordmark />
-          </button>
-          {menuMode && menuOpen === "文件" && (
-            <MenuPopover
-              backdropRoot={appWindowRef.current}
-              className="file-menu-popover"
-              id="file-menu"
-              label="文件"
+        {settingsWindow ? (
+          <span className="settings-title-mark" role="img" aria-label="设置">
+            <GearSixIcon aria-hidden="true" />
+          </span>
+        ) : (
+          <>
+            <Button
+              className="titlebar-sidebar-button"
+              isIconOnly
+              size="sm"
+              variant="tertiary"
+              isDisabled={menuMode}
+              aria-label={leftSidebarOpen ? "收起左侧栏" : "展开左侧栏"}
+              aria-pressed={leftSidebarOpen}
+              onPress={() => setLeftSidebarOpen((open) => !open)}
             >
-              {renderMenuItems(fileMenuItems)}
-            </MenuPopover>
-          )}
-          {menuMode && <nav className="menubar" aria-label="应用菜单">
-            {appMenus.map((menu) => (
-              <div
-                className="menu-root"
-                key={menu.name}
-                onMouseEnter={() => setMenuOpen(menu.name)}
+              <SidebarSimpleIcon size={14} />
+            </Button>
+            <div className="titlebar-leading">
+              <button
+                type="button"
+                className="window-brand"
+                aria-label="文件菜单"
+                aria-expanded={menuMode && menuOpen === "文件"}
+                aria-controls="file-menu"
+                onClick={() => {
+                  if (menuMode) closeMenu();
+                  else {
+                    setMenuMode(true);
+                    setMenuOpen("文件");
+                  }
+                }}
+                onMouseEnter={() => {
+                  if (menuMode) setMenuOpen("文件");
+                }}
               >
-                <button
-                  type="button"
-                  className="menu-trigger"
-                  aria-expanded={menuOpen === menu.name}
-                  aria-controls={`menu-${menu.name}`}
-                  onFocus={() => setMenuOpen(menu.name)}
-                  onClick={() => setMenuOpen(menu.name)}
+                <FolioWordmark />
+              </button>
+              {menuMode && menuOpen === "文件" && (
+                <MenuPopover
+                  backdropRoot={appWindowRef.current}
+                  className="file-menu-popover"
+                  id="file-menu"
+                  label="文件"
                 >
-                  {menu.name}
-                </button>
-                {menuOpen === menu.name && (
-                  <MenuPopover
-                    backdropRoot={appWindowRef.current}
-                    id={`menu-${menu.name}`}
-                    label={menu.name}
-                  >
-                    {renderMenuItems(menu.items)}
-                  </MenuPopover>
-                )}
-              </div>
-            ))}
-          </nav>}
-        </div>
+                  {renderMenuItems(fileMenuItems)}
+                </MenuPopover>
+              )}
+              {menuMode && (
+                <nav className="menubar" aria-label="应用菜单">
+                  {appMenus.map((menu) => (
+                    <div
+                      className="menu-root"
+                      key={menu.name}
+                      onMouseEnter={() => setMenuOpen(menu.name)}
+                    >
+                      <button
+                        type="button"
+                        className="menu-trigger"
+                        aria-expanded={menuOpen === menu.name}
+                        aria-controls={`menu-${menu.name}`}
+                        onFocus={() => setMenuOpen(menu.name)}
+                        onClick={() => setMenuOpen(menu.name)}
+                      >
+                        {menu.name}
+                      </button>
+                      {menuOpen === menu.name && (
+                        <MenuPopover
+                          backdropRoot={appWindowRef.current}
+                          id={`menu-${menu.name}`}
+                          label={menu.name}
+                        >
+                          {renderMenuItems(menu.items)}
+                        </MenuPopover>
+                      )}
+                    </div>
+                  ))}
+                </nav>
+              )}
+            </div>
+          </>
+        )}
         {!menuMode && !settingsWindow && <div className="titlebar-center">
           <div className="titlebar-drag-space" aria-hidden="true" />
           <Toolbar className="titlebar-actions" aria-label="字体库工具">
@@ -1814,13 +1832,17 @@ export default function App() {
           <div className="titlebar-drag-space" aria-hidden="true" />
         </div>}
         {menuMode && !settingsWindow && <div className="titlebar-drag-space" aria-hidden="true" />}
-        {settingsWindow && <span className="window-caption">
-          {settingsWindow
-            ? "设置"
-            : page
-              ? `字体库 · ${page.totalMatches} 个字族`
-              : "字体库"}
-        </span>}
+        {settingsWindow && (
+          <SegmentedTabs
+            items={settingsPages}
+            selectedKey={settingsPage}
+            onSelectionChange={setSettingsPage}
+            panelId="settings-panel"
+            tabIdPrefix="settings-tab"
+            ariaLabel="设置分类"
+            className="settings-tab-picker settings-titlebar-tabs"
+          />
+        )}
         <div className="window-controls" aria-label="窗口控制">
           {!settingsWindow && <Button
             className="titlebar-sidebar-button"
@@ -1834,26 +1856,30 @@ export default function App() {
           >
             <SidebarSimpleIcon size={14} mirrored />
           </Button>}
-          <Button
-            isIconOnly
-            variant="tertiary"
-            aria-label="最小化"
-            onPress={() =>
-              void getCurrentWindow()
-                .minimize()
-                .catch((cause) => setWindowActionError(errorMessage(cause)))
-            }
-          >
-            <MinusIcon size={13} />
-          </Button>
-          <Button
-            isIconOnly
-            variant="tertiary"
-            aria-label={isMaximized ? "还原窗口" : "最大化窗口"}
-            onPress={() => void toggleWindowMaximize()}
-          >
-            {isMaximized ? <CopySimpleIcon size={13} /> : <SquareIcon size={13} />}
-          </Button>
+          {!settingsWindow && (
+            <>
+              <Button
+                isIconOnly
+                variant="tertiary"
+                aria-label="最小化"
+                onPress={() =>
+                  void getCurrentWindow()
+                    .minimize()
+                    .catch((cause) => setWindowActionError(errorMessage(cause)))
+                }
+              >
+                <MinusIcon size={13} />
+              </Button>
+              <Button
+                isIconOnly
+                variant="tertiary"
+                aria-label={isMaximized ? "还原窗口" : "最大化窗口"}
+                onPress={() => void toggleWindowMaximize()}
+              >
+                {isMaximized ? <CopySimpleIcon size={13} /> : <SquareIcon size={13} />}
+              </Button>
+            </>
+          )}
           <Button
             className="close-control"
             isIconOnly
@@ -1884,27 +1910,18 @@ export default function App() {
 
       {settingsWindow ? (
         <section className="settings-content" aria-label="设置">
-          <aside className="settings-nav">
-            <div className="settings-title">
-              <GearSixIcon />
-              设置
-            </div>
-            {settingsPages.map((item) => (
-              <button
-                key={item.id}
-                className={settingsPage === item.id ? "selected" : ""}
-                onClick={() => setSettingsPage(item.id)}
-              >
-                {item.title}
-              </button>
-            ))}
-          </aside>
-          <article className="settings-page">
+          <article
+            id="settings-panel"
+            className="settings-page"
+            role="tabpanel"
+            aria-labelledby={`settings-tab-${settingsPage}`}
+            tabIndex={0}
+          >
             <h1>{settings?.title}</h1>
-            {settingsPage === "appearance" ? (
+            {settingsPage === "display" ? (
               <>
                 <section className="settings-group">
-                  <h2>显示</h2>
+                  <h2>浏览设置</h2>
                   <p>设置字体库的初始浏览视图和预览字号。</p>
                   <label className="setting-field">
                     默认浏览视图
@@ -1932,8 +1949,11 @@ export default function App() {
                     onChange={updateSidebarBlur}
                   />
                 </section>
+              </>
+            ) : settingsPage === "font-cards" ? (
+              <>
                 <section className="settings-group">
-                  <h2>字体卡片</h2>
+                  <h2>卡片行为</h2>
                   <p>设置字体卡片的交互方式。</p>
                   <Switch
                     className="setting-toggle"
@@ -1996,223 +2016,229 @@ export default function App() {
               </>
             ) : settingsPage === "cloud" ? (
               <>
-                <p>连接 WebDAV 或 123PAN，同步字体文件与收藏状态。</p>
-                <div className="setting-field">
-                  <span>服务商</span>
-                  <div className="setting-choice-row setting-preset-row">
-                    {webdavPresets.map((preset) => (
-                      <Button
-                        key={preset.id}
-                        variant={
-                          matchingWebdavPreset(syncServerUrl) === preset.id
-                            ? "primary"
-                            : "secondary"
-                        }
-                        onPress={() => setSyncServerUrl(preset.url ?? "")}
-                      >
-                        {preset.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <TextField className="setting-field">
-                  <Label>服务器地址</Label>
-                  <Input
-                    type="url"
-                    autoComplete="url"
-                    placeholder="https://"
-                    value={syncServerUrl}
-                    onChange={(event) => setSyncServerUrl(event.target.value)}
-                  />
-                </TextField>
-                <TextField className="setting-field">
-                  <Label>远程目录</Label>
-                  <Input
-                    value={syncDirectory}
-                    onChange={(event) => setSyncDirectory(event.target.value)}
-                  />
-                </TextField>
-                <TextField className="setting-field">
-                  <Label>用户名</Label>
-                  <Input
-                    autoComplete="username"
-                    value={syncUsername}
-                    onChange={(event) => setSyncUsername(event.target.value)}
-                  />
-                </TextField>
-                <TextField className="setting-field">
-                  <Label>密码</Label>
-                  <Input
-                    type="password"
-                    autoComplete="current-password"
-                    value={syncPassword}
-                    onChange={(event) => setSyncPassword(event.target.value)}
-                    placeholder={
-                      syncProfile ? "已保存在系统凭据库，可留空" : "WebDAV 密码"
-                    }
-                  />
-                </TextField>
-                <Switch
-                  className="setting-toggle"
-                  isSelected={syncAutomatic}
-                  onChange={setSyncAutomatic}
-                >
-                  <Switch.Content>
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
-                    连接恢复后自动同步
-                  </Switch.Content>
-                </Switch>
-                <div className="setting-actions">
-                  <Button
-                    variant="secondary"
-                    onPress={() => void testCloudConnection()}
-                  >
-                    测试连接
-                  </Button>
-                  <Button
-                    onPress={() => void saveCloudConnection()}
-                    isDisabled={!syncPassword}
-                  >
-                    保存连接
-                  </Button>
-                </div>
-                {syncStatus && (
-                  <div
-                    className={`sync-status${syncStatus.error ? " has-error" : ""}`}
-                    role="status"
-                  >
-                    <div className="sync-status-row">
-                      {syncStatus.running && (
-                        <RingSyncProgress
-                          progress={syncStatus.percent / 100}
-                          size={14}
-                        />
-                      )}
-                      <strong>
-                        {syncStatus.configured
-                          ? syncStatus.running
-                            ? `正在同步 ${syncStatus.percent}%`
-                            : "已连接"
-                          : "未连接"}
-                      </strong>
+                <p className="settings-description">连接 WebDAV 或 123PAN，同步字体文件与收藏状态。</p>
+                <section className="settings-group sync-connection-settings">
+                  <h2>WebDAV 连接</h2>
+                  <div className="setting-field">
+                    <span>服务商</span>
+                    <div className="setting-choice-row setting-preset-row">
+                      {webdavPresets.map((preset) => (
+                        <Button
+                          key={preset.id}
+                          variant={
+                            matchingWebdavPreset(syncServerUrl) === preset.id
+                              ? "primary"
+                              : "secondary"
+                          }
+                          onPress={() => setSyncServerUrl(preset.url ?? "")}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
                     </div>
-                    <span>{syncStatus.error ?? syncStatus.phase}</span>
-                    {syncStatus.running && (
-                      <span className="sync-progress-detail">
-                        {describeSyncStage(syncStatus)}
-                      </span>
-                    )}
                   </div>
-                )}
-                {syncMessage && (
-                  <p className="settings-note" role="status">
-                    {syncMessage}
-                  </p>
-                )}
-                {syncStatus?.configured && (
+                  <TextField className="setting-field">
+                    <Label>服务器地址</Label>
+                    <Input
+                      type="url"
+                      autoComplete="url"
+                      placeholder="https://"
+                      value={syncServerUrl}
+                      onChange={(event) => setSyncServerUrl(event.target.value)}
+                    />
+                  </TextField>
+                  <TextField className="setting-field">
+                    <Label>远程目录</Label>
+                    <Input
+                      value={syncDirectory}
+                      onChange={(event) => setSyncDirectory(event.target.value)}
+                    />
+                  </TextField>
+                  <TextField className="setting-field">
+                    <Label>用户名</Label>
+                    <Input
+                      autoComplete="username"
+                      value={syncUsername}
+                      onChange={(event) => setSyncUsername(event.target.value)}
+                    />
+                  </TextField>
+                  <TextField className="setting-field">
+                    <Label>密码</Label>
+                    <Input
+                      type="password"
+                      autoComplete="current-password"
+                      value={syncPassword}
+                      onChange={(event) => setSyncPassword(event.target.value)}
+                      placeholder={
+                        syncProfile ? "已保存在系统凭据库，可留空" : "WebDAV 密码"
+                      }
+                    />
+                  </TextField>
+                  <Switch
+                    className="setting-toggle"
+                    isSelected={syncAutomatic}
+                    onChange={setSyncAutomatic}
+                  >
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      连接恢复后自动同步
+                    </Switch.Content>
+                  </Switch>
                   <div className="setting-actions">
                     <Button
-                      onPress={() => void startCloudSync()}
-                      isDisabled={syncStatus.running}
+                      variant="secondary"
+                      onPress={() => void testCloudConnection()}
                     >
-                      {syncStatus.running ? "正在同步…" : "立即同步"}
+                      测试连接
                     </Button>
-                    {syncStatus.running && (
-                      <Button
-                        variant="secondary"
-                        onPress={() =>
-                          void cancelSync().catch((cause) =>
-                            setSyncMessage(errorMessage(cause)),
-                          )
-                        }
-                      >
-                        取消同步
-                      </Button>
-                    )}
-                    {!syncStatus.running && (
-                      <Button
-                        variant="tertiary"
-                        onPress={() => void disconnectCloud()}
-                      >
-                        断开连接
-                      </Button>
-                    )}
+                    <Button
+                      onPress={() => void saveCloudConnection()}
+                      isDisabled={!syncPassword}
+                    >
+                      保存连接
+                    </Button>
                   </div>
-                )}
-                <h2 className="settings-subheading">云端字体</h2>
-                {cloudFonts.length ? (
-                  <div className="sync-font-list">
-                    {cloudFonts.map((font) => (
-                      <div key={font.fingerprint}>
-                        <strong>{font.displayName}</strong>
-                        <span>
-                          {font.deleted
-                            ? "已删除"
-                            : font.cloudOnly
-                              ? "仅在云端"
-                              : "已同步到本机"}{" "}
-                          · {formatFileSize(font.fileSize)}
-                        </span>
-                        {(font.deleted || font.cloudOnly) && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            isDisabled={syncStatus?.running}
-                            onPress={() => void restoreCloudCopy(font)}
-                          >
-                            {font.deleted ? "恢复" : "下载"}
-                          </Button>
+                </section>
+                <section className="settings-group sync-management-settings">
+                  <h2>同步状态</h2>
+                  {syncStatus && (
+                    <div
+                      className={`sync-status${syncStatus.error ? " has-error" : ""}`}
+                      role="status"
+                    >
+                      <div className="sync-status-row">
+                        {syncStatus.running && (
+                          <RingSyncProgress
+                            progress={syncStatus.percent / 100}
+                            size={14}
+                          />
                         )}
+                        <strong>
+                          {syncStatus.configured
+                            ? syncStatus.running
+                              ? `正在同步 ${syncStatus.percent}%`
+                              : "已连接"
+                            : "未连接"}
+                        </strong>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="settings-note">云端尚无字体记录。</p>
-                )}
-                <h2 className="settings-subheading">同步冲突</h2>
-                {syncConflicts.length ? (
-                  <div className="sync-conflict-list">
-                    {syncConflicts.map((conflict) => (
-                      <section key={conflict.id}>
-                        <strong>{conflict.title}</strong>
-                        <p>{conflict.detail}</p>
-                        <div className="setting-actions">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onPress={() =>
-                              void applySyncConflict(conflict.id, "keepBoth")
-                            }
-                          >
-                            保留两者
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onPress={() =>
-                              void applySyncConflict(conflict.id, "useLocal")
-                            }
-                          >
-                            使用本机版本
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onPress={() =>
-                              void applySyncConflict(conflict.id, "useRemote")
-                            }
-                          >
-                            使用云端版本
-                          </Button>
+                      <span>{syncStatus.error ?? syncStatus.phase}</span>
+                      {syncStatus.running && (
+                        <span className="sync-progress-detail">
+                          {describeSyncStage(syncStatus)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {syncMessage && (
+                    <p className="settings-note" role="status">
+                      {syncMessage}
+                    </p>
+                  )}
+                  {syncStatus?.configured && (
+                    <div className="setting-actions">
+                      <Button
+                        onPress={() => void startCloudSync()}
+                        isDisabled={syncStatus.running}
+                      >
+                        {syncStatus.running ? "正在同步…" : "立即同步"}
+                      </Button>
+                      {syncStatus.running && (
+                        <Button
+                          variant="secondary"
+                          onPress={() =>
+                            void cancelSync().catch((cause) =>
+                              setSyncMessage(errorMessage(cause)),
+                            )
+                          }
+                        >
+                          取消同步
+                        </Button>
+                      )}
+                      {!syncStatus.running && (
+                        <Button
+                          variant="tertiary"
+                          onPress={() => void disconnectCloud()}
+                        >
+                          断开连接
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  <h2 className="settings-subheading">云端字体</h2>
+                  {cloudFonts.length ? (
+                    <div className="sync-font-list">
+                      {cloudFonts.map((font) => (
+                        <div key={font.fingerprint}>
+                          <strong>{font.displayName}</strong>
+                          <span>
+                            {font.deleted
+                              ? "已删除"
+                              : font.cloudOnly
+                                ? "仅在云端"
+                                : "已同步到本机"}{" "}
+                            · {formatFileSize(font.fileSize)}
+                          </span>
+                          {(font.deleted || font.cloudOnly) && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              isDisabled={syncStatus?.running}
+                              onPress={() => void restoreCloudCopy(font)}
+                            >
+                              {font.deleted ? "恢复" : "下载"}
+                            </Button>
+                          )}
                         </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="settings-note">云端尚无字体记录。</p>
+                  )}
+                  <h2 className="settings-subheading">同步冲突</h2>
+                  {syncConflicts.length ? (
+                    <div className="sync-conflict-list">
+                      {syncConflicts.map((conflict) => (
+                        <section key={conflict.id}>
+                          <strong>{conflict.title}</strong>
+                          <p>{conflict.detail}</p>
+                          <div className="setting-actions">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onPress={() =>
+                                void applySyncConflict(conflict.id, "keepBoth")
+                              }
+                            >
+                              保留两者
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onPress={() =>
+                                void applySyncConflict(conflict.id, "useLocal")
+                              }
+                            >
+                              使用本机版本
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onPress={() =>
+                                void applySyncConflict(conflict.id, "useRemote")
+                              }
+                            >
+                              使用云端版本
+                            </Button>
+                          </div>
                       </section>
                     ))}
                   </div>
                 ) : (
                   <p className="settings-note">没有待处理冲突。</p>
                 )}
+                </section>
               </>
             ) : (
               <p>Folio 字体资产管理工具</p>
@@ -3582,7 +3608,7 @@ function BlurSettingsPreview({
   return (
     <section className="blur-preview-section" aria-labelledby="blur-preview-title">
       <div className="blur-preview-heading">
-        <h2 id="blur-preview-title">液态玻璃效果</h2>
+        <h2 id="blur-preview-title">模糊效果</h2>
         <p>在主页面菜单上实时预览模糊程度。</p>
       </div>
       <div className="blur-preview-window" ref={setPreviewRoot}>

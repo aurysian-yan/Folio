@@ -683,8 +683,8 @@ async fn open_settings(window: WebviewWindow, app: tauri::AppHandle) -> Result<(
         WebviewUrl::App("index.html?window=settings".into()),
     )
     .title("Folio 设置")
-    .inner_size(720.0, 600.0)
-    .min_inner_size(620.0, 500.0)
+    .inner_size(840.0, 640.0)
+    .resizable(false)
     .decorations(false)
     .transparent(true)
     .visible(false)
