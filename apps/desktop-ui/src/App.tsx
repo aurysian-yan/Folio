@@ -43,6 +43,7 @@ import { SmoothCorners, useSmoothCorners } from "@lisse/react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
+import { createPortal } from "react-dom";
 import {
   Fragment,
   type ButtonHTMLAttributes,
@@ -52,6 +53,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -114,7 +116,7 @@ type LibraryScope =
   | "fontHealth"
   | "cloudFonts";
 type SettingsPage =
-  "cloud" | "importing" | "display" | "shortcuts" | "theme" | "cards" | "about";
+  "cloud" | "importing" | "appearance" | "shortcuts" | "about";
 type QuitShortcut = "Control+W" | "Control+Q" | "Alt+Q" | "Alt+W";
 type MenuEntry = {
   label: string;
@@ -250,7 +252,7 @@ const collectionColorOptions: CollectionColorOption[] = [
   { id: "cyan", label: "青色", value: "rgb(0, 150, 161)" },
   { id: "blue", label: "蓝色", value: "rgb(46, 120, 214)" },
   { id: "purple", label: "紫色", value: "rgb(125, 79, 207)" },
-  { id: "gray", label: "灰色", value: "rgb(122, 128, 135)" },
+  { id: "gray", label: "灰色", value: "rgb(128, 128, 128)" },
 ];
 
 const collectionColorMap: Record<string, string> = Object.fromEntries(
@@ -268,10 +270,8 @@ function collectionColorValue(color: string) {
 const settingsPages: { id: SettingsPage; title: string }[] = [
   { id: "cloud", title: "云同步" },
   { id: "importing", title: "导入" },
-  { id: "display", title: "显示" },
+  { id: "appearance", title: "外观" },
   { id: "shortcuts", title: "快捷键" },
-  { id: "theme", title: "主题色" },
-  { id: "cards", title: "字体卡片" },
   { id: "about", title: "关于" },
 ];
 
@@ -360,19 +360,27 @@ function fontStateLabel(id: FontStateId, snapshot: LibrarySnapshotDto | null) {
   );
 }
 
-// 应用 lisse 平滑圆角的外壳；边框与阴影改用 SVG 效果跟随曲线轮廓。
+// 菜单衬底与内容分层，lisse 为两者裁切圆角并为菜单绘制描边和阴影。
 function MenuPopover({
   id,
   label,
   className,
+  backdropRoot,
   children,
 }: {
   id: string;
   label: string;
   className?: string;
+  backdropRoot: HTMLElement | null;
   children: ReactNode;
 }) {
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
+  useSmoothCorners(backdropRef, menuCorners, {
+    autoEffects: false,
+    fallbackBorderRadius: "10px",
+  });
   useSmoothCorners(ref, menuCorners, {
     autoEffects: false,
     fallbackBorderRadius: "10px",
@@ -383,22 +391,63 @@ function MenuPopover({
         offsetY: 8,
         blur: 28,
         spread: 0,
-        color: "#141820",
+        color: "#191919",
         opacity: 0.18,
       },
     },
   });
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    const backdrop = backdropRef.current;
+    if (!shell || !backdrop || !backdropRoot) return;
+
+    const updateBackdropPosition = () => {
+      const shellRect = shell.getBoundingClientRect();
+      const rootRect = backdropRoot.getBoundingClientRect();
+      backdrop.style.left = `${shellRect.left - rootRect.left}px`;
+      backdrop.style.top = `${shellRect.top - rootRect.top}px`;
+      backdrop.style.width = `${shellRect.width}px`;
+      backdrop.style.height = `${shellRect.height}px`;
+    };
+    updateBackdropPosition();
+
+    const resizeObserver = new ResizeObserver(updateBackdropPosition);
+    resizeObserver.observe(shell);
+    resizeObserver.observe(backdropRoot);
+    window.addEventListener("resize", updateBackdropPosition);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateBackdropPosition);
+    };
+  }, [backdropRoot]);
   return (
-    <div
-      ref={ref}
-      className={`menu-popover${className ? ` ${className}` : ""}`}
-      style={{ borderRadius: 10 }}
-      id={id}
-      role="menu"
-      aria-label={label}
-    >
-      {children}
-    </div>
+    <>
+      {backdropRoot &&
+        createPortal(
+          <div
+            ref={backdropRef}
+            className="menu-backdrop"
+            style={{ borderRadius: 10 }}
+            aria-hidden="true"
+          />,
+          backdropRoot,
+        )}
+      <div
+        ref={shellRef}
+        className={`menu-shell${className ? ` ${className}` : ""}`}
+      >
+        <div
+          ref={ref}
+          className="menu-popover"
+          style={{ borderRadius: 10 }}
+          id={id}
+          role="menu"
+          aria-label={label}
+        >
+          {children}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -470,13 +519,16 @@ function isSettingsWindow() {
   );
 }
 
-function initialTheme() {
-  return localStorage.getItem("folio-theme") ?? "system";
+function FolioWordmark() {
+  return (
+    <svg height="12" viewBox="0 0 1024 364" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M386.388 112.573C417.93 112.573 444.888 121.213 467.261 138.494C496.236 161.658 510.723 193.83 510.723 235.01C510.723 265.894 501.553 293.103 483.215 316.634C458.641 347.886 424.715 363.513 381.436 363.513C349.893 363.513 322.752 353.953 300.013 334.834C271.404 310.567 257.101 277.66 257.101 236.112C257.101 206.698 265.536 180.961 282.407 158.9C306.614 128.015 341.275 112.573 386.388 112.573ZM899.664 112.573C931.206 112.573 958.164 121.213 980.537 138.494C1009.51 161.658 1024 193.83 1024 235.01C1024 265.894 1014.83 293.103 996.492 316.634C971.919 347.886 937.992 363.513 894.713 363.513C863.171 363.513 836.029 353.953 813.289 334.834C784.681 310.567 770.377 277.66 770.377 236.112C770.377 206.698 778.813 180.961 795.685 158.9C819.892 128.016 854.551 112.573 899.664 112.573ZM270.619 0.615173C273.097 0.615173 275.119 2.59711 275.169 5.07416L277.186 104.62C277.237 107.169 275.185 109.263 272.636 109.264H264.723C262.708 109.264 260.932 107.939 260.359 106.007L249.354 68.9003C249.266 68.6031 249.254 68.3348 249.146 68.0439C248.965 67.5523 248.59 67.0797 248.433 66.58C237.71 32.5309 215.967 15.506 183.203 15.5058H125.586C123.072 15.5058 121.035 17.544 121.035 20.0576V148.282C121.035 150.796 123.072 152.834 125.586 152.834H222.114C224.628 152.834 226.665 154.871 226.665 157.385V164.828C226.665 167.341 224.628 169.379 222.114 169.379H125.586C123.073 169.379 121.035 171.416 121.035 173.93V338.555C121.035 341.068 123.072 343.106 125.586 343.106H181.402C183.916 343.106 185.953 345.144 185.953 347.657V353.446C185.953 355.96 183.916 357.997 181.402 357.997H4.55078C2.0375 357.997 0.000131932 355.96 0 353.446V347.657C6.59676e-05 345.144 2.03746 343.107 4.55078 343.106H39.4619C41.9753 343.106 44.0127 341.068 44.0127 338.555V20.0576C44.0127 17.5442 41.9753 15.506 39.4619 15.5058H4.55078C2.03742 15.5056 0 13.4684 0 10.955V5.16595C0.000226495 2.65275 2.03756 0.615349 4.55078 0.615173H270.619ZM616.606 0.573181C619.417 0.0235637 622.031 2.17596 622.031 5.03998V339.106C622.031 341.62 624.069 343.658 626.582 343.658H649.539C649.897 343.658 650.251 343.664 650.6 343.674C650.895 343.601 651.2 343.554 651.513 343.537C654.461 343.374 657.162 343.047 659.617 342.555C672.454 340.349 678.873 331.157 678.873 314.979V161.797C678.873 159.283 676.836 157.246 674.322 157.246H651.515C649.001 157.246 646.964 155.208 646.964 152.694V146.577C646.964 144.435 648.457 142.583 650.551 142.129L743.228 122.041C746.064 121.426 748.743 123.587 748.743 126.489V339.106C748.743 341.62 750.781 343.658 753.294 343.658H769.099C771.299 343.658 773.317 343.841 775.15 344.209C778.981 344.8 781.273 347.882 782.026 353.456C782.363 355.947 780.265 357.997 777.752 357.997H513.8C511.286 357.997 509.249 355.96 509.249 353.446V348.209C509.249 345.695 511.287 343.665 513.8 343.606C521.985 343.417 528.72 342.699 534.006 341.452C546.109 338.143 552.161 328.951 552.161 313.876V40.4638C552.161 37.9503 550.123 35.912 547.609 35.912H513.8C511.286 35.912 509.249 33.8747 509.249 31.3613V25.3203C509.249 23.1436 510.79 21.2714 512.926 20.8535L616.606 0.573181ZM383.637 126.912C369.699 126.912 358.879 131.141 351.177 139.598C338.707 153.937 332.472 186.844 332.472 238.318C332.472 272.88 334.672 298.066 339.073 313.876C345.675 337.407 360.346 349.173 383.086 349.173C395.923 349.173 406.376 345.312 414.445 337.591C428.383 323.619 435.352 289.793 435.352 236.112C435.352 202.654 433.15 178.203 428.749 162.761C422.147 138.862 407.11 126.912 383.637 126.912ZM896.913 126.912C882.976 126.912 872.156 131.141 864.454 139.598C851.984 153.937 845.749 186.844 845.749 238.318C845.749 272.88 847.949 298.066 852.351 313.876C858.953 337.407 873.623 349.173 896.363 349.173C909.2 349.173 919.654 345.312 927.723 337.591C941.66 323.619 948.628 289.793 948.628 236.112C948.628 202.654 946.428 178.203 942.026 162.761C935.424 138.862 920.386 126.912 896.913 126.912ZM712.433 7.23334C719.401 7.23334 726.003 9.07219 732.238 12.749C746.542 20.4702 753.694 32.4198 753.694 48.5976C753.694 55.5833 751.861 62.2017 748.193 68.4521C740.491 82.056 728.571 88.8574 712.433 88.8574C705.831 88.8573 699.412 87.2036 693.177 83.8945C678.873 76.541 671.721 64.7751 671.721 48.5976C671.721 41.6118 673.372 34.9935 676.673 28.7431C684.742 14.4037 696.661 7.23336 712.433 7.23334Z" fill="white"/>
+    </svg>
+  );
 }
 
 export default function App() {
   const settingsWindow = isSettingsWindow();
-  const [theme, setTheme] = useState(initialTheme);
   const [viewMode, setViewMode] = useState<ViewMode>(
     () =>
       (localStorage.getItem("folio-view-mode") as ViewMode | null) ?? "compact",
@@ -493,6 +545,13 @@ export default function App() {
   const [cardMetadata, setCardMetadata] = useState(
     () => localStorage.getItem("folio-card-metadata") !== "false",
   );
+  const [sidebarBlur, setSidebarBlur] = useState(() =>
+    parseSidebarBlur(localStorage.getItem("folio-sidebar-status-blur")),
+  );
+  const updateSidebarBlur = useCallback((value: number) => {
+    setSidebarBlur(value);
+    localStorage.setItem("folio-sidebar-status-blur", String(value));
+  }, []);
   const [scope, setScope] = useState<LibraryScope>("all");
   const [collectionId, setCollectionId] = useState<string | null>(null);
   const [smartFolderId, setSmartFolderId] = useState<string | null>(null);
@@ -529,6 +588,7 @@ export default function App() {
     width: number;
   } | null>(null);
   const [snapClosingSidebar, setSnapClosingSidebar] = useState(false);
+  const appWindowRef = useRef<HTMLElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [windowActionError, setWindowActionError] = useState<string | null>(
     null,
@@ -681,21 +741,17 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.themePreference = theme;
-    localStorage.setItem("folio-theme", theme);
+    root.dataset.themePreference = "system";
     const applyTheme = () => {
-      root.dataset.theme =
-        theme === "system"
-          ? window.matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light"
-          : theme;
+      root.dataset.theme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
     };
     applyTheme();
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", applyTheme);
     return () => media.removeEventListener("change", applyTheme);
-  }, [theme]);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("folio-view-mode", viewMode);
@@ -712,13 +768,25 @@ export default function App() {
   }, [importMode, cardHover, cardMetadata]);
 
   useEffect(() => {
+    const saturation = 150 + ((sidebarBlur - 1) * 50) / 11;
+    document.documentElement.style.setProperty(
+      "--sidebar-status-blur",
+      `${sidebarBlur}px`,
+    );
+    document.documentElement.style.setProperty(
+      "--sidebar-status-saturation",
+      `${saturation.toFixed(1)}%`,
+    );
+  }, [sidebarBlur]);
+
+  useEffect(() => {
     const syncPreferences = (event: StorageEvent) => {
-      if (event.key === "folio-theme" && event.newValue)
-        setTheme(event.newValue);
       if (event.key === "folio-view-mode" && event.newValue)
         setViewMode(event.newValue as ViewMode);
       if (event.key === "folio-quit-shortcut")
         setQuitShortcut(parseQuitShortcut(event.newValue));
+      if (event.key === "folio-sidebar-status-blur")
+        setSidebarBlur(parseSidebarBlur(event.newValue));
     };
     window.addEventListener("storage", syncPreferences);
     return () => window.removeEventListener("storage", syncPreferences);
@@ -1550,7 +1618,10 @@ export default function App() {
     ));
 
   return (
-    <main className={`app-window${settingsWindow ? " settings-window" : ""}`}>
+    <main
+      ref={appWindowRef}
+      className={`app-window${settingsWindow ? " settings-window" : ""}`}
+    >
       <header
         className="titlebar"
         onMouseDown={(event) => {
@@ -1605,12 +1676,15 @@ export default function App() {
               if (menuMode) setMenuOpen("文件");
             }}
           >
-          <svg height="12" viewBox="0 0 1024 364" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M386.388 112.573C417.93 112.573 444.888 121.213 467.261 138.494C496.236 161.658 510.723 193.83 510.723 235.01C510.723 265.894 501.553 293.103 483.215 316.634C458.641 347.886 424.715 363.513 381.436 363.513C349.893 363.513 322.752 353.953 300.013 334.834C271.404 310.567 257.101 277.66 257.101 236.112C257.101 206.698 265.536 180.961 282.407 158.9C306.614 128.015 341.275 112.573 386.388 112.573ZM899.664 112.573C931.206 112.573 958.164 121.213 980.537 138.494C1009.51 161.658 1024 193.83 1024 235.01C1024 265.894 1014.83 293.103 996.492 316.634C971.919 347.886 937.992 363.513 894.713 363.513C863.171 363.513 836.029 353.953 813.289 334.834C784.681 310.567 770.377 277.66 770.377 236.112C770.377 206.698 778.813 180.961 795.685 158.9C819.892 128.016 854.551 112.573 899.664 112.573ZM270.619 0.615173C273.097 0.615173 275.119 2.59711 275.169 5.07416L277.186 104.62C277.237 107.169 275.185 109.263 272.636 109.264H264.723C262.708 109.264 260.932 107.939 260.359 106.007L249.354 68.9003C249.266 68.6031 249.254 68.3348 249.146 68.0439C248.965 67.5523 248.59 67.0797 248.433 66.58C237.71 32.5309 215.967 15.506 183.203 15.5058H125.586C123.072 15.5058 121.035 17.544 121.035 20.0576V148.282C121.035 150.796 123.072 152.834 125.586 152.834H222.114C224.628 152.834 226.665 154.871 226.665 157.385V164.828C226.665 167.341 224.628 169.379 222.114 169.379H125.586C123.073 169.379 121.035 171.416 121.035 173.93V338.555C121.035 341.068 123.072 343.106 125.586 343.106H181.402C183.916 343.106 185.953 345.144 185.953 347.657V353.446C185.953 355.96 183.916 357.997 181.402 357.997H4.55078C2.0375 357.997 0.000131932 355.96 0 353.446V347.657C6.59676e-05 345.144 2.03746 343.107 4.55078 343.106H39.4619C41.9753 343.106 44.0127 341.068 44.0127 338.555V20.0576C44.0127 17.5442 41.9753 15.506 39.4619 15.5058H4.55078C2.03742 15.5056 0 13.4684 0 10.955V5.16595C0.000226495 2.65275 2.03756 0.615349 4.55078 0.615173H270.619ZM616.606 0.573181C619.417 0.0235637 622.031 2.17596 622.031 5.03998V339.106C622.031 341.62 624.069 343.658 626.582 343.658H649.539C649.897 343.658 650.251 343.664 650.6 343.674C650.895 343.601 651.2 343.554 651.513 343.537C654.461 343.374 657.162 343.047 659.617 342.555C672.454 340.349 678.873 331.157 678.873 314.979V161.797C678.873 159.283 676.836 157.246 674.322 157.246H651.515C649.001 157.246 646.964 155.208 646.964 152.694V146.577C646.964 144.435 648.457 142.583 650.551 142.129L743.228 122.041C746.064 121.426 748.743 123.587 748.743 126.489V339.106C748.743 341.62 750.781 343.658 753.294 343.658H769.099C771.299 343.658 773.317 343.841 775.15 344.209C778.981 344.8 781.273 347.882 782.026 353.456C782.363 355.947 780.265 357.997 777.752 357.997H513.8C511.286 357.997 509.249 355.96 509.249 353.446V348.209C509.249 345.695 511.287 343.665 513.8 343.606C521.985 343.417 528.72 342.699 534.006 341.452C546.109 338.143 552.161 328.951 552.161 313.876V40.4638C552.161 37.9503 550.123 35.912 547.609 35.912H513.8C511.286 35.912 509.249 33.8747 509.249 31.3613V25.3203C509.249 23.1436 510.79 21.2714 512.926 20.8535L616.606 0.573181ZM383.637 126.912C369.699 126.912 358.879 131.141 351.177 139.598C338.707 153.937 332.472 186.844 332.472 238.318C332.472 272.88 334.672 298.066 339.073 313.876C345.675 337.407 360.346 349.173 383.086 349.173C395.923 349.173 406.376 345.312 414.445 337.591C428.383 323.619 435.352 289.793 435.352 236.112C435.352 202.654 433.15 178.203 428.749 162.761C422.147 138.862 407.11 126.912 383.637 126.912ZM896.913 126.912C882.976 126.912 872.156 131.141 864.454 139.598C851.984 153.937 845.749 186.844 845.749 238.318C845.749 272.88 847.949 298.066 852.351 313.876C858.953 337.407 873.623 349.173 896.363 349.173C909.2 349.173 919.654 345.312 927.723 337.591C941.66 323.619 948.628 289.793 948.628 236.112C948.628 202.654 946.428 178.203 942.026 162.761C935.424 138.862 920.386 126.912 896.913 126.912ZM712.433 7.23334C719.401 7.23334 726.003 9.07219 732.238 12.749C746.542 20.4702 753.694 32.4198 753.694 48.5976C753.694 55.5833 751.861 62.2017 748.193 68.4521C740.491 82.056 728.571 88.8574 712.433 88.8574C705.831 88.8573 699.412 87.2036 693.177 83.8945C678.873 76.541 671.721 64.7751 671.721 48.5976C671.721 41.6118 673.372 34.9935 676.673 28.7431C684.742 14.4037 696.661 7.23336 712.433 7.23334Z" fill="white"/>
-          </svg>
+          <FolioWordmark />
           </button>
           {menuMode && menuOpen === "文件" && (
-            <MenuPopover className="file-menu-popover" id="file-menu" label="文件">
+            <MenuPopover
+              backdropRoot={appWindowRef.current}
+              className="file-menu-popover"
+              id="file-menu"
+              label="文件"
+            >
               {renderMenuItems(fileMenuItems)}
             </MenuPopover>
           )}
@@ -1632,7 +1706,11 @@ export default function App() {
                   {menu.name}
                 </button>
                 {menuOpen === menu.name && (
-                  <MenuPopover id={`menu-${menu.name}`} label={menu.name}>
+                  <MenuPopover
+                    backdropRoot={appWindowRef.current}
+                    id={`menu-${menu.name}`}
+                    label={menu.name}
+                  >
                     {renderMenuItems(menu.items)}
                   </MenuPopover>
                 )}
@@ -1823,45 +1901,65 @@ export default function App() {
           </aside>
           <article className="settings-page">
             <h1>{settings?.title}</h1>
-            {settingsPage === "theme" ? (
+            {settingsPage === "appearance" ? (
               <>
-                <p>选择 Folio 的外观主题。</p>
-                <div className="setting-choice-row">
-                  {["system", "light", "dark"].map((choice) => (
-                    <Button
-                      key={choice}
-                      variant={theme === choice ? "primary" : "secondary"}
-                      onPress={() => setTheme(choice)}
-                    >
-                      {choice === "system"
-                        ? "跟随系统"
-                        : choice === "light"
-                          ? "浅色"
-                          : "深色"}
-                    </Button>
-                  ))}
-                </div>
-              </>
-            ) : settingsPage === "display" ? (
-              <>
-                <p>设置字体库的初始浏览视图和预览字号。</p>
-                <label className="setting-field">
-                  默认浏览视图
-                  <OptionSelect
-                    label="默认浏览视图"
-                    value={viewMode}
-                    options={viewModes.map(({ id, label }) => ({ id, label }))}
-                    onChange={(value) => setViewMode(value as ViewMode)}
+                <section className="settings-group">
+                  <h2>显示</h2>
+                  <p>设置字体库的初始浏览视图和预览字号。</p>
+                  <label className="setting-field">
+                    默认浏览视图
+                    <OptionSelect
+                      label="默认浏览视图"
+                      value={viewMode}
+                      options={viewModes.map(({ id, label }) => ({ id, label }))}
+                      onChange={(value) => setViewMode(value as ViewMode)}
+                    />
+                  </label>
+                  <label className="setting-field">
+                    预览字号
+                    <SettingSlider
+                      label="预览字号"
+                      minValue={24}
+                      maxValue={104}
+                      value={previewSize}
+                      onChange={setPreviewSize}
+                    />
+                    <output>{previewSize}px</output>
+                  </label>
+                  <BlurSettingsPreview
+                    items={fileMenuItems}
+                    value={sidebarBlur}
+                    onChange={updateSidebarBlur}
                   />
-                </label>
-                <label className="setting-field">
-                  预览字号
-                  <PreviewSizeSlider
-                    value={previewSize}
-                    onChange={setPreviewSize}
-                  />
-                  <output>{previewSize}px</output>
-                </label>
+                </section>
+                <section className="settings-group">
+                  <h2>字体卡片</h2>
+                  <p>设置字体卡片的交互方式。</p>
+                  <Switch
+                    className="setting-toggle"
+                    isSelected={cardHover}
+                    onChange={setCardHover}
+                  >
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      将指针移到卡片时选中字体
+                    </Switch.Content>
+                  </Switch>
+                  <Switch
+                    className="setting-toggle"
+                    isSelected={cardMetadata}
+                    onChange={setCardMetadata}
+                  >
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      显示卡片上的字体信息
+                    </Switch.Content>
+                  </Switch>
+                </section>
               </>
             ) : settingsPage === "shortcuts" ? (
               <>
@@ -1895,34 +1993,6 @@ export default function App() {
                   复制会保留一份由 Folio
                   管理的字体文件；引用会从原目录读取字体。
                 </p>
-              </>
-            ) : settingsPage === "cards" ? (
-              <>
-                <p>设置字体卡片的交互方式。</p>
-                <Switch
-                  className="setting-toggle"
-                  isSelected={cardHover}
-                  onChange={setCardHover}
-                >
-                  <Switch.Content>
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
-                    将指针移到卡片时选中字体
-                  </Switch.Content>
-                </Switch>
-                <Switch
-                  className="setting-toggle"
-                  isSelected={cardMetadata}
-                  onChange={setCardMetadata}
-                >
-                  <Switch.Content>
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
-                    显示卡片上的字体信息
-                  </Switch.Content>
-                </Switch>
               </>
             ) : settingsPage === "cloud" ? (
               <>
@@ -2172,27 +2242,29 @@ export default function App() {
           >
             <div className="sidebar-inner">
               <div
-                className="sidebar-tabs"
+                className="sidebar-pages"
                 role="tablist"
                 aria-label="侧边栏页面"
               >
                 <button
+                  type="button"
+                  className="sidebar-page"
                   role="tab"
                   aria-selected={sidebarPage === "navigation"}
-                  aria-label="导航"
-                  title="导航"
                   onClick={() => setSidebarPage("navigation")}
                 >
-                  <AnimatedIcon name="map-pin" />
+                  <span className="sidebar-page-label">导航</span>
+                  <span className="sidebar-page-dot" aria-hidden="true" />
                 </button>
                 <button
+                  type="button"
+                  className="sidebar-page"
                   role="tab"
                   aria-selected={sidebarPage === "filters"}
-                  aria-label="筛选"
-                  title="筛选"
                   onClick={() => setSidebarPage("filters")}
                 >
-                  <AnimatedIcon name="funnel-simple" />
+                  <span className="sidebar-page-dot" aria-hidden="true" />
+                  <span className="sidebar-page-label">筛选</span>
                 </button>
               </div>
               <div className="sidebar-scroll">
@@ -3462,19 +3534,27 @@ function OptionSelect({
   );
 }
 
-function PreviewSizeSlider({
+function SettingSlider({
+  label,
+  minValue,
+  maxValue,
   value,
   onChange,
+  className = "settings-slider",
 }: {
+  label: string;
+  minValue: number;
+  maxValue: number;
   value: number;
   onChange: (value: number) => void;
+  className?: string;
 }) {
   return (
     <Slider.Root
-      className="preview-size-slider"
-      aria-label="预览字号"
-      minValue={24}
-      maxValue={104}
+      className={className}
+      aria-label={label}
+      minValue={minValue}
+      maxValue={maxValue}
       step={1}
       value={[value]}
       onChange={(values) =>
@@ -3486,6 +3566,171 @@ function PreviewSizeSlider({
         <Slider.Thumb />
       </Slider.Track>
     </Slider.Root>
+  );
+}
+
+function BlurSettingsPreview({
+  items,
+  value,
+  onChange,
+}: {
+  items: MenuEntry[];
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [previewRoot, setPreviewRoot] = useState<HTMLDivElement | null>(null);
+  return (
+    <section className="blur-preview-section" aria-labelledby="blur-preview-title">
+      <div className="blur-preview-heading">
+        <h2 id="blur-preview-title">液态玻璃效果</h2>
+        <p>在主页面菜单上实时预览模糊程度。</p>
+      </div>
+      <div className="blur-preview-window" ref={setPreviewRoot}>
+        <header className="titlebar blur-preview-titlebar">
+          <button
+            type="button"
+            className="titlebar-sidebar-button"
+            data-slot="button"
+            tabIndex={-1}
+            aria-hidden="true"
+          >
+            <SidebarSimpleIcon size={14} />
+          </button>
+          <div className="titlebar-leading blur-preview-leading">
+            <div className="menu-root">
+              <button
+                type="button"
+                className="window-brand"
+                aria-haspopup="menu"
+                aria-expanded="true"
+                tabIndex={-1}
+              >
+                <FolioWordmark />
+              </button>
+              <MenuPopover
+                backdropRoot={previewRoot}
+                className="file-menu-popover blur-preview-menu-shell"
+                id="blur-preview-menu"
+                label="文件菜单预览"
+              >
+                {items.map((item) => (
+                  <Fragment key={item.label}>
+                    {item.separatorBefore && (
+                      <div className="menu-separator" role="separator" />
+                    )}
+                    <MenuItem item={item} onSelect={() => {}} />
+                  </Fragment>
+                ))}
+              </MenuPopover>
+            </div>
+            <nav className="menubar" aria-label="应用菜单预览">
+              {["编辑", "显示", "窗口", "帮助"].map((label) => (
+                <span className="menu-trigger" key={label}>
+                  {label}
+                </span>
+              ))}
+            </nav>
+          </div>
+        </header>
+        <div className="blur-preview-workspace">
+          <aside className="blur-preview-sidebar" aria-label="侧边栏预览">
+            <div className="blur-preview-sidebar-inner">
+              <div className="sidebar-pages" aria-hidden="true">
+                <span className="sidebar-page" aria-selected="true">
+                  <span className="sidebar-page-label">导航</span>
+                  <span className="sidebar-page-dot" />
+                </span>
+                <span className="sidebar-page" aria-selected="false">
+                  <span className="sidebar-page-dot" />
+                  <span className="sidebar-page-label">筛选</span>
+                </span>
+              </div>
+              <nav
+                className="sidebar-scroll blur-preview-nav"
+                aria-label="可滚动的侧边栏导航预览"
+                tabIndex={0}
+              >
+                <div className="sidebar-section-label">本地</div>
+                <div className="sidebar-link selected">
+                  <AnimatedIcon name="text-aa" />
+                  全部字体<span>1,248</span>
+                </div>
+                <div className="sidebar-link">
+                  <AnimatedIcon name="clock-counter-clockwise" />
+                  最近
+                </div>
+                <div className="sidebar-link">
+                  <AnimatedIcon name="star" />
+                  收藏
+                </div>
+                <div className="sidebar-section-label sidebar-section-heading">
+                  收藏夹
+                </div>
+                <div className="sidebar-link sidebar-folder">
+                  <span className="sidebar-link-icon">
+                    <AnimatedIcon name="star" />
+                  </span>
+                  <span className="sidebar-folder-name">常用字体</span>
+                  <span>24</span>
+                </div>
+                <div className="sidebar-link sidebar-folder">
+                  <span className="sidebar-link-icon">
+                    <AnimatedIcon name="folder" />
+                  </span>
+                  <span className="sidebar-folder-name">标题字体</span>
+                  <span>16</span>
+                </div>
+                <div className="sidebar-section-label sidebar-section-heading">
+                  字体管理
+                </div>
+                <div className="sidebar-link">
+                  <AnimatedIcon name="sparkle" />
+                  字体健康
+                </div>
+                <div className="sidebar-link">
+                  <AnimatedIcon name="hard-drives" />
+                  云端字体
+                </div>
+              </nav>
+            </div>
+          </aside>
+          <section className="blur-preview-library" aria-hidden="true" />
+        </div>
+      </div>
+      <div className="blur-preview-controls">
+        <span>模糊度</span>
+        <SettingSlider
+          label="模糊度"
+          minValue={1}
+          maxValue={12}
+          value={value}
+          onChange={onChange}
+        />
+        <output>{value}px</output>
+      </div>
+      <p className="settings-note">
+        滚动侧边栏导航，查看实际菜单在不同模糊程度下的效果。
+      </p>
+    </section>
+  );
+}
+
+function PreviewSizeSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <SettingSlider
+      className="preview-size-slider"
+      label="预览字号"
+      minValue={24}
+      maxValue={104}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 
@@ -3516,6 +3761,14 @@ function scopeTitle(scope: LibraryScope) {
 function storedSidebarWidth(key: string) {
   const value = Number(localStorage.getItem(key));
   return Number.isFinite(value) && value >= 256 && value <= 480 ? value : null;
+}
+
+function parseSidebarBlur(value: string | null) {
+  if (value === null) return 4;
+  const amount = Number(value);
+  return Number.isFinite(amount)
+    ? Math.round(Math.min(12, Math.max(1, amount)))
+    : 4;
 }
 
 function errorMessage(cause: unknown) {
