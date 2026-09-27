@@ -65,6 +65,11 @@ export interface LibrarySnapshotDto {
   recentCount: number;
   roots: string[];
   fontStateCounts: Record<string, number>;
+  userFontGroups: {
+    id: string;
+    name: string;
+    familyCount: number;
+  }[];
   health: HealthDto;
 }
 

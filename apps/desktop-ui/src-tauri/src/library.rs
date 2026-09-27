@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     path::{Path, PathBuf},
 };
 
@@ -189,7 +189,16 @@ pub struct LibrarySnapshotDto {
     pub recent_count: usize,
     pub roots: Vec<String>,
     pub font_state_counts: HashMap<String, usize>,
+    pub user_font_groups: Vec<UserFontGroupDto>,
     pub health: HealthDto,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserFontGroupDto {
+    pub id: String,
+    pub name: String,
+    pub family_count: usize,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -267,7 +276,7 @@ impl LibraryService {
                 self.database.add_root(path, true)?;
             }
         }
-        Ok(())
+        self.add_managed_root()
     }
 
     pub fn add_root(&mut self, path: PathBuf) -> Result<LibrarySnapshotDto, LibraryError> {
@@ -281,11 +290,19 @@ impl LibraryService {
     }
 
     pub fn refresh(&mut self) -> Result<LibrarySnapshotDto, LibraryError> {
+        self.add_managed_root()?;
         self.database.refresh(RefreshMode::Incremental)?;
         self.catalog = self.database.load_cached_catalog()?;
         self.state = self.database.library_state_snapshot()?;
         self.query_index = FontQueryIndex::build(&self.catalog, &self.state)?;
         Ok(self.snapshot())
+    }
+
+    fn add_managed_root(&self) -> Result<(), LibraryError> {
+        if self.managed_directory.is_dir() {
+            self.database.add_root(&self.managed_directory, true)?;
+        }
+        Ok(())
     }
 
     pub fn query(&self, request: PageRequest) -> Result<LibraryPageDto, LibraryError> {
@@ -729,32 +746,40 @@ impl LibraryService {
             .into_iter()
             .map(|root| root.display_path)
             .collect();
-        let mut font_state_counts = HashMap::new();
-        for (key, count) in self.font_state_counts() {
-            font_state_counts.insert(key.to_owned(), count);
-        }
+        let (font_state_counts, user_font_groups) = self.font_state_counts();
         LibrarySnapshotDto {
             family_count: self.catalog.family_count(),
             face_count: self.catalog.face_count(),
             recent_count: self.state.recent.len(),
             roots,
             font_state_counts,
+            user_font_groups,
             health: self.health_overview().0,
         }
     }
 
     /// 按字体来源目录统计每个状态下的字族数量。
-    fn font_state_counts(&self) -> Vec<(&'static str, usize)> {
-        let roots = FontSourceRoots::new(&self.managed_directory);
-        let mut counts: HashMap<&'static str, usize> = HashMap::new();
+    fn font_state_counts(&self) -> (HashMap<String, usize>, Vec<UserFontGroupDto>) {
+        let roots = FontSourceRoots::new(&self.managed_directory, &self.catalog);
+        let mut counts: HashMap<String, usize> = HashMap::new();
         for family in &self.catalog.families {
             let mut kinds = BTreeSet::new();
+            let mut user_ids = BTreeSet::new();
             for face in &family.faces {
                 kinds.extend(classify_face(face, &roots));
+                for source in &face.sources {
+                    if !source.path().exists() {
+                        continue;
+                    }
+                    if let Some(group) = roots.user_group_for_path(source.path()) {
+                        user_ids.insert(group.id.clone());
+                    }
+                }
             }
-            let mut keys: Vec<&'static str> = kinds.iter().map(|kind| kind.key()).collect();
+            let mut keys: Vec<String> = kinds.iter().map(|kind| kind.key().to_owned()).collect();
+            keys.extend(user_ids);
             if kinds.contains(&FontStateKind::User) || kinds.contains(&FontStateKind::System) {
-                keys.push(FontStateKind::Active.key());
+                keys.push(FontStateKind::Active.key().to_owned());
             }
             keys.sort_unstable();
             keys.dedup();
@@ -762,10 +787,19 @@ impl LibraryService {
                 *counts.entry(key).or_default() += 1;
             }
         }
-        FontStateKind::ALL
+        for kind in FontStateKind::ALL {
+            counts.entry(kind.key().to_owned()).or_default();
+        }
+        let users = roots
+            .user
             .iter()
-            .map(|kind| (kind.key(), counts.get(kind.key()).copied().unwrap_or(0)))
-            .collect()
+            .map(|group| UserFontGroupDto {
+                id: group.id.clone(),
+                name: group.name.clone(),
+                family_count: counts.get(&group.id).copied().unwrap_or(0),
+            })
+            .collect();
+        (counts, users)
     }
 
     /// 健康概览与问题字款集合；数量口径与 macOS 版本一致。
@@ -805,19 +839,30 @@ impl LibraryService {
     }
 
     fn face_ids_for_state(&self, state: &str) -> BTreeSet<FontFaceId> {
+        let roots = FontSourceRoots::new(&self.managed_directory, &self.catalog);
+        let user_group = roots.user.iter().find(|group| group.id == state);
         let kinds = FontStateKind::matching(state);
-        if kinds.is_empty() {
+        if kinds.is_empty() && user_group.is_none() {
             return BTreeSet::new();
         }
-        let roots = FontSourceRoots::new(&self.managed_directory);
         self.catalog
             .families
             .iter()
             .flat_map(|family| family.faces.iter())
             .filter(|face| {
-                classify_face(face, &roots)
-                    .iter()
-                    .any(|kind| kinds.contains(kind))
+                if let Some(group) = user_group {
+                    face.sources.iter().any(|source| {
+                        source.path().exists()
+                            && group
+                                .roots
+                                .iter()
+                                .any(|root| source.path().starts_with(root))
+                    })
+                } else {
+                    classify_face(face, &roots)
+                        .iter()
+                        .any(|kind| kinds.contains(kind))
+                }
             })
             .map(|face| face.id)
             .collect()
@@ -831,28 +876,139 @@ impl LibraryService {
 struct FontSourceRoots {
     managed: PathBuf,
     system: Vec<PathBuf>,
-    user: Vec<PathBuf>,
+    user: Vec<UserFontGroup>,
+}
+
+struct UserFontGroup {
+    id: String,
+    name: String,
+    roots: Vec<PathBuf>,
 }
 
 impl FontSourceRoots {
-    fn new(managed: &Path) -> Self {
+    fn new(managed: &Path, catalog: &Catalog) -> Self {
         // 扫描结果使用规范路径，Windows 下包含 \\?\ 前缀，目录也须按同一形式比较。
+        let current_roots = user_font_roots();
+        let current_profile = current_roots
+            .first()
+            .map(|root| normalize_font_root(root))
+            .and_then(|root| user_profile_for_font_root(&root))
+            .map(|profile| normalize_font_root(&profile));
+        let mut candidates = current_roots.into_iter().collect::<BTreeSet<_>>();
+        for source in catalog
+            .families
+            .iter()
+            .flat_map(|family| &family.faces)
+            .flat_map(|face| &face.sources)
+        {
+            if let Some(root) = user_font_root_for_path(source.path()) {
+                candidates.insert(root);
+            }
+        }
+        let mut by_profile: BTreeMap<PathBuf, UserFontGroup> = BTreeMap::new();
+        for candidate in candidates {
+            let root = normalize_font_root(&candidate);
+            let Some(profile) = user_profile_for_font_root(&root) else {
+                continue;
+            };
+            let profile = normalize_font_root(&profile);
+            let name = if current_profile.as_ref() == Some(&profile) {
+                current_account_name().unwrap_or_else(|| profile_name(&profile))
+            } else {
+                profile_name(&profile)
+            };
+            let group = by_profile
+                .entry(profile.clone())
+                .or_insert_with(|| UserFontGroup {
+                    id: format!("user:{}", profile.to_string_lossy()),
+                    name,
+                    roots: Vec::new(),
+                });
+            if !group.roots.contains(&root) {
+                group.roots.push(root);
+            }
+        }
+        let mut user = by_profile.into_values().collect::<Vec<_>>();
+        user.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
         Self {
             managed: normalize_font_root(managed),
             system: system_font_roots()
                 .iter()
                 .map(|path| normalize_font_root(path))
                 .collect(),
-            user: user_font_roots()
-                .iter()
-                .map(|path| normalize_font_root(path))
-                .collect(),
+            user,
         }
+    }
+
+    fn user_group_for_path(&self, path: &Path) -> Option<&UserFontGroup> {
+        self.user
+            .iter()
+            .find(|group| group.roots.iter().any(|root| path.starts_with(root)))
     }
 }
 
 fn normalize_font_root(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn current_account_name() -> Option<String> {
+    let key = if cfg!(target_os = "windows") {
+        "USERNAME"
+    } else {
+        "USER"
+    };
+    std::env::var(key)
+        .ok()
+        .filter(|name| !name.trim().is_empty())
+}
+
+fn profile_name(profile: &Path) -> String {
+    profile
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "未知用户".to_owned())
+}
+
+fn user_font_root_for_path(path: &Path) -> Option<PathBuf> {
+    path.ancestors()
+        .find(|ancestor| user_profile_for_font_root(ancestor).is_some())
+        .map(Path::to_path_buf)
+}
+
+fn user_profile_for_font_root(root: &Path) -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut node = root;
+        for expected in ["Fonts", "Windows", "Microsoft", "Local", "AppData"] {
+            if !node
+                .file_name()?
+                .to_string_lossy()
+                .eq_ignore_ascii_case(expected)
+            {
+                return None;
+            }
+            node = node.parent()?;
+        }
+        return Some(node.to_path_buf());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut node = root;
+        let parts = if root.file_name()? == ".fonts" {
+            &[".fonts"][..]
+        } else {
+            &["fonts", "share", ".local"][..]
+        };
+        for expected in parts {
+            if node.file_name()? != *expected {
+                return None;
+            }
+            node = node.parent()?;
+        }
+        return Some(node.to_path_buf());
+    }
+    #[allow(unreachable_code)]
+    None
 }
 
 fn classify_face(face: &FontFace, roots: &FontSourceRoots) -> Vec<FontStateKind> {
@@ -872,7 +1028,7 @@ fn classify_source(path: &Path, roots: &FontSourceRoots) -> FontStateKind {
     if path.starts_with(&roots.managed) {
         return FontStateKind::Available;
     }
-    if roots.user.iter().any(|root| path.starts_with(root)) {
+    if roots.user_group_for_path(path).is_some() {
         return FontStateKind::User;
     }
     if roots.system.iter().any(|root| path.starts_with(root)) {
@@ -1374,7 +1530,11 @@ mod tests {
         assert_eq!(classify_source(&source, &system), FontStateKind::System);
         let user = FontSourceRoots {
             system: Vec::new(),
-            user: vec![normalized_root.clone()],
+            user: vec![UserFontGroup {
+                id: "user:test".to_owned(),
+                name: "test".to_owned(),
+                roots: vec![normalized_root.clone()],
+            }],
             ..system
         };
         assert_eq!(classify_source(&source, &user), FontStateKind::User);
@@ -1388,5 +1548,71 @@ mod tests {
             classify_source(&source.with_file_name("missing.ttf"), &managed),
             FontStateKind::Unavailable
         );
+    }
+
+    #[test]
+    fn refresh_indexes_files_already_in_managed_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let managed = dir.path().join("ManagedFonts");
+        std::fs::create_dir(&managed).unwrap();
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/fonts/Lato-Regular.ttf");
+        std::fs::copy(fixture, managed.join("Lato-Regular.ttf")).unwrap();
+        let mut library = LibraryService::open(dir.path().join("folio.sqlite")).unwrap();
+
+        let snapshot = library.refresh().unwrap();
+        assert_eq!(snapshot.family_count, 1);
+        assert_eq!(snapshot.font_state_counts["available"], 1);
+        assert!(snapshot
+            .roots
+            .iter()
+            .any(|root| root.ends_with("ManagedFonts")));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_user_font_paths_have_independent_profiles() {
+        let alice = Path::new(r"C:\Users\Alice\AppData\Local\Microsoft\Windows\Fonts\a.ttf");
+        let bob = Path::new(r"D:\Profiles\Bob\AppData\Local\Microsoft\Windows\Fonts\b.ttf");
+        let alice_root = user_font_root_for_path(alice).unwrap();
+        let bob_root = user_font_root_for_path(bob).unwrap();
+        assert_eq!(
+            profile_name(&user_profile_for_font_root(&alice_root).unwrap()),
+            "Alice"
+        );
+        assert_eq!(
+            profile_name(&user_profile_for_font_root(&bob_root).unwrap()),
+            "Bob"
+        );
+        assert_ne!(alice_root, bob_root);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn user_font_groups_count_and_filter_each_account_separately() {
+        let dir = tempfile::tempdir().unwrap();
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/fonts/Lato-Regular.ttf");
+        let mut library = LibraryService::open(dir.path().join("folio.sqlite")).unwrap();
+        for account in ["Alice", "Bob"] {
+            let root = dir
+                .path()
+                .join(account)
+                .join("AppData/Local/Microsoft/Windows/Fonts");
+            std::fs::create_dir_all(&root).unwrap();
+            std::fs::copy(&fixture, root.join("Lato-Regular.ttf")).unwrap();
+            library.database.add_root(root, true).unwrap();
+        }
+
+        let snapshot = library.refresh().unwrap();
+        for account in ["Alice", "Bob"] {
+            let group = snapshot
+                .user_font_groups
+                .iter()
+                .find(|group| group.name == account)
+                .unwrap();
+            assert_eq!(group.family_count, 1);
+            assert_eq!(library.face_ids_for_state(&group.id).len(), 1);
+        }
     }
 }

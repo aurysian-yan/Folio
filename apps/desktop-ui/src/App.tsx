@@ -297,29 +297,25 @@ function matchingWebdavPreset(serverUrl: string) {
 // 字体状态顺序与 macOS 版本一致；跨平台口径见 Rust `FontStateKind`。
 type FontStateId =
   | "active"
-  | "user"
+  | `user:${string}`
   | "available"
   | "external"
   | "system"
   | "unavailable";
 
-const fontStateOptions: {
+type FontStateOption = {
   id: FontStateId;
   label: string;
   animatedName: AnimatedIconName;
   help: string;
-}[] = [
+};
+
+const fontStateOptions: FontStateOption[] = [
   {
     id: "active",
     label: "已挂载",
     animatedName: "seal-check",
     help: "操作系统当前可用的字体",
-  },
-  {
-    id: "user",
-    label: "用户字体",
-    animatedName: "download-simple",
-    help: "当前用户字体目录中的字体",
   },
   {
     id: "available",
@@ -347,8 +343,21 @@ const fontStateOptions: {
   },
 ];
 
-function fontStateLabel(id: FontStateId) {
-  return fontStateOptions.find((option) => option.id === id)?.label ?? "字体状态";
+function fontStateOptionsFor(snapshot: LibrarySnapshotDto | null): FontStateOption[] {
+  const users = (snapshot?.userFontGroups ?? []).map((group) => ({
+    id: group.id as FontStateId,
+    label: `用户字体 · ${group.name}`,
+    animatedName: "download-simple" as AnimatedIconName,
+    help: `${group.name} 的个人字体目录`,
+  }));
+  return [fontStateOptions[0], ...users, ...fontStateOptions.slice(1)];
+}
+
+function fontStateLabel(id: FontStateId, snapshot: LibrarySnapshotDto | null) {
+  return (
+    fontStateOptionsFor(snapshot).find((option) => option.id === id)?.label ??
+    "字体状态"
+  );
 }
 
 // 应用 lisse 平滑圆角的外壳；边框与阴影改用 SVG 效果跟随曲线轮廓。
@@ -1380,7 +1389,7 @@ export default function App() {
         ? (smartFolders.find((folder) => folder.id === smartFolderId)?.name ??
           "智慧收藏夹")
         : scope === "fontState"
-          ? fontStateLabel(fontState)
+          ? fontStateLabel(fontState, snapshot)
           : scopeTitle(scope);
   const compactViewport = viewportWidth <= 860;
   const healthCount = snapshot
@@ -2321,7 +2330,7 @@ export default function App() {
                     <div className="sidebar-section-label sidebar-section-heading">
                       字体状态
                     </div>
-                    {fontStateOptions.map((option) => {
+                    {fontStateOptionsFor(snapshot).map((option) => {
                       return (
                         <SidebarItem
                           key={option.id}
@@ -3101,7 +3110,7 @@ function CloudFontsPane({
         <div>
           <h1>云端字体</h1>
           <p>
-            {active.length} 个字体 ·{" "}
+            {active.length} 个字体文件 ·{" "}
             {running ? "正在同步" : (status?.phase ?? "已连接")}
           </p>
         </div>
