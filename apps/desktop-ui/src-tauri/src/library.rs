@@ -745,17 +745,15 @@ impl LibraryService {
 
     /// 按字体来源目录统计每个状态下的字族数量。
     fn font_state_counts(&self) -> Vec<(&'static str, usize)> {
-        let managed = self.managed_directory.as_path();
-        let system = system_font_roots();
-        let user = user_font_roots();
+        let roots = FontSourceRoots::new(&self.managed_directory);
         let mut counts: HashMap<&'static str, usize> = HashMap::new();
         for family in &self.catalog.families {
             let mut kinds = BTreeSet::new();
             for face in &family.faces {
-                kinds.insert(classify_face(face, managed, &system, &user));
+                kinds.extend(classify_face(face, &roots));
             }
             let mut keys: Vec<&'static str> = kinds.iter().map(|kind| kind.key()).collect();
-            if kinds.contains(&FontStateKind::Installed) || kinds.contains(&FontStateKind::System) {
+            if kinds.contains(&FontStateKind::User) || kinds.contains(&FontStateKind::System) {
                 keys.push(FontStateKind::Active.key());
             }
             keys.sort_unstable();
@@ -811,14 +809,16 @@ impl LibraryService {
         if kinds.is_empty() {
             return BTreeSet::new();
         }
-        let managed = self.managed_directory.as_path();
-        let system = system_font_roots();
-        let user = user_font_roots();
+        let roots = FontSourceRoots::new(&self.managed_directory);
         self.catalog
             .families
             .iter()
             .flat_map(|family| family.faces.iter())
-            .filter(|face| kinds.contains(&classify_face(face, managed, &system, &user)))
+            .filter(|face| {
+                classify_face(face, &roots)
+                    .iter()
+                    .any(|kind| kinds.contains(kind))
+            })
             .map(|face| face.id)
             .collect()
     }
@@ -828,29 +828,57 @@ impl LibraryService {
     }
 }
 
-fn classify_face(
-    face: &FontFace,
-    managed: &Path,
-    system: &[PathBuf],
-    user: &[PathBuf],
-) -> FontStateKind {
-    for source in &face.sources {
-        let path = source.path();
-        if !path.exists() {
-            continue;
+struct FontSourceRoots {
+    managed: PathBuf,
+    system: Vec<PathBuf>,
+    user: Vec<PathBuf>,
+}
+
+impl FontSourceRoots {
+    fn new(managed: &Path) -> Self {
+        // 扫描结果使用规范路径，Windows 下包含 \\?\ 前缀，目录也须按同一形式比较。
+        Self {
+            managed: normalize_font_root(managed),
+            system: system_font_roots()
+                .iter()
+                .map(|path| normalize_font_root(path))
+                .collect(),
+            user: user_font_roots()
+                .iter()
+                .map(|path| normalize_font_root(path))
+                .collect(),
         }
-        if path.starts_with(managed) {
-            return FontStateKind::Available;
-        }
-        if user.iter().any(|root| path.starts_with(root)) {
-            return FontStateKind::Installed;
-        }
-        if system.iter().any(|root| path.starts_with(root)) {
-            return FontStateKind::System;
-        }
-        return FontStateKind::External;
     }
-    FontStateKind::Unavailable
+}
+
+fn normalize_font_root(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn classify_face(face: &FontFace, roots: &FontSourceRoots) -> Vec<FontStateKind> {
+    if face.sources.is_empty() {
+        return vec![FontStateKind::Unavailable];
+    }
+    face.sources
+        .iter()
+        .map(|source| classify_source(source.path(), roots))
+        .collect()
+}
+
+fn classify_source(path: &Path, roots: &FontSourceRoots) -> FontStateKind {
+    if !path.exists() {
+        return FontStateKind::Unavailable;
+    }
+    if path.starts_with(&roots.managed) {
+        return FontStateKind::Available;
+    }
+    if roots.user.iter().any(|root| path.starts_with(root)) {
+        return FontStateKind::User;
+    }
+    if roots.system.iter().any(|root| path.starts_with(root)) {
+        return FontStateKind::System;
+    }
+    FontStateKind::External
 }
 
 fn family_ids_for_faces(
@@ -868,13 +896,13 @@ fn family_ids_for_faces(
 enum FontStateKind {
     /// 操作系统当前可用的字体（系统目录或用户字体目录）。
     Active,
-    /// 安装到当前用户字体目录。
-    Installed,
+    /// 当前用户字体目录中的字体。
+    User,
     /// 位于 Folio 管理目录、尚未安装。
     Available,
     /// 引用的外部文件或用户添加的文件夹。
     External,
-    /// 操作系统自带的字体目录。
+    /// 系统级字体目录，包含面向所有用户安装的字体。
     System,
     /// 来源文件已不可访问。
     Unavailable,
@@ -883,7 +911,7 @@ enum FontStateKind {
 impl FontStateKind {
     const ALL: [Self; 6] = [
         Self::Active,
-        Self::Installed,
+        Self::User,
         Self::Available,
         Self::External,
         Self::System,
@@ -893,7 +921,7 @@ impl FontStateKind {
     fn key(self) -> &'static str {
         match self {
             Self::Active => "active",
-            Self::Installed => "installed",
+            Self::User => "user",
             Self::Available => "available",
             Self::External => "external",
             Self::System => "system",
@@ -903,8 +931,8 @@ impl FontStateKind {
 
     fn matching(state: &str) -> Vec<Self> {
         match state {
-            "active" => vec![Self::Installed, Self::System],
-            "installed" => vec![Self::Installed],
+            "active" => vec![Self::User, Self::System],
+            "user" => vec![Self::User],
             "available" => vec![Self::Available],
             "external" => vec![Self::External],
             "system" => vec![Self::System],
@@ -1318,4 +1346,47 @@ fn default_font_roots() -> Vec<PathBuf> {
     let mut roots = system_font_roots();
     roots.extend(user_font_roots());
     roots
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_font_sources_match_their_roots() {
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/fonts/Lato-Regular.ttf")
+            .canonicalize()
+            .unwrap();
+        let raw_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/fonts");
+        let normalized_root = normalize_font_root(&raw_root);
+        let external = FontSourceRoots {
+            managed: raw_root.join("not-managed"),
+            system: Vec::new(),
+            user: Vec::new(),
+        };
+        assert_eq!(classify_source(&source, &external), FontStateKind::External);
+
+        let system = FontSourceRoots {
+            system: vec![normalized_root.clone()],
+            ..external
+        };
+        assert_eq!(classify_source(&source, &system), FontStateKind::System);
+        let user = FontSourceRoots {
+            system: Vec::new(),
+            user: vec![normalized_root.clone()],
+            ..system
+        };
+        assert_eq!(classify_source(&source, &user), FontStateKind::User);
+        let managed = FontSourceRoots {
+            managed: normalized_root,
+            user: Vec::new(),
+            ..user
+        };
+        assert_eq!(classify_source(&source, &managed), FontStateKind::Available);
+        assert_eq!(
+            classify_source(&source.with_file_name("missing.ttf"), &managed),
+            FontStateKind::Unavailable
+        );
+    }
 }

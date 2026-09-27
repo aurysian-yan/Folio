@@ -297,7 +297,7 @@ function matchingWebdavPreset(serverUrl: string) {
 // 字体状态顺序与 macOS 版本一致；跨平台口径见 Rust `FontStateKind`。
 type FontStateId =
   | "active"
-  | "installed"
+  | "user"
   | "available"
   | "external"
   | "system"
@@ -316,10 +316,10 @@ const fontStateOptions: {
     help: "操作系统当前可用的字体",
   },
   {
-    id: "installed",
-    label: "已安装",
+    id: "user",
+    label: "用户字体",
     animatedName: "download-simple",
-    help: "安装到当前用户字体目录的字体",
+    help: "当前用户字体目录中的字体",
   },
   {
     id: "available",
@@ -337,7 +337,7 @@ const fontStateOptions: {
     id: "system",
     label: "系统字体",
     animatedName: "laptop",
-    help: "操作系统自带的字体",
+    help: "系统字体目录中的字体，包含面向所有用户安装的字体",
   },
   {
     id: "unavailable",
