@@ -38,6 +38,10 @@ pub enum SyncError {
     Authentication,
     #[error("没有访问 WebDAV 目录的权限")]
     PermissionDenied,
+    #[error("云端下载节点暂时不可用，请稍后重试")]
+    DownloadRejected,
+    #[error("有 {count} 个云端变更暂时无法下载，已保留进度，请稍后重新同步")]
+    PendingDownloads { count: u64 },
     #[error("WebDAV 可用空间不足")]
     RemoteStorageFull,
     #[error("WebDAV 请求失败，状态码 {0}")]
@@ -216,10 +220,7 @@ impl SyncProgress {
     }
 }
 
-fn emit_progress(
-    progress: &mut SyncProgress,
-    report: &Arc<dyn Fn(SyncProgress) + Send + Sync>,
-) {
+fn emit_progress(progress: &mut SyncProgress, report: &Arc<dyn Fn(SyncProgress) + Send + Sync>) {
     progress.refresh_percent();
     (report)(progress.clone());
 }
@@ -1145,8 +1146,9 @@ async fn synchronize_with_client(
     emit_progress(&mut progress, report);
 
     publish_local_events(db, remote, cancelled, report, &mut progress).await?;
-    receive_remote_events(db, remote, cancelled, report, &mut progress).await?;
-    apply_remote_events(
+    let deferred_events =
+        receive_remote_events(db, remote, cancelled, report, &mut progress).await?;
+    let deferred_fonts = apply_remote_events(
         db,
         managed_directory,
         remote,
@@ -1155,16 +1157,23 @@ async fn synchronize_with_client(
         &mut progress,
     )
     .await?;
-    db.set_sync_metadata(
-        BASELINE_KEY,
-        &serde_json::to_string(&event_user_baseline(db)?)?,
-    )?;
-    if let Ok(elapsed) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-        db.set_sync_metadata("last_successful_sync_ms", &elapsed.as_millis().to_string())?;
+    // 只有全部下载成功才更新基线与成功时间；部分失败留待下次同步补齐。
+    let deferred = deferred_events + deferred_fonts;
+    if deferred == 0 {
+        db.set_sync_metadata(
+            BASELINE_KEY,
+            &serde_json::to_string(&event_user_baseline(db)?)?,
+        )?;
+        if let Ok(elapsed) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            db.set_sync_metadata("last_successful_sync_ms", &elapsed.as_millis().to_string())?;
+        }
     }
     progress.set_phase(SyncPhase::Finishing, 1);
     progress.advance();
     emit_progress(&mut progress, report);
+    if deferred > 0 {
+        return Err(SyncError::PendingDownloads { count: deferred });
+    }
     Ok(progress)
 }
 
@@ -1181,6 +1190,18 @@ async fn run_or_cancel<T>(
             }
         } => Err(SyncError::Cancelled),
     }
+}
+
+/// 下载阶段可延迟处理的错误：文件仍在远端，保留进度等待下次同步补传。
+fn is_deferrable_download(error: &SyncError) -> bool {
+    matches!(
+        error,
+        SyncError::DownloadRejected
+            | SyncError::PermissionDenied
+            | SyncError::Http(_)
+            | SyncError::HttpStatus(_)
+            | SyncError::InvalidFont
+    )
 }
 
 fn capture_user_state(db: &FolioDatabase) -> Result<UserSnapshot, SyncError> {
@@ -1560,11 +1581,13 @@ async fn publish_local_events(
         .await?
         .into_iter()
         .collect::<BTreeSet<_>>();
-    let mut remote_events =
-        run_or_cancel(remote.list(&["Folio", "v1", "events", &device_id]), cancelled)
-            .await?
-            .into_iter()
-            .collect::<BTreeSet<_>>();
+    let mut remote_events = run_or_cancel(
+        remote.list(&["Folio", "v1", "events", &device_id]),
+        cancelled,
+    )
+    .await?
+    .into_iter()
+    .collect::<BTreeSet<_>>();
     let events = db.list_sync_events()?;
     let mut upload_targets = Vec::<(String, PathBuf)>::new();
     let mut staged_uploads = BTreeSet::new();
@@ -1666,7 +1689,7 @@ async fn receive_remote_events(
     cancelled: &AtomicBool,
     report: &Arc<dyn Fn(SyncProgress) + Send + Sync>,
     progress: &mut SyncProgress,
-) -> Result<(), SyncError> {
+) -> Result<u64, SyncError> {
     let mut known = db
         .list_sync_events()?
         .into_iter()
@@ -1701,15 +1724,27 @@ async fn receive_remote_events(
     }
     progress.set_phase(SyncPhase::Receiving, pending.len() as u64);
     emit_progress(progress, report);
+    // 单条事件命中断断续续的下载节点时先跳过，保证其余事件与游标继续推进。
+    let mut deferred = 0u64;
     for (device, name, id, sequence) in pending {
         if cancelled.load(Ordering::Relaxed) {
             return Err(SyncError::Cancelled);
         }
-        let bytes = run_or_cancel(
+        let bytes = match run_or_cancel(
             remote.get(&["Folio", "v1", "events", &device, &name]),
             cancelled,
         )
-        .await?;
+        .await
+        {
+            Ok(bytes) => bytes,
+            Err(error) if is_deferrable_download(&error) => {
+                deferred += 1;
+                progress.advance();
+                emit_progress(progress, report);
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         let wire: RemoteEvent = serde_json::from_slice(&bytes)?;
         if wire.format_version != FORMAT_VERSION {
             return Err(SyncError::UnsupportedFormat);
@@ -1731,7 +1766,7 @@ async fn receive_remote_events(
         progress.advance();
         emit_progress(progress, report);
     }
-    Ok(())
+    Ok(deferred)
 }
 
 fn active_add_tags(
@@ -1850,7 +1885,7 @@ async fn apply_remote_events(
     cancelled: &AtomicBool,
     report: &Arc<dyn Fn(SyncProgress) + Send + Sync>,
     progress: &mut SyncProgress,
-) -> Result<(), SyncError> {
+) -> Result<u64, SyncError> {
     let events = decoded_events(db)?;
     let mut collection_ids = BTreeSet::new();
     let mut smart_folder_ids = BTreeSet::new();
@@ -2074,6 +2109,8 @@ async fn apply_remote_events(
         .collect();
     emit_progress(progress, report);
     let mut catalog_changed = false;
+    // 与事件接收一致：单条字体命中断断续续的下载节点时先跳过，避免整轮失败。
+    let mut deferred = 0u64;
     for (fingerprint, remote_asset) in &font_assets {
         if cancelled.load(Ordering::Relaxed) {
             return Err(SyncError::Cancelled);
@@ -2106,14 +2143,24 @@ async fn apply_remote_events(
         if !asset.cloud_only && !local_asset_is_valid(&asset, remote_asset)? {
             progress.set_item_status(fingerprint, SyncItemStatus::Running);
             emit_progress(progress, report);
-            let path = download_asset(remote, directory, remote_asset, cancelled).await?;
-            asset.local_path = Some(path.to_string_lossy().into_owned());
-            progress.downloaded_files += 1;
-            progress.downloaded_bytes += remote_asset.file_size;
-            progress.advance();
-            progress.set_item_status(fingerprint, SyncItemStatus::Done);
-            emit_progress(progress, report);
-            catalog_changed = true;
+            match download_asset(remote, directory, remote_asset, cancelled).await {
+                Ok(path) => {
+                    asset.local_path = Some(path.to_string_lossy().into_owned());
+                    progress.downloaded_files += 1;
+                    progress.downloaded_bytes += remote_asset.file_size;
+                    progress.advance();
+                    progress.set_item_status(fingerprint, SyncItemStatus::Done);
+                    emit_progress(progress, report);
+                    catalog_changed = true;
+                }
+                Err(error) if is_deferrable_download(&error) => {
+                    deferred += 1;
+                    progress.advance();
+                    emit_progress(progress, report);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
         }
         db.upsert_sync_asset(&asset)?;
     }
@@ -2123,7 +2170,7 @@ async fn apply_remote_events(
         db.refresh(RefreshMode::Incremental)?;
     }
     detect_font_conflicts(db, &font_assets, &events)?;
-    Ok(())
+    Ok(deferred)
 }
 
 fn local_asset_is_valid(asset: &StoredSyncAsset, remote: &RemoteAsset) -> Result<bool, SyncError> {

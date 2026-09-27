@@ -8,6 +8,9 @@ use reqwest::{header, Method, RequestBuilder, Response, StatusCode, Url};
 
 use crate::{SyncError, SyncProfile};
 
+/// 幂等读取的最大尝试次数（含首次）。
+const MAX_ATTEMPTS: usize = 4;
+
 pub(crate) struct WebDavClient {
     http: reqwest::Client,
     server: Url,
@@ -94,9 +97,48 @@ impl WebDavClient {
     }
 
     // WebDAV 方法在 301/302 后不能改成 GET；跨站下载不能携带 WebDAV 凭据。
+    // 123 云盘等服务的下载会 302 到独立 CDN，节点偶发 403/超时，因此只对幂等读取做有限重试。
     async fn send(&self, builder: RequestBuilder) -> Result<Response, SyncError> {
-        let mut request = builder.build()?;
+        let base = builder.build()?;
+        let idempotent = is_idempotent(base.method());
+        let mut attempt = 0;
+        loop {
+            match self
+                .send_once(base.try_clone().ok_or(SyncError::InvalidRedirect)?)
+                .await
+            {
+                Ok((response, cross_origin)) => {
+                    if attempt + 1 < MAX_ATTEMPTS
+                        && idempotent
+                        && is_retryable_status(response.status(), cross_origin)
+                    {
+                        retry_wait(attempt).await;
+                        attempt += 1;
+                        continue;
+                    }
+                    if cross_origin && response.status() == StatusCode::FORBIDDEN {
+                        return Err(SyncError::DownloadRejected);
+                    }
+                    return Ok(response);
+                }
+                Err(error) => {
+                    if attempt + 1 < MAX_ATTEMPTS && idempotent && is_retryable_error(&error) {
+                        retry_wait(attempt).await;
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
+        }
+    }
+
+    async fn send_once(
+        &self,
+        mut request: reqwest::Request,
+    ) -> Result<(Response, bool), SyncError> {
         let origin = request.url().origin();
+        let mut cross_origin = false;
         for hop in 0..=5 {
             let response = self
                 .http
@@ -110,7 +152,7 @@ impl WebDavClient {
                     | StatusCode::TEMPORARY_REDIRECT
                     | StatusCode::PERMANENT_REDIRECT
             ) {
-                return Ok(response);
+                return Ok((response, cross_origin));
             }
             if hop == 5
                 || response.status() == StatusCode::SEE_OTHER && request.method() != Method::GET
@@ -135,6 +177,7 @@ impl WebDavClient {
             }
             if next.origin() != request.url().origin() {
                 request.headers_mut().remove(header::AUTHORIZATION);
+                cross_origin = true;
             }
             *request.url_mut() = next;
         }
@@ -313,6 +356,45 @@ impl WebDavClient {
     }
 }
 
+/// 幂等读取失败时可安全重发；写入不在此列。
+fn is_idempotent(method: &Method) -> bool {
+    *method == Method::GET
+        || *method == Method::HEAD
+        || *method == Method::OPTIONS
+        || method.as_str() == "PROPFIND"
+}
+
+/// 重试状态码：网络级瞬时错误，以及跨站下载节点对 GET 的临时拒绝。
+fn is_retryable_status(status: StatusCode, cross_origin: bool) -> bool {
+    matches!(
+        status,
+        StatusCode::REQUEST_TIMEOUT
+            | StatusCode::TOO_MANY_REQUESTS
+            | StatusCode::INTERNAL_SERVER_ERROR
+            | StatusCode::BAD_GATEWAY
+            | StatusCode::SERVICE_UNAVAILABLE
+            | StatusCode::GATEWAY_TIMEOUT
+    ) || cross_origin && status == StatusCode::FORBIDDEN
+}
+
+fn is_retryable_error(error: &SyncError) -> bool {
+    match error {
+        SyncError::Http(inner) => {
+            inner.is_timeout() || inner.is_connect() || inner.is_request() || inner.is_body()
+        }
+        _ => false,
+    }
+}
+
+async fn retry_wait(attempt: usize) {
+    let delay = match attempt {
+        0 => 300,
+        1 => 700,
+        _ => 1500,
+    };
+    tokio::time::sleep(Duration::from_millis(delay)).await;
+}
+
 fn check_status(status: StatusCode) -> Result<(), SyncError> {
     if status.is_success() {
         Ok(())
@@ -351,7 +433,10 @@ mod tests {
         existing_mkcol_forbidden: bool,
         full: bool,
         malformed: bool,
-        interrupt_next_get: bool,
+        /// 剩余需要直接断开连接的 GET 次数。
+        interrupt_gets: u32,
+        /// 剩余需要返回 403 的 GET 次数。
+        forbidden_gets: u32,
     }
 
     struct DavServer {
@@ -473,12 +558,18 @@ mod tests {
             stream.write_all(response.as_bytes()).unwrap();
             return;
         }
-        if method == "GET" && state.interrupt_next_get {
-            state.interrupt_next_get = false;
+        if method == "GET" && state.interrupt_gets > 0 {
+            state.interrupt_gets -= 1;
             return;
+        }
+        let forbidden_get = method == "GET" && state.forbidden_gets > 0;
+        if forbidden_get {
+            state.forbidden_gets -= 1;
         }
         let (status, body) = if !authorized && path != "/download" {
             (401, Vec::new())
+        } else if forbidden_get {
+            (403, Vec::new())
         } else {
             match method {
                 "PROPFIND" if state.malformed => (207, b"<broken".to_vec()),
@@ -596,8 +687,13 @@ mod tests {
             vec!["a"]
         );
         assert_eq!(client.get(path).await.unwrap(), b"font");
-        server.state.lock().unwrap().interrupt_next_get = true;
+        // 单次网络中断由幂等重试恢复。
+        server.state.lock().unwrap().interrupt_gets = 1;
+        assert_eq!(client.get(path).await.unwrap(), b"font");
+        // 持续中断在重试耗尽后仍报网络错误。
+        server.state.lock().unwrap().interrupt_gets = 10;
         assert!(matches!(client.get(path).await, Err(SyncError::Http(_))));
+        server.state.lock().unwrap().interrupt_gets = 0;
         assert_eq!(client.get(path).await.unwrap(), b"font");
         client.put(path, b"font".to_vec()).await.unwrap();
         assert!(matches!(
@@ -678,6 +774,40 @@ mod tests {
                 .put(&["Library", "objects", "denied"], b"font".to_vec())
                 .await,
             Err(SyncError::InvalidRedirect)
+        ));
+    }
+
+    #[tokio::test]
+    async fn cross_origin_download_forbidden_is_retried_then_reported() {
+        let server = DavServer::start();
+        let download = DavServer::start();
+        let client = server.client("p");
+        client.ensure_root("Library").await.unwrap();
+        client
+            .ensure_directory(&["Library", "objects"])
+            .await
+            .unwrap();
+        server.state.lock().unwrap().redirects.insert(
+            ("GET".to_owned(), "/dav/Library/objects/object".to_owned()),
+            format!("{}/download", download.url.trim_end_matches("/dav")),
+        );
+        download
+            .state
+            .lock()
+            .unwrap()
+            .files
+            .insert("/download".to_owned(), b"font".to_vec());
+        // 下载节点偶发 403 时，幂等重试应恢复。
+        download.state.lock().unwrap().forbidden_gets = 1;
+        assert_eq!(
+            client.get(&["Library", "objects", "object"]).await.unwrap(),
+            b"font"
+        );
+        // 持续 403 时给出可重试的下载错误，而不是目录权限错误。
+        download.state.lock().unwrap().forbidden_gets = 10;
+        assert!(matches!(
+            client.get(&["Library", "objects", "object"]).await,
+            Err(SyncError::DownloadRejected)
         ));
     }
 
@@ -1332,12 +1462,7 @@ mod tests {
         let report: Arc<dyn Fn(crate::SyncProgress) + Send + Sync> = Arc::new(|_| {});
         let mut db = FolioDatabase::open(dir.path().join("library.sqlite")).unwrap();
         let first = crate::synchronize_with_client(
-            &mut db,
-            &library,
-            &profile,
-            &client,
-            &cancelled,
-            &report,
+            &mut db, &library, &profile, &client, &cancelled, &report,
         )
         .await
         .unwrap();
@@ -1358,12 +1483,7 @@ mod tests {
         }
 
         let repair = crate::synchronize_with_client(
-            &mut db,
-            &library,
-            &profile,
-            &client,
-            &cancelled,
-            &report,
+            &mut db, &library, &profile, &client, &cancelled, &report,
         )
         .await
         .unwrap();
@@ -1374,5 +1494,68 @@ mod tests {
             .files
             .keys()
             .any(|path| path.starts_with("/dav/Folio/v1/events/")));
+    }
+
+    #[tokio::test]
+    async fn deferred_download_failure_keeps_progress_and_resumes() {
+        use folio_storage::FolioDatabase;
+
+        let server = DavServer::start();
+        let client = server.client("p");
+        let dir = tempfile::tempdir().unwrap();
+        let first_dir = dir.path().join("first");
+        let second_dir = dir.path().join("second");
+        std::fs::create_dir_all(&first_dir).unwrap();
+        std::fs::create_dir_all(&second_dir).unwrap();
+        let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/fonts/Lato-Regular.ttf");
+        std::fs::copy(source, first_dir.join("Lato-Regular.ttf")).unwrap();
+        let profile = SyncProfile {
+            server_url: server.url.clone(),
+            remote_directory: String::new(),
+            username: "u".to_owned(),
+            automatic: true,
+        };
+        let cancelled = AtomicBool::new(false);
+        let report: Arc<dyn Fn(crate::SyncProgress) + Send + Sync> = Arc::new(|_| {});
+        let mut first = FolioDatabase::open(dir.path().join("first.sqlite")).unwrap();
+        crate::synchronize_with_client(
+            &mut first, &first_dir, &profile, &client, &cancelled, &report,
+        )
+        .await
+        .unwrap();
+
+        // 下载节点持续拒绝：本轮只报告待重试数量，不中断整体流程。
+        let mut second = FolioDatabase::open(dir.path().join("second.sqlite")).unwrap();
+        server.state.lock().unwrap().forbidden_gets = 1000;
+        let result = crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(crate::SyncError::PendingDownloads { count: 1 })
+        ));
+        assert!(second.list_sync_assets().unwrap().is_empty());
+
+        // 节点恢复后重新同步即可补齐。
+        server.state.lock().unwrap().forbidden_gets = 0;
+        let progress = crate::synchronize_with_client(
+            &mut second,
+            &second_dir,
+            &profile,
+            &client,
+            &cancelled,
+            &report,
+        )
+        .await
+        .unwrap();
+        assert_eq!(progress.downloaded_files, 1);
+        assert_eq!(second.list_sync_assets().unwrap().len(), 1);
     }
 }
