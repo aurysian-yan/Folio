@@ -5,10 +5,11 @@ import { previewCacheRevision, subscribePreviewCache } from "../preview-cache-ev
 import { observePreviewVisibility } from "../preview-visibility";
 import { startMetric } from "../performance-metrics";
 
-export const FontPreview = memo(function FontPreview({ style, text, size, lines, align = "center", label, priority = "visible" }: {
+export const FontPreview = memo(function FontPreview({ style, text, size, color, lines, align = "center", label, priority = "visible" }: {
   style?: PreviewStyle;
   text: string;
   size: number;
+  color?: string | null;
   lines: number;
   align?: "center" | "left" | "top";
   label: string;
@@ -114,9 +115,11 @@ export const FontPreview = memo(function FontPreview({ style, text, size, lines,
   };
   const fallbackImage = fallback?.key === fallbackKey ? fallback.image : undefined;
   return (
-    <div ref={container} className={`font-preview align-${align}`} role="img" aria-label={sampleNote ? `${label}，${sampleNote}` : label} title={sampleNote} aria-busy={Boolean(face) && !family && fallbackImage === undefined}>
+    <div ref={container} className={`font-preview align-${align}`} style={{ color: color ?? undefined }} role="img" aria-label={sampleNote ? `${label}，${sampleNote}` : label} title={sampleNote} aria-busy={Boolean(face) && !family && fallbackImage === undefined}>
       {family ? <span className="font-preview-text" style={fontStyle} aria-hidden="true">{sample}</span>
-        : fallbackImage ? <img src={fallbackImage} alt="" className="font-preview-fallback" />
+        : fallbackImage ? <span className="font-preview-colored-fallback" style={{ maskImage: `url("${fallbackImage}")` }} aria-hidden="true">
+          <img src={fallbackImage} alt="" className="font-preview-fallback" />
+        </span>
         : <span className="preview-unavailable">{fallbackImage === null || !face ? "预览不可用" : "正在载入字体…"}</span>}
     </div>
   );

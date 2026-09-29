@@ -9,9 +9,12 @@
     "@heroui/styles": "3.2.6",
     "@lisse/react": "0.7.2",
     "@phosphor-icons/react": "2.1.10",
+    "@scritto/react": "0.1.0",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "2.7.3",
     "react": "19.3.0",
+    "react-aria-components": "1.21.1",
+    "react-colorful": "5.8.1",
     "react-dom": "19.3.0"
   },
   "devDependencies": {

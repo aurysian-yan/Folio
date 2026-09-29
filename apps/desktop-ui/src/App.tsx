@@ -32,17 +32,21 @@ import {
   Modal,
   SearchField,
   Select,
-  Slider,
   Switch,
   TextField,
   Toolbar,
 } from "@heroui/react";
+import Scritto from "@scritto/react";
 import { SmoothCorners, useSmoothCorners } from "@lisse/react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createPortal } from "react-dom";
 import { SegmentedTabs } from "./components/SegmentedTabs";
+import { ClaralightSlider } from "./components/ClaralightSlider";
+import { PreviewColorPicker } from "./components/PreviewColorPicker";
+import { PreviewPresetMenu } from "./components/PreviewPresetMenu";
+import { previewSizeRange, usePreviewAppearance } from "./preview-appearance";
 import type { ViewMode } from "./components/FontCard";
 import { VirtualFontGrid } from "./components/VirtualFontGrid";
 import { appendLibraryPage, LibraryPageRequests } from "./library-paging";
@@ -647,9 +651,13 @@ export default function App() {
   const [previewText, setPreviewText] = useState(
     "Sphinx of black quartz, judge my vow.",
   );
-  const [previewSize, setPreviewSize] = useState(() =>
-    parsePreviewSize(localStorage.getItem("folio-preview-size")),
+  const previewAppearance = usePreviewAppearance(
+    selected && page?.families.some((family) => family.id === selected.id) ? selected.id : page?.families[0]?.id ?? null,
   );
+  const previewSize = previewAppearance.current.size;
+  const inspectorAppearance = selected && previewAppearance.editing?.familyId === selected.id
+    ? previewAppearance.current : previewAppearance.committed;
+  const setPreviewSize = (size: number) => previewAppearance.update({ size });
   const [syncProfile, setSyncProfile] = useState<SyncProfileDto | null>(null);
   const [syncServerUrl, setSyncServerUrl] = useState("");
   const [syncDirectory, setSyncDirectory] = useState("Folio");
@@ -815,10 +823,6 @@ export default function App() {
   }, [viewMode]);
 
   useEffect(() => {
-    localStorage.setItem("folio-preview-size", String(previewSize));
-  }, [previewSize]);
-
-  useEffect(() => {
     localStorage.setItem("folio-quit-shortcut", quitShortcut);
   }, [quitShortcut]);
 
@@ -845,8 +849,6 @@ export default function App() {
     const syncPreferences = (event: StorageEvent) => {
       if (event.key === "folio-view-mode" && event.newValue)
         setViewMode(event.newValue as ViewMode);
-      if (event.key === "folio-preview-size")
-        setPreviewSize(parsePreviewSize(event.newValue));
       if (event.key === "folio-quit-shortcut")
         setQuitShortcut(parseQuitShortcut(event.newValue));
       if (event.key === "folio-card-hover")
@@ -1980,10 +1982,12 @@ export default function App() {
                     预览字号
                     <SettingSlider
                       label="预览字号"
-                      minValue={24}
-                      maxValue={104}
+                      minValue={previewSizeRange.min}
+                      maxValue={previewSizeRange.max}
                       value={previewSize}
                       onChange={setPreviewSize}
+                      onChangeStart={previewAppearance.begin}
+                      onChangeEnd={previewAppearance.commit}
                     />
                     <output>{previewSize}px</output>
                   </label>
@@ -2018,6 +2022,7 @@ export default function App() {
                       minValue={0}
                       maxValue={1000}
                       step={10}
+                      unit=" 毫秒"
                       isDisabled={!cardHover}
                       value={cardHoverDelay}
                       onChange={setCardHoverDelay}
@@ -2656,7 +2661,9 @@ export default function App() {
               <VirtualFontGrid
                 key={JSON.stringify([search, scope, sort, selectedFacets, collectionId, smartFolderId, fontState])}
                 families={page.families} total={page.totalMatches}
-                mode={viewMode} previewText={previewText} previewSize={previewSize}
+                mode={viewMode} previewText={previewText} previewSize={previewAppearance.committed.size}
+                textColor={previewAppearance.committed.textColor} backgroundColor={previewAppearance.committed.backgroundColor}
+                editingPreview={previewAppearance.editing}
                 styleKey={selectedStyleKey} selectedId={selected?.id} onStyleChange={setSelectedStyleKey}
                 showMetadata={cardMetadata} selectOnHover={cardHover} hoverDelay={cardHoverDelay}
                 onSelect={selectFamily} onFavorite={favoriteFamily}
@@ -2703,27 +2710,11 @@ export default function App() {
             )}
             <footer className="preview-bar">
               <span className="sr-only" role="status">{recentError}</span>
-              <OptionSelect
-                label="预览文字样例"
+              <PreviewPresetMenu
                 value={previewTextMode}
-                options={[
-                  { id: "pangram", label: "Pangram" },
-                  { id: "alphabet", label: "Alphabet" },
-                  { id: "numbers", label: "Numbers" },
-                  { id: "loremIpsum", label: "Lorem Ipsum" },
-                  { id: "custom", label: "Custom" },
-                ]}
-                onChange={(mode) => {
+                onChange={(mode, text) => {
                   setPreviewTextMode(mode);
-                  const presetText: Record<string, string> = {
-                    pangram: "Sphinx of black quartz, judge my vow.",
-                    alphabet:
-                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz",
-                    numbers: "0123456789",
-                    loremIpsum:
-                      "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-                  };
-                  if (presetText[mode]) setPreviewText(presetText[mode]);
+                  if (text !== undefined) setPreviewText(text);
                 }}
               />
               <TextField
@@ -2740,12 +2731,25 @@ export default function App() {
                   }}
                 />
               </TextField>
-              <TextAaIcon />
+              <TextAaIcon className="preview-size-icon" aria-hidden="true" />
               <PreviewSizeSlider
                 value={previewSize}
                 onChange={setPreviewSize}
+                onChangeStart={previewAppearance.begin}
+                onChangeEnd={previewAppearance.commit}
               />
-              <output>{previewSize}px</output>
+              <output className="preview-size-value" aria-label={`预览字号 ${previewSize}px`}>
+                {previewSize < 100 && <span className="preview-size-padding" aria-hidden="true">0</span>}
+                <Scritto value={previewSize} respectMotionPreference aria-hidden="true" />
+                <span aria-hidden="true">px</span>
+              </output>
+              <span className="preview-color-divider" aria-hidden="true" />
+              <PreviewColorPicker kind="background" value={previewAppearance.current.backgroundColor}
+                onChange={(backgroundColor) => previewAppearance.update({ backgroundColor })}
+                onEditingStart={previewAppearance.begin} onEditingEnd={previewAppearance.commit} />
+              <PreviewColorPicker kind="text" value={previewAppearance.current.textColor}
+                onChange={(textColor) => previewAppearance.update({ textColor })}
+                onEditingStart={previewAppearance.begin} onEditingEnd={previewAppearance.commit} />
             </footer>
               </>
             )}
@@ -2778,7 +2782,9 @@ export default function App() {
                   family={selected}
                   styleKey={selectedStyleKey}
                   previewText={previewText}
-                  previewSize={previewSize}
+                  previewSize={inspectorAppearance.size}
+                  textColor={inspectorAppearance.textColor}
+                  backgroundColor={inspectorAppearance.backgroundColor}
                   collections={collections}
                   collectionTargetId={collectionTargetId}
                   onCollectionTargetChange={setCollectionTargetId}
@@ -3396,6 +3402,8 @@ function Inspector({
   styleKey,
   previewText,
   previewSize,
+  textColor,
+  backgroundColor,
   collections,
   collectionTargetId,
   onCollectionTargetChange,
@@ -3406,6 +3414,8 @@ function Inspector({
   styleKey: string | null;
   previewText: string;
   previewSize: number;
+  textColor: string | null;
+  backgroundColor: string | null;
   collections: CollectionDto[];
   collectionTargetId: string;
   onCollectionTargetChange: (id: string) => void;
@@ -3438,8 +3448,8 @@ function Inspector({
       </p>
       <details className="inspector-section" open>
         <summary>预览</summary>
-        <div className="inspector-preview">
-          <FontPreview style={style} text={previewText} size={previewSize} lines={6} align="left" priority="selected" label={`${family.displayName}，${style?.name ?? "常规"} 预览`} />
+        <div className="inspector-preview" style={{ backgroundColor: backgroundColor ?? undefined }}>
+          <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={6} align="left" priority="selected" label={`${family.displayName}，${style?.name ?? "常规"} 预览`} />
         </div>
       </details>
       {face?.weight != null && (
@@ -3544,8 +3554,11 @@ function SettingSlider({
   maxValue,
   value,
   onChange,
+  onChangeStart,
+  onChangeEnd,
   className = "settings-slider",
   step = 1,
+  unit = "px",
   isDisabled = false,
 }: {
   label: string;
@@ -3553,28 +3566,27 @@ function SettingSlider({
   maxValue: number;
   value: number;
   onChange: (value: number) => void;
+  onChangeStart?: () => void;
+  onChangeEnd?: () => void;
   className?: string;
   step?: number;
+  unit?: string;
   isDisabled?: boolean;
 }) {
   return (
-    <Slider.Root
-      className={className}
+    <ClaralightSlider
+      className={`folio-slider ${className}`}
       aria-label={label}
-      minValue={minValue}
-      maxValue={maxValue}
+      aria-valuetext={`${value}${unit}`}
+      min={minValue}
+      max={maxValue}
       step={step}
-      isDisabled={isDisabled}
-      value={[value]}
-      onChange={(values) =>
-        onChange(Array.isArray(values) ? (values[0] ?? value) : values)
-      }
-    >
-      <Slider.Track>
-        <Slider.Fill />
-        <Slider.Thumb />
-      </Slider.Track>
-    </Slider.Root>
+      disabled={isDisabled}
+      value={value}
+      onValueChange={onChange}
+      onValueChangeStart={onChangeStart}
+      onValueChangeEnd={onChangeEnd}
+    />
   );
 }
 
@@ -3727,18 +3739,24 @@ function BlurSettingsPreview({
 function PreviewSizeSlider({
   value,
   onChange,
+  onChangeStart,
+  onChangeEnd,
 }: {
   value: number;
   onChange: (value: number) => void;
+  onChangeStart: () => void;
+  onChangeEnd: () => void;
 }) {
   return (
     <SettingSlider
       className="preview-size-slider"
       label="预览字号"
-      minValue={24}
-      maxValue={104}
+      minValue={previewSizeRange.min}
+      maxValue={previewSizeRange.max}
       value={value}
       onChange={onChange}
+      onChangeStart={onChangeStart}
+      onChangeEnd={onChangeEnd}
     />
   );
 }
@@ -3771,12 +3789,6 @@ function parseSidebarBlur(value: string | null) {
   return Number.isFinite(amount)
     ? Math.round(Math.min(12, Math.max(1, amount)))
     : 4;
-}
-
-function parsePreviewSize(value: string | null) {
-  if (!value?.trim()) return 48;
-  const size = Number(value);
-  return Number.isFinite(size) ? Math.round(Math.min(104, Math.max(24, size))) : 48;
 }
 
 function errorMessage(cause: unknown) {

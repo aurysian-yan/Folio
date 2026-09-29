@@ -7,13 +7,15 @@ import { FontPreview } from "./FontPreview";
 
 export type ViewMode = "compact" | "large" | "list" | "expanded";
 
-export const FontCard = memo(function FontCard({ family, mode, selected, styleKey, previewText, previewSize, showMetadata, selectOnHover, hoverDelay, onSelect, onStyleChange, onFavorite, position, total }: {
+export const FontCard = memo(function FontCard({ family, mode, selected, styleKey, previewText, previewSize, textColor, backgroundColor, showMetadata, selectOnHover, hoverDelay, onSelect, onStyleChange, onFavorite, position, total }: {
   family: FamilyDto;
   mode: ViewMode;
   selected: boolean;
   styleKey: string | null;
   previewText: string;
   previewSize: number;
+  textColor?: string | null;
+  backgroundColor?: string | null;
   showMetadata: boolean;
   selectOnHover: boolean;
   hoverDelay: number;
@@ -60,6 +62,7 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
     <Button isIconOnly size="sm" variant="ghost" className="font-style-step" aria-label="下一个样式" isDisabled={styles.length < 2} onPress={() => moveStyle(1)}><CaretRightIcon /></Button>
   </div>;
   return <Card className={`font-card${selected ? " selected" : ""}`} variant="secondary" data-mode={mode} data-family-id={family.id}
+    style={{ backgroundColor: backgroundColor ?? undefined }}
     role="listitem" aria-posinset={position} aria-setsize={total}
     onPointerEnter={(event) => setHovered(event.pointerType === "mouse")}
     onPointerLeave={() => setHovered(false)}
@@ -69,7 +72,7 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
       <span className="sr-only">选择 {family.displayName}</span>
     </Button>
     <div className="font-card-preview-area">
-      <FontPreview style={style} text={previewText} size={previewSize} lines={mode === "compact" ? 2 : mode === "large" ? 3 : mode === "list" ? 1 : 6}
+      <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={mode === "compact" ? 2 : mode === "large" ? 3 : mode === "list" ? 1 : 6}
         priority={selected ? "selected" : "visible"}
         align={mode === "expanded" ? "top" : mode === "list" ? "left" : "center"} label={`${family.displayName}，${style?.name ?? "常规"} 字体预览`} />
     </div>

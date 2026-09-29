@@ -20,10 +20,11 @@ it("卡片和检查器共享真实字体，坐标或字号变化不重新传输"
     <FontPreview style={style} text="Aa" size={48} lines={6} label="检查器" priority="selected" /></>);
   await waitFor(() => expect(container.querySelectorAll(".font-preview-text")).toHaveLength(2));
   expect(loadPreviewFont).toHaveBeenCalledTimes(1);
-  rerender(<><FontPreview style={style && { ...style, coordinates: { wght: 700 } }} text="Aa 中文" size={64} lines={2} label="卡片" />
+  rerender(<><FontPreview style={style && { ...style, coordinates: { wght: 700 } }} text="Aa 中文" size={64} color="#ff000080" lines={2} label="卡片" />
     <FontPreview style={style} text="Aa" size={48} lines={6} label="检查器" priority="selected" /></>);
   await waitFor(() => expect(container.textContent).toContain("Aa □□"));
   expect(loadPreviewFont).toHaveBeenCalledTimes(1);
+  expect(container.querySelector<HTMLElement>(".font-preview")?.style.color).toBe("rgba(255, 0, 0, 0.5)");
   expect(previewStyles(value)).toBe(previewStyles(value));
 });
 
@@ -62,9 +63,14 @@ it("离开页面后在途字体不再构造或注册", async () => {
 it("浏览器拒绝字体后共享原生预览，缺字不使整个预览失败", async () => {
   vi.spyOn(FontFace.prototype, "load").mockRejectedValue(new Error("拒绝字体"));
   const style = currentPreviewStyle(family("fallback"));
-  const { container, unmount } = render(<><FontPreview style={style} text="Aa 中文" size={48} lines={2} label="一" />
+  const { container, rerender, unmount } = render(<><FontPreview style={style} text="Aa 中文" size={48} lines={2} label="一" />
     <FontPreview style={style} text="Aa 中文" size={48} lines={2} label="二" /></>);
   await waitFor(() => expect(container.querySelectorAll("img")).toHaveLength(2));
+  expect(renderPreviews).toHaveBeenCalledTimes(1);
+  rerender(<><FontPreview style={style} text="Aa 中文" size={48} color="#ff000080" lines={2} label="一" />
+    <FontPreview style={style} text="Aa 中文" size={48} color="#ff000080" lines={2} label="二" /></>);
+  for (const preview of container.querySelectorAll<HTMLElement>(".font-preview")) expect(preview.style.color).toBe("rgba(255, 0, 0, 0.5)");
+  for (const mask of container.querySelectorAll<HTMLElement>(".font-preview-colored-fallback")) expect(mask.style.maskImage).toContain("data:image/png;base64,AA==");
   expect(renderPreviews).toHaveBeenCalledTimes(1);
   unmount();
   const again = render(<FontPreview style={style} text="Aa 中文" size={48} lines={2} label="再次预览" />);

@@ -1,17 +1,19 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent } from "react";
 import { gridGeometry, visibleRows } from "../grid-layout";
 import type { FamilyDto } from "../types";
+import type { EditingPreview } from "../preview-appearance";
 import { FontCard } from "./FontCard";
 
 type CardProps = ComponentProps<typeof FontCard>;
-type Props = Pick<CardProps, "mode" | "previewText" | "previewSize" | "showMetadata" | "selectOnHover" | "hoverDelay" | "onSelect" | "onStyleChange" | "onFavorite"> & {
+type Props = Pick<CardProps, "mode" | "previewText" | "previewSize" | "textColor" | "backgroundColor" | "showMetadata" | "selectOnHover" | "hoverDelay" | "onSelect" | "onStyleChange" | "onFavorite"> & {
   families: FamilyDto[];
   selectedId?: string;
   styleKey: string | null;
   total: number;
+  editingPreview?: EditingPreview | null;
 };
 
-export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selectedId, styleKey, total, ...props }: Props) {
+export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selectedId, styleKey, total, editingPreview, ...props }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: 640, height: 480, scrollTop: 0, top: 10 });
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -117,6 +119,9 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
       {rows.map((row) => <div key={row} className="font-grid-row" style={{ top: row * geometry.stride, height: geometry.cardHeight, gap: geometry.gap, gridTemplateColumns: `repeat(${geometry.columns}, minmax(0, 1fr))` }}>
         {families.slice(row * geometry.columns, (row + 1) * geometry.columns).map((family, column) => <FontCard
           {...props} key={family.id} family={family} selected={selectedId === family.id} styleKey={selectedId === family.id ? styleKey : null}
+          previewSize={editingPreview?.familyId === family.id ? editingPreview.appearance.size : props.previewSize}
+          textColor={editingPreview?.familyId === family.id ? editingPreview.appearance.textColor : props.textColor}
+          backgroundColor={editingPreview?.familyId === family.id ? editingPreview.appearance.backgroundColor : props.backgroundColor}
           position={row * geometry.columns + column + 1} total={total} />)}
       </div>)}
     </div>

@@ -27,7 +27,9 @@
 - 设计稿中的侧栏、工具栏、搜索框、字体卡片网格和底部预览栏作为后续
   前端实现的基础结构。
 - 侧栏抽屉使用 HeroUI `Drawer`，操作区使用 `Toolbar`，字体预览使用
-  `Card`，字号与颜色控制使用 `Slider`、`ColorPicker`。
+  `Card`，颜色入口使用 HeroUI `ColorPicker`，面板使用成熟的 `react-colorful`
+  完整组件及其内置色相、透明度控件。其余数值滑块统一使用 Claralight Slider
+  源码，不显示气泡；来源与适配约定见 `docs/claralight-slider.md`。
 - UI 文案默认使用中文，必须是可以直接交付的产品文案；不得出现 TODO、
   FIXME、调试信息或开发过程说明。
 - 使用语义化 HTML 和 HeroUI 提供的 React Aria 行为，确保键盘、焦点和读屏
@@ -37,7 +39,8 @@
 
 - 使用 HeroUI 语义主题变量支持浅色、深色和系统主题。
 - 遵循 `prefers-reduced-motion`。默认使用 HeroUI 内置的 CSS transitions 和
-  keyframes，不增加独立动画库；复杂页面转场需要单独评估。
+  keyframes，不增加独立动画库；Claralight 滑块保留内置手柄动效，主窗口
+  底部字号数字使用 Scritto。复杂页面转场需要单独评估。
 - 不添加渐变、无依据的装饰、任意设计 token 或大范围组件覆盖。自定义 CSS
   只用于应用级布局和主题变量。
 - 图标统一使用 Phosphor Icons，优先使用带 `Icon` 后缀的导出，例如
