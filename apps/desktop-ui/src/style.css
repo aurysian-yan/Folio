@@ -41,6 +41,12 @@
     --border: var(--line);
     --separator: color-mix(in srgb, var(--text) 10%, transparent);
     --segment: #ffffff;
+    /* Hero 状态色沿用 Figma 与 SwiftUI 的七种状态。 */
+    --hero-normal: #26bf4d;
+    --hero-damaged: #f5234b;
+    --hero-update: #0078f0;
+    --hero-cloud: #f58625;
+    --hero-conflict: #cb30e0;
     color: var(--text);
     color-scheme: light;
 }
@@ -909,17 +915,6 @@ button {
     align-items: center;
     justify-content: space-between;
     padding: 10px 24px 0;
-}
-.library-title-row h1 {
-    margin: 0;
-    font-size: 21px;
-    font-weight: 620;
-    letter-spacing: -0.025em;
-}
-.library-title-row p {
-    margin: 5px 0 0;
-    color: var(--text-muted);
-    font-size: 11px;
 }
 .sort-button {
     display: flex;
@@ -2046,48 +2041,67 @@ button {
 
 .library-overview {
     flex: 0 0 auto;
-    padding: 24px 36px 12px;
+    padding: 16px 24px 8px;
+    container-type: inline-size;
 }
 .library-title-row {
+    position: relative;
+    flex-wrap: wrap;
     align-items: flex-start;
-    min-height: 122px;
+    justify-content: flex-end;
+    min-height: 0;
     padding: 0;
 }
-.library-summary {
-    min-width: 0;
-}
-.library-summary-heading {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.library-summary-heading svg {
-    width: 24px;
-    height: 24px;
-    flex: 0 0 auto;
-    color: #23b751;
-}
-.library-summary-heading h1 {
-    font-size: clamp(19px, 2.1vw, 24px);
-    line-height: 1.35;
-}
-.library-summary > p {
-    margin: 2px 0 14px 32px;
-    color: var(--text-muted);
-    font-size: clamp(13px, 1.6vw, 19px);
-    line-height: 1.35;
-}
-.library-sync-note {
-    display: inline-flex;
-    align-items: center;
+.library-title-row > .library-hero-container { margin-inline: auto; }
+.library-hero-container { container: library-hero / inline-size; }
+.library-hero-icon-slot { display: flex; flex-shrink: 0; align-items: center; }
+.library-hero { --hero-state-color: var(--hero-normal); }
+.library-hero[data-kind="damaged"] { --hero-state-color: var(--hero-damaged); }
+.library-hero[data-kind="update"] { --hero-state-color: var(--hero-update); }
+.library-hero:is([data-kind="cloudAhead"], [data-kind="localUnsynced"], [data-kind="cloudStorageLow"]) { --hero-state-color: var(--hero-cloud); }
+.library-hero[data-kind="conflict"] { --hero-state-color: var(--hero-conflict); }
+.library-hero-heading, .library-hero-subtitle { font-stretch: condensed; overflow-wrap: anywhere; }
+.library-hero .library-hero-action, .library-hero .library-hero-sync-action {
+    height: auto;
+    min-height: 32px;
+    max-width: 100%;
+    justify-content: flex-start;
     gap: 6px;
-    margin-left: 32px;
-    color: var(--text-muted);
-    font-size: 11px;
+    padding: 0;
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    white-space: normal;
+    text-align: left;
+    --button-bg: transparent;
+    --button-bg-hover: transparent;
+    --button-bg-pressed: transparent;
 }
-.library-sync-note svg {
-    width: 15px;
-    height: 15px;
+.library-hero .library-hero-action:hover > span, .library-hero .library-hero-sync-action:hover > span { text-decoration: underline; text-underline-offset: 4px; }
+.library-hero .library-hero-icon { width: 24px; height: 24px; flex-shrink: 0; margin: 0; color: var(--hero-state-color); }
+.library-hero .library-hero-chevron { width: 16px; height: 16px; flex-shrink: 0; margin: 0; color: color-mix(in srgb, var(--foreground) 28%, transparent); }
+.library-hero .library-hero-sync-icon { width: 16px; height: 16px; flex-shrink: 0; margin: 0; }
+.library-hero-sync-icon-slot { display: flex; height: 32px; flex: 0 0 16px; align-items: center; }
+.library-hero .library-hero-sync-action { align-items: flex-start; gap: 4px; padding: 0; }
+.library-hero-sync { display: flex; }
+.library-hero-sync:is([data-state="pending"], [data-state="error"]) .library-hero-sync-icon { color: var(--hero-cloud); }
+.library-hero-sync[data-state="running"] .library-hero-sync-icon { color: var(--hero-update); animation: hero-sync-spin 1.5s linear infinite; }
+@keyframes hero-sync-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .library-hero-sync[data-state="running"] .library-hero-sync-icon { animation: none; }
+}
+@container (min-width: 946px) {
+    .library-title-row > .sort-button { position: absolute; top: 10px; right: 0; }
+}
+@container library-hero (max-width: 480px) {
+    .library-hero { padding: 10px 12px; }
+    .library-hero-title-row { flex-direction: column; align-items: flex-start; gap: 0; padding: 0; }
+    .library-hero-icon-slot { width: 36px; padding: 2px 2px 6px; }
+    .library-hero .library-hero-icon { width: 32px; height: 32px; }
+    .library-hero-heading { width: 100%; padding: 0 4px 8px; }
+    .library-hero-ready { display: block; }
+    .library-hero-subtitle { padding: 0 4px; }
 }
 .sort-button {
     flex: 0 0 auto;
@@ -2215,21 +2229,12 @@ button {
 }
 @media (max-width: 1050px) {
     .library-overview {
-        padding: 19px 20px 10px;
+        padding: 16px 16px 8px;
     }
 }
 @media (max-width: 860px) {
     .library-overview {
-        padding: 16px 14px 8px;
-    }
-    .library-title-row {
-        min-height: 110px;
-    }
-    .library-summary-heading h1 {
-        font-size: 17px;
-    }
-    .library-summary > p {
-        font-size: 12px;
+        padding: 12px 10px 6px;
     }
     .sort-button > span {
         display: none;

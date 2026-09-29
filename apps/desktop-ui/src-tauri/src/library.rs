@@ -206,6 +206,7 @@ pub struct FacetOptionDto {
 pub struct LibrarySnapshotDto {
     pub family_count: usize,
     pub face_count: usize,
+    pub variable_family_count: usize,
     pub recent_count: usize,
     pub roots: Vec<String>,
     pub font_state_counts: HashMap<String, usize>,
@@ -760,6 +761,12 @@ impl LibraryService {
         LibrarySnapshotDto {
             family_count: self.catalog.family_count(),
             face_count: self.catalog.face_count(),
+            variable_family_count: self
+                .catalog
+                .families
+                .iter()
+                .filter(|family| family.faces.iter().any(|face| face.metadata.is_variable))
+                .count(),
             recent_count: self.state.recent.len(),
             roots,
             font_state_counts,
@@ -2107,6 +2114,25 @@ mod tests {
             stored[0].identity_id,
             parse_identity_id(&identities[1]).unwrap()
         );
+    }
+
+    #[test]
+    fn snapshot_counts_variable_families_in_the_complete_catalog() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("fonts");
+        std::fs::create_dir(&root).unwrap();
+        let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/fonts");
+        for name in ["Lato-Regular.ttf", "Lato-Italic.ttf", "Inter-Variable.ttf"] {
+            std::fs::copy(fixtures.join(name), root.join(name)).unwrap();
+        }
+        let mut library = LibraryService::open(dir.path().join("folio.sqlite")).unwrap();
+        let snapshot = library.add_root(root).unwrap();
+        assert_eq!(snapshot.family_count, 2);
+        assert_eq!(snapshot.variable_family_count, 1);
+        let request: PageRequest =
+            serde_json::from_value(serde_json::json!({ "limit": 1 })).unwrap();
+        assert_eq!(library.query(request).unwrap().families.len(), 1);
+        assert_eq!(library.snapshot().variable_family_count, 1);
     }
 
     #[test]

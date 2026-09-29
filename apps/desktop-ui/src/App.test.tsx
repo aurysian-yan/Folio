@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { family } from "./test/fixtures";
 import App from "./App";
-import { queryLibrary, recordRecent } from "./api";
+import { getSyncProfile, getSyncStatus, listSyncConflicts, openSettings, queryLibrary, recordRecent } from "./api";
 
 vi.mock("./components/FontPreview", () => ({ FontPreview: ({ size, label, color }: { size: number; label: string; color?: string | null }) => <span data-testid="preview-font-size" data-size={size} data-color={color ?? "default"} aria-label={label} /> }));
 vi.mock("@lisse/react", () => ({ useSmoothCorners: () => {}, SmoothCorners: ({ children }: { children: ReactNode }) => children }));
@@ -16,11 +16,12 @@ vi.mock("./api", async (importOriginal) => {
   return {
     ...actual,
     queryLibrary: vi.fn(async ({ offset, limit }: { offset: number; limit: number }) => ({ families: families.slice(offset, offset + limit), totalMatches: 300, facets: [], isLoading: false })),
-    refreshLibrary: vi.fn(async () => ({ familyCount: 300, faceCount: 300, recentCount: 0, roots: [], fontStateCounts: {}, userFontGroups: [],
+    refreshLibrary: vi.fn(async () => ({ familyCount: 300, faceCount: 300, variableFamilyCount: 0, recentCount: 0, roots: [], fontStateCounts: {}, userFontGroups: [],
       health: { damagedFiles: 0, duplicateSources: 0, multipleRevisions: 0, metadataConflicts: 0 } })),
     recordRecent: vi.fn(async () => 1),
+    openSettings: vi.fn(async () => {}),
     listCollections: vi.fn(async () => []), listSmartFolders: vi.fn(async () => []),
-    getSyncProfile: vi.fn(async () => null), listCloudFonts: vi.fn(async () => []),
+    getSyncProfile: vi.fn(async () => null), listCloudFonts: vi.fn(async () => []), listSyncConflicts: vi.fn(async () => []),
     getSyncStatus: vi.fn(async () => ({ configured: false, running: false, phase: "", stage: "", percent: 0, stageCompleted: 0, stageTotal: 0,
       uploadedFiles: 0, downloadedFiles: 0, publishedEvents: 0, items: [], error: null })),
   };
@@ -46,6 +47,28 @@ it("选择后续页字体不查询列表、不丢失后续页或选中项", asyn
   expect(getByText("显示 240 / 300")).toBeTruthy();
   expect(container.querySelector('.font-card[data-family-id="239"]')?.classList.contains("selected")).toBe(true);
   expect(container.querySelectorAll(".font-card").length).toBeLessThan(40);
+});
+
+it("搜索结果数量不覆盖 Hero 全库统计，未连接提示保持简短", async () => {
+  const { getByRole, getByText } = render(<App />);
+  await waitFor(() => expect(getByRole("heading", { level: 1 }).textContent).toBe("现有 300 个字族，随时可用"));
+  await waitFor(() => expect(getByText("未连接云端", { selector: ".library-hero-sync span" })).toBeTruthy());
+  await waitFor(() => expect(getByRole("button", { name: "加载更多" }).hasAttribute("disabled")).toBe(false));
+  vi.mocked(queryLibrary).mockResolvedValueOnce({ families: [family("0")], totalMatches: 1, facets: [], isLoading: false });
+  fireEvent.change(getByRole("searchbox", { name: "搜索字体" }), { target: { value: "字体 0" } });
+  await waitFor(() => expect(vi.mocked(queryLibrary).mock.calls.at(-1)?.[0].text).toBe("字体 0"));
+  await waitFor(() => expect(getByRole("button", { name: "选择 字体 0" })).toBeTruthy());
+  expect(getByRole("heading", { level: 1 }).textContent).toBe("现有 300 个字族，随时可用");
+});
+
+it("主窗口读取字体同步冲突，Hero 操作打开同步设置", async () => {
+  vi.mocked(getSyncProfile).mockResolvedValueOnce({ serverUrl: "https://webdav.123pan.com", remoteDirectory: "Folio", username: "", automatic: false });
+  vi.mocked(getSyncStatus).mockResolvedValueOnce({ configured: true, running: false, phase: "", stage: "", percent: 0, stageCompleted: 0, stageTotal: 0, uploadedFiles: 0, downloadedFiles: 0, publishedEvents: 0, items: [], error: null });
+  vi.mocked(listSyncConflicts).mockResolvedValueOnce([{ id: "revision", kind: "font_revision", title: "字体版本冲突", detail: "", localFingerprint: "a", remoteFingerprint: "b" }]);
+  const { getByRole } = render(<App />);
+  const action = await waitFor(() => getByRole("button", { name: "发现 1 个字体同步冲突，处理同步冲突" }));
+  fireEvent.click(action);
+  await waitFor(() => expect(openSettings).toHaveBeenCalled());
 });
 
 it("保存并同步预览字号，主窗口卡片和侧边栏使用同一字号", async () => {

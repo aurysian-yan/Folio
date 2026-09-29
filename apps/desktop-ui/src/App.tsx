@@ -52,6 +52,8 @@ import { VirtualFontGrid } from "./components/VirtualFontGrid";
 import { appendLibraryPage, LibraryPageRequests } from "./library-paging";
 import { startMetric } from "./performance-metrics";
 import { FontPreview } from "./components/FontPreview";
+import { LibraryHero } from "./components/LibraryHero";
+import { createLibraryHero, type HeroAction } from "./library-hero";
 import { currentPreviewStyle } from "./font-preview";
 import {
   Fragment,
@@ -668,6 +670,8 @@ export default function App() {
   const [syncMessage, setSyncMessage] = useState("");
   const [cloudFonts, setCloudFonts] = useState<CloudFontDto[]>([]);
   const [syncConflicts, setSyncConflicts] = useState<SyncConflictDto[]>([]);
+  const [cloudLoaded, setCloudLoaded] = useState(false);
+  const [cloudReadError, setCloudReadError] = useState(false);
   const wasSyncRunning = useRef(false);
   const lastAutomaticSyncAt = useRef(0);
   const pageRequests = useRef(new LibraryPageRequests());
@@ -955,25 +959,42 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadOrganization, settingsWindow]);
 
-  // 主窗口维护云端连接状态与云字体列表，供侧栏「云端」区段使用。
+  // 主窗口共用云端状态；同步结束后更新 Hero、字体列表与冲突。
   useEffect(() => {
     if (settingsWindow) return;
     let active = true;
     let previousRunning = false;
+    let previousConfigured = false;
+    let cloudStateLoaded = false;
+    let cloudStateLoading = false;
     const loadCloud = async () => {
+      if (cloudStateLoading) return;
+      cloudStateLoading = true;
       try {
-        const [profile, status, fonts] = await Promise.all([
+        const [profile, status, fonts, conflicts] = await Promise.all([
           getSyncProfile(),
           getSyncStatus(),
           listCloudFonts(),
+          listSyncConflicts(),
         ]);
         if (!active) return;
         setSyncProfile(profile);
         setSyncStatus(status);
         setCloudFonts(fonts);
+        setSyncConflicts(conflicts);
+        setCloudReadError(false);
+        setCloudLoaded(true);
+        cloudStateLoaded = true;
         previousRunning = status.running;
+        previousConfigured = status.configured;
       } catch {
-        // 云端不可用时保持未连接状态，不打断字体库浏览。
+        cloudStateLoaded = false;
+        if (active) {
+          setCloudReadError(true);
+          setCloudLoaded(true);
+        }
+      } finally {
+        cloudStateLoading = false;
       }
     };
     void loadCloud();
@@ -982,10 +1003,12 @@ export default function App() {
         .then((status) => {
           if (!active) return;
           setSyncStatus(status);
-          if (previousRunning && !status.running) void loadCloud();
+          if (!cloudStateLoaded || (previousRunning && !status.running) || previousConfigured !== status.configured) void loadCloud();
+          else setCloudReadError(false);
           previousRunning = status.running;
+          previousConfigured = status.configured;
         })
-        .catch(() => {});
+        .catch(() => { if (active) setCloudReadError(true); });
     }, 2000);
     return () => {
       active = false;
@@ -1512,6 +1535,11 @@ export default function App() {
         : scope === "fontState"
           ? fontStateLabel(fontState, snapshot)
           : scopeTitle(scope);
+  const libraryHero = useMemo(() => createLibraryHero({ snapshot, profile: syncProfile, status: syncStatus, fonts: cloudFonts, conflicts: syncConflicts, cloudLoaded, cloudReadError }), [snapshot, syncProfile, syncStatus, cloudFonts, syncConflicts, cloudLoaded, cloudReadError]);
+  const handleHeroAction = (action: HeroAction) => {
+    if (action === "cloudSettings") void openSettings().catch((cause) => setError(errorMessage(cause)));
+    else selectLibraryScope(action);
+  };
   const compactViewport = viewportWidth <= 860;
   const healthCount = snapshot
     ? snapshot.health.damagedFiles +
@@ -2617,25 +2645,14 @@ export default function App() {
               <>
             <div className="library-overview">
               <div className="library-title-row">
-                <div className="library-summary">
-                  <div className="library-summary-heading">
-                    <SparkleIcon aria-hidden="true" />
-                    <h1>
-                      {scope === "all" && page
-                        ? `现有 ${page.totalMatches} 个字族，随时可用`
-                        : currentScopeTitle}
-                    </h1>
-                  </div>
-                  <p>
-                    {page
-                      ? `${page.totalMatches} 个字族 · 搜索、筛选并预览本地字体`
-                      : "正在加载字体库"}
-                  </p>
-                  <span className="library-sync-note">
-                    <CloudCheckIcon aria-hidden="true" />
-                    本地字体目录已就绪
-                  </span>
-                </div>
+                <LibraryHero
+                  presentation={scope === "all" ? libraryHero : {
+                    kind: "normal", title: currentScopeTitle,
+                    subtitle: page ? `${page.totalMatches} 个字族 · 搜索、筛选与预览` : "正在读取字体库…",
+                    sync: libraryHero.sync,
+                  }}
+                  onAction={handleHeroAction}
+                />
                 <div className="sort-button">
                   <span>排序</span>
                   <OptionSelect

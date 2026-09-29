@@ -64,6 +64,7 @@ export interface HealthDto {
 export interface LibrarySnapshotDto {
   familyCount: number;
   faceCount: number;
+  variableFamilyCount: number;
   recentCount: number;
   roots: string[];
   fontStateCounts: Record<string, number>;
