@@ -1,4 +1,5 @@
 mod library;
+mod preview;
 
 use std::{
     path::PathBuf,
@@ -16,7 +17,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 struct AppState {
-    library: Mutex<LibraryService>,
+    library: Arc<Mutex<LibraryService>>,
+    previews: Arc<preview::PreviewService>,
     database_path: PathBuf,
     managed_directory: PathBuf,
     sync_status: Arc<Mutex<SyncStatusDto>>,
@@ -98,47 +100,44 @@ struct SyncConflictDto {
 }
 
 #[tauri::command]
-fn query_library(
+async fn query_library(
     window: WebviewWindow,
     state: State<'_, AppState>,
     request: PageRequest,
 ) -> Result<library::LibraryPageDto, String> {
     require_main_window(&window)?;
-    state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .query(request)
-        .map_err(|error| error.to_string())
+    with_library(&state, move |library| library.query(request)).await
 }
 
 #[tauri::command]
-fn refresh_library(
+async fn refresh_library(
     window: WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<library::LibrarySnapshotDto, String> {
     require_main_window(&window)?;
-    state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .refresh()
-        .map_err(|error| error.to_string())
+    let previews = Arc::clone(&state.previews);
+    with_library(&state, move |library| {
+        let snapshot = library.refresh()?;
+        previews.invalidate();
+        Ok(snapshot)
+    })
+    .await
 }
 
 #[tauri::command]
-fn add_library_root(
+async fn add_library_root(
     window: WebviewWindow,
     state: State<'_, AppState>,
     path: String,
 ) -> Result<library::LibrarySnapshotDto, String> {
     require_main_window(&window)?;
-    state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .add_root(PathBuf::from(path))
-        .map_err(|error| error.to_string())
+    let previews = Arc::clone(&state.previews);
+    with_library(&state, move |library| {
+        let snapshot = library.add_root(PathBuf::from(path))?;
+        previews.invalidate();
+        Ok(snapshot)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -146,22 +145,29 @@ async fn load_preview_font(
     window: WebviewWindow,
     state: State<'_, AppState>,
     face_id: String,
-) -> Result<library::PreviewFontDto, String> {
+) -> Result<tauri::ipc::Response, String> {
     require_main_window(&window)?;
-    let source = state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .preview_font_source(&face_id)
-        .map_err(|error| error.to_string())?;
-    tauri::async_runtime::spawn_blocking(move || library::load_preview_font(&source))
-        .await
-        .map_err(|_| "字体预览暂时不可用".to_owned())?
-        .map_err(|error| error.to_string())
+    let library = Arc::clone(&state.library);
+    let previews = Arc::clone(&state.previews);
+    tauri::async_runtime::spawn_blocking(move || {
+        let (sources, generation) = {
+            let library = library.lock().map_err(|_| "字体库暂时不可用".to_owned())?;
+            (
+                library
+                    .preview_font_sources(&face_id)
+                    .map_err(|error| error.to_string())?,
+                previews.generation(),
+            )
+        };
+        let packet = previews.font(&face_id, &sources, generation)?;
+        Ok(tauri::ipc::Response::new(packet.as_ref().clone()))
+    })
+    .await
+    .map_err(|_| "字体预览暂时不可用".to_owned())?
 }
 
 #[tauri::command]
-fn render_previews(
+async fn render_previews(
     window: WebviewWindow,
     state: State<'_, AppState>,
     face_ids: Vec<String>,
@@ -169,57 +175,91 @@ fn render_previews(
     size: u32,
 ) -> Result<Vec<library::FontPreviewDto>, String> {
     require_main_window(&window)?;
-    state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .render_previews(&face_ids, &sample, size)
-        .map_err(|error| error.to_string())
+    let library = Arc::clone(&state.library);
+    let previews = Arc::clone(&state.previews);
+    tauri::async_runtime::spawn_blocking(move || {
+        let (sources, generation) = {
+            let library = library.lock().map_err(|_| "字体库暂时不可用".to_owned())?;
+            let sources: Vec<_> = face_ids
+                .into_iter()
+                .take(120)
+                .map(|id| {
+                    let sources = library.preview_font_sources(&id);
+                    (id, sources)
+                })
+                .collect();
+            (sources, previews.generation())
+        };
+        Ok(sources
+            .into_iter()
+            .map(|(id, sources)| {
+                let result = sources
+                    .map_err(|error| error.to_string())
+                    .and_then(|sources| previews.image(&id, &sources, generation, &sample, size));
+                match result {
+                    Ok(data_url) => library::FontPreviewDto {
+                        face_id: id,
+                        data_url: Some(data_url),
+                        error: None,
+                    },
+                    Err(error) => library::FontPreviewDto {
+                        face_id: id,
+                        data_url: None,
+                        error: Some(error),
+                    },
+                }
+            })
+            .collect())
+    })
+    .await
+    .map_err(|_| "字体预览暂时不可用".to_owned())?
 }
 
 #[tauri::command]
-fn set_family_favorite(
+async fn set_family_favorite(
     window: WebviewWindow,
     state: State<'_, AppState>,
     identity_ids: Vec<String>,
     favorite: bool,
 ) -> Result<(), String> {
     require_main_window(&window)?;
-    state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .set_favorites(&identity_ids, favorite)
-        .map_err(|error| error.to_string())
+    with_library(&state, move |library| {
+        library.set_favorites(&identity_ids, favorite)
+    })
+    .await
 }
 
 #[tauri::command]
-fn record_recent(
+async fn record_recent(
     window: WebviewWindow,
     state: State<'_, AppState>,
     identity_id: String,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     require_main_window(&window)?;
-    state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .record_recent(&identity_id)
-        .map_err(|error| error.to_string())
+    with_library(&state, move |library| library.record_recent(&identity_id)).await
+}
+
+// 数据库与查询工作在阻塞线程池执行，避免占用窗口线程或异步执行器。
+async fn with_library<T: Send + 'static>(
+    state: &AppState,
+    action: impl FnOnce(&mut LibraryService) -> Result<T, library::LibraryError> + Send + 'static,
+) -> Result<T, String> {
+    let library = Arc::clone(&state.library);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut library = library.lock().map_err(|_| "字体库暂时不可用".to_owned())?;
+        action(&mut library).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| "字体库暂时不可用".to_owned())?
 }
 
 #[tauri::command]
-fn list_collections(
+async fn list_collections(
     window: WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<Vec<library::CollectionDto>, String> {
     require_main_window(&window)?;
-    state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .list_collections()
-        .map_err(|error| error.to_string())
+    with_library(&state, |library| library.list_collections()).await
 }
 
 #[tauri::command]
@@ -268,17 +308,12 @@ fn set_collection_members(
 }
 
 #[tauri::command]
-fn list_smart_folders(
+async fn list_smart_folders(
     window: WebviewWindow,
     state: State<'_, AppState>,
 ) -> Result<Vec<library::SmartFolderDto>, String> {
     require_main_window(&window)?;
-    state
-        .library
-        .lock()
-        .map_err(|_| "字体库暂时不可用".to_owned())?
-        .list_smart_folders()
-        .map_err(|error| error.to_string())
+    with_library(&state, |library| library.list_smart_folders()).await
 }
 
 #[tauri::command]
@@ -395,8 +430,8 @@ fn save_sync_connection(
 ) -> Result<(), String> {
     require_settings_window(&window)?;
     let password = if password.trim().is_empty() {
-        let previous = folio_sync::load_profile(&state.database_path)
-            .map_err(|error| error.to_string())?;
+        let previous =
+            folio_sync::load_profile(&state.database_path).map_err(|error| error.to_string())?;
         if !previous.is_some_and(|saved| {
             saved.server_url == profile.server_url
                 && saved.remote_directory == profile.remote_directory
@@ -773,7 +808,8 @@ pub fn run() {
             let mut library = LibraryService::open(database_path.clone())?;
             library.add_default_roots()?;
             app.manage(AppState {
-                library: Mutex::new(library),
+                library: Arc::new(Mutex::new(library)),
+                previews: Arc::new(preview::PreviewService::default()),
                 database_path,
                 managed_directory,
                 sync_status: Arc::new(Mutex::new(SyncStatusDto::default())),

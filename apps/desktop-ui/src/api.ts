@@ -1,4 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import { decodePreviewFont } from "./preview-packet";
+import { invalidatePreviewCache } from "./preview-cache-events";
+import { startMetric } from "./performance-metrics";
 import type { CloudFontDto, CollectionDto, FontPreviewDto, LibraryPageDto, LibrarySnapshotDto, PreviewFontDto, SmartFolderDto, SyncConflictDto, SyncProfileDto, SyncStatusDto } from "./types";
 
 export interface QueryRequest {
@@ -13,31 +16,40 @@ export interface QueryRequest {
   fontState?: string;
 }
 
-export function queryLibrary(request: QueryRequest): Promise<LibraryPageDto> {
-  return invoke("query_library", { request });
+export async function queryLibrary(request: QueryRequest): Promise<LibraryPageDto> {
+  const finish = startMetric("query-library");
+  try { return await invoke("query_library", { request }); } finally { finish(); }
 }
 
-export function refreshLibrary(): Promise<LibrarySnapshotDto> {
-  return invoke("refresh_library");
+export async function refreshLibrary(): Promise<LibrarySnapshotDto> {
+  const snapshot = await invoke<LibrarySnapshotDto>("refresh_library");
+  invalidatePreviewCache();
+  return snapshot;
 }
 
-export function addLibraryRoot(path: string): Promise<LibrarySnapshotDto> {
-  return invoke("add_library_root", { path });
+export async function addLibraryRoot(path: string): Promise<LibrarySnapshotDto> {
+  const snapshot = await invoke<LibrarySnapshotDto>("add_library_root", { path });
+  invalidatePreviewCache();
+  return snapshot;
 }
 
 export function renderPreviews(faceIds: string[], sample: string, size: number): Promise<FontPreviewDto[]> {
   return invoke("render_previews", { faceIds, sample, size });
 }
 
-export function loadPreviewFont(faceId: string): Promise<PreviewFontDto> {
-  return invoke("load_preview_font", { faceId });
+export async function loadPreviewFont(faceId: string): Promise<PreviewFontDto> {
+  const finish = startMetric("font-ipc");
+  let packet: ArrayBuffer | number[];
+  try { packet = await invoke("load_preview_font", { faceId }); } finally { finish(); }
+  const decoded = startMetric("font-decode");
+  try { return decodePreviewFont(packet instanceof ArrayBuffer ? packet : new Uint8Array(packet).buffer); } finally { decoded(); }
 }
 
 export function setFamilyFavorite(identityIds: string[], favorite: boolean): Promise<void> {
   return invoke("set_family_favorite", { identityIds, favorite });
 }
 
-export function recordRecent(identityId: string): Promise<void> {
+export function recordRecent(identityId: string): Promise<number> {
   return invoke("record_recent", { identityId });
 }
 

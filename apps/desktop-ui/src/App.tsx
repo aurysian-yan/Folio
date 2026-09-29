@@ -43,7 +43,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createPortal } from "react-dom";
 import { SegmentedTabs } from "./components/SegmentedTabs";
-import { FontCard, type ViewMode } from "./components/FontCard";
+import type { ViewMode } from "./components/FontCard";
+import { VirtualFontGrid } from "./components/VirtualFontGrid";
+import { appendLibraryPage, LibraryPageRequests } from "./library-paging";
+import { startMetric } from "./performance-metrics";
 import { FontPreview } from "./components/FontPreview";
 import { currentPreviewStyle } from "./font-preview";
 import {
@@ -637,7 +640,9 @@ export default function App() {
   const [menuMode, setMenuMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [previewText, setPreviewText] = useState("Folio 字体预览");
-  const [previewSize, setPreviewSize] = useState(48);
+  const [previewSize, setPreviewSize] = useState(() =>
+    parsePreviewSize(localStorage.getItem("folio-preview-size")),
+  );
   const [syncProfile, setSyncProfile] = useState<SyncProfileDto | null>(null);
   const [syncServerUrl, setSyncServerUrl] = useState("");
   const [syncDirectory, setSyncDirectory] = useState("Folio");
@@ -650,7 +655,36 @@ export default function App() {
   const [syncConflicts, setSyncConflicts] = useState<SyncConflictDto[]>([]);
   const wasSyncRunning = useRef(false);
   const lastAutomaticSyncAt = useRef(0);
-  const queryRevision = useRef(0);
+  const pageRequests = useRef(new LibraryPageRequests());
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const recentWrites = useRef<Promise<unknown>>(Promise.resolve());
+  const recentStatisticsTimer = useRef(0);
+  const hasSmartFolders = useRef(false);
+  hasSmartFolders.current = smartFolders.length > 0;
+  const [recentError, setRecentError] = useState("");
+
+  useEffect(() => () => window.clearTimeout(recentStatisticsTimer.current), []);
+
+  const selectFamily = useCallback((family: FamilyDto) => {
+    if (selectedRef.current?.id === family.id) return;
+    const finish = startMetric("selection-feedback");
+    selectedRef.current = family;
+    setSelected(family);
+    setSelectedStyleKey(null);
+    setRecentError("");
+    window.requestAnimationFrame(() => window.requestAnimationFrame(finish));
+    const identityId = currentPreviewStyle(family)?.face.identityId;
+    if (!identityId) return;
+    // 顺序保存访问记录，列表保持当前位置，统计更新合并到后台。
+    recentWrites.current = recentWrites.current.catch(() => {}).then(() => recordRecent(identityId)).then((recentCount) => {
+      setSnapshot((current) => current ? { ...current, recentCount: Math.max(current.recentCount, recentCount) } : current);
+      window.clearTimeout(recentStatisticsTimer.current);
+      if (hasSmartFolders.current) recentStatisticsTimer.current = window.setTimeout(() => {
+        void listSmartFolders().then(setSmartFolders).catch((cause) => setRecentError(errorMessage(cause)));
+      }, 250);
+    }).catch((cause) => setRecentError(errorMessage(cause)));
+  }, []);
 
   useEffect(() => {
     if (!menuMode) return;
@@ -774,6 +808,10 @@ export default function App() {
   }, [viewMode]);
 
   useEffect(() => {
+    localStorage.setItem("folio-preview-size", String(previewSize));
+  }, [previewSize]);
+
+  useEffect(() => {
     localStorage.setItem("folio-quit-shortcut", quitShortcut);
   }, [quitShortcut]);
 
@@ -800,6 +838,8 @@ export default function App() {
     const syncPreferences = (event: StorageEvent) => {
       if (event.key === "folio-view-mode" && event.newValue)
         setViewMode(event.newValue as ViewMode);
+      if (event.key === "folio-preview-size")
+        setPreviewSize(parsePreviewSize(event.newValue));
       if (event.key === "folio-quit-shortcut")
         setQuitShortcut(parseQuitShortcut(event.newValue));
       if (event.key === "folio-card-hover")
@@ -821,7 +861,9 @@ export default function App() {
         setLoading(false);
         return;
       }
-      const revision = ++queryRevision.current;
+      const key = JSON.stringify([text, currentScope, selectedFacets, sort, collectionId, smartFolderId, fontState]);
+      const ticket = pageRequests.current.begin(key, offset);
+      if (!ticket) return;
       setLoading(true);
       setError(null);
       try {
@@ -843,10 +885,10 @@ export default function App() {
           fontState:
             currentScope === "fontState" ? fontState : undefined,
         });
-        if (revision !== queryRevision.current) return;
+        if (!pageRequests.current.current(ticket)) return;
         setPage((current) =>
           offset > 0 && current
-            ? { ...result, families: [...current.families, ...result.families] }
+            ? appendLibraryPage(current, result)
             : result,
         );
         setSelected((current) =>
@@ -856,9 +898,9 @@ export default function App() {
             : null,
         );
       } catch (cause) {
-        if (revision === queryRevision.current) setError(errorMessage(cause));
+        if (pageRequests.current.current(ticket)) setError(errorMessage(cause));
       } finally {
-        if (revision === queryRevision.current) setLoading(false);
+        if (pageRequests.current.finish(ticket)) setLoading(false);
       }
     },
     [
@@ -869,6 +911,12 @@ export default function App() {
       sort,
     ],
   );
+
+  const favoriteFamily = useCallback((family: FamilyDto) => {
+    void setFamilyFavorite(family.faces.map((face) => face.identityId), !family.isFavorite)
+      .then(() => Promise.all([loadPage(search, scope), reloadOrganization()]))
+      .catch((cause) => setError(errorMessage(cause)));
+  }, [loadPage, reloadOrganization, search, scope]);
 
   useEffect(() => {
     if (settingsWindow) return;
@@ -1911,7 +1959,7 @@ export default function App() {
               <>
                 <section className="settings-group">
                   <h2>浏览设置</h2>
-                  <p>设置字体库的初始浏览视图和预览字号。</p>
+                  <p>设置字体库的浏览视图和预览字号，修改会同步到主窗口。</p>
                   <label className="setting-field">
                     默认浏览视图
                     <OptionSelect
@@ -2598,55 +2646,14 @@ export default function App() {
                 <Button onPress={() => void runRefresh()}>重试</Button>
               </div>
             ) : page?.families.length ? (
-              <div
-                className={`font-grid mode-${viewMode}`}
-                tabIndex={-1}
-                aria-label="字体列表"
-              >
-                {page.families.map((family) => (
-                  <FontCard
-                    key={family.id}
-                    family={family}
-                    mode={viewMode}
-                    previewText={previewText}
-                    previewSize={previewSize}
-                    styleKey={selectedStyleKey}
-                    onStyleChange={setSelectedStyleKey}
-                    showMetadata={cardMetadata}
-                    selectOnHover={cardHover}
-                    hoverDelay={cardHoverDelay}
-                    selected={selected?.id === family.id}
-                    onSelect={() => {
-                      if (selected?.id === family.id) return;
-                      setSelected(family);
-                      setSelectedStyleKey(null);
-                      const identityId = currentPreviewStyle(family)?.face.identityId;
-                      if (identityId)
-                        void recordRecent(identityId)
-                          .then(() =>
-                            Promise.all([
-                              loadPage(search, scope),
-                              reloadOrganization(),
-                            ]),
-                          )
-                          .catch((cause) => setError(errorMessage(cause)));
-                    }}
-                    onFavorite={() => {
-                      void setFamilyFavorite(
-                        family.faces.map((face) => face.identityId),
-                        !family.isFavorite,
-                      )
-                        .then(() =>
-                          Promise.all([
-                            loadPage(search, scope),
-                            reloadOrganization(),
-                          ]),
-                        )
-                        .catch((cause) => setError(errorMessage(cause)));
-                    }}
-                  />
-                ))}
-              </div>
+              <VirtualFontGrid
+                key={JSON.stringify([search, scope, sort, selectedFacets, collectionId, smartFolderId, fontState])}
+                families={page.families} total={page.totalMatches}
+                mode={viewMode} previewText={previewText} previewSize={previewSize}
+                styleKey={selectedStyleKey} selectedId={selected?.id} onStyleChange={setSelectedStyleKey}
+                showMetadata={cardMetadata} selectOnHover={cardHover} hoverDelay={cardHoverDelay}
+                onSelect={selectFamily} onFavorite={favoriteFamily}
+              />
             ) : loading ? (
               <div className="state-message">
                 <div className="loading-indicator" />
@@ -2678,6 +2685,7 @@ export default function App() {
                 </span>
                 <Button
                   variant="secondary"
+                  isDisabled={loading}
                   onPress={() =>
                     void loadPage(search, scope, page.families.length)
                   }
@@ -2687,6 +2695,7 @@ export default function App() {
               </footer>
             )}
             <footer className="preview-bar">
+              <span className="sr-only" role="status">{recentError}</span>
               <OptionSelect
                 label="预览文字样例"
                 value={previewText}
@@ -3411,7 +3420,7 @@ function Inspector({
       <details className="inspector-section" open>
         <summary>预览</summary>
         <div className="inspector-preview">
-          <FontPreview style={style} text={previewText} size={previewSize} lines={6} align="left" label={`${family.displayName}，${style?.name ?? "常规"} 预览`} />
+          <FontPreview style={style} text={previewText} size={previewSize} lines={6} align="left" priority="selected" label={`${family.displayName}，${style?.name ?? "常规"} 预览`} />
         </div>
       </details>
       {face?.weight != null && (
@@ -3743,6 +3752,12 @@ function parseSidebarBlur(value: string | null) {
   return Number.isFinite(amount)
     ? Math.round(Math.min(12, Math.max(1, amount)))
     : 4;
+}
+
+function parsePreviewSize(value: string | null) {
+  if (!value?.trim()) return 48;
+  const size = Number(value);
+  return Number.isFinite(size) ? Math.round(Math.min(104, Math.max(24, size))) : 48;
 }
 
 function errorMessage(cause: unknown) {

@@ -1,4 +1,7 @@
-import { loadPreviewFont } from "./api";
+import { loadPreviewFont, renderPreviews } from "./api";
+import { PreviewCache, PreviewScheduler, type PreviewPriority } from "./preview-cache";
+import { subscribePreviewCache } from "./preview-cache-events";
+import { startMetric } from "./performance-metrics";
 import type { FaceDto, FamilyDto, PreviewFontDto } from "./types";
 
 export interface PreviewStyle {
@@ -17,8 +20,12 @@ export function preferredFace(family: FamilyDto) {
         ? face : nearest, undefined);
 }
 
+const styleCache = new WeakMap<FamilyDto, PreviewStyle[]>();
+
 export function previewStyles(family: FamilyDto): PreviewStyle[] {
-  return family.faces.flatMap((face) => {
+  const cached = styleCache.get(family);
+  if (cached) return cached;
+  const styles = family.faces.flatMap((face) => {
     const defaults = Object.fromEntries(face.variableAxes.map((axis) => [axis.tag, axis.defaultValue]));
     return [
       { key: face.id, name: face.styleName, face, coordinates: defaults },
@@ -28,67 +35,70 @@ export function previewStyles(family: FamilyDto): PreviewStyle[] {
         }]),
     ];
   }).sort((a, b) => (a.coordinates.wght ?? a.face.weight ?? 400) - (b.coordinates.wght ?? b.face.weight ?? 400));
+  styleCache.set(family, styles);
+  return styles;
 }
 
 export function currentPreviewStyle(family: FamilyDto, key?: string | null) {
   const styles = previewStyles(family);
-  return styles.find((style) => style.key === key) ??
-    styles.find((style) => style.key === preferredFace(family)?.id) ?? styles[0];
+  const chosen = styles.find((style) => style.key === key);
+  if (chosen) return chosen;
+  const preferredId = preferredFace(family)?.id;
+  return styles.find((style) => style.key === preferredId) ?? styles[0];
 }
 
 export type PreviewFont = { family: string; font: FontFace; coverage: PreviewFontDto["coverage"]; sample: string };
-type CacheEntry = { promise: Promise<PreviewFont>; users: number; usedAt: number; font?: FontFace };
-const cache = new Map<string, CacheEntry>();
-const pending: (() => void)[] = [];
-let loading = 0;
+const scheduler = new PreviewScheduler();
+const cache = new PreviewCache<PreviewFont>(scheduler, 128 * 1024 * 1024, 64, ({ font }) => { document.fonts.delete(font); });
+const images = new PreviewCache<string | null>(scheduler, 32 * 1024 * 1024, 256, () => {});
+const browserRejected = new Set<string>();
 let sequence = 0;
+subscribePreviewCache(() => { cache.invalidate(); images.invalidate(); browserRejected.clear(); });
 
-async function scheduledLoad(face: FaceDto): Promise<PreviewFont> {
-  if (loading >= 4) await new Promise<void>((resolve) => pending.push(resolve));
-  loading += 1;
-  try {
+export function acquirePreviewFont(face: FaceDto, priority: PreviewPriority = "visible") {
+  return cache.acquire(face.id, priority, async (wanted) => {
+    if (browserRejected.has(face.id)) throw new Error("此字体使用原生预览");
     const source = await loadPreviewFont(face.id);
+    if (!wanted()) throw new DOMException("预览请求已取消", "AbortError");
     const family = `folio-preview-${++sequence}`;
     const axis = face.variableAxes.find((axis) => axis.tag === "wght");
-    const font = new FontFace(family, `url("${source.dataUrl}")`, {
-      weight: axis ? `${axis.minValue} ${axis.maxValue}` : String(face.weight ?? 400),
-    });
-    await font.load();
+    const finish = startMetric("font-face-load");
+    let font: FontFace;
+    try {
+      font = new FontFace(family, source.bytes, {
+        weight: axis ? `${axis.minValue} ${axis.maxValue}` : String(face.weight ?? 400),
+      });
+      await font.load();
+    } catch (error) {
+      browserRejected.add(face.id);
+      if (browserRejected.size > 64) browserRejected.delete(browserRejected.values().next().value!);
+      throw error;
+    } finally { finish(); }
+    if (!wanted()) throw new DOMException("预览请求已取消", "AbortError");
     document.fonts.add(font);
-    return { family, font, coverage: source.coverage, sample: source.sample };
-  } finally {
-    loading -= 1;
-    pending.shift()?.();
-  }
+    return { value: { family, font, coverage: source.coverage, sample: source.sample }, bytes: source.bytes.byteLength };
+  });
 }
 
-function trimCache() {
-  const unused = [...cache.entries()].filter(([, entry]) => entry.users === 0 && entry.font)
-    .sort((a, b) => a[1].usedAt - b[1].usedAt);
-  while (cache.size > 64 && unused.length) {
-    const [id, entry] = unused.shift()!;
-    document.fonts.delete(entry.font!);
-    cache.delete(id);
-  }
+export function acquireNativePreview(faceId: string, sample: string, size: number, priority: PreviewPriority) {
+  return images.acquire(JSON.stringify([faceId, sample, size]), priority, async () => {
+    const [preview] = await renderPreviews([faceId], sample, size);
+    const image = preview?.dataUrl ?? null;
+    return { value: image, bytes: (image?.length ?? 0) * 2 };
+  });
 }
 
-// 按可见卡片加载，同一字面共享字体；闲置缓存有界，避免重复传输大字体。
-export function acquirePreviewFont(face: FaceDto) {
-  let entry = cache.get(face.id);
-  if (!entry) {
-    const promise = scheduledLoad(face);
-    entry = { promise, users: 0, usedAt: Date.now() };
-    cache.set(face.id, entry);
-    const created = entry;
-    void promise.then(({ font }) => { created.font = font; trimCache(); }, () => {
-      if (cache.get(face.id) === created) cache.delete(face.id);
-    });
+export function previewCacheStats() { return { fonts: cache.snapshot(), images: images.snapshot() }; }
+
+export function coversCodepoint(coverage: PreviewFontDto["coverage"], codepoint: number) {
+  let low = 0;
+  let high = coverage.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >>> 1;
+    const [start, end] = coverage[middle];
+    if (codepoint < start) high = middle - 1;
+    else if (codepoint > end) low = middle + 1;
+    else return true;
   }
-  entry.users += 1;
-  entry.usedAt = Date.now();
-  const acquired = entry;
-  return {
-    promise: acquired.promise,
-    release: () => { acquired.users -= 1; acquired.usedAt = Date.now(); trimCache(); },
-  };
+  return false;
 }

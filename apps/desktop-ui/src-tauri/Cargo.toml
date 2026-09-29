@@ -39,3 +39,7 @@ tauri-plugin-window-state = "2.4.1"
 [dev-dependencies]
 tempfile = "3.27.0"
 font-test-data = "=0.9.1"
+
+# 优化大 TTC 重建时的表校验和，应用代码仍保留开发调试信息。
+[profile.dev.package.read-fonts]
+opt-level = 2

@@ -89,7 +89,7 @@ export interface FontPreviewDto {
 }
 
 export interface PreviewFontDto {
-  dataUrl: string;
+  bytes: Uint8Array<ArrayBuffer>;
   coverage: [number, number][];
   sample: string;
 }

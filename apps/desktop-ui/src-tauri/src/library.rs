@@ -238,12 +238,32 @@ pub struct FontPreviewDto {
     pub error: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PreviewFontDto {
-    pub data_url: String,
+#[derive(Debug)]
+pub struct PreviewFont {
+    pub bytes: Vec<u8>,
     pub coverage: Vec<[u32; 2]>,
     pub sample: String,
+}
+
+impl PreviewFont {
+    pub fn into_packet(self) -> Result<Vec<u8>, LibraryError> {
+        #[derive(Serialize)]
+        struct Metadata<'a> {
+            coverage: &'a [[u32; 2]],
+            sample: &'a str,
+        }
+        let metadata = serde_json::to_vec(&Metadata {
+            coverage: &self.coverage,
+            sample: &self.sample,
+        })
+        .map_err(|_| LibraryError::Preview)?;
+        let length = u32::try_from(metadata.len()).map_err(|_| LibraryError::Preview)?;
+        let mut packet = Vec::with_capacity(4 + metadata.len() + self.bytes.len());
+        packet.extend_from_slice(&length.to_le_bytes());
+        packet.extend_from_slice(&metadata);
+        packet.extend_from_slice(&self.bytes);
+        Ok(packet)
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -274,7 +294,7 @@ pub struct LibraryService {
     catalog: Catalog,
     state: LibraryStateSnapshot,
     query_index: FontQueryIndex,
-    preview_cache: HashMap<(String, String, u32), String>,
+    preview_sources: HashMap<String, Vec<SourceDto>>,
     managed_directory: PathBuf,
 }
 
@@ -288,12 +308,13 @@ impl LibraryService {
         let catalog = database.load_cached_catalog()?;
         let state = database.library_state_snapshot()?;
         let query_index = FontQueryIndex::build(&catalog, &state)?;
+        let preview_sources = preview_source_index(&catalog);
         Ok(Self {
             database,
             catalog,
             state,
             query_index,
-            preview_cache: HashMap::new(),
+            preview_sources,
             managed_directory,
         })
     }
@@ -321,6 +342,7 @@ impl LibraryService {
         self.add_managed_root()?;
         self.database.refresh(RefreshMode::Incremental)?;
         self.catalog = self.database.load_cached_catalog()?;
+        self.preview_sources = preview_source_index(&self.catalog);
         self.state = self.database.library_state_snapshot()?;
         self.query_index = FontQueryIndex::build(&self.catalog, &self.state)?;
         Ok(self.snapshot())
@@ -694,70 +716,12 @@ impl LibraryService {
         Ok(())
     }
 
-    pub fn preview_font_source(&self, face_id: &str) -> Result<SourceDto, LibraryError> {
-        let face = self
-            .catalog
-            .faces()
-            .find(|face| face.id.to_string() == face_id)
-            .ok_or_else(|| LibraryError::Message("字体已不在当前目录中".to_owned()))?;
-        let source = face
-            .sources
-            .iter()
-            .find(|source| source.path().is_file())
-            .ok_or_else(|| LibraryError::Message("字体文件已不可用".to_owned()))?;
-        Ok(SourceDto {
-            path: source.path().to_string_lossy().into_owned(),
-            face_index: source.face_index(),
-        })
-    }
-
-    pub fn render_previews(
-        &mut self,
-        face_ids: &[String],
-        sample: &str,
-        size: u32,
-    ) -> Result<Vec<FontPreviewDto>, LibraryError> {
-        let size = size.clamp(24, 104) as f32;
-        let mut previews = Vec::new();
-        for id in face_ids.iter().take(120) {
-            let key = (id.clone(), sample.to_owned(), size as u32);
-            if let Some(data_url) = self.preview_cache.get(&key) {
-                previews.push(FontPreviewDto {
-                    face_id: id.clone(),
-                    data_url: Some(data_url.clone()),
-                    error: None,
-                });
-                continue;
-            }
-            if let Some(face) = self.catalog.faces().find(|face| face.id.to_string() == *id) {
-                let result = render_face_preview(face, sample, size);
-                match result {
-                    Ok(data_url) => {
-                        if self.preview_cache.len() >= 720 {
-                            self.preview_cache.clear();
-                        }
-                        self.preview_cache.insert(key, data_url.clone());
-                        previews.push(FontPreviewDto {
-                            face_id: id.clone(),
-                            data_url: Some(data_url),
-                            error: None,
-                        });
-                    }
-                    Err(_) => previews.push(FontPreviewDto {
-                        face_id: id.clone(),
-                        data_url: None,
-                        error: Some("无法从此字体文件准确载入所选字面".to_owned()),
-                    }),
-                }
-            } else {
-                previews.push(FontPreviewDto {
-                    face_id: id.clone(),
-                    data_url: None,
-                    error: Some("字体面已不在当前目录中".to_owned()),
-                });
-            }
-        }
-        Ok(previews)
+    // 锁内只复制来源描述，文件检查、读取与栅格化在锁外完成。
+    pub fn preview_font_sources(&self, face_id: &str) -> Result<Vec<SourceDto>, LibraryError> {
+        self.preview_sources
+            .get(face_id)
+            .cloned()
+            .ok_or_else(|| LibraryError::Message("字体已不在当前目录中".to_owned()))
     }
 
     pub fn set_favorites(
@@ -775,12 +739,13 @@ impl LibraryService {
         Ok(())
     }
 
-    pub fn record_recent(&mut self, identity_id: &str) -> Result<(), LibraryError> {
+    pub fn record_recent(&mut self, identity_id: &str) -> Result<usize, LibraryError> {
         self.database
             .record_recent(parse_identity_id(identity_id)?)?;
-        self.state = self.database.library_state_snapshot()?;
+        // 访问记录只刷新最近列表，避免重新反序列化所有字体的缓存状态。
+        self.state.recent = self.database.list_recent(usize::MAX)?;
         self.query_index.update_state(&self.state);
-        Ok(())
+        Ok(self.state.recent.len())
     }
 
     fn snapshot(&self) -> LibrarySnapshotDto {
@@ -1479,51 +1444,82 @@ fn face_dto(face: &FontFace) -> FaceDto {
     }
 }
 
-// 提取集合中的指定字面并重建 sfnt，供浏览器直接排版；不改变原字体文件。
-pub fn load_preview_font(source: &SourceDto) -> Result<PreviewFontDto, LibraryError> {
+fn preview_source_index(catalog: &Catalog) -> HashMap<String, Vec<SourceDto>> {
+    catalog
+        .faces()
+        .map(|face| {
+            (
+                face.id.to_string(),
+                face.sources
+                    .iter()
+                    .map(|source| SourceDto {
+                        path: source.path().to_string_lossy().into_owned(),
+                        face_index: source.face_index(),
+                    })
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+// 集合与签名字体重建 sfnt；普通独立字体复用原始字节。
+pub fn load_preview_font(source: &SourceDto) -> Result<PreviewFont, LibraryError> {
     let data = std::fs::read(&source.path).map_err(|_| LibraryError::Preview)?;
     let font = FontRef::from_index(&data, source.face_index).map_err(|_| LibraryError::Preview)?;
-    let mut builder = FontBuilder::new();
-    // 重建后数字签名失效，移除签名表以免浏览器拒绝载入。
-    for record in font.table_directory.table_records() {
-        let tag = record.tag();
-        if tag.to_be_bytes() == *b"DSIG" {
-            continue;
-        }
-        if let Some(table) = font.table_data(tag) {
-            builder.add_raw(tag, table.as_bytes());
-        }
-    }
+    let rebuild = data.starts_with(b"ttcf")
+        || font
+            .table_directory
+            .table_records()
+            .iter()
+            .any(|record| record.tag().to_be_bytes() == *b"DSIG");
     let mut coverage: Vec<[u32; 2]> = Vec::new();
     let mut sample = String::new();
+    let mut sample_length = 0;
     for (codepoint, _) in font.charmap().mappings() {
         if let Some(last) = coverage.last_mut().filter(|last| last[1] + 1 == codepoint) {
             last[1] = codepoint;
         } else {
             coverage.push([codepoint, codepoint]);
         }
-        if sample.chars().count() < 12 {
+        if sample_length < 12 {
             if let Some(character) = char::from_u32(codepoint)
                 .filter(|character| !character.is_control() && !character.is_whitespace())
             {
                 sample.push(character);
+                sample_length += 1;
             }
         }
     }
-    let bytes = builder.build();
-    Ok(PreviewFontDto {
-        data_url: format!("data:font/otf;base64,{}", STANDARD.encode(bytes)),
+    let bytes = if rebuild {
+        let mut builder = FontBuilder::new();
+        for record in font.table_directory.table_records() {
+            let tag = record.tag();
+            if tag.to_be_bytes() != *b"DSIG" {
+                if let Some(table) = font.table_data(tag) {
+                    builder.add_raw(tag, table.as_bytes());
+                }
+            }
+        }
+        builder.build()
+    } else {
+        data
+    };
+    Ok(PreviewFont {
+        bytes,
         coverage,
         sample,
     })
 }
 
-fn render_face_preview(face: &FontFace, sample: &str, size: f32) -> Result<String, LibraryError> {
+pub fn render_face_preview(
+    source: &SourceDto,
+    sample: &str,
+    size: f32,
+) -> Result<String, LibraryError> {
     const WIDTH: i32 = 360;
     const HEIGHT: i32 = 96;
-    let source = face.sources.first().ok_or(LibraryError::Preview)?;
     let font =
-        Font::from_path(source.path(), source.face_index()).map_err(|_| LibraryError::Preview)?;
+        Font::from_path(&source.path, source.face_index).map_err(|_| LibraryError::Preview)?;
     let mut canvas = Canvas::new(Vector2I::new(WIDTH, HEIGHT), Format::A8);
     let baseline = (HEIGHT as f32 * 0.72).round();
     let mut x = 4.0f32;
@@ -1620,10 +1616,254 @@ mod tests {
     use super::*;
 
     fn decoded_preview(source: &SourceDto) -> Vec<u8> {
-        let data_url = load_preview_font(source).unwrap().data_url;
-        STANDARD
-            .decode(data_url.split_once(',').unwrap().1)
-            .unwrap()
+        load_preview_font(source).unwrap().bytes
+    }
+
+    #[test]
+    fn preview_packet_has_little_endian_metadata_and_raw_font_bytes() {
+        let packet = PreviewFont {
+            bytes: vec![0, 1, 0, 0],
+            coverage: vec![[32, 126], [0x1f600, 0x1f600]],
+            sample: "Aa😀".to_owned(),
+        }
+        .into_packet()
+        .unwrap();
+        let length = u32::from_le_bytes(packet[..4].try_into().unwrap()) as usize;
+        let metadata: serde_json::Value = serde_json::from_slice(&packet[4..4 + length]).unwrap();
+        assert_eq!(metadata["sample"], "Aa😀");
+        assert_eq!(metadata["coverage"][1][0], 0x1f600);
+        assert_eq!(&packet[4 + length..], &[0, 1, 0, 0]);
+    }
+
+    #[test]
+    fn preview_reuses_unsigned_single_fonts_and_removes_invalid_signatures() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/fonts");
+        let path = root.join("Lato-Regular.ttf");
+        let original_data = std::fs::read(&path).unwrap();
+        let original = FontRef::new(&original_data).unwrap();
+        let source = SourceDto {
+            path: path.to_string_lossy().into_owned(),
+            face_index: 0,
+        };
+        assert_eq!(load_preview_font(&source).unwrap().bytes, original_data);
+        let mut builder = FontBuilder::new();
+        for record in original.table_directory.table_records() {
+            if let Some(table) = original.table_data(record.tag()) {
+                builder.add_raw(record.tag(), table.as_bytes());
+            }
+        }
+        builder.add_raw(write_fonts::types::Tag::new(b"DSIG"), &[0; 8]);
+        let directory = tempfile::tempdir().unwrap();
+        let signed_path = directory.path().join("signed.ttf");
+        std::fs::write(&signed_path, builder.build()).unwrap();
+        let exported_data = decoded_preview(&SourceDto {
+            path: signed_path.to_string_lossy().into_owned(),
+            face_index: 0,
+        });
+        let exported = FontRef::new(&exported_data).unwrap();
+        assert!(exported
+            .table_data(write_fonts::types::Tag::new(b"DSIG"))
+            .is_none());
+        for tag in [b"glyf", b"cmap", b"name"] {
+            let tag = write_fonts::types::Tag::new(tag);
+            assert_eq!(
+                original.table_data(tag).unwrap().as_bytes(),
+                exported.table_data(tag).unwrap().as_bytes()
+            );
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "本机字体性能采样，需要单独执行"]
+    fn preview_performance() {
+        use std::time::Instant;
+        fn p95(values: &mut [f64]) -> f64 {
+            values.sort_by(f64::total_cmp);
+            values[(values.len() as f64 * 0.95).ceil() as usize - 1]
+        }
+        let root = PathBuf::from(std::env::var_os("WINDIR").unwrap()).join("Fonts");
+        for name in [
+            "arial.ttf",
+            "NotoSansSC-VF.ttf",
+            "NotoSerifSC-VF.ttf",
+            "mingliub.ttc",
+        ] {
+            let path = root.join(name);
+            if !path.is_file() {
+                continue;
+            }
+            let source = SourceDto {
+                path: path.to_string_lossy().into_owned(),
+                face_index: 0,
+            };
+            let service = crate::preview::PreviewService::default();
+            let mut baseline = Vec::new();
+            let mut binary = Vec::new();
+            let mut warm = Vec::new();
+            let mut baseline_bytes = 0;
+            let mut binary_bytes = 0;
+            for _ in 0..10 {
+                let start = Instant::now();
+                let data = std::fs::read(&path).unwrap();
+                let font = FontRef::from_index(&data, 0).unwrap();
+                let mut builder = FontBuilder::new();
+                for record in font.table_directory.table_records() {
+                    if record.tag().to_be_bytes() != *b"DSIG" {
+                        if let Some(table) = font.table_data(record.tag()) {
+                            builder.add_raw(record.tag(), table.as_bytes());
+                        }
+                    }
+                }
+                let mut coverage: Vec<[u32; 2]> = Vec::new();
+                let mut sample = String::new();
+                for (codepoint, _) in font.charmap().mappings() {
+                    if let Some(last) = coverage.last_mut().filter(|last| last[1] + 1 == codepoint)
+                    {
+                        last[1] = codepoint;
+                    } else {
+                        coverage.push([codepoint, codepoint]);
+                    }
+                    if sample.chars().count() < 12 {
+                        if let Some(character) = char::from_u32(codepoint)
+                            .filter(|c| !c.is_control() && !c.is_whitespace())
+                        {
+                            sample.push(character);
+                        }
+                    }
+                }
+                let response = serde_json::to_vec(&serde_json::json!({ "dataUrl": format!("data:font/otf;base64,{}", STANDARD.encode(builder.build())), "coverage": coverage, "sample": sample })).unwrap();
+                baseline_bytes = response.len();
+                baseline.push(start.elapsed().as_secs_f64() * 1000.0);
+                drop(response);
+                service.invalidate();
+                let start = Instant::now();
+                let response = service
+                    .font(name, std::slice::from_ref(&source), service.generation())
+                    .unwrap()
+                    .as_ref()
+                    .clone();
+                binary_bytes = response.len();
+                binary.push(start.elapsed().as_secs_f64() * 1000.0);
+                drop(response);
+                let start = Instant::now();
+                let response = service
+                    .font(name, std::slice::from_ref(&source), service.generation())
+                    .unwrap()
+                    .as_ref()
+                    .clone();
+                warm.push(start.elapsed().as_secs_f64() * 1000.0);
+                drop(response);
+            }
+            println!(
+                "{}",
+                serde_json::json!({ "font": name, "samples": 10, "baselineP95Ms": p95(&mut baseline), "binaryP95Ms": p95(&mut binary), "warmP95Ms": p95(&mut warm), "baselineBytes": baseline_bytes, "binaryBytes": binary_bytes })
+            );
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "本机 TTC 导出分段采样，需要单独执行"]
+    fn preview_export_stages() {
+        use std::time::Instant;
+        let path = PathBuf::from(std::env::var_os("WINDIR").unwrap()).join("Fonts/mingliub.ttc");
+        if !path.is_file() {
+            return;
+        }
+        let mut stages = [Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+        for _ in 0..10 {
+            let start = Instant::now();
+            let data = std::fs::read(&path).unwrap();
+            stages[0].push(start.elapsed().as_secs_f64() * 1000.0);
+            let start = Instant::now();
+            let font = FontRef::from_index(&data, 0).unwrap();
+            let mut coverage: Vec<[u32; 2]> = Vec::new();
+            for (codepoint, _) in font.charmap().mappings() {
+                if let Some(last) = coverage.last_mut().filter(|last| last[1] + 1 == codepoint) {
+                    last[1] = codepoint;
+                } else {
+                    coverage.push([codepoint, codepoint]);
+                }
+            }
+            stages[1].push(start.elapsed().as_secs_f64() * 1000.0);
+            let start = Instant::now();
+            let mut builder = FontBuilder::new();
+            for record in font.table_directory.table_records() {
+                if record.tag().to_be_bytes() != *b"DSIG" {
+                    if let Some(table) = font.table_data(record.tag()) {
+                        builder.add_raw(record.tag(), table.as_bytes());
+                    }
+                }
+            }
+            let bytes = builder.build();
+            stages[2].push(start.elapsed().as_secs_f64() * 1000.0);
+            let start = Instant::now();
+            let packet = PreviewFont {
+                bytes,
+                coverage,
+                sample: String::new(),
+            }
+            .into_packet()
+            .unwrap();
+            stages[3].push(start.elapsed().as_secs_f64() * 1000.0);
+            let start = Instant::now();
+            let response = packet.clone();
+            stages[4].push(start.elapsed().as_secs_f64() * 1000.0);
+            std::hint::black_box(response);
+        }
+        let names = ["read", "coverage", "rebuild", "packet", "response-copy"];
+        for (name, values) in names.into_iter().zip(&mut stages) {
+            values.sort_by(f64::total_cmp);
+            println!(
+                "{}",
+                serde_json::json!({ "stage": name, "samples": values.len(), "p95Ms": values[(values.len() as f64 * 0.95).ceil() as usize - 1] })
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "本机最近记录性能采样，需要提供独立数据库副本"]
+    fn recent_performance() {
+        use std::time::Instant;
+        let Some(path) = std::env::var_os("FOLIO_PERFORMANCE_DATABASE") else {
+            return;
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("folio.sqlite");
+        std::fs::copy(path, &database).unwrap();
+        let mut library = LibraryService::open(database).unwrap();
+        let identities: Vec<_> = library
+            .catalog
+            .faces()
+            .take(20)
+            .map(|face| face.identity_id.to_string())
+            .collect();
+        let mut baseline = Vec::new();
+        let mut current = Vec::new();
+        for identity in &identities {
+            let start = Instant::now();
+            library
+                .database
+                .record_recent(parse_identity_id(identity).unwrap())
+                .unwrap();
+            library.state = library.database.library_state_snapshot().unwrap();
+            library.query_index.update_state(&library.state);
+            baseline.push(start.elapsed().as_secs_f64() * 1000.0);
+            let start = Instant::now();
+            library.record_recent(identity).unwrap();
+            current.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+        if identities.is_empty() {
+            return;
+        }
+        baseline.sort_by(f64::total_cmp);
+        current.sort_by(f64::total_cmp);
+        let index = (identities.len() as f64 * 0.95).ceil() as usize - 1;
+        println!(
+            "{}",
+            serde_json::json!({ "samples": identities.len(), "faces": library.catalog.faces().count(), "baselineP95Ms": baseline[index], "currentP95Ms": current[index] })
+        );
     }
 
     #[test]
@@ -1686,7 +1926,7 @@ mod tests {
         let report =
             folio_core::scan_files(&[fixture], &folio_core::ScanOptions::default()).unwrap();
         let face = report.catalog.faces().next().unwrap();
-        assert!(render_face_preview(face, "Folio 字体预览", 48.0).is_ok());
+        assert!(render_face_preview(&face_dto(face).sources[0], "Folio 字体预览", 48.0).is_ok());
         let preview = load_preview_font(&SourceDto {
             path: face.sources[0].path().to_string_lossy().into_owned(),
             face_index: 0,
@@ -1737,9 +1977,7 @@ mod tests {
                     face_index: index as u32,
                 };
                 let preview = load_preview_font(&source).unwrap();
-                let data = STANDARD
-                    .decode(preview.data_url.split_once(',').unwrap().1)
-                    .unwrap();
+                let data = preview.bytes;
                 let exported = FontRef::new(&data).unwrap();
                 let cmap = write_fonts::types::Tag::new(b"cmap");
                 assert_eq!(
@@ -1803,6 +2041,71 @@ mod tests {
         assert_eq!(
             classify_source(&source.with_file_name("missing.ttf"), &managed),
             FontStateKind::Unavailable
+        );
+    }
+
+    #[test]
+    fn recording_recent_preserves_other_state_and_updates_query() {
+        let directory = tempfile::tempdir().unwrap();
+        let managed = directory.path().join("ManagedFonts");
+        std::fs::create_dir(&managed).unwrap();
+        let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/fonts");
+        for name in ["Lato-Regular.ttf", "Inter-Variable.ttf"] {
+            std::fs::copy(fixtures.join(name), managed.join(name)).unwrap();
+        }
+        let mut library = LibraryService::open(directory.path().join("folio.sqlite")).unwrap();
+        library.refresh().unwrap();
+        let identities: Vec<_> = library
+            .catalog
+            .faces()
+            .map(|face| face.identity_id.to_string())
+            .collect();
+        library.set_favorites(&identities[..1], true).unwrap();
+        let collection = library
+            .save_collection(CollectionMutation {
+                id: None,
+                name: "字体收藏".to_owned(),
+                icon: "folder".to_owned(),
+                color: "gray".to_owned(),
+            })
+            .unwrap();
+        library
+            .set_collection_members(CollectionMembershipMutation {
+                collection_id: collection.id.clone(),
+                identity_ids: identities[..1].to_vec(),
+                member: true,
+            })
+            .unwrap();
+        let roots: Vec<_> = library
+            .state
+            .roots
+            .iter()
+            .map(|root| (root.root_id, root.face_ids.clone()))
+            .collect();
+        assert_eq!(library.record_recent(&identities[0]).unwrap(), 1);
+        assert_eq!(library.record_recent(&identities[0]).unwrap(), 1);
+        assert_eq!(library.record_recent(&identities[1]).unwrap(), 2);
+        assert_eq!(
+            library
+                .state
+                .roots
+                .iter()
+                .map(|root| (root.root_id, root.face_ids.clone()))
+                .collect::<Vec<_>>(),
+            roots
+        );
+        for (scope, count) in [("recent", 2), ("favorites", 1), ("collection", 1)] {
+            let request: PageRequest = serde_json::from_value(
+                serde_json::json!({ "scope": scope, "collectionId": collection.id }),
+            )
+            .unwrap();
+            assert_eq!(library.query(request).unwrap().families.len(), count);
+        }
+        let stored = library.database.list_recent(usize::MAX).unwrap();
+        assert_eq!(library.state.recent.len(), stored.len());
+        assert_eq!(
+            stored[0].identity_id,
+            parse_identity_id(&identities[1]).unwrap()
         );
     }
 
