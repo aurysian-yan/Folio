@@ -24,6 +24,8 @@ use pathfinder_geometry::{
     vector::{Vector2F, Vector2I},
 };
 use serde::{Deserialize, Serialize};
+use skrifa::MetadataProvider;
+use write_fonts::{read::FontRef, FontBuilder};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LibraryError {
@@ -147,7 +149,25 @@ pub struct FaceDto {
     pub is_variable: bool,
     pub weight: Option<f32>,
     pub width: Option<f32>,
+    pub variable_axes: Vec<VariableAxisDto>,
+    pub named_instances: Vec<NamedInstanceDto>,
     pub sources: Vec<SourceDto>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VariableAxisDto {
+    pub tag: String,
+    pub min_value: f32,
+    pub default_value: f32,
+    pub max_value: f32,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NamedInstanceDto {
+    pub name: String,
+    pub coordinates: BTreeMap<String, f32>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -216,6 +236,14 @@ pub struct FontPreviewDto {
     pub face_id: String,
     pub data_url: Option<String>,
     pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewFontDto {
+    pub data_url: String,
+    pub coverage: Vec<[u32; 2]>,
+    pub sample: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -664,6 +692,23 @@ impl LibraryService {
         self.state = self.database.library_state_snapshot()?;
         self.query_index.update_state(&self.state);
         Ok(())
+    }
+
+    pub fn preview_font_source(&self, face_id: &str) -> Result<SourceDto, LibraryError> {
+        let face = self
+            .catalog
+            .faces()
+            .find(|face| face.id.to_string() == face_id)
+            .ok_or_else(|| LibraryError::Message("字体已不在当前目录中".to_owned()))?;
+        let source = face
+            .sources
+            .iter()
+            .find(|source| source.path().is_file())
+            .ok_or_else(|| LibraryError::Message("字体文件已不可用".to_owned()))?;
+        Ok(SourceDto {
+            path: source.path().to_string_lossy().into_owned(),
+            face_index: source.face_index(),
+        })
     }
 
     pub fn render_previews(
@@ -1402,8 +1447,75 @@ fn face_dto(face: &FontFace) -> FaceDto {
         is_variable: face.metadata.is_variable,
         weight: face.metadata.weight.map(|value| value.value()),
         width: face.metadata.width.map(|value| value.ratio()),
+        variable_axes: face
+            .metadata
+            .variable_axes
+            .iter()
+            .map(|axis| VariableAxisDto {
+                tag: axis.tag.clone(),
+                min_value: axis.min_value,
+                default_value: axis.default_value,
+                max_value: axis.max_value,
+            })
+            .collect(),
+        named_instances: face
+            .metadata
+            .named_instances
+            .iter()
+            .enumerate()
+            .map(|(index, instance)| NamedInstanceDto {
+                name: instance
+                    .subfamily_name
+                    .clone()
+                    .unwrap_or_else(|| format!("样式 {}", index + 1)),
+                coordinates: instance
+                    .coordinates
+                    .iter()
+                    .map(|coordinate| (coordinate.axis_tag.clone(), coordinate.value))
+                    .collect(),
+            })
+            .collect(),
         sources,
     }
+}
+
+// 提取集合中的指定字面并重建 sfnt，供浏览器直接排版；不改变原字体文件。
+pub fn load_preview_font(source: &SourceDto) -> Result<PreviewFontDto, LibraryError> {
+    let data = std::fs::read(&source.path).map_err(|_| LibraryError::Preview)?;
+    let font = FontRef::from_index(&data, source.face_index).map_err(|_| LibraryError::Preview)?;
+    let mut builder = FontBuilder::new();
+    // 重建后数字签名失效，移除签名表以免浏览器拒绝载入。
+    for record in font.table_directory.table_records() {
+        let tag = record.tag();
+        if tag.to_be_bytes() == *b"DSIG" {
+            continue;
+        }
+        if let Some(table) = font.table_data(tag) {
+            builder.add_raw(tag, table.as_bytes());
+        }
+    }
+    let mut coverage: Vec<[u32; 2]> = Vec::new();
+    let mut sample = String::new();
+    for (codepoint, _) in font.charmap().mappings() {
+        if let Some(last) = coverage.last_mut().filter(|last| last[1] + 1 == codepoint) {
+            last[1] = codepoint;
+        } else {
+            coverage.push([codepoint, codepoint]);
+        }
+        if sample.chars().count() < 12 {
+            if let Some(character) = char::from_u32(codepoint)
+                .filter(|character| !character.is_control() && !character.is_whitespace())
+            {
+                sample.push(character);
+            }
+        }
+    }
+    let bytes = builder.build();
+    Ok(PreviewFontDto {
+        data_url: format!("data:font/otf;base64,{}", STANDARD.encode(bytes)),
+        coverage,
+        sample,
+    })
 }
 
 fn render_face_preview(face: &FontFace, sample: &str, size: f32) -> Result<String, LibraryError> {
@@ -1419,9 +1531,8 @@ fn render_face_preview(face: &FontFace, sample: &str, size: f32) -> Result<Strin
         if character.is_control() {
             continue;
         }
-        let glyph = font
-            .glyph_for_char(character)
-            .ok_or(LibraryError::Preview)?;
+        // 不支持的字符显示缺字字形，避免一个字符使整张预览失效。
+        let glyph = font.glyph_for_char(character).unwrap_or(0);
         let transform = Transform2F::from_translation(Vector2F::new(x, baseline));
         font.rasterize_glyph(
             &mut canvas,
@@ -1507,6 +1618,151 @@ fn default_font_roots() -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn decoded_preview(source: &SourceDto) -> Vec<u8> {
+        let data_url = load_preview_font(source).unwrap().data_url;
+        STANDARD
+            .decode(data_url.split_once(',').unwrap().1)
+            .unwrap()
+    }
+
+    #[test]
+    fn preview_extracts_each_collection_face_without_changing_glyph_tables() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.ttc");
+        std::fs::write(&path, font_test_data::ttc::TTC).unwrap();
+        for index in 0..2 {
+            let source = SourceDto {
+                path: path.to_string_lossy().into_owned(),
+                face_index: index,
+            };
+            let data = decoded_preview(&source);
+            let exported = FontRef::new(&data).unwrap();
+            let original = FontRef::from_index(font_test_data::ttc::TTC, index).unwrap();
+            for tag in [*b"cmap", *b"glyf", *b"hmtx", *b"name"] {
+                let tag = write_fonts::types::Tag::new(&tag);
+                assert_eq!(
+                    exported.table_data(tag).unwrap().as_bytes(),
+                    original.table_data(tag).unwrap().as_bytes()
+                );
+            }
+        }
+        assert!(load_preview_font(&SourceDto {
+            path: path.to_string_lossy().into_owned(),
+            face_index: 100
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn preview_preserves_variable_axes_and_cff_outlines() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/fonts");
+        for (name, tags) in [
+            ("Inter-Variable.ttf", vec![*b"fvar", *b"gvar"]),
+            ("SourceSerif4-Regular.otf", vec![*b"CFF "]),
+        ] {
+            let path = root.join(name);
+            let original_data = std::fs::read(&path).unwrap();
+            let original = FontRef::new(&original_data).unwrap();
+            let data = decoded_preview(&SourceDto {
+                path: path.to_string_lossy().into_owned(),
+                face_index: 0,
+            });
+            let exported = FontRef::new(&data).unwrap();
+            for tag in tags {
+                let tag = write_fonts::types::Tag::new(&tag);
+                assert_eq!(
+                    exported.table_data(tag).unwrap().as_bytes(),
+                    original.table_data(tag).unwrap().as_bytes()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn native_preview_keeps_latin_glyphs_when_sample_contains_missing_characters() {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/fonts/Lato-Regular.ttf");
+        let report =
+            folio_core::scan_files(&[fixture], &folio_core::ScanOptions::default()).unwrap();
+        let face = report.catalog.faces().next().unwrap();
+        assert!(render_face_preview(face, "Folio 字体预览", 48.0).is_ok());
+        let preview = load_preview_font(&SourceDto {
+            path: face.sources[0].path().to_string_lossy().into_owned(),
+            face_index: 0,
+        })
+        .unwrap();
+        let covers = |codepoint| {
+            preview
+                .coverage
+                .iter()
+                .any(|range| range[0] <= codepoint && codepoint <= range[1])
+        };
+        assert!(covers('F' as u32));
+        assert!(!covers('字' as u32));
+        assert!(!preview.sample.is_empty());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn preview_exports_windows_system_fonts_and_collection_members() {
+        let root = PathBuf::from(std::env::var_os("WINDIR").unwrap()).join("Fonts");
+        let output = std::env::var_os("FOLIO_PREVIEW_VERIFY_DIR").map(PathBuf::from);
+        if let Some(output) = &output {
+            std::fs::create_dir_all(output).unwrap();
+        }
+        let mut manifest = Vec::new();
+        for name in [
+            "arial.ttf",
+            "arialbd.ttf",
+            "cambria.ttc",
+            "msyh.ttc",
+            "simsun.ttc",
+            "SegUIVar.ttf",
+            "bahnschrift.ttf",
+            "segmdl2.ttf",
+            "seguisym.ttf",
+            "seguiemj.ttf",
+            "wingding.ttf",
+        ] {
+            let path = root.join(name);
+            if !path.is_file() {
+                continue;
+            }
+            let bytes = std::fs::read(&path).unwrap();
+            for (index, original) in FontRef::fonts(&bytes).enumerate() {
+                let original = original.unwrap();
+                let source = SourceDto {
+                    path: path.to_string_lossy().into_owned(),
+                    face_index: index as u32,
+                };
+                let preview = load_preview_font(&source).unwrap();
+                let data = STANDARD
+                    .decode(preview.data_url.split_once(',').unwrap().1)
+                    .unwrap();
+                let exported = FontRef::new(&data).unwrap();
+                let cmap = write_fonts::types::Tag::new(b"cmap");
+                assert_eq!(
+                    exported.table_data(cmap).unwrap().as_bytes(),
+                    original.table_data(cmap).unwrap().as_bytes(),
+                    "{name}, {index}"
+                );
+                // 可选导出供浏览器验证，默认只做内存中的回归检查。
+                if let Some(output) = &output {
+                    let filename = format!("{name}-{index}.otf");
+                    std::fs::write(output.join(&filename), &data).unwrap();
+                    manifest.push(serde_json::json!({ "name": name, "index": index, "file": filename, "coverage": preview.coverage, "sample": preview.sample }));
+                }
+            }
+        }
+        if let Some(output) = &output {
+            std::fs::write(
+                output.join("manifest.json"),
+                serde_json::to_vec(&manifest).unwrap(),
+            )
+            .unwrap();
+        }
+    }
 
     #[test]
     fn canonical_font_sources_match_their_roots() {

@@ -142,6 +142,25 @@ fn add_library_root(
 }
 
 #[tauri::command]
+async fn load_preview_font(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    face_id: String,
+) -> Result<library::PreviewFontDto, String> {
+    require_main_window(&window)?;
+    let source = state
+        .library
+        .lock()
+        .map_err(|_| "字体库暂时不可用".to_owned())?
+        .preview_font_source(&face_id)
+        .map_err(|error| error.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || library::load_preview_font(&source))
+        .await
+        .map_err(|_| "字体预览暂时不可用".to_owned())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn render_previews(
     window: WebviewWindow,
     state: State<'_, AppState>,
@@ -772,6 +791,7 @@ pub fn run() {
             refresh_library,
             add_library_root,
             render_previews,
+            load_preview_font,
             set_family_favorite,
             record_recent,
             list_collections,

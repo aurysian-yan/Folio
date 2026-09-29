@@ -18,7 +18,6 @@ import {
   SparkleIcon,
   SquareIcon,
   StackSimpleIcon,
-  StarIcon,
   TextAaIcon,
   TrashIcon,
   WarningIcon,
@@ -26,7 +25,6 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
-  Card,
   Checkbox,
   Input,
   Label,
@@ -45,6 +43,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createPortal } from "react-dom";
 import { SegmentedTabs } from "./components/SegmentedTabs";
+import { FontCard, type ViewMode } from "./components/FontCard";
+import { FontPreview } from "./components/FontPreview";
+import { currentPreviewStyle } from "./font-preview";
 import {
   Fragment,
   type ButtonHTMLAttributes,
@@ -78,7 +79,6 @@ import {
   quitApp,
   recordRecent,
   refreshLibrary,
-  renderPreviews,
   resolveSyncConflict,
   restoreCloudFont,
   restoreDeletedCloudFont,
@@ -106,7 +106,6 @@ import type {
 import { AnimatedIcon } from "./animated-icons";
 import type { AnimatedIconName } from "./animated-icons-data";
 
-type ViewMode = "compact" | "large" | "list" | "expanded";
 type LibraryScope =
   | "all"
   | "recent"
@@ -165,6 +164,13 @@ const quitShortcutOptions: { id: QuitShortcut; label: string }[] = [
 
 function parseQuitShortcut(value: string | null): QuitShortcut {
   return quitShortcutOptions.find((option) => option.id === value)?.id ?? "Control+W";
+}
+
+function parseCardHoverDelay(value: string | null) {
+  const milliseconds = value?.trim() ? Number(value) : 180;
+  return Number.isFinite(milliseconds)
+    ? Math.max(0, Math.min(1000, Math.round(milliseconds / 10) * 10))
+    : 180;
 }
 
 function matchesQuitShortcut(event: globalThis.KeyboardEvent, shortcut: QuitShortcut) {
@@ -547,7 +553,10 @@ export default function App() {
     () => localStorage.getItem("folio-import-mode") ?? "copy",
   );
   const [cardHover, setCardHover] = useState(
-    () => localStorage.getItem("folio-card-hover") === "true",
+    () => localStorage.getItem("folio-card-hover") !== "false",
+  );
+  const [cardHoverDelay, setCardHoverDelay] = useState(
+    () => parseCardHoverDelay(localStorage.getItem("folio-card-hover-delay")),
   );
   const [cardMetadata, setCardMetadata] = useState(
     () => localStorage.getItem("folio-card-metadata") !== "false",
@@ -620,8 +629,8 @@ export default function App() {
   >({});
   const [sort, setSort] = useState("name");
   const [page, setPage] = useState<LibraryPageDto | null>(null);
-  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<FamilyDto | null>(null);
+  const [selectedStyleKey, setSelectedStyleKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -771,8 +780,9 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("folio-import-mode", importMode);
     localStorage.setItem("folio-card-hover", String(cardHover));
+    localStorage.setItem("folio-card-hover-delay", String(cardHoverDelay));
     localStorage.setItem("folio-card-metadata", String(cardMetadata));
-  }, [importMode, cardHover, cardMetadata]);
+  }, [importMode, cardHover, cardHoverDelay, cardMetadata]);
 
   useEffect(() => {
     const saturation = 150 + ((sidebarBlur - 1) * 50) / 11;
@@ -792,6 +802,12 @@ export default function App() {
         setViewMode(event.newValue as ViewMode);
       if (event.key === "folio-quit-shortcut")
         setQuitShortcut(parseQuitShortcut(event.newValue));
+      if (event.key === "folio-card-hover")
+        setCardHover(event.newValue !== "false");
+      if (event.key === "folio-card-hover-delay")
+        setCardHoverDelay(parseCardHoverDelay(event.newValue));
+      if (event.key === "folio-card-metadata")
+        setCardMetadata(event.newValue !== "false");
       if (event.key === "folio-sidebar-status-blur")
         setSidebarBlur(parseSidebarBlur(event.newValue));
     };
@@ -836,34 +852,9 @@ export default function App() {
         setSelected((current) =>
           current
             ? (result.families.find((family) => family.id === current.id) ??
-              null)
+              (offset > 0 ? current : null))
             : null,
         );
-        const faceIds = result.families
-          .map((family) => preferredFace(family)?.id)
-          .filter((id): id is string => Boolean(id));
-        if (faceIds.length) {
-          const rendered = await renderPreviews(
-            faceIds,
-            previewText,
-            previewSize,
-          );
-          if (revision === queryRevision.current) {
-            setPreviews((current) => ({
-              ...current,
-              ...Object.fromEntries(
-                rendered
-                  .filter((preview) => preview.dataUrl)
-                  .map((preview) => [
-                    preview.faceId,
-                    preview.dataUrl as string,
-                  ]),
-              ),
-            }));
-          }
-        } else {
-          setPreviews({});
-        }
       } catch (cause) {
         if (revision === queryRevision.current) setError(errorMessage(cause));
       } finally {
@@ -873,8 +864,6 @@ export default function App() {
     [
       collectionId,
       fontState,
-      previewSize,
-      previewText,
       selectedFacets,
       smartFolderId,
       sort,
@@ -1964,9 +1953,23 @@ export default function App() {
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      将指针移到卡片时选中字体
+                      悬停时选中字体卡片
                     </Switch.Content>
                   </Switch>
+                  <label className="setting-field">
+                    悬停选中延时
+                    <SettingSlider
+                      label="悬停选中延时"
+                      minValue={0}
+                      maxValue={1000}
+                      step={10}
+                      isDisabled={!cardHover}
+                      value={cardHoverDelay}
+                      onChange={setCardHoverDelay}
+                    />
+                    <output>{cardHoverDelay} 毫秒</output>
+                  </label>
+                  <p className="settings-note">指针停留达到设定时间后选中，移出卡片会取消等待。默认延时为 180 毫秒。</p>
                   <Switch
                     className="setting-toggle"
                     isSelected={cardMetadata}
@@ -2605,11 +2608,19 @@ export default function App() {
                     key={family.id}
                     family={family}
                     mode={viewMode}
-                    preview={previews[preferredFace(family)?.id ?? ""]}
+                    previewText={previewText}
+                    previewSize={previewSize}
+                    styleKey={selectedStyleKey}
+                    onStyleChange={setSelectedStyleKey}
+                    showMetadata={cardMetadata}
+                    selectOnHover={cardHover}
+                    hoverDelay={cardHoverDelay}
                     selected={selected?.id === family.id}
                     onSelect={() => {
+                      if (selected?.id === family.id) return;
                       setSelected(family);
-                      const identityId = preferredFace(family)?.identityId;
+                      setSelectedStyleKey(null);
+                      const identityId = currentPreviewStyle(family)?.face.identityId;
                       if (identityId)
                         void recordRecent(identityId)
                           .then(() =>
@@ -2737,7 +2748,9 @@ export default function App() {
               {selected ? (
                 <Inspector
                   family={selected}
-                  preview={previews[preferredFace(selected)?.id ?? ""]}
+                  styleKey={selectedStyleKey}
+                  previewText={previewText}
+                  previewSize={previewSize}
                   collections={collections}
                   collectionTargetId={collectionTargetId}
                   onCollectionTargetChange={setCollectionTargetId}
@@ -3350,77 +3363,11 @@ function SidebarResizeHandle({
   );
 }
 
-function FontCard({
-  family,
-  mode,
-  preview,
-  selected,
-  onSelect,
-  onFavorite,
-}: {
-  family: FamilyDto;
-  mode: ViewMode;
-  preview?: string;
-  selected: boolean;
-  onSelect: () => void;
-  onFavorite: () => void;
-}) {
-  const face = preferredFace(family);
-  return (
-    <Card
-      className={`font-card${selected ? " selected" : ""}`}
-      variant="secondary"
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-    >
-      <div
-        className="font-preview"
-        aria-label={`${family.displayName} 字体预览`}
-      >
-        {preview ? (
-          <img src={preview} alt="" />
-        ) : (
-          <span className="preview-unavailable">预览不可用</span>
-        )}
-      </div>
-      <Card.Content className="font-card-content">
-        <Card.Title>{family.displayName}</Card.Title>
-        <Card.Description>
-          {mode === "list"
-            ? (face?.styleName ?? "常规")
-            : `${family.faces.length} 个样式${family.isVariable ? " · VF" : ""}`}
-        </Card.Description>
-        {(mode === "large" || mode === "expanded") && (
-          <div className="font-card-meta">
-            {face?.styleName ?? "常规"} · {face?.format ?? "字体"}
-          </div>
-        )}
-      </Card.Content>
-      <button
-        className={`favorite-button${family.isFavorite ? " is-favorite" : ""}`}
-        aria-label={family.isFavorite ? "取消收藏" : "收藏字体"}
-        aria-pressed={family.isFavorite}
-        onClick={(event) => {
-          event.stopPropagation();
-          onFavorite();
-        }}
-      >
-        <StarIcon weight={family.isFavorite ? "fill" : "regular"} />
-      </button>
-    </Card>
-  );
-}
-
 function Inspector({
   family,
-  preview,
+  styleKey,
+  previewText,
+  previewSize,
   collections,
   collectionTargetId,
   onCollectionTargetChange,
@@ -3428,14 +3375,17 @@ function Inspector({
   onClose,
 }: {
   family: FamilyDto;
-  preview?: string;
+  styleKey: string | null;
+  previewText: string;
+  previewSize: number;
   collections: CollectionDto[];
   collectionTargetId: string;
   onCollectionTargetChange: (id: string) => void;
   onCollectionMembershipChange: (member: boolean) => void;
   onClose: () => void;
 }) {
-  const face = preferredFace(family);
+  const style = currentPreviewStyle(family, styleKey);
+  const face = style?.face;
   const [copyMessage, setCopyMessage] = useState("");
   const copyValue = async (value: string, label: string) => {
     try {
@@ -3456,18 +3406,18 @@ function Inspector({
       </button>
       <h2>{family.displayName}</h2>
       <p className="inspector-style">
-        {face?.styleName ?? "常规"} <span>·</span> {face?.format ?? "字体"} <span>·</span> {family.faces.length} 个样式
+        {style?.name ?? "常规"} <span>·</span> {face?.format ?? "字体"} <span>·</span> {family.faces.length} 个样式
       </p>
       <details className="inspector-section" open>
         <summary>预览</summary>
         <div className="inspector-preview">
-          {preview ? <img src={preview} alt={`${family.displayName} 预览`} /> : <span>预览不可用</span>}
+          <FontPreview style={style} text={previewText} size={previewSize} lines={6} align="left" label={`${family.displayName}，${style?.name ?? "常规"} 预览`} />
         </div>
       </details>
       {face?.weight != null && (
         <div className="inspector-weight">
           <span>字重</span>
-          <strong>{face.weight}</strong>
+          <strong>{style?.coordinates.wght ?? face.weight}</strong>
         </div>
       )}
       <details className="inspector-section" open>
@@ -3567,6 +3517,8 @@ function SettingSlider({
   value,
   onChange,
   className = "settings-slider",
+  step = 1,
+  isDisabled = false,
 }: {
   label: string;
   minValue: number;
@@ -3574,6 +3526,8 @@ function SettingSlider({
   value: number;
   onChange: (value: number) => void;
   className?: string;
+  step?: number;
+  isDisabled?: boolean;
 }) {
   return (
     <Slider.Root
@@ -3581,7 +3535,8 @@ function SettingSlider({
       aria-label={label}
       minValue={minValue}
       maxValue={maxValue}
-      step={1}
+      step={step}
+      isDisabled={isDisabled}
       value={[value]}
       onChange={(values) =>
         onChange(Array.isArray(values) ? (values[0] ?? value) : values)
@@ -3757,13 +3712,6 @@ function PreviewSizeSlider({
       value={value}
       onChange={onChange}
     />
-  );
-}
-
-function preferredFace(family: FamilyDto) {
-  return (
-    family.faces.find((face) => family.matchedFaceIds.includes(face.id)) ??
-    family.faces[0]
   );
 }
 

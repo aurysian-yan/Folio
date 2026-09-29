@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CloudFontDto, CollectionDto, FontPreviewDto, LibraryPageDto, LibrarySnapshotDto, SmartFolderDto, SyncConflictDto, SyncProfileDto, SyncStatusDto } from "./types";
+import type { CloudFontDto, CollectionDto, FontPreviewDto, LibraryPageDto, LibrarySnapshotDto, PreviewFontDto, SmartFolderDto, SyncConflictDto, SyncProfileDto, SyncStatusDto } from "./types";
 
 export interface QueryRequest {
   text: string;
@@ -27,6 +27,10 @@ export function addLibraryRoot(path: string): Promise<LibrarySnapshotDto> {
 
 export function renderPreviews(faceIds: string[], sample: string, size: number): Promise<FontPreviewDto[]> {
   return invoke("render_previews", { faceIds, sample, size });
+}
+
+export function loadPreviewFont(faceId: string): Promise<PreviewFontDto> {
+  return invoke("load_preview_font", { faceId });
 }
 
 export function setFamilyFavorite(identityIds: string[], favorite: boolean): Promise<void> {

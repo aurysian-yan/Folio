@@ -26,6 +26,8 @@ font-kit = "0.14.3"
 png = "=0.17.16"
 base64 = "0.22.1"
 pathfinder_geometry = "0.5.1"
+write-fonts = { version = "=0.53.0", default-features = false, features = ["read"] }
+skrifa = "=0.47.0"
 tauri-plugin-dialog = "2.7.3"
 window-vibrancy = "0.8.1"
 keyring = "=4.2.0"
@@ -36,3 +38,4 @@ tauri-plugin-window-state = "2.4.1"
 
 [dev-dependencies]
 tempfile = "3.27.0"
+font-test-data = "=0.9.1"

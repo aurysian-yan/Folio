@@ -1344,11 +1344,13 @@ dependencies = [
  "folio-storage",
  "folio-sync",
  "font-kit",
+ "font-test-data",
  "keyring",
  "pathfinder_geometry",
  "png 0.17.16",
  "serde",
  "serde_json",
+ "skrifa",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -1357,6 +1359,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "window-vibrancy 0.8.1",
+ "write-fonts",
 ]
 
 [[package]]
@@ -1423,6 +1426,15 @@ dependencies = [
  "walkdir",
  "winapi",
  "yeslogic-fontconfig-sys",
+]
+
+[[package]]
+name = "font-test-data"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8250a122865fc22377a26c0bb273bc4a69914409b4cf4a9b4cd7d7c6c5b1a0d7"
+dependencies = [
+ "font-types",
 ]
 
 [[package]]
@@ -5980,6 +5992,17 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "write-fonts"
+version = "0.53.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c2feba63177f6f6b51d646b78fafd5ff65f0581814155eb36ef620133d245c4"
+dependencies = [
+ "font-types",
+ "log",
+ "read-fonts",
+]
 
 [[package]]
 name = "writeable"

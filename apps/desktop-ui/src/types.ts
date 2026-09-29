@@ -12,6 +12,8 @@ export interface FaceDto {
   isVariable: boolean;
   weight: number | null;
   width: number | null;
+  variableAxes: { tag: string; minValue: number; defaultValue: number; maxValue: number }[];
+  namedInstances: { name: string; coordinates: Record<string, number> }[];
   sources: SourceDto[];
 }
 
@@ -84,6 +86,12 @@ export interface FontPreviewDto {
   faceId: string;
   dataUrl: string | null;
   error: string | null;
+}
+
+export interface PreviewFontDto {
+  dataUrl: string;
+  coverage: [number, number][];
+  sample: string;
 }
 
 export interface SyncProfileDto {
