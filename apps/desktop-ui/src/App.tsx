@@ -639,7 +639,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [menuMode, setMenuMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
-  const [previewText, setPreviewText] = useState("Folio 字体预览");
+  const [previewTextMode, setPreviewTextMode] = useState("pangram");
+  const [previewText, setPreviewText] = useState(
+    "Sphinx of black quartz, judge my vow.",
+  );
   const [previewSize, setPreviewSize] = useState(() =>
     parsePreviewSize(localStorage.getItem("folio-preview-size")),
   );
@@ -2698,17 +2701,26 @@ export default function App() {
               <span className="sr-only" role="status">{recentError}</span>
               <OptionSelect
                 label="预览文字样例"
-                value={previewText}
+                value={previewTextMode}
                 options={[
-                  { id: "Aa", label: "Aa" },
-                  { id: "Folio", label: "Folio" },
-                  {
-                    id: "The quick brown fox jumps over the lazy dog.",
-                    label: "Pangram",
-                  },
-                  { id: "1234567890", label: "数字" },
+                  { id: "pangram", label: "Pangram" },
+                  { id: "alphabet", label: "Alphabet" },
+                  { id: "numbers", label: "Numbers" },
+                  { id: "loremIpsum", label: "Lorem Ipsum" },
+                  { id: "custom", label: "Custom" },
                 ]}
-                onChange={setPreviewText}
+                onChange={(mode) => {
+                  setPreviewTextMode(mode);
+                  const presetText: Record<string, string> = {
+                    pangram: "Sphinx of black quartz, judge my vow.",
+                    alphabet:
+                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz",
+                    numbers: "0123456789",
+                    loremIpsum:
+                      "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+                  };
+                  if (presetText[mode]) setPreviewText(presetText[mode]);
+                }}
               />
               <TextField
                 className="preview-text-field"
@@ -2718,7 +2730,10 @@ export default function App() {
                   aria-label="自定义预览文字"
                   className="preview-text-input"
                   value={previewText}
-                  onChange={(event) => setPreviewText(event.target.value)}
+                  onChange={(event) => {
+                    setPreviewText(event.target.value);
+                    setPreviewTextMode("custom");
+                  }}
                 />
               </TextField>
               <TextAaIcon />

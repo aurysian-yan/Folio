@@ -56,8 +56,8 @@ final class LibraryViewModel {
             scheduleQuery(immediate: false)
         }
     }
-    var previewMode: PreviewTextMode = .custom
-    var customPreviewText = "Folio 字体预览"
+    var previewMode: PreviewTextMode = .pangram
+    var customPreviewText = "Sphinx of black quartz, judge my vow."
     var previewSize: Double
     private(set) var committedPreviewSize: Double
     private(set) var isPreviewSizeEditing = false
