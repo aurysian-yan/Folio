@@ -544,6 +544,10 @@ function FolioWordmark() {
 }
 
 export default function App() {
+  useLayoutEffect(() => {
+    document.documentElement.dataset.uiReady = "true";
+  }, []);
+
   const settingsWindow = isSettingsWindow();
   const [viewMode, setViewMode] = useState<ViewMode>(
     () =>

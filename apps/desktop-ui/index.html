@@ -3,10 +3,83 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f7f7f7" />
     <title>Folio</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: transparent;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      #root {
+        width: 100%;
+        height: 100%;
+        visibility: hidden;
+        opacity: 0;
+      }
+
+      #boot-splash {
+        position: fixed;
+        z-index: 1;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: transparent;
+        opacity: 1;
+        transition:
+          opacity 120ms ease-out,
+          visibility 0s linear 120ms;
+      }
+
+      #boot-splash img {
+        display: block;
+        width: 96px;
+        max-width: 30vw;
+        height: 96px;
+        object-fit: contain;
+        pointer-events: none;
+        user-select: none;
+      }
+
+      html[data-ui-ready="true"] #root {
+        visibility: visible;
+        opacity: 1;
+        transition: opacity 120ms ease-out;
+      }
+
+      html[data-ui-ready="true"] #boot-splash {
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      html[data-window="settings"] #boot-splash {
+        display: none;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #root,
+        #boot-splash {
+          transition: none;
+        }
+      }
+    </style>
+    <script>
+      if (new URLSearchParams(location.search).get("window") === "settings") {
+        document.documentElement.dataset.window = "settings";
+      }
+    </script>
   </head>
   <body>
+    <div id="boot-splash" aria-hidden="true">
+      <img src="/folio-logo.png" alt="" />
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
