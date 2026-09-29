@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { gridGeometry, visibleRows } from "../grid-layout";
 import type { FamilyDto } from "../types";
 import type { EditingPreview } from "../preview-appearance";
@@ -10,12 +10,18 @@ type Props = Pick<CardProps, "mode" | "previewText" | "previewSize" | "textColor
   selectedId?: string;
   styleKey: string | null;
   total: number;
+  isLoading?: boolean;
+  onLoadMore?: () => void;
+  header?: ReactNode;
+  emptyState?: ReactNode;
   editingPreview?: EditingPreview | null;
 };
 
-export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selectedId, styleKey, total, editingPreview, ...props }: Props) {
+export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selectedId, styleKey, total, isLoading, onLoadMore, header, emptyState, editingPreview, ...props }: Props) {
   const root = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ width: 640, height: 480, scrollTop: 0, top: 10 });
+  const headerRoot = useRef<HTMLDivElement>(null);
+  const contentRoot = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState({ width: 640, height: 0, scrollTop: 0, top: 10 });
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const positions = useMemo(() => new Map(families.map((family, index) => [family.id, index])), [families]);
   const geometry = gridGeometry(viewport.width, props.mode);
@@ -24,19 +30,23 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
   const restoreScroll = useRef<number | null>(null);
   const focusedControl = useRef(0);
   const frame = useRef(0);
+  const lastLoad = useRef<{ first: FamilyDto; count: number } | null>(null);
   const mode = props.mode;
+  const gridHeight = Math.max(0, Math.ceil(families.length / geometry.columns) * geometry.stride - geometry.gap);
 
   useLayoutEffect(() => {
     const element = root.current;
-    if (!element) return;
+    const content = contentRoot.current;
+    if (!element || !content) return;
     const measure = () => {
-      const css = getComputedStyle(element);
-      const width = Math.max(1, element.clientWidth - parseFloat(css.paddingLeft || "0") - parseFloat(css.paddingRight || "0"));
-      const top = parseFloat(css.paddingTop || "0");
+      const css = getComputedStyle(content);
+      const width = Math.max(1, content.clientWidth - parseFloat(css.paddingLeft || "0") - parseFloat(css.paddingRight || "0"));
+      const top = (headerRoot.current?.offsetHeight ?? 0) + parseFloat(css.paddingTop || "0");
       const previous = measured.current;
       const next = gridGeometry(width, mode);
       let scrollTop = element.scrollTop;
-      if (previous.width && (previous.width !== width || previous.mode !== mode)) {
+      // Hero 高度与视图变化后保留卡片锚点，浏览 Hero 时保持原位置。
+      if (previous.width && element.scrollTop >= previous.top && (previous.width !== width || previous.mode !== mode || previous.top !== top)) {
         const index = Math.floor(Math.max(0, element.scrollTop - previous.top) / previous.geometry.stride) * previous.geometry.columns;
         const fraction = Math.max(0, element.scrollTop - previous.top) % previous.geometry.stride / previous.geometry.stride;
         scrollTop = top + (Math.floor(index / next.columns) + fraction) * next.stride;
@@ -49,11 +59,24 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    observer.observe(content);
+    if (headerRoot.current) observer.observe(headerRoot.current);
     return () => { observer.disconnect(); window.cancelAnimationFrame(frame.current); frame.current = 0; };
   }, [mode]);
 
-  const rows = visibleRows(families.length, geometry.columns, geometry.stride, viewport.scrollTop - viewport.top,
-    viewport.height, focusedId ? positions.get(focusedId) ?? -1 : -1);
+  useEffect(() => {
+    if (!onLoadMore || isLoading || !families.length || families.length >= total || viewport.height <= 0) return;
+    const remaining = viewport.top + gridHeight - viewport.scrollTop - viewport.height;
+    if (remaining > Math.max(viewport.height * 2, geometry.stride * 3)) return;
+    // 提前两屏补页；同一页只触发一次，首屏替换后允许重新加载。
+    if (lastLoad.current?.first === families[0] && lastLoad.current.count === families.length) return;
+    lastLoad.current = { first: families[0], count: families.length };
+    onLoadMore();
+  }, [families, total, isLoading, onLoadMore, gridHeight, geometry.stride, viewport.top, viewport.scrollTop, viewport.height]);
+
+  const gridScrollTop = viewport.scrollTop - viewport.top;
+  const rows = visibleRows(families.length, geometry.columns, geometry.stride, gridScrollTop,
+    Math.max(0, viewport.height + Math.min(0, gridScrollTop)), focusedId ? positions.get(focusedId) ?? -1 : -1);
   const focusIndex = (index: number, last = false) => {
     const element = root.current;
     const family = families[index];
@@ -100,7 +123,7 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
     if (step || event.key === "Home" || event.key === "End") { event.preventDefault(); focusIndex(Math.max(0, Math.min(families.length - 1, next))); }
   };
 
-  return <div ref={root} className={`font-grid virtual-font-grid mode-${mode}`} tabIndex={-1} role="list" aria-label="字体列表"
+  return <div ref={root} className={`font-grid virtual-font-grid mode-${mode}`} tabIndex={-1} role="region" aria-label="字体浏览"
     onKeyDownCapture={onKeyDown}
     onFocusCapture={(event) => {
       const card = (event.target as HTMLElement).closest<HTMLElement>(".font-card");
@@ -115,15 +138,18 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
         if (root.current) setViewport((current) => ({ ...current, scrollTop: root.current!.scrollTop }));
       });
     }}>
-    <div className="font-grid-rows" style={{ height: Math.max(0, Math.ceil(families.length / geometry.columns) * geometry.stride - geometry.gap) }}>
-      {rows.map((row) => <div key={row} className="font-grid-row" style={{ top: row * geometry.stride, height: geometry.cardHeight, gap: geometry.gap, gridTemplateColumns: `repeat(${geometry.columns}, minmax(0, 1fr))` }}>
-        {families.slice(row * geometry.columns, (row + 1) * geometry.columns).map((family, column) => <FontCard
-          {...props} key={family.id} family={family} selected={selectedId === family.id} styleKey={selectedId === family.id ? styleKey : null}
-          previewSize={editingPreview?.familyId === family.id ? editingPreview.appearance.size : props.previewSize}
-          textColor={editingPreview?.familyId === family.id ? editingPreview.appearance.textColor : props.textColor}
-          backgroundColor={editingPreview?.familyId === family.id ? editingPreview.appearance.backgroundColor : props.backgroundColor}
-          position={row * geometry.columns + column + 1} total={total} />)}
-      </div>)}
+    <div ref={headerRoot} className="font-grid-header">{header}</div>
+    <div ref={contentRoot} className="font-grid-content">
+      {families.length ? <div className="font-grid-rows" style={{ height: gridHeight }} role="list" aria-label="字体列表">
+        {rows.map((row) => <div key={row} className="font-grid-row" style={{ top: row * geometry.stride, height: geometry.cardHeight, gap: geometry.gap, gridTemplateColumns: `repeat(${geometry.columns}, minmax(0, 1fr))` }}>
+          {families.slice(row * geometry.columns, (row + 1) * geometry.columns).map((family, column) => <FontCard
+            {...props} key={family.id} family={family} selected={selectedId === family.id} styleKey={selectedId === family.id ? styleKey : null}
+            previewSize={editingPreview?.familyId === family.id ? editingPreview.appearance.size : props.previewSize}
+            textColor={editingPreview?.familyId === family.id ? editingPreview.appearance.textColor : props.textColor}
+            backgroundColor={editingPreview?.familyId === family.id ? editingPreview.appearance.backgroundColor : props.backgroundColor}
+            position={row * geometry.columns + column + 1} total={total} />)}
+        </div>)}
+      </div> : emptyState}
     </div>
   </div>;
 });

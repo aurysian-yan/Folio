@@ -1,4 +1,5 @@
 @import "@heroui/styles/css";
+@import "overlayscrollbars/overlayscrollbars.css";
 
 @font-face {
     font-family: "JetBrains Mono";
@@ -122,6 +123,38 @@ body,
 }
 body {
     overflow: hidden;
+}
+
+/* 初始化前隐藏原生滚动条，所有滚动区域使用同一主题。 */
+:where(.sidebar-scroll, .font-grid, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop) {
+    scrollbar-width: none;
+}
+:where(.sidebar-scroll, .font-grid, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop)::-webkit-scrollbar {
+    display: none;
+}
+.os-theme-folio {
+    --os-size: 10px;
+    --os-padding-perpendicular: 3px;
+    --os-padding-axis: 3px;
+    --os-track-border-radius: 999px;
+    --os-handle-border-radius: 999px;
+    --os-handle-bg: color-mix(in srgb, var(--text) 28%, transparent);
+    --os-handle-bg-hover: color-mix(in srgb, var(--text) 44%, transparent);
+    --os-handle-bg-active: color-mix(in srgb, var(--text) 56%, transparent);
+    --os-handle-min-size: 32px;
+}
+.sidebar-scroll:not(.blur-preview-nav) > .os-scrollbar.os-scrollbar-vertical {
+    bottom: var(--sidebar-status-clearance, 72px);
+}
+.modal__backdrop[data-overlayscrollbars] {
+    position: fixed;
+}
+@media (prefers-reduced-motion: reduce) {
+    .os-scrollbar,
+    .os-scrollbar-track,
+    .os-scrollbar-handle {
+        transition: none;
+    }
 }
 button,
 input,
@@ -673,10 +706,9 @@ button {
     min-height: 0;
     flex: 1;
     flex-direction: column;
-    /* 滚动区域顶到窗口底部，底部留出悬浮状态卡的高度。 */
-    padding-bottom: 72px;
+    /* 内容留白与滚动条底部同步避开悬浮状态卡。 */
+    padding-bottom: var(--sidebar-status-clearance, 72px);
     overflow: auto;
-    scrollbar-width: thin;
 }
 /* 列表项保持自身高度，内容超出时由 side-scroll 滚动而不是压缩。 */
 .sidebar-scroll > * {
@@ -945,7 +977,6 @@ button {
     overflow: auto;
     padding: 10px 12px 22px;
     outline: 0;
-    scrollbar-width: thin;
 }
 .font-grid.mode-large {
     grid-template-columns: repeat(auto-fill, minmax(min(272px, 100%), 1fr));
@@ -959,11 +990,26 @@ button {
     gap: 16px;
 }
 .font-grid.virtual-font-grid {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
     overflow-anchor: none;
+}
+.font-grid-header {
+    flex: 0 0 auto;
+}
+.font-grid-content {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    min-width: 0;
+    padding: 10px 12px 22px;
 }
 .font-grid-rows {
     position: relative;
+    flex: 0 0 auto;
     width: 100%;
 }
 .font-grid-row {
@@ -1310,14 +1356,6 @@ button {
     border-radius: 50%;
     animation: spin 800ms linear infinite;
 }
-.pagination-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 5px 22px 10px;
-    color: var(--text-muted);
-    font-size: 11px;
-}
 .preview-bar {
     container: preview-controls / inline-size;
     display: flex;
@@ -1522,7 +1560,6 @@ button {
     min-height: 0;
     overflow: auto;
     padding: 14px 15px;
-    scrollbar-width: thin;
     transition:
         transform 220ms ease,
         opacity 180ms ease;
@@ -1683,7 +1720,6 @@ button {
     overflow: auto;
     padding: 12px clamp(0px, 3vw, 24px) 28px;
     background: transparent;
-    scrollbar-width: thin;
 }
 .settings-page h1 {
     margin: 0 0 8px;
@@ -2239,7 +2275,7 @@ button {
     .sort-button > span {
         display: none;
     }
-    .font-grid {
+    .font-grid, .font-grid-content {
         padding: 8px 10px 18px;
     }
 }
@@ -2366,7 +2402,6 @@ button {
     min-height: 0;
     flex: 1;
     overflow: auto;
-    scrollbar-width: thin;
 }
 .favorite-editor-page {
     display: grid;
@@ -2692,7 +2727,6 @@ button {
     gap: 12px;
     padding: 24px 36px;
     overflow: auto;
-    scrollbar-width: thin;
 }
 .cloud-pane-header {
     display: flex;

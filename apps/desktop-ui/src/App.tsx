@@ -51,6 +51,7 @@ import type { ViewMode } from "./components/FontCard";
 import { VirtualFontGrid } from "./components/VirtualFontGrid";
 import { appendLibraryPage, LibraryPageRequests } from "./library-paging";
 import { startMetric } from "./performance-metrics";
+import { useAppScrollbars } from "./scrollbars";
 import { FontPreview } from "./components/FontPreview";
 import { LibraryHero } from "./components/LibraryHero";
 import { createLibraryHero, type HeroAction } from "./library-hero";
@@ -550,6 +551,7 @@ function FolioWordmark() {
 }
 
 export default function App() {
+  useAppScrollbars();
   useLayoutEffect(() => {
     document.documentElement.dataset.uiReady = "true";
   }, []);
@@ -924,6 +926,10 @@ export default function App() {
       sort,
     ],
   );
+
+  const loadMore = useCallback(() => {
+    if (page && !loading) void loadPage(search, scope, page.families.length);
+  }, [loadPage, loading, page, search, scope]);
 
   const favoriteFamily = useCallback((family: FamilyDto) => {
     void setFamilyFavorite(family.faces.map((face) => face.identityId), !family.isFavorite)
@@ -2643,88 +2649,74 @@ export default function App() {
               />
             ) : (
               <>
-            <div className="library-overview">
-              <div className="library-title-row">
-                <LibraryHero
-                  presentation={scope === "all" ? libraryHero : {
-                    kind: "normal", title: currentScopeTitle,
-                    subtitle: page ? `${page.totalMatches} 个字族 · 搜索、筛选与预览` : "正在读取字体库…",
-                    sync: libraryHero.sync,
-                  }}
-                  onAction={handleHeroAction}
-                />
-                <div className="sort-button">
-                  <span>排序</span>
-                  <OptionSelect
-                    label="排序方式"
-                    value={sort}
-                    options={[
-                      { id: "name", label: "名称" },
-                      { id: "recent", label: "最近查看" },
-                      { id: "relevance", label: "相关度" },
-                    ]}
-                    onChange={setSort}
-                  />
+            <VirtualFontGrid
+              key={JSON.stringify([search, scope, sort, selectedFacets, collectionId, smartFolderId, fontState])}
+              families={error ? [] : page?.families ?? []} total={page?.totalMatches ?? 0}
+              isLoading={loading} onLoadMore={loadMore}
+              mode={viewMode} previewText={previewText} previewSize={previewAppearance.committed.size}
+              textColor={previewAppearance.committed.textColor} backgroundColor={previewAppearance.committed.backgroundColor}
+              editingPreview={previewAppearance.editing}
+              styleKey={selectedStyleKey} selectedId={selected?.id} onStyleChange={setSelectedStyleKey}
+              showMetadata={cardMetadata} selectOnHover={cardHover} hoverDelay={cardHoverDelay}
+              onSelect={selectFamily} onFavorite={favoriteFamily}
+              header={
+                <div className="library-overview">
+                  <div className="library-title-row">
+                    <LibraryHero
+                      presentation={scope === "all" ? libraryHero : {
+                        kind: "normal", title: currentScopeTitle,
+                        subtitle: page ? `${page.totalMatches} 个字族 · 搜索、筛选与预览` : "正在读取字体库…",
+                        sync: libraryHero.sync,
+                      }}
+                      onAction={handleHeroAction}
+                    />
+                    <div className="sort-button">
+                      <span>排序</span>
+                      <OptionSelect
+                        label="排序方式"
+                        value={sort}
+                        options={[
+                          { id: "name", label: "名称" },
+                          { id: "recent", label: "最近查看" },
+                          { id: "relevance", label: "相关度" },
+                        ]}
+                        onChange={setSort}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            {error ? (
-              <div className="state-message error-state">
-                <h2>无法加载字体库</h2>
-                <p>{error}</p>
-                <Button onPress={() => void runRefresh()}>重试</Button>
-              </div>
-            ) : page?.families.length ? (
-              <VirtualFontGrid
-                key={JSON.stringify([search, scope, sort, selectedFacets, collectionId, smartFolderId, fontState])}
-                families={page.families} total={page.totalMatches}
-                mode={viewMode} previewText={previewText} previewSize={previewAppearance.committed.size}
-                textColor={previewAppearance.committed.textColor} backgroundColor={previewAppearance.committed.backgroundColor}
-                editingPreview={previewAppearance.editing}
-                styleKey={selectedStyleKey} selectedId={selected?.id} onStyleChange={setSelectedStyleKey}
-                showMetadata={cardMetadata} selectOnHover={cardHover} hoverDelay={cardHoverDelay}
-                onSelect={selectFamily} onFavorite={favoriteFamily}
-              />
-            ) : loading ? (
-              <div className="state-message">
-                <div className="loading-indicator" />
-                <p>正在读取字体库…</p>
-              </div>
-            ) : (
-              <div className="state-message empty-state">
-                <div className="empty-icon">
-                  <TextAaIcon />
+              }
+              emptyState={error ? (
+                <div className="state-message error-state">
+                  <h2>无法加载字体库</h2>
+                  <p>{error}</p>
+                  <Button onPress={() => void runRefresh()}>重试</Button>
                 </div>
-                <h2>{search ? "没有匹配的字体" : "字体库还是空的"}</h2>
-                <p>
-                  {search
-                    ? "尝试更改搜索内容，或清除搜索条件。"
-                    : "添加一个字体文件夹，Folio 就会建立本地字体目录。"}
-                </p>
-                {!search && (
-                  <Button onPress={() => void chooseFolder()}>
-                    <FolderPlusIcon />
-                    添加字体文件夹
-                  </Button>
-                )}
-              </div>
-            )}
-            {page && page.totalMatches > page.families.length && (
-              <footer className="pagination-row">
-                <span>
-                  显示 {page.families.length} / {page.totalMatches}
-                </span>
-                <Button
-                  variant="secondary"
-                  isDisabled={loading}
-                  onPress={() =>
-                    void loadPage(search, scope, page.families.length)
-                  }
-                >
-                  加载更多
-                </Button>
-              </footer>
-            )}
+              ) : loading ? (
+                <div className="state-message">
+                  <div className="loading-indicator" />
+                  <p>正在读取字体库…</p>
+                </div>
+              ) : (
+                <div className="state-message empty-state">
+                  <div className="empty-icon">
+                    <TextAaIcon />
+                  </div>
+                  <h2>{search ? "没有匹配的字体" : "字体库还是空的"}</h2>
+                  <p>
+                    {search
+                      ? "尝试更改搜索内容，或清除搜索条件。"
+                      : "添加一个字体文件夹，Folio 就会建立本地字体目录。"}
+                  </p>
+                  {!search && (
+                    <Button onPress={() => void chooseFolder()}>
+                      <FolderPlusIcon />
+                      添加字体文件夹
+                    </Button>
+                  )}
+                </div>
+              )}
+            />
             <footer className="preview-bar">
               <span className="sr-only" role="status">{recentError}</span>
               <PreviewPresetMenu

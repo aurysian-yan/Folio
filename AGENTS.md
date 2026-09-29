@@ -34,6 +34,8 @@
   FIXME、调试信息或开发过程说明。
 - 使用语义化 HTML 和 HeroUI 提供的 React Aria 行为，确保键盘、焦点和读屏
   支持。
+- Windows/Linux 界面滚动条统一使用 OverlayScrollbars，包含菜单和弹窗；
+  左侧栏内容与轨道必须避开底部状态卡，接入约定见 `docs/ui-scrollbars.md`。
 
 ## 样式与动效
 
