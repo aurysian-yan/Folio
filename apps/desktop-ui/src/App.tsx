@@ -1736,7 +1736,7 @@ export default function App() {
             </div>
           </>
         )}
-        {!menuMode && !settingsWindow && <div className="titlebar-center">
+        {!settingsWindow && <div className="titlebar-center" hidden={menuMode}>
           <div className="titlebar-drag-space" aria-hidden="true" />
           <Toolbar className="titlebar-actions" aria-label="字体库工具">
           <SmoothCorners
