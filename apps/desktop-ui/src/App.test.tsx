@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { family } from "./test/fixtures";
 import App from "./App";
-import { getSyncProfile, getSyncStatus, listSyncConflicts, openSettings, queryLibrary, recordRecent } from "./api";
+import { getSyncProfile, getSyncStatus, listSyncConflicts, openSettings, queryLibrary, quitApp, recordRecent } from "./api";
 
 vi.mock("./components/FontPreview", () => ({ FontPreview: ({ size, label, color }: { size: number; label: string; color?: string | null }) => <span data-testid="preview-font-size" data-size={size} data-color={color ?? "default"} aria-label={label} /> }));
 vi.mock("@lisse/react", () => ({ useSmoothCorners: () => {}, SmoothCorners: ({ children }: { children: ReactNode }) => children }));
@@ -20,6 +20,7 @@ vi.mock("./api", async (importOriginal) => {
       health: { damagedFiles: 0, duplicateSources: 0, multipleRevisions: 0, metadataConflicts: 0 } })),
     recordRecent: vi.fn(async () => 1),
     openSettings: vi.fn(async () => {}),
+    quitApp: vi.fn(async () => {}),
     listCollections: vi.fn(async () => []), listSmartFolders: vi.fn(async () => []),
     getSyncProfile: vi.fn(async () => null), listCloudFonts: vi.fn(async () => []), listSyncConflicts: vi.fn(async () => []),
     getSyncStatus: vi.fn(async () => ({ configured: false, running: false, phase: "", stage: "", percent: 0, stageCompleted: 0, stageTotal: 0,
@@ -27,8 +28,37 @@ vi.mock("./api", async (importOriginal) => {
   };
 });
 
-beforeEach(() => { localStorage.clear(); });
+beforeEach(() => { localStorage.clear(); vi.mocked(quitApp).mockClear(); });
 afterEach(() => { window.history.replaceState(null, "", "/"); });
+
+it.each([null, "invalid"])("未设置或无效退出快捷键 %s 时默认使用 Ctrl+Q", async (stored) => {
+  if (stored !== null) localStorage.setItem("folio-quit-shortcut", stored);
+  window.history.replaceState(null, "", "?window=settings");
+  const { getByRole } = render(<App />);
+  fireEvent.click(getByRole("tab", { name: "快捷键" }));
+  expect(getByRole("button", { name: /退出应用快捷键/ }).textContent).toBe("Ctrl+Q");
+  await waitFor(() => expect(localStorage.getItem("folio-quit-shortcut")).toBe("Control+Q"));
+  fireEvent.keyDown(window, { key: "w", ctrlKey: true });
+  expect(quitApp).not.toHaveBeenCalled();
+  fireEvent.keyDown(window, { key: "q", ctrlKey: true });
+  expect(quitApp).toHaveBeenCalledTimes(1);
+});
+
+it("保留已保存的退出快捷键，并同步后续设置变更", async () => {
+  localStorage.setItem("folio-quit-shortcut", "Control+W");
+  window.history.replaceState(null, "", "?window=settings");
+  render(<App />);
+  fireEvent.keyDown(window, { key: "q", ctrlKey: true });
+  expect(quitApp).not.toHaveBeenCalled();
+  fireEvent.keyDown(window, { key: "w", ctrlKey: true });
+  expect(quitApp).toHaveBeenCalledTimes(1);
+  fireEvent(window, new StorageEvent("storage", { key: "folio-quit-shortcut", newValue: "Control+Q" }));
+  await waitFor(() => expect(localStorage.getItem("folio-quit-shortcut")).toBe("Control+Q"));
+  fireEvent.keyDown(window, { key: "w", ctrlKey: true });
+  expect(quitApp).toHaveBeenCalledTimes(1);
+  fireEvent.keyDown(window, { key: "q", ctrlKey: true });
+  expect(quitApp).toHaveBeenCalledTimes(2);
+});
 
 it("选择后续页字体不查询列表、不丢失后续页或选中项", async () => {
   const { getByRole, queryByRole, queryByText, container } = render(<App />);

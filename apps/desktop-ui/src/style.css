@@ -1,6 +1,20 @@
 @import "@heroui/styles/css";
 @import "overlayscrollbars/overlayscrollbars.css";
 
+@theme {
+    --text-sm: 0.75rem;
+    --text-sm--line-height: 1.5;
+}
+
+@layer components {
+    /* 按钮与开关保持胶囊形态，独立于表单与弹层圆角。 */
+    .button,
+    .switch .switch__control,
+    .switch .switch__thumb {
+        border-radius: 999px;
+    }
+}
+
 @font-face {
     font-family: "JetBrains Mono";
     src: url("./assets/fonts/JetBrainsMono-Variable.ttf") format("truetype");
@@ -12,9 +26,13 @@
 :root {
     --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
     font-family: Inter, "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-size: 16px;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    /* 桌面控件沿用 HeroUI 尺度，收紧字号与圆角。 */
+    --radius: 0.25rem;
+    --field-radius: calc(var(--radius) * 1.5);
     /* 灰色文字与描边使用主文字色透明度，随主题自动适配。 */
     --text: #262626;
     --text-muted: color-mix(in srgb, var(--text) 64%, transparent);
@@ -36,7 +54,8 @@
     --muted: var(--text-muted);
     --default: #ffffff;
     --background: #ffffff;
-    --overlay: #ffffff;
+    /* 弹层使用实色，避免底层字体透过菜单与颜色面板。 */
+    --overlay: var(--menu-backdrop);
     --field-foreground: var(--text);
     --field-background: #ffffff;
     --border: var(--line);
@@ -69,7 +88,6 @@
     --background: rgba(255, 255, 255, 0.05);
     --surface-secondary: rgba(255, 255, 255, 0.05);
     --surface-tertiary: rgba(255, 255, 255, 0.05);
-    --overlay: rgba(255, 255, 255, 0.05);
     --muted: var(--text-muted);
     --default: rgba(255, 255, 255, 0.05);
     --field-background: rgba(255, 255, 255, 0.05);
@@ -96,7 +114,6 @@
         --background: rgba(255, 255, 255, 0.05);
         --surface-secondary: rgba(255, 255, 255, 0.05);
         --surface-tertiary: rgba(255, 255, 255, 0.05);
-        --overlay: rgba(255, 255, 255, 0.05);
         --default: rgba(255, 255, 255, 0.05);
         --field-background: rgba(255, 255, 255, 0.05);
         --segment: rgba(255, 255, 255, 0.05);
@@ -123,6 +140,8 @@ body,
 }
 body {
     overflow: hidden;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
 }
 
 /* 初始化前隐藏原生滚动条，所有滚动区域使用同一主题。 */
@@ -156,15 +175,6 @@ body {
         transition: none;
     }
 }
-button,
-input,
-select {
-    font: inherit;
-}
-button {
-    color: inherit;
-}
-
 .app-window {
     position: relative;
     isolation: isolate;
@@ -1509,7 +1519,28 @@ button {
 }
 .preview-color-controls .react-colorful {
     width: 100%;
-    height: 200px;
+    height: 224px;
+    gap: 12px;
+}
+.preview-color-controls .react-colorful__pointer {
+    width: 18px;
+    height: 18px;
+}
+.preview-color-controls .react-colorful__saturation .react-colorful__interactive {
+    inset: 9px;
+}
+.preview-color-controls .react-colorful__hue .react-colorful__interactive,
+.preview-color-controls .react-colorful__alpha .react-colorful__interactive {
+    left: 9px;
+    right: 9px;
+}
+.preview-color-controls .react-colorful__saturation {
+    border-bottom: 0;
+    border-radius: 6px;
+}
+.preview-color-controls .react-colorful__hue,
+.preview-color-controls .react-colorful__alpha {
+    border-radius: 999px;
 }
 .preview-color-field {
     display: flex;
@@ -1768,6 +1799,9 @@ button {
 }
 .setting-field .input {
     min-width: 0;
+    height: 32px;
+    padding-top: 0;
+    padding-bottom: 0;
 }
 .setting-field .hero-select-trigger {
     min-height: 32px;
@@ -1782,21 +1816,53 @@ button {
     min-width: 42px;
     color: var(--text-muted);
     font-size: 11px;
+    text-align: right;
 }
 .setting-toggle {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     margin-top: 15px;
     color: var(--text);
     font-size: 12px;
 }
 .setting-toggle .switch__content {
+    width: 100%;
+    min-height: 32px;
+    flex-direction: row-reverse;
+    justify-content: space-between;
     font-size: 12px;
     font-weight: 400;
 }
 .settings-note {
     margin-top: 16px;
     line-height: 1.6;
+}
+.setting-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+}
+.sync-status,
+.sync-font-list,
+.sync-conflict-list {
+    display: grid;
+    gap: 8px;
+}
+.sync-font-list > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+}
+.sync-font-list strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.sync-font-list > div > span {
+    color: var(--text-muted);
 }
 .sync-connection-settings,
 .sync-management-settings,
@@ -2003,7 +2069,6 @@ button {
     width: 100%;
     min-height: 30px;
     padding: 0 8px;
-    font-size: 11px;
 }
 .spin {
     animation: spin 900ms linear infinite;

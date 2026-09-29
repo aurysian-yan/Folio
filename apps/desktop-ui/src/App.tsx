@@ -173,7 +173,7 @@ const quitShortcutOptions: { id: QuitShortcut; label: string }[] = [
 ];
 
 function parseQuitShortcut(value: string | null): QuitShortcut {
-  return quitShortcutOptions.find((option) => option.id === value)?.id ?? "Control+W";
+  return quitShortcutOptions.find((option) => option.id === value)?.id ?? "Control+Q";
 }
 
 function parseCardHoverDelay(value: string | null) {
@@ -2122,6 +2122,8 @@ export default function App() {
                       {webdavPresets.map((preset) => (
                         <Button
                           key={preset.id}
+                          size="sm"
+                          className="h-8"
                           variant={
                             matchingWebdavPreset(syncServerUrl) === preset.id
                               ? "primary"
@@ -2185,12 +2187,16 @@ export default function App() {
                   </Switch>
                   <div className="setting-actions">
                     <Button
+                      size="sm"
+                      className="h-8"
                       variant="secondary"
                       onPress={() => void testCloudConnection()}
                     >
                       测试连接
                     </Button>
                     <Button
+                      size="sm"
+                      className="h-8"
                       onPress={() => void saveCloudConnection()}
                       isDisabled={!syncPassword}
                     >
@@ -2236,6 +2242,8 @@ export default function App() {
                   {syncStatus?.configured && (
                     <div className="setting-actions">
                       <Button
+                        size="sm"
+                        className="h-8"
                         onPress={() => void startCloudSync()}
                         isDisabled={syncStatus.running}
                       >
@@ -2243,6 +2251,8 @@ export default function App() {
                       </Button>
                       {syncStatus.running && (
                         <Button
+                          size="sm"
+                          className="h-8"
                           variant="secondary"
                           onPress={() =>
                             void cancelSync().catch((cause) =>
@@ -2255,6 +2265,8 @@ export default function App() {
                       )}
                       {!syncStatus.running && (
                         <Button
+                          size="sm"
+                          className="h-8"
                           variant="tertiary"
                           onPress={() => void disconnectCloud()}
                         >
@@ -2280,6 +2292,7 @@ export default function App() {
                           {(font.deleted || font.cloudOnly) && (
                             <Button
                               size="sm"
+                              className="h-8"
                               variant="secondary"
                               isDisabled={syncStatus?.running}
                               onPress={() => void restoreCloudCopy(font)}
@@ -2303,6 +2316,7 @@ export default function App() {
                           <div className="setting-actions">
                             <Button
                               size="sm"
+                              className="h-8"
                               variant="secondary"
                               onPress={() =>
                                 void applySyncConflict(conflict.id, "keepBoth")
@@ -2312,6 +2326,7 @@ export default function App() {
                             </Button>
                             <Button
                               size="sm"
+                              className="h-8"
                               variant="secondary"
                               onPress={() =>
                                 void applySyncConflict(conflict.id, "useLocal")
@@ -2321,6 +2336,7 @@ export default function App() {
                             </Button>
                             <Button
                               size="sm"
+                              className="h-8"
                               variant="secondary"
                               onPress={() =>
                                 void applySyncConflict(conflict.id, "useRemote")
@@ -3536,7 +3552,7 @@ function OptionSelect({
         if (key !== null) onChange(String(key));
       }}
     >
-      <Select.Trigger className="hero-select-trigger">
+      <Select.Trigger className="hero-select-trigger items-center">
         <Select.Value />
         <Select.Indicator />
       </Select.Trigger>

@@ -52,7 +52,7 @@ export function PreviewColorPicker({ kind, value, onChange, onEditingStart, onEd
           <span>色值</span>
           <HexColorInput alpha prefixed color={color} onChange={change} onBlur={finish} aria-label={`${label}颜色色值`} />
         </label>
-        <Button variant="ghost" size="sm" onPress={() => { onChange(null); onEditingEnd(); }}>恢复默认{label}颜色</Button>
+        <Button variant="ghost" size="sm" className="self-center h-8" onPress={() => { onChange(null); onEditingEnd(); }}>恢复默认{label}颜色</Button>
       </div>
     </ColorPicker.Popover>
   </ColorPicker>;
