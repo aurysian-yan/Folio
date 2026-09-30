@@ -1,12 +1,19 @@
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import type { LibrarySnapshot } from './library';
 import type { Theme } from './ui';
 
 export const usesNativeControls = false;
+export const usesNativeSidebar = false;
 
-export interface NativeTabsProps {
+export type NativeDestination = 'local' | 'recent' | 'favorites' | 'cloud' | 'settings';
+
+export interface NativeNavigationProps {
   children: ReactNode;
   theme: Theme;
-  onTabChange: (local: boolean) => void;
+  sidebar: boolean;
+  destination: NativeDestination;
+  snapshot: LibrarySnapshot | null;
+  onDestinationChange: (destination: NativeDestination) => void;
 }
 
 export interface NativeHeaderProps {
@@ -35,6 +42,14 @@ export interface NativeActionProps {
   plain?: boolean;
 }
 
-export function NativeTabs({ children }: NativeTabsProps) { return <>{children}</>; }
+export interface NativeLibraryContentProps extends NativeHeaderProps {
+  children: ReactElement;
+  title: string;
+  subtitle: string;
+  active: boolean;
+}
+
+export function NativeNavigation({ children }: NativeNavigationProps) { return <>{children}</>; }
+export function NativeLibraryContent({ children }: NativeLibraryContentProps) { return children; }
 export function NativeHeaderControls(_props: NativeHeaderProps) { return null; }
 export function NativeActionButton(_props: NativeActionProps) { return null; }

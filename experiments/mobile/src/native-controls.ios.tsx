@@ -1,19 +1,23 @@
 import {
-  Button, GlassEffectContainer, Host, HStack, Image, Label, Menu, Namespace, Picker,
-  RNHostView, TabView, TextField, useNativeState,
-  type ButtonProps,
+  Button, GlassEffectContainer, Host, HStack, Image, Label, List, Menu, Namespace,
+  NavigationSplitView, Picker, RNHostView, Section, Spacer, TabView, Text, TextField,
+  Toolbar, ToolbarItem, useNativeState, VStack,
+  type ButtonProps, type NavigationSplitViewColumn, type NavigationSplitViewVisibility,
 } from '@expo/ui/swift-ui';
 import {
-  accessibilityLabel, animation, Animation, autocorrectionDisabled, buttonBorderShape,
-  buttonStyle, contentShape, controlSize, disabled, font, frame, glassEffect, glassEffectId,
-  labelStyle, menuIndicator, menuStyle, onSubmit, padding, submitLabel,
+  accessibilityLabel, animation, Animation, autocorrectionDisabled, background, buttonBorderShape,
+  buttonStyle, contentShape, controlSize, disabled, font, foregroundStyle, frame, glassEffect, glassEffectId,
+  labelStyle, listStyle, menuIndicator, menuStyle, navigationSplitViewStyle, navigationTitle, onSubmit, padding, submitLabel,
   shapes, tabViewStyle, tag, textFieldStyle, textInputAutocapitalization, tint,
 } from '@expo/ui/swift-ui/modifiers';
 import { useEffect, useId, useState } from 'react';
 import { AccessibilityInfo, Keyboard, Platform, StyleSheet, View } from 'react-native';
-import type { NativeActionProps, NativeHeaderProps, NativeTabsProps } from './native-controls';
+import type {
+  NativeActionProps, NativeDestination, NativeHeaderProps, NativeLibraryContentProps, NativeNavigationProps,
+} from './native-controls';
 
 export const usesNativeControls = true;
+export const usesNativeSidebar = Platform.OS === 'ios' && Platform.isPad;
 const glass = Number(Platform.Version) >= 26;
 const toolbarHeight = 44;
 
@@ -29,12 +33,53 @@ function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = fa
   ];
 }
 
-// iOS 导航由系统 TabView 管理选中项、拖动和玻璃动效。
-export function NativeTabs({ children, theme, onTabChange }: NativeTabsProps) {
+// iPad 常规窗口使用原生分栏，紧凑窗口沿用 iPhone 标签栏。
+export function NativeNavigation({ children, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
+  const [visibility, setVisibility] = useState<NavigationSplitViewVisibility>('all');
+  const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
+
+  if (sidebar) {
+    const row = (id: NativeDestination, title: string, symbol: ButtonProps['systemImage'], count?: number) => (
+      <HStack key={id} modifiers={[tag(id)]}>
+        <Label title={title} systemImage={symbol} />
+        <Spacer />
+        {count !== undefined && <Text modifiers={[foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>{count}</Text>}
+      </HStack>
+    );
+    return (
+      <Host style={styles.fill} modifiers={[background(theme.background)]}>
+        <NavigationSplitView columnVisibility={visibility} onColumnVisibilityChange={setVisibility}
+          preferredCompactColumn={compactColumn} onPreferredCompactColumnChange={setCompactColumn}
+          modifiers={[navigationSplitViewStyle('balanced'), tint(theme.accent)]}>
+          <NavigationSplitView.Sidebar>
+            <List selection={[destination]} onSelectionChange={(selection) => {
+              const value = selection[0];
+              if (value === 'local' || value === 'recent' || value === 'favorites' || value === 'cloud' || value === 'settings') {
+                onDestinationChange(value);
+                setCompactColumn('detail');
+              }
+            }} modifiers={[listStyle('sidebar'), navigationTitle('Folio')]}>
+              <Section title="本地">
+                {row('local', '全部字体', 'textformat.alt', snapshot?.familyCount)}
+                {row('recent', '最近', 'clock', snapshot?.recentCount)}
+                {row('favorites', '收藏', 'star')}
+              </Section>
+              <Section title="云端">{row('cloud', '云端字体', 'cloud')}</Section>
+              <Section>{row('settings', '设置', 'gear')}</Section>
+            </List>
+          </NavigationSplitView.Sidebar>
+          <NavigationSplitView.Detail>{children}</NavigationSplitView.Detail>
+        </NavigationSplitView>
+      </Host>
+    );
+  }
+
   return (
-    <Host style={styles.fill}>
-      <TabView defaultSelection="local" onSelectionChange={(value) => onTabChange(value === 'local')}
-        modifiers={[tabViewStyle({ type: 'automatic' }), tint(theme.accent)]}>
+    <Host style={styles.fill} modifiers={[background(theme.background)]}>
+      <TabView selection={destination} onSelectionChange={(value) => {
+        if (value === 'local' || value === 'recent' || value === 'cloud' || value === 'settings') onDestinationChange(value);
+      }}
+        modifiers={[tabViewStyle({ type: 'automatic' }), tint(theme.accent), background(theme.background)]}>
         <TabView.Tab value="local" label="本地" systemImage="textformat.alt">
           <RNHostView><View style={styles.fill}>{children}</View></RNHostView>
         </TabView.Tab>
@@ -49,6 +94,60 @@ export function NativeTabs({ children, theme, onTabChange }: NativeTabsProps) {
         </TabView.Tab>
       </TabView>
     </Host>
+  );
+}
+
+// 分栏详情只保留系统工具栏，React Native 内容不再绘制顶部操作区。
+export function NativeLibraryContent({ children, title, subtitle, active, theme, mode, width,
+  searchOpen, searchText, ready, importing, onModeChange, onSearch, onSearchTextChange, onImport }: NativeLibraryContentProps) {
+  const text = useNativeState(searchText);
+  useEffect(() => { if (!searchOpen) text.set(''); }, [searchOpen, text]);
+
+  const actionModifiers = [labelStyle('iconOnly'), tint(theme.label)];
+  return (
+    <Toolbar>
+      <RNHostView>{children}</RNHostView>
+      <Toolbar.Content>
+        <ToolbarItem placement="principal">
+          {active && searchOpen ? <HStack spacing={8} modifiers={[
+            padding({ horizontal: 12 }), frame({ width: Math.max(100, width - toolbarHeight), height: toolbarHeight }),
+            ...(glass ? [glassEffect({ glass: { variant: 'regular' }, shape: 'capsule' })] : []),
+          ]}>
+            <Image systemName="magnifyingglass" size={20} color={theme.secondary} />
+            <TextField text={text} placeholder="搜索字体名称或样式" autoFocus
+              onTextChange={onSearchTextChange} modifiers={[
+                textFieldStyle(glass ? 'plain' : 'roundedBorder'), font({ textStyle: 'body' }),
+                accessibilityLabel('搜索字体'), autocorrectionDisabled(), disabled(!ready),
+                textInputAutocapitalization('never'), submitLabel('search'), onSubmit(() => Keyboard.dismiss()),
+              ]} />
+            {searchText.length > 0 && <Button label="清除搜索" systemImage="xmark.circle.fill"
+              onPress={() => { text.set(''); onSearchTextChange(''); }}
+              modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel('清除搜索')]} />}
+          </HStack> : <VStack>
+            <Text modifiers={[font({ textStyle: 'headline' })]}>{title}</Text>
+            {active && <Text modifiers={[font({ textStyle: 'caption' }), foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>{subtitle}</Text>}
+          </VStack>}
+        </ToolbarItem>
+        {active && <ToolbarItem placement="topBarTrailing">
+          <HStack>
+            {searchOpen ? <>
+              <Button label="关闭搜索" systemImage="xmark" onPress={onSearch} modifiers={actionModifiers} />
+            </> : <>
+              <Menu label={<Label title="视图选项" systemImage={mode === 'grid' ? 'square.grid.2x2' : 'list.bullet'} />}
+                modifiers={[labelStyle('iconOnly'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel('视图选项')]}>
+                <Picker label="视图" selection={mode} onSelectionChange={onModeChange}>
+                  <Label title="网格视图" systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
+                  <Label title="列表视图" systemImage="list.bullet" modifiers={[tag('list')]} />
+                </Picker>
+              </Menu>
+              <Button label="搜索字体" systemImage="magnifyingglass" onPress={onSearch} modifiers={actionModifiers} />
+              <Button label={importing ? '正在导入…' : '导入字体'} systemImage="plus" onPress={onImport}
+                modifiers={[...actionModifiers, disabled(!ready || importing)]} />
+            </>}
+          </HStack>
+        </ToolbarItem>}
+      </Toolbar.Content>
+    </Toolbar>
   );
 }
 

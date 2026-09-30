@@ -1,17 +1,20 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, PlatformColor, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { NativeActionButton, usesNativeControls } from './native-controls';
+
+// 原生系统背景随浅深色及窗口层级自动变化。
+const systemBackground = Platform.OS === 'ios' ? PlatformColor('systemBackground') : undefined;
 
 // 移动端语义色与设计稿尺寸。
 export const themes = {
   light: {
-    background: '#FFFFFF', surface: '#EFEFEF', raised: '#FFFFFF', label: '#1A1A1A',
+    background: systemBackground ?? '#FFFFFF', onAccent: '#FFFFFF', surface: '#EFEFEF', raised: '#FFFFFF', label: '#1A1A1A',
     secondary: '#727272', muted: '#999999', border: '#E4E4E4', accent: '#0088FF',
     selection: '#C9E6FF', tab: '#F7F7F7', activeTab: '#E6E6E6',
     scrim: 'rgba(0, 0, 0, 0.16)', danger: '#C62828',
   },
   dark: {
-    background: '#121212', surface: '#242424', raised: '#2C2C2E', label: '#F2F2F2',
+    background: systemBackground ?? '#121212', onAccent: '#121212', surface: '#242424', raised: '#2C2C2E', label: '#F2F2F2',
     secondary: '#AEAEAE', muted: '#8E8E93', border: '#38383A', accent: '#64B5FF',
     selection: '#173F60', tab: '#202020', activeTab: '#38383A',
     scrim: 'rgba(0, 0, 0, 0.48)', danger: '#FF8A80',
