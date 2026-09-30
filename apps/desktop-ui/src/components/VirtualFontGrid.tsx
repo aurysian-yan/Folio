@@ -3,6 +3,7 @@ import { gridGeometry, visibleRows } from "../grid-layout";
 import type { FamilyDto } from "../types";
 import type { EditingPreview } from "../preview-appearance";
 import { FontCard } from "./FontCard";
+import { ExpandedFontCarousel } from "./ExpandedFontCarousel";
 
 type CardProps = ComponentProps<typeof FontCard>;
 type Props = Pick<CardProps, "mode" | "previewText" | "previewSize" | "textColor" | "backgroundColor" | "showMetadata" | "selectOnHover" | "hoverDelay" | "onSelect" | "onStyleChange" | "onFavorite"> & {
@@ -10,14 +11,17 @@ type Props = Pick<CardProps, "mode" | "previewText" | "previewSize" | "textColor
   selectedId?: string;
   styleKey: string | null;
   total: number;
+  wheelSpeed: number;
   isLoading?: boolean;
   onLoadMore?: () => void;
+  onRequestRange?: (offset: number, limit: number) => Promise<FamilyDto[]>;
+  onPreviewSelect?: (family: FamilyDto) => void;
   header?: ReactNode;
   emptyState?: ReactNode;
   editingPreview?: EditingPreview | null;
 };
 
-export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selectedId, styleKey, total, isLoading, onLoadMore, header, emptyState, editingPreview, ...props }: Props) {
+export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selectedId, styleKey, total, wheelSpeed, isLoading, onLoadMore, onRequestRange, onPreviewSelect, header, emptyState, editingPreview, ...props }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const headerRoot = useRef<HTMLDivElement>(null);
   const contentRoot = useRef<HTMLDivElement>(null);
@@ -65,14 +69,14 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
   }, [mode]);
 
   useEffect(() => {
-    if (!onLoadMore || isLoading || !families.length || families.length >= total || viewport.height <= 0) return;
+    if (mode === "expanded" || !onLoadMore || isLoading || !families.length || families.length >= total || viewport.height <= 0) return;
     const remaining = viewport.top + gridHeight - viewport.scrollTop - viewport.height;
     if (remaining > Math.max(viewport.height * 2, geometry.stride * 3)) return;
     // 提前两屏补页；同一页只触发一次，首屏替换后允许重新加载。
     if (lastLoad.current?.first === families[0] && lastLoad.current.count === families.length) return;
     lastLoad.current = { first: families[0], count: families.length };
     onLoadMore();
-  }, [families, total, isLoading, onLoadMore, gridHeight, geometry.stride, viewport.top, viewport.scrollTop, viewport.height]);
+  }, [families, total, isLoading, onLoadMore, gridHeight, geometry.stride, viewport.top, viewport.scrollTop, viewport.height, mode]);
 
   const gridScrollTop = viewport.scrollTop - viewport.top;
   const rows = visibleRows(families.length, geometry.columns, geometry.stride, gridScrollTop,
@@ -122,6 +126,9 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
     const next = event.key === "Home" ? 0 : event.key === "End" ? families.length - 1 : index + step;
     if (step || event.key === "Home" || event.key === "End") { event.preventDefault(); focusIndex(Math.max(0, Math.min(families.length - 1, next))); }
   };
+
+  if (mode === "expanded") return <ExpandedFontCarousel {...props} families={families} selectedId={selectedId} styleKey={styleKey} total={total}
+    wheelSpeed={wheelSpeed} isLoading={isLoading} onLoadMore={onLoadMore} onRequestRange={onRequestRange} onPreviewSelect={onPreviewSelect} header={header} emptyState={emptyState} editingPreview={editingPreview} />;
 
   return <div ref={root} className={`font-grid virtual-font-grid mode-${mode}`} tabIndex={-1} role="region" aria-label="字体浏览"
     onKeyDownCapture={onKeyDown}

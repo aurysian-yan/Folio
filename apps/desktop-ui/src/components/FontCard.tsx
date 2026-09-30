@@ -78,7 +78,7 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
     </div>
     <Card.Content className="font-card-content">
       <Card.Title title={family.displayName}>{family.displayName}</Card.Title>
-      {mode === "expanded" ? <div className="font-card-footer-row">{showMetadata && metadata}{selected && selector}</div>
+      {mode === "expanded" ? <div className="font-card-footer-row">{showMetadata && metadata}{selector}</div>
         : selected ? selector : showMetadata && metadata}
     </Card.Content>
     {selected && mode !== "expanded" && <Toolbar className="font-card-actions" aria-label={`${family.displayName} 字体操作`}>

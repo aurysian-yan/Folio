@@ -188,6 +188,13 @@ function parseCardHoverDelay(value: string | null) {
     : 180;
 }
 
+function parseExpandedCardWheelSpeed(value: string | null) {
+  const speed = value?.trim() ? Number(value) : 1.25;
+  return Number.isFinite(speed)
+    ? Math.round(Math.max(0.5, Math.min(2, speed)) * 20) / 20
+    : 1.25;
+}
+
 function matchesQuitShortcut(event: globalThis.KeyboardEvent, shortcut: QuitShortcut) {
   const [modifier, key] = shortcut.split("+");
   return event.key.toLowerCase() === key?.toLowerCase() &&
@@ -612,6 +619,9 @@ export default function App() {
   const [cardHoverDelay, setCardHoverDelay] = useState(
     () => parseCardHoverDelay(localStorage.getItem("folio-card-hover-delay")),
   );
+  const [expandedCardWheelSpeed, setExpandedCardWheelSpeed] = useState(
+    () => parseExpandedCardWheelSpeed(localStorage.getItem("folio-expanded-card-wheel-speed")),
+  );
   const [cardMetadata, setCardMetadata] = useState(
     () => localStorage.getItem("folio-card-metadata") !== "false",
   );
@@ -722,6 +732,7 @@ export default function App() {
   const pageRequests = useRef(new LibraryPageRequests());
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  const previewSelectedId = useRef<string | null>(null);
   const recentWrites = useRef<Promise<unknown>>(Promise.resolve());
   const recentStatisticsTimer = useRef(0);
   const hasSmartFolders = useRef(false);
@@ -731,11 +742,15 @@ export default function App() {
   useEffect(() => () => window.clearTimeout(recentStatisticsTimer.current), []);
 
   const selectFamily = useCallback((family: FamilyDto) => {
-    if (selectedRef.current?.id === family.id) return;
+    const fromSliderPreview = previewSelectedId.current === family.id;
+    previewSelectedId.current = null;
+    if (selectedRef.current?.id === family.id && !fromSliderPreview) return;
     const finish = startMetric("selection-feedback");
-    selectedRef.current = family;
-    setSelected(family);
-    setSelectedStyleKey(null);
+    if (selectedRef.current?.id !== family.id) {
+      selectedRef.current = family;
+      setSelected(family);
+      setSelectedStyleKey(null);
+    }
     setRecentError("");
     window.requestAnimationFrame(() => window.requestAnimationFrame(finish));
     const identityId = currentPreviewStyle(family)?.face.identityId;
@@ -748,6 +763,14 @@ export default function App() {
         void listSmartFolders().then(setSmartFolders).catch((cause) => setRecentError(errorMessage(cause)));
       }, 250);
     }).catch((cause) => setRecentError(errorMessage(cause)));
+  }, []);
+
+  const previewSelectFamily = useCallback((family: FamilyDto) => {
+    previewSelectedId.current = family.id;
+    if (selectedRef.current?.id === family.id) return;
+    selectedRef.current = family;
+    setSelected(family);
+    setSelectedStyleKey(null);
   }, []);
 
   useEffect(() => {
@@ -883,6 +906,10 @@ export default function App() {
   }, [importMode, cardHover, cardHoverDelay, cardMetadata]);
 
   useEffect(() => {
+    localStorage.setItem("folio-expanded-card-wheel-speed", String(expandedCardWheelSpeed));
+  }, [expandedCardWheelSpeed]);
+
+  useEffect(() => {
     const saturation = 150 + ((sidebarBlur - 1) * 50) / 11;
     document.documentElement.style.setProperty(
       "--sidebar-status-blur",
@@ -904,6 +931,8 @@ export default function App() {
         setCardHover(event.newValue !== "false");
       if (event.key === "folio-card-hover-delay")
         setCardHoverDelay(parseCardHoverDelay(event.newValue));
+      if (event.key === "folio-expanded-card-wheel-speed")
+        setExpandedCardWheelSpeed(parseExpandedCardWheelSpeed(event.newValue));
       if (event.key === "folio-card-metadata")
         setCardMetadata(event.newValue !== "false");
       if (event.key === "folio-sidebar-status-blur")
@@ -973,6 +1002,16 @@ export default function App() {
   const loadMore = useCallback(() => {
     if (page && !loading) void loadPage(search, scope, page.families.length);
   }, [loadPage, loading, page, search, scope]);
+
+  const requestCarouselRange = useCallback(async (offset: number, limit: number) => {
+    const result = await queryLibrary({
+      text: search, scope, offset, limit, facets: selectedFacets, sort,
+      collectionId: scope === "collection" ? (collectionId ?? undefined) : undefined,
+      smartFolderId: scope === "smartFolder" ? (smartFolderId ?? undefined) : undefined,
+      fontState: scope === "fontState" ? fontState : undefined,
+    });
+    return result.families;
+  }, [search, scope, selectedFacets, sort, collectionId, smartFolderId, fontState]);
 
   const favoriteFamily = useCallback((family: FamilyDto) => {
     void setFamilyFavorite(family.faces.map((face) => face.identityId), !family.isFavorite)
@@ -2189,6 +2228,19 @@ export default function App() {
                     <output>{cardHoverDelay} 毫秒</output>
                   </label>
                   <p className="settings-note">指针停留达到设定时间后选中，移出卡片会取消等待。默认延时为 180 毫秒。</p>
+                  <label className="setting-field">
+                    滚轮滚动速度
+                    <SettingSlider
+                      label="滚轮滚动速度"
+                      minValue={0.5}
+                      maxValue={2}
+                      step={0.05}
+                      unit="×"
+                      value={expandedCardWheelSpeed}
+                      onChange={(value) => setExpandedCardWheelSpeed(parseExpandedCardWheelSpeed(String(value)))}
+                    />
+                    <output>{expandedCardWheelSpeed.toFixed(2)}×</output>
+                  </label>
                   <Switch
                     className="setting-toggle"
                     isSelected={cardMetadata}
@@ -2793,13 +2845,14 @@ export default function App() {
             <VirtualFontGrid
               key={JSON.stringify([search, scope, sort, selectedFacets, collectionId, smartFolderId, fontState])}
               families={error ? [] : page?.families ?? []} total={page?.totalMatches ?? 0}
-              isLoading={loading} onLoadMore={loadMore}
+              isLoading={loading} onLoadMore={loadMore} onRequestRange={requestCarouselRange}
               mode={viewMode} previewText={previewText} previewSize={previewAppearance.committed.size}
               textColor={previewAppearance.committed.textColor} backgroundColor={previewAppearance.committed.backgroundColor}
               editingPreview={previewAppearance.editing}
               styleKey={selectedStyleKey} selectedId={selected?.id} onStyleChange={setSelectedStyleKey}
               showMetadata={cardMetadata} selectOnHover={cardHover} hoverDelay={cardHoverDelay}
-              onSelect={selectFamily} onFavorite={favoriteFamily}
+              wheelSpeed={expandedCardWheelSpeed}
+              onSelect={selectFamily} onPreviewSelect={previewSelectFamily} onFavorite={favoriteFamily}
               header={
                 <div className="library-overview">
                   <div className="library-title-row">

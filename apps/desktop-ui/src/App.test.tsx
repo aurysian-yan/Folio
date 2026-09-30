@@ -205,6 +205,24 @@ it("设置滑块保留步长、上下限与禁用行为", async () => {
   expect(delay.getAttribute("aria-valuenow")).toBe("190");
 });
 
+it("滚轮速度与 SwiftUI 使用相同范围和步长，并同步到主窗口", async () => {
+  localStorage.setItem("folio-expanded-card-wheel-speed", "1.7");
+  window.history.replaceState(null, "", "?window=settings");
+  const { getByRole, getByText } = render(<App />);
+  fireEvent.click(getByRole("tab", { name: "字体卡片" }));
+  const speed = getByRole("slider", { name: "滚轮滚动速度" });
+  expect(speed.getAttribute("aria-valuemin")).toBe("0.5");
+  expect(speed.getAttribute("aria-valuemax")).toBe("2");
+  expect(speed.getAttribute("aria-valuenow")).toBe("1.7");
+  fireEvent.keyDown(speed, { key: "ArrowRight" });
+  fireEvent.keyUp(speed, { key: "ArrowRight" });
+  expect(speed.getAttribute("aria-valuenow")).toBe("1.75");
+  expect(getByText("1.75×")).toBeTruthy();
+  await waitFor(() => expect(localStorage.getItem("folio-expanded-card-wheel-speed")).toBe("1.75"));
+  fireEvent(window, new StorageEvent("storage", { key: "folio-expanded-card-wheel-speed", newValue: "0.5" }));
+  await waitFor(() => expect(speed.getAttribute("aria-valuenow")).toBe("0.5"));
+});
+
 it("两位字号补淡色零，三位字号不补零，并使用 SwiftUI 字号范围", async () => {
   localStorage.setItem("folio-preview-size", "99");
   const { container, getByRole } = render(<App />);

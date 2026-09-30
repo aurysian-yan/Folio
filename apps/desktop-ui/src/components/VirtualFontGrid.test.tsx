@@ -7,7 +7,7 @@ vi.mock("./FontPreview", () => ({ FontPreview: () => null }));
 
 const families = Array.from({ length: 1000 }, (_, index) => family(String(index)));
 const props = { families, total: 1000, mode: "compact" as const, previewText: "Aa", previewSize: 48, styleKey: null,
-  showMetadata: true, selectOnHover: false, hoverDelay: 200, onSelect: vi.fn(), onStyleChange: vi.fn(), onFavorite: vi.fn() };
+  showMetadata: true, selectOnHover: false, hoverDelay: 200, wheelSpeed: 1.25, onSelect: vi.fn(), onStyleChange: vi.fn(), onFavorite: vi.fn() };
 
 it("长列表挂载有界，End/Home 可跨虚拟行聚焦", async () => {
   const { container, getByRole } = render(<VirtualFontGrid {...props} />);
