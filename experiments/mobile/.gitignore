@@ -1,0 +1,10 @@
+.expo/
+.build/
+/android/
+/ios/
+samples/
+modules/folio-native/android/generated/
+modules/folio-native/android/src/main/jniLibs/
+modules/folio-native/android/build/
+modules/folio-native/ios/generated/
+modules/folio-native/ios/Frameworks/

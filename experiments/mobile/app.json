@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Folio",
+    "slug": "folio-mobile-poc",
+    "version": "0.1.0",
+    "scheme": "folio-poc",
+    "platforms": ["ios", "android"],
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.folio.mobile.poc",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.folio.mobile.poc",
+      "permissions": []
+    },
+    "plugins": [
+      "expo-document-picker",
+      ["expo-build-properties", {
+        "ios": { "deploymentTarget": "16.4", "enableSceneSupport": true },
+        "android": { "minSdkVersion": 28, "buildArchs": ["arm64-v8a", "x86_64"] }
+      }]
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["FolioNativeModule"] },
+  "android": { "modules": ["com.folio.poc.FolioNativeModule"] }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "folio-mobile-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios --no-install",
+    "ide:android": "node scripts/open-ide.mjs android",
+    "ide:ios": "node scripts/open-ide.mjs ios",
+    "prebuild": "expo prebuild --no-install --no-clean",
+    "pods": "node scripts/install-pods.mjs",
+    "bindings": "node scripts/build-rust.mjs bindings",
+    "rust:android": "node scripts/build-rust.mjs android",
+    "rust:ios": "node scripts/build-rust.mjs ios",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --experimental-strip-types --test src/*.test.ts",
+    "test:swift": "node scripts/smoke-swift.mjs",
+    "samples": "node scripts/prepare-samples.mjs"
+  },
+  "dependencies": {
+    "expo": "57.0.26",
+    "expo-build-properties": "57.0.22",
+    "expo-dev-client": "57.0.19",
+    "expo-document-picker": "57.0.3",
+    "expo-modules-core": "57.0.20",
+    "expo-status-bar": "57.0.1",
+    "expo-system-ui": "57.0.4",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "5.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.3",
+    "@types/react": "19.2.14",
+    "eslint": "9.39.4",
+    "eslint-config-expo": "57.0.2",
+    "typescript": "6.0.3"
+  }
+}

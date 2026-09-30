@@ -183,6 +183,10 @@ component systems.
 
 ## Planned
 
+移动端隔离实验位于 [`experiments/mobile`](experiments/mobile/README.md)，对应
+[`FOLIO_ROADMAP.md`](FOLIO_ROADMAP.md) 阶段 D；启动、原生打包与验证范围见实验文档。
+RN + Expo 的生产采用结论仍待 PoC 验收。
+
 * Folio v2: WOFF/WOFF2 support, managed library storage, collection
 * Windows desktop app first, then Linux using the shared React UI; Android,
   iOS/iPadOS

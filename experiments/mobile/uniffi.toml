@@ -1,0 +1,7 @@
+[crates.folio_ffi.bindings.kotlin]
+package_name = "com.folio.poc.ffi"
+cdylib_name = "folio_ffi"
+android = true
+
+[crates.folio_ffi.bindings.kotlin.rename]
+"FolioFfiError.Operation.message" = "detail"

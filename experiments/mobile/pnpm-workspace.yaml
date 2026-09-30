@@ -1,0 +1,14 @@
+packages:
+  - .
+
+allowBuilds:
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - expo-constants@57.0.20
+  - expo-document-picker@57.0.3
+  - expo-modules-core@57.0.20
+  - expo@57.0.26
+
+nodeLinker: hoisted
+saveExact: true

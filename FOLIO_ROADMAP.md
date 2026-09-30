@@ -16,7 +16,7 @@
 | WebDAV / 123PAN | PARTIAL | `folio-sync` 已有 WebDAV v1 事件/对象、上传下载、取消/重试、续传、云端占位与冲突；macOS、Tauri 均有连接与同步入口。123PAN 使用 WebDAV，不是独立协议。[v7 迁移报告](docs/sync-migration-v7-report.md) 记录单设备连接修复及一次成功同步，**双设备、断网恢复、冲突处理和 123PAN 实网矩阵仍未验收**。现有协议足以启动移动 PoC，不足以宣布移动同步可交付。 |
 | Tauri / Windows baseline | PARTIAL | `apps/desktop-ui` 已有完整 React 页面、四种浏览样式、分页/预览、收藏/智慧收藏夹、同步设置；`src-tauri` 直接使用 Rust crates，并有 Windows 默认目录、渲染和命令。旧文档的“只有依赖基线”已失效。尚无完整 Explorer 批量导入、Windows 字体启用/安装流程及本轮 Windows 打包/运行验收；Linux 更未实测。 |
 | Character Map | NOT STARTED | Core 已观察 `cmap` 以统计脚本、桌面端也用其做预览采样，但没有面向产品的码点/Glyph ID 枚举、分页、检索接口或字符表页面；不能把预览采样算作字符表。 |
-| Android / iOS | NOT STARTED | 仓库没有移动应用、Rust 移动打包、`DocumentsProvider` 或 File Provider 扩展。Tauri 图标目录中的移动图标不代表客户端。 |
+| Android / iOS | PARTIAL（隔离 PoC） | `experiments/mobile` 已建立 RN/Expo、UniFFI 本地模块、导入/查询与原生预览基础；双端 Rust 打包、Android APK 和 arm64 iOS Simulator App 构建已通过，见 [验证记录](experiments/mobile/VALIDATION.md)。未交付正式移动客户端、`DocumentsProvider` 或 File Provider；架构 go/no-go 与实机验收仍待完成。 |
 | 在线字体 | PARTIAL | `folio-online`、macOS 在线浏览与下载已有实现；旧 README 仍称未实现。镜像可用性、来源许可和跨平台范围需另验。 |
 
 本轮检查：`git status --short` 起始为空；`git log --oneline -n 20` 最新为 `93697a4`。Windows 主机上 `pnpm -C apps/desktop-ui typecheck`、`lint` 与 `test` 通过（12 个文件、69 项测试）。`cargo test --workspace` **退出码 1**：`folio-storage` 的 `root::tests::timestamps_keep_nanoseconds_and_reject_unrepresentable_values` 得到 `1234567890123456700` 而非 `1234567890123456789`；`db::tests::failed_commit_rolls_back_cache_changes` 的 `invalid.is_empty()` 断言失败。源码中后者用 `Path::new("/tmp/font.ttf")` 构造缓存来源，Windows 上该路径的绝对性假设需核查；前者需核查 Windows `SystemTime` 精度。此处记录测试失败，**不能据此断定生产事务回滚失效**。本轮没有 macOS、Android、iOS 或 Linux 运行验证。
@@ -93,6 +93,8 @@ PoC 放在独立临时工程或隔离工作区，使用固定许可测试字体�
 - **Explicitly Out of Scope：**未编码 glyph、复杂连字塑形、WOFF/WOFF2、Linux 实机验收。
 
 ### D. 移动架构 PoC 与决策
+
+当前已建立 [隔离基础工程](experiments/mobile/README.md)、[边界决策](experiments/mobile/DECISION.md) 和 [验证记录](experiments/mobile/VALIDATION.md)。本次只打通基础打包与调用路径，阶段 D 保持 PARTIAL；RN + Expo 未被批准为生产架构。
 
 - **Goal：**确定 RN + Expo 混合原生方案能否达到 Folio 的字体准确性和平台体验要求。
 - **Scope：**完成上表六个隔离 PoC；额外做 Android `DocumentsProvider` 的最小 URI/按需读取实验和 iOS Files/Share 与 File Provider 需求判定；比较双原生备选。
