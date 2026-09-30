@@ -200,5 +200,6 @@ pnpm -C apps/desktop-ui test
 
 ## 许可证
 
-Folio 项目以 GNU Affero 通用公共许可证第 3 版（仅该版本）发布，授权声明及
-完整条款链接见根目录 `LICENSE`。测试字体采用各自的许可证，使用前请查阅[测试字体说明](fixtures/fonts/README.md)。
+Folio 原创代码以 GNU Affero 通用公共许可证第 3 版（仅该版本，
+`AGPL-3.0-only`）发布，完整条款见 [LICENSE](LICENSE)。第三方依赖及测试字体
+保留各自的许可证；测试字体的许可信息见[测试字体说明](fixtures/fonts/README.md)。
