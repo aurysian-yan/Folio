@@ -1,5 +1,6 @@
 {
   "name": "folio-native",
   "version": "0.1.0",
-  "private": true
+  "private": true,
+  "license": "AGPL-3.0-only"
 }
