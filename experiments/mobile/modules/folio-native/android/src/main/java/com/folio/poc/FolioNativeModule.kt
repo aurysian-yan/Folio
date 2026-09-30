@@ -1,7 +1,11 @@
 package com.folio.poc
 
 import android.net.Uri
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import com.folio.poc.ffi.FolioEngine
+import com.folio.poc.ffi.IdentityIdDto
 import com.folio.poc.ffi.LibraryQueryDto
 import com.folio.poc.ffi.LibrarySnapshotDto
 import com.folio.poc.ffi.QueryScopeDto
@@ -30,6 +34,8 @@ class FolioPreviewSelection : Record {
     @Field var revisionId: String = ""
     @Field var axes: Map<String, Double> = emptyMap()
     @Field var text: String = ""
+    @Field var fontSize: Double = 32.0
+    @Field var centered: Boolean = false
 }
 
 class FolioNativeModule : Module() {
@@ -108,6 +114,17 @@ class FolioNativeModule : Module() {
             }
         }
 
+        AsyncFunction("setFavorite") { identityIds: List<String>, favorite: Boolean, promise: Promise ->
+            perform(promise) {
+                requireEngine().setFavorite(identityIds.map { IdentityIdDto(it) }, favorite)
+            }
+        }
+
+        AsyncFunction("copyText") { text: String ->
+            val clipboard = context().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("字体名称", text))
+        }
+
         OnDestroy {
             executor.execute {
                 engine?.destroy()
@@ -132,7 +149,9 @@ class FolioNativeModule : Module() {
         ?: throw CodedException("ERR_FOLIO_NOT_READY", "字体库尚未就绪。", null)
 
     private fun snapshot(value: LibrarySnapshotDto) = mapOf(
-        "familyCount" to value.familyCount.toDouble(), "faceCount" to value.faceCount.toDouble()
+        "familyCount" to value.familyCount.toDouble(), "faceCount" to value.faceCount.toDouble(),
+        "variableFamilyCount" to value.variableFamilyCount.toDouble(), "recentCount" to value.recentCount.toDouble(),
+        "damagedCount" to value.health.damagedFiles.toDouble()
     )
 
     private fun perform(promise: Promise, action: () -> Any) {

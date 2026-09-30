@@ -7,8 +7,9 @@ const query = { text: '衬线', scope: 'all' as const, offset: 40, limit: 40 };
 
 function mockBridge(run: LibraryBridge['query']): LibraryBridge {
   return {
-    initialize: async () => ({ familyCount: 0, faceCount: 0 }),
-    importFont: async () => ({ familyCount: 0, faceCount: 0 }),
+    initialize: async () => ({ familyCount: 0, faceCount: 0, variableFamilyCount: 0, recentCount: 0, damagedCount: 0 }),
+    importFont: async () => ({ familyCount: 0, faceCount: 0, variableFamilyCount: 0, recentCount: 0, damagedCount: 0 }),
+    setFavorite: async () => {},
     query: run,
   };
 }

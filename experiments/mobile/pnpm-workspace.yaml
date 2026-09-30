@@ -11,4 +11,6 @@ minimumReleaseAgeExclude:
   - expo@57.0.26
 
 nodeLinker: hoisted
+overrides:
+  react-dom: 19.2.3
 saveExact: true

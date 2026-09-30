@@ -5,11 +5,12 @@
 ## Scope
 
 - 独立 pnpm workspace、固定依赖及锁文件，Android/iOS 使用 `com.folio.mobile.poc`。
-- 共享 React Native 页面提供真实文件导入、搜索、分页、字款选择和原生预览；空库不填充示例数据。
+- 共享 React Native 字体主页按 Figma 实现双列卡片、网格/列表切换、真实文件导入、搜索、分页、字款选择、收藏和原生预览；空库不填充示例数据。
 - Swift/Kotlin 本地 Expo Module 复用 `folio-ffi`；SQLite、解析和查询均由现有 Rust 实现。
 - 导入是复制到实验应用的托管目录，验证通过后以文件根加入 Rust 库；无系统字体安装、全盘存储权限或 iCloud capability。
 - 预览按文件、TTC index、revision 和 axes 定位；不通过全局注册字体。iOS 使用 CoreText，Android 使用原生 Font/字形塑形与绘制。
-- 系统浅色/深色、Safe Area、列表虚拟化及原生控件默认样式。
+- iOS 使用 `@expo/ui` 的原生 SwiftUI TabView、Menu 和 Button；iOS 26 及以上由系统提供 Liquid Glass、菜单展开和 Tab 拖动切换，旧系统使用原生兼容样式。最近、云端和设置页面保持空白。
+- 系统浅色/深色、Safe Area 和列表虚拟化。更新 iOS 开发包后重定位托管字体，保留字体库和收藏。
 
 ## Setup
 

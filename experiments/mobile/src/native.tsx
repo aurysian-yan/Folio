@@ -2,7 +2,9 @@ import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core
 import type { NativeSyntheticEvent, ViewProps } from 'react-native';
 import { createLibraryClient, type LibraryBridge } from './library';
 
-export const library = createLibraryClient(requireNativeModule<LibraryBridge>('FolioNative'));
+const nativeModule = requireNativeModule<LibraryBridge & { copyText(text: string): Promise<void> }>('FolioNative');
+export const library = createLibraryClient(nativeModule);
+export const copyText = (text: string) => nativeModule.copyText(text);
 
 export interface PreviewSelection {
   sourcePath: string;
@@ -10,6 +12,8 @@ export interface PreviewSelection {
   revisionId: string;
   axes: Record<string, number>;
   text: string;
+  fontSize?: number;
+  centered?: boolean;
 }
 
 export interface PreviewStatus {

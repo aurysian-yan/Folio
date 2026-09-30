@@ -26,6 +26,9 @@ export interface FontFamily {
 export interface LibrarySnapshot {
   familyCount: number;
   faceCount: number;
+  variableFamilyCount: number;
+  recentCount: number;
+  damagedCount: number;
 }
 
 export interface LibraryQuery {
@@ -44,6 +47,7 @@ export interface LibraryBridge {
   initialize(): Promise<LibrarySnapshot>;
   query(request: LibraryQuery): Promise<LibraryPage>;
   importFont(uri: string): Promise<LibrarySnapshot>;
+  setFavorite(identityIds: string[], favorite: boolean): Promise<void>;
 }
 
 export type LibraryErrorCode = 'invalid-query' | 'cancelled' | 'native';
@@ -70,6 +74,7 @@ export function createLibraryClient(bridge: LibraryBridge) {
   return {
     initialize: () => bridge.initialize(),
     importFont: (uri: string) => bridge.importFont(uri),
+    setFavorite: (identityIds: string[], favorite: boolean) => bridge.setFavorite(identityIds, favorite),
     query(query: LibraryQuery, signal?: AbortSignal): Promise<LibraryPage> {
       validateQuery(query);
       if (signal?.aborted) return Promise.reject(new LibraryError('cancelled', '查询已取消。'));

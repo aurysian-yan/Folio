@@ -49,6 +49,8 @@ xcodebuild -workspace ios/Folio.xcworkspace -scheme Folio \
 
 此前 Android API 37 模拟器的系统/Launcher ANR 不记作 UI 验收通过。本次按用户要求使用安卓真机，未再启动 Android 模拟器。两端完整的字体导入、TTC/变量预览和生命周期压力测试仍待验收。
 
+字体主页已按 Figma 实现。iOS 27 模拟器确认原生 SwiftUI Menu 玻璃弹层、网格/列表菜单项、TabView 滑块拖动至云端空页、系统深色外观与 Inter 真实字体预览；更新开发包后托管字体路径恢复正常。用户确认界面无问题后停止后续测试，未将这些结果扩展为 Android 原生导航或实机性能验收。
+
 本次未连接 WebDAV 或真实凭据，未实施正式数据库迁移。实验数据库由现有 Rust 在独立应用沙盒内创建。JS 取消不等于原生 Rust 中断。
 
 ## IDE Recovery
@@ -75,7 +77,7 @@ pnpm android --device "23013RK75C" --no-bundler
 | Rust ↔ RN/Expo | 双端打包/编译和主机真实调用已验证；移动实机上的查询、取消、生命周期、冷启动与内存仍待验收。 |
 | 动态 TTF/OTF/TTC | 已有导入和原生预览实现及可复现样本；双端导入、非零成员、缺字、损坏/离线、反复切换需实机验证。 |
 | Variable axes | 桥接返回轴范围，预览接收轴值；两轴连续拖动、实际字形变化与缓存/帧率/内存待做。 |
-| iOS SwiftUI / Android Compose、MIUIX / Liquid Glass navigation | 未开始；本次只有原生预览容器和系统文件选择入口，没有这些 UI 互操作验证。 |
+| iOS SwiftUI / Android Compose、MIUIX / Liquid Glass navigation | iOS 已接入原生 TabView、Menu 和 Button，模拟器玻璃菜单及 Tab 拖动切页已确认；Android Compose、MIUIX 与实机导航性能仍待验收。 |
 | Android DocumentsProvider / SAF/USB | 未开始；系统 Picker 导入不等于字体 Provider 或导出。 |
 | iOS Files/Share / File Provider 需求判定 | 文件选择接入；分享导出与 Provider 需求判定尚未完成。 |
 

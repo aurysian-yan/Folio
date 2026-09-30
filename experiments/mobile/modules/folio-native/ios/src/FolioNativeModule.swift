@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import Foundation
+import UIKit
 
 struct FolioQuery: Record {
     @Field var text: String = ""
@@ -14,6 +15,8 @@ struct FolioPreviewSelection: Record {
     @Field var revisionId: String = ""
     @Field var axes: [String: Double] = [:]
     @Field var text: String = ""
+    @Field var fontSize: Double = 32
+    @Field var centered: Bool = false
 }
 
 enum FolioPaths {
@@ -31,6 +34,16 @@ enum FolioPaths {
         }
         return source
     }
+
+    // 应用更新后只重定位实验沙盒内的托管字体。
+    static func relocatedFont(_ path: String) throws -> URL? {
+        guard let range = path.range(of: "/FolioMobilePoC/fonts/", options: .backwards) else { return nil }
+        let name = String(path[range.upperBound...])
+        guard !name.isEmpty, !name.contains("/"), name != ".", name != ".." else { return nil }
+        let candidate = try root().appendingPathComponent("fonts", isDirectory: true).appendingPathComponent(name)
+        guard candidate.path != path, FileManager.default.isReadableFile(atPath: candidate.path) else { return nil }
+        return try managedFont(candidate.path)
+    }
 }
 
 public final class FolioNativeModule: Module {
@@ -46,7 +59,18 @@ public final class FolioNativeModule: Module {
                 try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
                 self.engine = try FolioEngine.open(databasePath: root.appendingPathComponent("folio.sqlite").path)
             }
-            return self.snapshot(try self.requireEngine().loadCachedLibrary())
+            let engine = try self.requireEngine()
+            let cached = try engine.loadCachedLibrary()
+            var relocated = false
+            for root in cached.roots where root.kind == "file" {
+                if let source = try FolioPaths.relocatedFont(root.displayPath) {
+                    try engine.validateFontFile(path: source.path)
+                    _ = try engine.addFontFile(path: source.path)
+                    try engine.removeLibraryRoot(id: root.id)
+                    relocated = true
+                }
+            }
+            return self.snapshot(relocated ? try engine.refreshLibrary().snapshot : cached)
         }.runOnQueue(queue)
 
         AsyncFunction("query") { (request: FolioQuery) throws -> [String: Any] in
@@ -102,6 +126,15 @@ public final class FolioNativeModule: Module {
             }
         }.runOnQueue(queue)
 
+        AsyncFunction("setFavorite") { (identityIds: [String], favorite: Bool) throws in
+            try self.requireEngine().setFavorite(identityIds: identityIds.map { IdentityIdDto(value: $0) },
+                                                favorite: favorite)
+        }.runOnQueue(queue)
+
+        AsyncFunction("copyText") { (text: String) in
+            UIPasteboard.general.string = text
+        }.runOnQueue(.main)
+
         OnDestroy {
             self.queue.async { self.engine = nil }
         }
@@ -123,6 +156,8 @@ public final class FolioNativeModule: Module {
     }
 
     private func snapshot(_ value: LibrarySnapshotDto) -> [String: Any] {
-        ["familyCount": value.familyCount, "faceCount": value.faceCount]
+        ["familyCount": value.familyCount, "faceCount": value.faceCount,
+         "variableFamilyCount": value.variableFamilyCount, "recentCount": value.recentCount,
+         "damagedCount": value.health.damagedFiles]
     }
 }
