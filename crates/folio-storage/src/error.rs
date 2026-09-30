@@ -13,6 +13,10 @@ use crate::path_codec::PathCodecError;
 /// 致命的存储或缓存错误。
 #[derive(Debug, Error)]
 pub enum StorageError {
+    #[error("sync event sequence is exhausted")]
+    SyncSequenceExhausted,
+    #[error("storage file access failed: {0}")]
+    Io(#[from] std::io::Error),
     #[error("collection name is empty")]
     InvalidCollectionName,
     #[error("collection name already exists")]

@@ -16,6 +16,17 @@ use library::{
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StorageUsageDto {
+    database_bytes: u64,
+    volume_total_bytes: u64,
+    volume_free_bytes: u64,
+    managed_font_bytes: u64,
+    catalog_cache_entries: u64,
+    catalog_cache_estimated_bytes: u64,
+}
+
 struct AppState {
     library: Arc<Mutex<LibraryService>>,
     previews: Arc<preview::PreviewService>,
@@ -402,6 +413,57 @@ fn get_sync_status(
         .map_err(|error| error.to_string())?
         .is_some();
     Ok(status)
+}
+
+#[tauri::command]
+fn get_storage_usage(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<StorageUsageDto, String> {
+    require_settings_window(&window)?;
+    let db = folio_storage::FolioDatabase::open(&state.database_path)
+        .map_err(|error| error.to_string())?;
+    let usage = db.storage_usage().map_err(|error| error.to_string())?;
+    let managed = folio_storage::directory_bytes(&state.managed_directory)
+        .map_err(|error| error.to_string())?;
+    Ok(StorageUsageDto {
+        database_bytes: usage.database_bytes,
+        volume_total_bytes: usage.volume_total_bytes,
+        volume_free_bytes: usage.volume_free_bytes,
+        managed_font_bytes: managed,
+        catalog_cache_entries: usage.catalog_cache_entries,
+        catalog_cache_estimated_bytes: usage.catalog_cache_estimated_bytes,
+    })
+}
+
+#[tauri::command]
+fn clear_catalog_cache(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<u64, String> {
+    require_settings_window(&window)?;
+    let status = state.sync_status.lock().map_err(|_| "同步状态暂时不可用".to_owned())?;
+    if status.running {
+        return Err("请等待同步完成".to_owned());
+    }
+    let mut library = state.library.try_lock().map_err(|_| "请等待字体库刷新完成".to_owned())?;
+    library.clear_catalog_cache().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn rebuild_sync_indexes(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    require_settings_window(&window)?;
+    let status = state.sync_status.lock().map_err(|_| "同步状态暂时不可用".to_owned())?;
+    if status.running {
+        return Err("请等待同步完成".to_owned());
+    }
+    let _library = state.library.try_lock().map_err(|_| "请等待字体库刷新完成".to_owned())?;
+    let mut db = folio_storage::FolioDatabase::open(&state.database_path)
+        .map_err(|error| error.to_string())?;
+    db.rebuild_sync_indexes().map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -841,6 +903,9 @@ pub fn run() {
             convert_smart_folder_to_collection,
             get_sync_profile,
             get_sync_status,
+            get_storage_usage,
+            clear_catalog_cache,
+            rebuild_sync_indexes,
             test_sync_connection,
             save_sync_connection,
             disconnect_sync,

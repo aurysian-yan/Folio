@@ -16,6 +16,7 @@ use crate::ids::LibraryRootId;
 use crate::refresh::{self, RefreshMode, RefreshResult};
 use crate::root::{self, AddRootOutcome, LibraryRoot};
 use crate::schema;
+use crate::storage_usage::StorageUsage;
 
 /// 持久化的本地字体库。
 /// 连接可转移线程但不能并发共享；调用方应串行执行数据库操作。
@@ -118,6 +119,18 @@ impl FolioDatabase {
     /// 删除可重建目录缓存，不触碰库根目录。
     pub fn clear_catalog_cache(&self) -> Result<u64, StorageError> {
         cache::clear_all(&self.conn)
+    }
+
+    /// 清空可重建的目录缓存并整理数据库空闲页。
+    pub fn clear_catalog_cache_and_compact(&self) -> Result<u64, StorageError> {
+        let removed = self.clear_catalog_cache()?;
+        self.conn.execute_batch("VACUUM")?;
+        Ok(removed)
+    }
+
+    /// 本地数据库与目录缓存占用。
+    pub fn storage_usage(&self) -> Result<StorageUsage, StorageError> {
+        StorageUsage::read(&self.conn, &self.path)
     }
 
     /// 不访问文件系统，仅从缓存重建目录。

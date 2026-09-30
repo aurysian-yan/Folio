@@ -1,7 +1,7 @@
 //! WebDAV 同步的设备本地记录；远端协议由 folio-sync 独立定义。
 
 use folio_core::{normalize_search, Collection, FontIdentityId, SmartFolder};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction};
 
 use crate::{FolioDatabase, StorageError};
 
@@ -38,6 +38,48 @@ fn random_device_id() -> Result<String, StorageError> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
+fn ensure_device_id(tx: &Transaction<'_>) -> Result<String, StorageError> {
+    tx.execute(
+        "INSERT OR IGNORE INTO sync_metadata(key,value) VALUES('device_id',?1)",
+        [random_device_id()?],
+    )?;
+    Ok(tx.query_row(
+        "SELECT value FROM sync_metadata WHERE key='device_id'",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn next_local_sequence(tx: &Transaction<'_>, device_id: &str) -> Result<i64, StorageError> {
+    let saved = tx
+        .query_row(
+            "SELECT value FROM sync_metadata WHERE key='next_sequence'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(1)
+        .max(1);
+    Ok(saved.max(sequence_after_events(tx, device_id)?))
+}
+
+fn sequence_after_events(tx: &Transaction<'_>, device_id: &str) -> Result<i64, StorageError> {
+    let greatest: Option<i64> = tx.query_row(
+        "SELECT MAX(sequence) FROM sync_events WHERE device_id=?1",
+        [device_id],
+        |row| row.get(0),
+    )?;
+    Ok(greatest
+        .map(|value| {
+            value
+                .checked_add(1)
+                .ok_or(StorageError::SyncSequenceExhausted)
+        })
+        .transpose()?
+        .unwrap_or(1))
+}
+
 impl FolioDatabase {
     pub fn sync_metadata(&self, key: &str) -> Result<Option<String>, StorageError> {
         Ok(self
@@ -66,12 +108,15 @@ impl FolioDatabase {
     }
 
     pub fn sync_device_id(&self) -> Result<String, StorageError> {
-        if let Some(id) = self.sync_metadata("device_id")? {
-            return Ok(id);
-        }
-        let id = random_device_id()?;
-        self.set_sync_metadata("device_id", &id)?;
-        Ok(id)
+        self.conn.execute(
+            "INSERT OR IGNORE INTO sync_metadata(key,value) VALUES('device_id',?1)",
+            [random_device_id()?],
+        )?;
+        Ok(self.conn.query_row(
+            "SELECT value FROM sync_metadata WHERE key='device_id'",
+            [],
+            |row| row.get(0),
+        )?)
     }
 
     pub fn reset_sync_remote_state(&mut self) -> Result<(), StorageError> {
@@ -80,27 +125,22 @@ impl FolioDatabase {
         tx.execute("DELETE FROM sync_assets", [])?;
         tx.execute("DELETE FROM sync_remote_cursors", [])?;
         tx.execute("DELETE FROM sync_conflicts", [])?;
-        tx.execute("DELETE FROM sync_metadata WHERE key IN ('user_baseline','next_sequence','last_successful_sync_ms')", [])?;
+        tx.execute("DELETE FROM sync_metadata WHERE key IN ('device_id','user_baseline','next_sequence','last_successful_sync_ms')", [])?;
         tx.commit()?;
         Ok(())
     }
 
     pub fn append_sync_event(&mut self, payload: &str) -> Result<StoredSyncEvent, StorageError> {
-        let device_id = self.sync_device_id()?;
         let tx = self.conn.transaction()?;
-        let sequence: i64 = tx
-            .query_row(
-                "SELECT value FROM sync_metadata WHERE key='next_sequence'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(1);
+        let device_id = ensure_device_id(&tx)?;
+        let sequence = next_local_sequence(&tx, &device_id)?;
+        let following = sequence
+            .checked_add(1)
+            .ok_or(StorageError::SyncSequenceExhausted)?;
         tx.execute(
             "INSERT INTO sync_metadata(key,value) VALUES('next_sequence',?1) \
              ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            [(sequence + 1).to_string()],
+            [following.to_string()],
         )?;
         let event = StoredSyncEvent {
             id: format!("{device_id}-{sequence:020}"),
@@ -115,6 +155,51 @@ impl FolioDatabase {
         )?;
         tx.commit()?;
         Ok(event)
+    }
+
+    /// 根据已保存事件重建同步序号与连续接收游标。
+    pub fn rebuild_sync_indexes(&mut self) -> Result<(), StorageError> {
+        let tx = self.conn.transaction()?;
+        let device_id = ensure_device_id(&tx)?;
+        let next = sequence_after_events(&tx, &device_id)?;
+        tx.execute(
+            "INSERT INTO sync_metadata(key,value) VALUES('next_sequence',?1) \
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [next.to_string()],
+        )?;
+        tx.execute("DELETE FROM sync_remote_cursors", [])?;
+        let mut statement =
+            tx.prepare("SELECT device_id,sequence FROM sync_events ORDER BY device_id,sequence")?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        let mut current_device = String::new();
+        let mut cursor = 0_i64;
+        for row in rows {
+            let (device, sequence) = row?;
+            if device != current_device {
+                if !current_device.is_empty() && cursor > 0 {
+                    tx.execute(
+                        "INSERT INTO sync_remote_cursors(device_id,last_sequence) VALUES(?1,?2)",
+                        params![current_device, cursor],
+                    )?;
+                }
+                current_device = device;
+                cursor = 0;
+            }
+            if cursor.checked_add(1) == Some(sequence) {
+                cursor += 1;
+            }
+        }
+        if !current_device.is_empty() && cursor > 0 {
+            tx.execute(
+                "INSERT INTO sync_remote_cursors(device_id,last_sequence) VALUES(?1,?2)",
+                params![current_device, cursor],
+            )?;
+        }
+        drop(statement);
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn insert_remote_sync_event(&self, event: &StoredSyncEvent) -> Result<bool, StorageError> {
@@ -322,5 +407,83 @@ mod tests {
         assert_eq!(db.sync_remote_cursor(&device_id).unwrap(), 0);
         db.insert_remote_sync_event(&event(1)).unwrap();
         assert_eq!(db.sync_remote_cursor(&device_id).unwrap(), 2);
+    }
+
+    #[test]
+    fn local_sequence_recovers_from_missing_or_stale_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = FolioDatabase::open(dir.path().join("folio.sqlite")).unwrap();
+        let first = db.append_sync_event("{}").unwrap();
+        assert_eq!(first.sequence, 1);
+        db.set_sync_metadata("next_sequence", "1").unwrap();
+        assert_eq!(db.append_sync_event("{}").unwrap().sequence, 2);
+        db.remove_sync_metadata("next_sequence").unwrap();
+        assert_eq!(db.append_sync_event("{}").unwrap().sequence, 3);
+        db.insert_remote_sync_event(&StoredSyncEvent {
+            id: format!("{}-{:020}", first.device_id, 8),
+            device_id: first.device_id,
+            sequence: 8,
+            payload: "{}".to_owned(),
+            published: true,
+        })
+        .unwrap();
+        assert_eq!(db.append_sync_event("{}").unwrap().sequence, 9);
+    }
+
+    #[test]
+    fn rebuilding_indexes_preserves_events_and_repairs_cursors() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = FolioDatabase::open(dir.path().join("folio.sqlite")).unwrap();
+        db.set_sync_metadata("sync_profile", "kept").unwrap();
+        let collection = db.create_collection("保留的收藏夹").unwrap();
+        let local = db.append_sync_event("local").unwrap();
+        let remote = "aa".repeat(16);
+        for sequence in [1, 2, 4] {
+            db.insert_remote_sync_event(&StoredSyncEvent {
+                id: format!("{remote}-{sequence:020}"),
+                device_id: remote.clone(),
+                sequence,
+                payload: format!("remote-{sequence}"),
+                published: true,
+            })
+            .unwrap();
+        }
+        let before = db.list_sync_events().unwrap();
+        db.set_sync_metadata("next_sequence", "99").unwrap();
+        db.conn
+            .execute(
+                "UPDATE sync_remote_cursors SET last_sequence=99 WHERE device_id=?1",
+                [&remote],
+            )
+            .unwrap();
+        db.rebuild_sync_indexes().unwrap();
+        assert_eq!(
+            db.sync_metadata("next_sequence").unwrap().as_deref(),
+            Some("2")
+        );
+        assert_eq!(db.sync_remote_cursor(&remote).unwrap(), 2);
+        assert_eq!(db.sync_remote_cursor(&local.device_id).unwrap(), 1);
+        assert_eq!(
+            db.sync_metadata("sync_profile").unwrap().as_deref(),
+            Some("kept")
+        );
+        assert_eq!(db.list_sync_events().unwrap(), before);
+        assert_eq!(db.list_collections().unwrap()[0].id, collection.id);
+    }
+
+    #[test]
+    fn remote_reset_rotates_device_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = FolioDatabase::open(dir.path().join("folio.sqlite")).unwrap();
+        let old = db.append_sync_event("{}").unwrap();
+        db.set_sync_metadata("sync_profile", "kept").unwrap();
+        db.reset_sync_remote_state().unwrap();
+        let next = db.append_sync_event("{}").unwrap();
+        assert_ne!(next.device_id, old.device_id);
+        assert_eq!(next.sequence, 1);
+        assert_eq!(
+            db.sync_metadata("sync_profile").unwrap().as_deref(),
+            Some("kept")
+        );
     }
 }

@@ -14,6 +14,33 @@ fn event(id: &str, change: Change) -> (StoredSyncEvent, Change) {
 }
 
 #[test]
+fn switching_away_and_back_never_reuses_remote_device_identity() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("folio.sqlite");
+    let profile = |server_url: &str| SyncProfile {
+        server_url: server_url.to_owned(),
+        remote_directory: "Folio".to_owned(),
+        username: "user".to_owned(),
+        automatic: false,
+    };
+    save_profile(&path, &profile("https://a.example.test/dav")).unwrap();
+    let mut db = FolioDatabase::open(&path).unwrap();
+    let first = db.append_sync_event("{}").unwrap();
+    drop(db);
+    save_profile(&path, &profile("https://b.example.test/dav")).unwrap();
+    let mut db = FolioDatabase::open(&path).unwrap();
+    let second = db.append_sync_event("{}").unwrap();
+    drop(db);
+    save_profile(&path, &profile("https://a.example.test/dav")).unwrap();
+    let mut db = FolioDatabase::open(&path).unwrap();
+    let third = db.append_sync_event("{}").unwrap();
+    assert_ne!(first.device_id, second.device_id);
+    assert_ne!(first.device_id, third.device_id);
+    assert_ne!(second.device_id, third.device_id);
+    assert_eq!(third.sequence, 1);
+}
+
+#[test]
 fn observed_remove_keeps_concurrent_favorite_add() {
     let identity = "11".repeat(16);
     let a = "aa".repeat(16);

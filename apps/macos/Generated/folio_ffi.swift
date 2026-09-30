@@ -1072,6 +1072,8 @@ public protocol FolioOnlineProtocol: AnyObject, Sendable {
 
     func job(id: UInt64) throws  -> OnlineJobDto
 
+    func previewCacheBytes() throws  -> UInt64
+
     func query(text: String, category: String?, subset: String?, offset: UInt64, limit: UInt64)  -> OnlinePageDto
 
     func startDownload(familyId: String, styleId: String, mirrorTemplate: String?, collect: Bool) throws  -> UInt64
@@ -1200,6 +1202,15 @@ open func job(id: UInt64)throws  -> OnlineJobDto  {
 })
 }
 
+open func previewCacheBytes()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioonline_preview_cache_bytes(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
 open func query(text: String, category: String?, subset: String?, offset: UInt64, limit: UInt64) -> OnlinePageDto  {
     return try!  FfiConverterTypeOnlinePageDto_lift(try! rustCall() {
         uniffiCallStatus in
@@ -1299,6 +1310,10 @@ public protocol FolioSyncProtocol: AnyObject, Sendable {
 
     func cancel()
 
+    func clearCatalogCache() throws  -> UInt64
+
+    func clearPreviewCache(cacheDirectory: String) throws  -> UInt64
+
     func cloudFonts() throws  -> [CloudFontDto]
 
     func conflicts() throws  -> [SyncConflictDto]
@@ -1310,6 +1325,8 @@ public protocol FolioSyncProtocol: AnyObject, Sendable {
     func markCloudOnlyForPath(path: String) throws  -> Bool
 
     func profile() throws  -> SyncProfileDto?
+
+    func rebuildSyncIndexes() throws
 
     func resolveConflict(id: String, resolution: SyncResolutionDto) throws
 
@@ -1324,6 +1341,8 @@ public protocol FolioSyncProtocol: AnyObject, Sendable {
     func startSync(password: String) throws  -> Bool
 
     func status() throws  -> SyncStatusDto
+
+    func storageUsage() throws  -> StorageUsageDto
 
     func testConnection(profile: SyncProfileDto, password: String) throws
 
@@ -1399,6 +1418,25 @@ open func cancel()  {try! rustCall() {
 }
 }
 
+open func clearCatalogCache()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_clear_catalog_cache(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func clearPreviewCache(cacheDirectory: String)throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_clear_preview_cache(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(cacheDirectory),uniffiCallStatus
+    )
+})
+}
+
 open func cloudFonts()throws  -> [CloudFontDto]  {
     return try  FfiConverterSequenceTypeCloudFontDto.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -1451,6 +1489,14 @@ open func profile()throws  -> SyncProfileDto?  {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
+}
+
+open func rebuildSyncIndexes()throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_rebuild_sync_indexes(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
 }
 
 open func resolveConflict(id: String, resolution: SyncResolutionDto)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
@@ -1513,6 +1559,15 @@ open func status()throws  -> SyncStatusDto  {
     return try  FfiConverterTypeSyncStatusDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_foliosync_status(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func storageUsage()throws  -> StorageUsageDto  {
+    return try  FfiConverterTypeStorageUsageDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_storage_usage(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -3420,6 +3475,76 @@ public func FfiConverterTypeSmartFolderSummaryDto_lower(_ value: SmartFolderSumm
 }
 
 
+public struct StorageUsageDto: Equatable, Hashable {
+    public var databaseBytes: UInt64
+    public var volumeTotalBytes: UInt64
+    public var volumeFreeBytes: UInt64
+    public var managedFontBytes: UInt64
+    public var catalogCacheEntries: UInt64
+    public var catalogCacheEstimatedBytes: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(databaseBytes: UInt64, volumeTotalBytes: UInt64, volumeFreeBytes: UInt64, managedFontBytes: UInt64, catalogCacheEntries: UInt64, catalogCacheEstimatedBytes: UInt64) {
+        self.databaseBytes = databaseBytes
+        self.volumeTotalBytes = volumeTotalBytes
+        self.volumeFreeBytes = volumeFreeBytes
+        self.managedFontBytes = managedFontBytes
+        self.catalogCacheEntries = catalogCacheEntries
+        self.catalogCacheEstimatedBytes = catalogCacheEstimatedBytes
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension StorageUsageDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStorageUsageDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StorageUsageDto {
+        return
+            try StorageUsageDto(
+                databaseBytes: FfiConverterUInt64.read(from: &buf),
+                volumeTotalBytes: FfiConverterUInt64.read(from: &buf),
+                volumeFreeBytes: FfiConverterUInt64.read(from: &buf),
+                managedFontBytes: FfiConverterUInt64.read(from: &buf),
+                catalogCacheEntries: FfiConverterUInt64.read(from: &buf),
+                catalogCacheEstimatedBytes: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StorageUsageDto, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.databaseBytes, into: &buf)
+        FfiConverterUInt64.write(value.volumeTotalBytes, into: &buf)
+        FfiConverterUInt64.write(value.volumeFreeBytes, into: &buf)
+        FfiConverterUInt64.write(value.managedFontBytes, into: &buf)
+        FfiConverterUInt64.write(value.catalogCacheEntries, into: &buf)
+        FfiConverterUInt64.write(value.catalogCacheEstimatedBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStorageUsageDto_lift(_ buf: RustBuffer) throws -> StorageUsageDto {
+    return try FfiConverterTypeStorageUsageDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStorageUsageDto_lower(_ value: StorageUsageDto) -> RustBuffer {
+    return FfiConverterTypeStorageUsageDto.lower(value)
+}
+
+
 public struct SyncConflictDto: Equatable, Hashable {
     public var id: String
     public var kind: String
@@ -4886,6 +5011,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioonline_job() != 31367) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioonline_preview_cache_bytes() != 8199) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioonline_query() != 63643) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4899,6 +5027,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_cancel() != 59610) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_clear_catalog_cache() != 56024) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_clear_preview_cache() != 52432) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_cloud_fonts() != 62061) {
@@ -4917,6 +5051,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_profile() != 22800) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_rebuild_sync_indexes() != 19704) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_resolve_conflict() != 30207) {
@@ -4938,6 +5075,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_status() != 39761) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_storage_usage() != 45961) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_test_connection() != 43960) {

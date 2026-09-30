@@ -1,9 +1,9 @@
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { family } from "./test/fixtures";
 import App from "./App";
-import { getSyncProfile, getSyncStatus, listSyncConflicts, openSettings, queryLibrary, quitApp, recordRecent } from "./api";
+import { clearCatalogCache, getStorageUsage, getSyncProfile, getSyncStatus, listSyncConflicts, openSettings, queryLibrary, quitApp, rebuildSyncIndexes, recordRecent } from "./api";
 
 vi.mock("./components/FontPreview", () => ({ FontPreview: ({ size, label, color }: { size: number; label: string; color?: string | null }) => <span data-testid="preview-font-size" data-size={size} data-color={color ?? "default"} aria-label={label} /> }));
 vi.mock("@lisse/react", () => ({ useSmoothCorners: () => {}, SmoothCorners: ({ children }: { children: ReactNode }) => children }));
@@ -25,10 +25,18 @@ vi.mock("./api", async (importOriginal) => {
     getSyncProfile: vi.fn(async () => null), listCloudFonts: vi.fn(async () => []), listSyncConflicts: vi.fn(async () => []),
     getSyncStatus: vi.fn(async () => ({ configured: false, running: false, phase: "", stage: "", percent: 0, stageCompleted: 0, stageTotal: 0,
       uploadedFiles: 0, downloadedFiles: 0, publishedEvents: 0, items: [], error: null })),
+    getStorageUsage: vi.fn(async () => ({ databaseBytes: 2048, volumeTotalBytes: 224_000_000_000, volumeFreeBytes: 124_000_000_000, managedFontBytes: 4096, catalogCacheEntries: 3, catalogCacheEstimatedBytes: 1024 })),
+    clearCatalogCache: vi.fn(async () => 3),
+    rebuildSyncIndexes: vi.fn(async () => {}),
   };
 });
 
-beforeEach(() => { localStorage.clear(); vi.mocked(quitApp).mockClear(); });
+beforeEach(() => {
+  localStorage.clear();
+  vi.mocked(quitApp).mockClear();
+  vi.mocked(clearCatalogCache).mockClear();
+  vi.mocked(rebuildSyncIndexes).mockClear();
+});
 afterEach(() => { window.history.replaceState(null, "", "/"); });
 
 it.each([null, "invalid"])("未设置或无效退出快捷键 %s 时默认使用 Ctrl+Q", async (stored) => {
@@ -143,6 +151,30 @@ it("独立设置窗口读取保存的字号，并同步主窗口发来的更新"
   fireEvent(window, new StorageEvent("storage", { key: "folio-preview-size", newValue: "48" }));
   await waitFor(() => expect(slider.getAttribute("aria-valuenow")).toBe("48"));
   expect(container.querySelector("[data-testid='preview-size-readout']")).toBeNull();
+});
+
+it("存储页统计占用并确认重建同步索引", async () => {
+  window.history.replaceState(null, "", "?window=settings");
+  vi.mocked(getStorageUsage).mockResolvedValueOnce({ databaseBytes: 1_617_000_000, volumeTotalBytes: 224_000_000_000, volumeFreeBytes: 124_000_000_000, managedFontBytes: 4096, catalogCacheEntries: 3, catalogCacheEstimatedBytes: 1024 });
+  const { container, getByRole, getByText } = render(<App />);
+  fireEvent.click(getByRole("tab", { name: "存储" }));
+  await waitFor(() => expect(getStorageUsage).toHaveBeenCalled());
+  expect(getByRole("img", { name: /Folio 本地占用 1\.6 GB/ })).toBeTruthy();
+  expect(getByRole("img", { name: /占用所在磁盘空间 0\.7%/ })).toBeTruthy();
+  expect(container.querySelectorAll(".storage-volume-track")).toHaveLength(1);
+  expect(container.querySelectorAll(".storage-volume-track span")).toHaveLength(4);
+  expect(container.querySelector(".storage-volume-track span")?.classList.contains("storage-other")).toBe(true);
+  expect(getByText(/其他应用与系统/)).toBeTruthy();
+  expect(getByText(/可用空间/)).toBeTruthy();
+  expect(getByText("98.4 GB")).toBeTruthy();
+  expect(getByText("124.0 GB")).toBeTruthy();
+  expect(getByText(/3 条记录/)).toBeTruthy();
+  fireEvent.click(getByRole("button", { name: "清理目录缓存" }));
+  await waitFor(() => expect(clearCatalogCache).toHaveBeenCalledTimes(1));
+  fireEvent.click(getByRole("button", { name: "重建同步索引" }));
+  expect(rebuildSyncIndexes).not.toHaveBeenCalled();
+  fireEvent.click(within(getByRole("dialog", { name: "重建同步索引" })).getByRole("button", { name: "重建" }));
+  await waitFor(() => expect(rebuildSyncIndexes).toHaveBeenCalledTimes(1));
 });
 
 it("设置滑块保留步长、上下限与禁用行为", async () => {

@@ -349,6 +349,10 @@ impl LibraryService {
         Ok(self.snapshot())
     }
 
+    pub fn clear_catalog_cache(&mut self) -> Result<u64, LibraryError> {
+        Ok(self.database.clear_catalog_cache_and_compact()?)
+    }
+
     fn add_managed_root(&self) -> Result<(), LibraryError> {
         if self.managed_directory.is_dir() {
             self.database.add_root(&self.managed_directory, true)?;

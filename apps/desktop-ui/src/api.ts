@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { decodePreviewFont } from "./preview-packet";
 import { invalidatePreviewCache } from "./preview-cache-events";
 import { startMetric } from "./performance-metrics";
-import type { CloudFontDto, CollectionDto, FontPreviewDto, LibraryPageDto, LibrarySnapshotDto, PreviewFontDto, SmartFolderDto, SyncConflictDto, SyncProfileDto, SyncStatusDto } from "./types";
+import type { CloudFontDto, CollectionDto, FontPreviewDto, LibraryPageDto, LibrarySnapshotDto, PreviewFontDto, SmartFolderDto, StorageUsageDto, SyncConflictDto, SyncProfileDto, SyncStatusDto } from "./types";
 
 export interface QueryRequest {
   text: string;
@@ -103,6 +103,18 @@ export function getSyncProfile(): Promise<SyncProfileDto | null> {
 
 export function getSyncStatus(): Promise<SyncStatusDto> {
   return invoke("get_sync_status");
+}
+
+export function getStorageUsage(): Promise<StorageUsageDto> {
+  return invoke("get_storage_usage");
+}
+
+export function clearCatalogCache(): Promise<number> {
+  return invoke("clear_catalog_cache");
+}
+
+export function rebuildSyncIndexes(): Promise<void> {
+  return invoke("rebuild_sync_indexes");
 }
 
 export function testSyncConnection(profile: SyncProfileDto, password: string): Promise<void> {

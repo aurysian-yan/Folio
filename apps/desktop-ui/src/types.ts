@@ -102,6 +102,15 @@ export interface SyncProfileDto {
   automatic: boolean;
 }
 
+export interface StorageUsageDto {
+  databaseBytes: number;
+  volumeTotalBytes: number;
+  volumeFreeBytes: number;
+  managedFontBytes: number;
+  catalogCacheEntries: number;
+  catalogCacheEstimatedBytes: number;
+}
+
 export interface SyncStatusDto {
   configured: boolean;
   running: boolean;

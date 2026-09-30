@@ -140,9 +140,19 @@ fn clear_catalog_cache_keeps_library_roots() {
     let root = common::add_root(&mut db, &fonts);
     common::refresh(&mut db);
     assert_eq!(db.load_cached_catalog().expect("catalog").face_count(), 1);
+    let event = db.append_sync_event("keep").expect("sync event");
 
-    let removed = db.clear_catalog_cache().expect("clear");
+    let usage = db.storage_usage().expect("usage");
+    assert!(usage.catalog_cache_entries >= 1);
+    assert!(usage.catalog_cache_estimated_bytes > 0);
+    assert!(usage.database_bytes > 0);
+    assert!(usage.volume_total_bytes > 0);
+    assert!(usage.volume_free_bytes <= usage.volume_total_bytes);
+
+    let removed = db.clear_catalog_cache_and_compact().expect("clear");
     assert!(removed >= 1);
+    assert_eq!(db.storage_usage().unwrap().catalog_cache_entries, 0);
+    assert_eq!(db.list_sync_events().unwrap(), vec![event]);
     assert!(db
         .load_cached_catalog()
         .expect("catalog")

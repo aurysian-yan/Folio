@@ -47,6 +47,7 @@ mod path_codec;
 mod refresh;
 mod root;
 mod schema;
+mod storage_usage;
 mod sync;
 
 pub use db::FolioDatabase;
@@ -57,6 +58,7 @@ pub use refresh::{
     RefreshIssue, RefreshIssueKind, RefreshIssueSeverity, RefreshMode, RefreshResult, RefreshStats,
 };
 pub use root::{AddRootOutcome, LibraryRoot, LibraryRootKind};
+pub use storage_usage::{directory_bytes, StorageUsage};
 pub use sync::{StoredSyncAsset, StoredSyncConflict, StoredSyncEvent};
 
 /// 序列化解析缓存载荷的版本号。

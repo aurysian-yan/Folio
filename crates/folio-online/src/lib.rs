@@ -189,6 +189,31 @@ impl OnlineClient {
         })
     }
 
+    /// 只统计已完成、可重新下载的在线预览文件。
+    pub fn preview_cache_bytes(&self) -> Result<u64, OnlineError> {
+        let mut total = 0_u64;
+        for entry in fs::read_dir(self.cache_dir.join("previews"))? {
+            let entry = entry?;
+            if completed_preview_file(&entry) {
+                total = total.saturating_add(entry.metadata()?.len());
+            }
+        }
+        Ok(total)
+    }
+
+    /// 保留下载临时文件，避免打断正在进行的下载。
+    pub fn clear_preview_cache(&self) -> Result<u64, OnlineError> {
+        let mut removed = 0_u64;
+        for entry in fs::read_dir(self.cache_dir.join("previews"))? {
+            let entry = entry?;
+            if completed_preview_file(&entry) {
+                removed = removed.saturating_add(entry.metadata()?.len());
+                fs::remove_file(entry.path())?;
+            }
+        }
+        Ok(removed)
+    }
+
     pub async fn download(
         &self,
         family_id: &str,
@@ -366,6 +391,22 @@ impl OnlineClient {
     }
 }
 
+fn completed_preview_file(entry: &fs::DirEntry) -> bool {
+    let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+        return false;
+    };
+    let Some((fingerprint, extension)) = name.split_once('.') else {
+        return false;
+    };
+    fingerprint.len() == 40
+        && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit())
+        && matches!(
+            extension.to_ascii_lowercase().as_str(),
+            "ttf" | "otf" | "ttc" | "otc"
+        )
+        && entry.file_type().is_ok_and(|kind| kind.is_file())
+}
+
 async fn wait_cancel(cancelled: &AtomicBool) {
     while !cancelled.load(Ordering::Relaxed) {
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -521,6 +562,26 @@ mod tests {
         client.trim_preview_cache().unwrap();
         assert!(!older.exists());
         assert!(newer.exists());
+    }
+
+    #[test]
+    fn clearing_previews_keeps_temporary_and_collected_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let client = OnlineClient::new(directory.path()).unwrap();
+        let preview = directory
+            .path()
+            .join(format!("previews/{}.ttf", "a".repeat(40)));
+        let temporary = directory.path().join("previews/.tmp-preview");
+        let collected = directory.path().join("downloads/collected.ttf");
+        std::fs::write(&preview, b"preview").unwrap();
+        std::fs::write(&temporary, b"pending").unwrap();
+        std::fs::write(&collected, b"collected").unwrap();
+        assert_eq!(client.preview_cache_bytes().unwrap(), 7);
+        assert_eq!(client.clear_preview_cache().unwrap(), 7);
+        assert!(!preview.exists());
+        assert!(temporary.exists());
+        assert!(collected.exists());
+        assert_eq!(client.preview_cache_bytes().unwrap(), 0);
     }
 
     #[tokio::test]

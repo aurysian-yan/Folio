@@ -23,6 +23,7 @@ final class CloudSyncModel {
     private var automaticTask: Task<Void, Never>?
     private var pendingAutomaticSync = false
     private var pendingManualSync = false
+    private(set) var storageMaintenanceRunning = false
     private var wasOffline = false
     private var cachedCredentialKey: String?
     private var cachedCredential: String?
@@ -160,6 +161,7 @@ final class CloudSyncModel {
 
     func requestAutomaticSync() {
         guard profile?.automatic == true else { return }
+        if storageMaintenanceRunning { pendingAutomaticSync = true; return }
         if isRunning { pendingAutomaticSync = true; return }
         automaticTask?.cancel()
         automaticTask = Task {
@@ -171,6 +173,10 @@ final class CloudSyncModel {
 
     func syncNow() {
         guard let engine, let profile else { return }
+        if storageMaintenanceRunning {
+            pendingManualSync = true
+            return
+        }
         if isRunning {
             pendingManualSync = true
             return
@@ -194,6 +200,55 @@ final class CloudSyncModel {
 
     func cancel() {
         engine?.cancel()
+    }
+
+    func storageUsage() async throws -> StorageUsageDto {
+        guard let engine else { throw StorageManagementError.unavailable }
+        return try await Task.detached(priority: .userInitiated) {
+            try engine.storageUsage()
+        }.value
+    }
+
+    func clearCatalogCache() async throws -> UInt64 {
+        try await performStorageMaintenance { engine in
+            try engine.clearCatalogCache()
+        }
+    }
+
+    func clearPreviewCache(cacheDirectory: String) async throws -> UInt64 {
+        try await performStorageMaintenance { engine in
+            try engine.clearPreviewCache(cacheDirectory: cacheDirectory)
+        }
+    }
+
+    func rebuildSyncIndexes() async throws {
+        _ = try await performStorageMaintenance { engine in
+            try engine.rebuildSyncIndexes()
+            return ()
+        }
+    }
+
+    private func performStorageMaintenance<T: Sendable>(
+        _ operation: @escaping @Sendable (FolioSync) throws -> T
+    ) async throws -> T {
+        guard let engine else { throw StorageManagementError.unavailable }
+        guard !isRunning, !storageMaintenanceRunning else {
+            throw StorageManagementError.busy
+        }
+        storageMaintenanceRunning = true
+        defer {
+            storageMaintenanceRunning = false
+            if pendingManualSync {
+                pendingManualSync = false
+                syncNow()
+            } else if pendingAutomaticSync {
+                pendingAutomaticSync = false
+                requestAutomaticSync()
+            }
+        }
+        return try await Task.detached(priority: .userInitiated) {
+            try operation(engine)
+        }.value
     }
 
     func restore(_ font: CloudFontDto) {
@@ -345,6 +400,18 @@ final class CloudSyncModel {
     private var libraryDirectory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Folio", isDirectory: true)
+    }
+}
+
+private enum StorageManagementError: LocalizedError {
+    case unavailable
+    case busy
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable: "本地存储暂时不可用"
+        case .busy: "请等待同步或存储操作完成"
+        }
     }
 }
 

@@ -9,6 +9,11 @@ struct SettingsView: View {
     @State private var testingMirror = false
     @State private var mirrorMessage: String?
     @State private var showResetConfirmation = false
+    @State private var showSyncRebuildConfirmation = false
+    @State private var storageUsage: StorageUsageDto?
+    @State private var previewCacheBytes: UInt64?
+    @State private var storageMessage: String?
+    @State private var storageBusy = false
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
     @AppStorage(AppPreferences.sliderHaptics) private var sliderHaptics = true
@@ -58,9 +63,20 @@ struct SettingsView: View {
             } message: {
                 Text("所有偏好将恢复为初始设置，WebDAV 连接信息不受影响。")
             }
+            .confirmationDialog(
+                "重建同步索引？",
+                isPresented: $showSyncRebuildConfirmation
+            ) {
+                Button("重建同步索引") { rebuildSyncIndexes() }
+            } message: {
+                Text("将依据本机已有事件修复序号与接收位置，保留 WebDAV 连接、字体和个人数据。")
+            }
             .onAppear {
                 cloud.start()
                 loadDraft()
+            }
+            .onChange(of: selection) { _, section in
+                if section == .storage { loadStorageUsage() }
             }
     }
 
@@ -175,6 +191,7 @@ struct SettingsView: View {
         case .display: displayForm
         case .theme: themeForm
         case .cards: cardsForm
+        case .storage: storageForm
         case .about: AboutView()
         }
     }
@@ -422,6 +439,180 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
+    private var storageForm: some View {
+        Form {
+            Section("存储空间") {
+                if let storageUsage {
+                    StorageOverviewChart(
+                        databaseBytes: storageUsage.databaseBytes,
+                        managedFontBytes: storageUsage.managedFontBytes,
+                        previewBytes: previewCacheBytes ?? 0,
+                        volumeTotalBytes: storageUsage.volumeTotalBytes,
+                        volumeFreeBytes: storageUsage.volumeFreeBytes
+                    )
+                    .padding(.vertical, 12)
+                    Text("总量包含数据库、托管与已安装字体、在线预览缓存。目录扫描缓存已计入数据库。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ProgressView("正在统计本机存储…")
+                }
+            }
+            Section {
+                if let storageUsage {
+                    storageDetail(
+                        "托管与已安装字体",
+                        detail: "由 Folio 保存的字体文件",
+                        bytes: storageUsage.managedFontBytes,
+                        color: .accentColor
+                    )
+                    storageDetail(
+                        "字体库数据库",
+                        detail: "收藏夹、同步记录与字体库索引",
+                        bytes: storageUsage.databaseBytes,
+                        color: .primary
+                    )
+                    HStack(spacing: 10) {
+                        Circle().fill(Color.secondary).frame(width: 9, height: 9)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("目录扫描缓存")
+                            Text("\(storageUsage.catalogCacheEntries) 条记录 · 估算占用，已计入数据库")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(formatBytes(storageUsage.catalogCacheEstimatedBytes))
+                            .foregroundStyle(.secondary)
+                        Button("清理") { clearCatalogCache() }
+                            .accessibilityLabel("清理目录缓存")
+                            .disabled(storageBusy || cloud.isRunning)
+                    }
+                    storageDetail(
+                        "在线字体预览缓存",
+                        detail: "可重新下载的预览文件",
+                        bytes: previewCacheBytes ?? 0,
+                        color: .orange
+                    ) {
+                        Button("清理") { clearPreviewCache() }
+                            .accessibilityLabel("清理在线预览缓存")
+                            .disabled(storageBusy || cloud.isRunning)
+                    }
+                }
+            } header: {
+                Text("占用明细")
+            } footer: {
+                Text("清理缓存后会在下次使用时重新生成，字体文件和个人数据会保留。")
+            }
+            Section {
+                Button("重建同步索引") { showSyncRebuildConfirmation = true }
+                    .disabled(storageBusy || cloud.isRunning)
+            } header: {
+                Text("同步索引")
+            } footer: {
+                Text("依据现有事件修复序号和接收位置，不清空同步历史。")
+            }
+            if let storageMessage {
+                Section {
+                    Text(storageMessage)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func storageDetail<Accessory: View>(
+        _ title: String,
+        detail: String,
+        bytes: UInt64,
+        color: Color,
+        @ViewBuilder accessory: () -> Accessory
+    ) -> some View {
+        HStack(spacing: 10) {
+            Circle().fill(color).frame(width: 9, height: 9)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(formatBytes(bytes)).foregroundStyle(.secondary)
+            accessory()
+        }
+    }
+
+    private func storageDetail(
+        _ title: String,
+        detail: String,
+        bytes: UInt64,
+        color: Color
+    ) -> some View {
+        storageDetail(title, detail: detail, bytes: bytes, color: color) { EmptyView() }
+    }
+
+    private func formatBytes(_ bytes: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .file)
+    }
+
+    private func loadStorageUsage() {
+        Task {
+            do {
+                storageUsage = try await cloud.storageUsage()
+                let cacheDirectory = OnlineFontsView.cacheDirectory
+                previewCacheBytes = try await Task.detached(priority: .userInitiated) {
+                    try FolioOnline.open(cacheDirectory: cacheDirectory).previewCacheBytes()
+                }.value
+            } catch {
+                storageMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func clearCatalogCache() {
+        storageBusy = true
+        storageMessage = nil
+        Task {
+            defer { storageBusy = false }
+            do {
+                let removed = try await cloud.clearCatalogCache()
+                storageMessage = "已清理 \(removed) 条目录缓存记录。下次刷新字体库时会重新扫描。"
+                loadStorageUsage()
+            } catch {
+                storageMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func clearPreviewCache() {
+        storageBusy = true
+        storageMessage = nil
+        let cacheDirectory = OnlineFontsView.cacheDirectory
+        Task {
+            defer { storageBusy = false }
+            do {
+                let bytes = try await cloud.clearPreviewCache(cacheDirectory: cacheDirectory)
+                storageMessage = "已清理 \(formatBytes(bytes)) 在线预览缓存。"
+                loadStorageUsage()
+            } catch {
+                storageMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func rebuildSyncIndexes() {
+        storageBusy = true
+        storageMessage = nil
+        Task {
+            defer { storageBusy = false }
+            do {
+                try await cloud.rebuildSyncIndexes()
+                storageMessage = "同步索引已重建，连接和本地记录均已保留。"
+                loadStorageUsage()
+            } catch {
+                storageMessage = error.localizedDescription
+            }
+        }
+    }
+
     /// 用已保存的偏好与连接信息初始化草稿。
     private func loadDraft() {
         draft.googleFontsMirrorTemplate = googleFontsMirrorTemplate
@@ -512,6 +703,96 @@ struct SettingsView: View {
     }
 }
 
+private struct StorageOverviewChart: View {
+    let databaseBytes: UInt64
+    let managedFontBytes: UInt64
+    let previewBytes: UInt64
+    let volumeTotalBytes: UInt64
+    let volumeFreeBytes: UInt64
+
+    private struct Segment {
+        let bytes: UInt64
+        let color: Color
+        let isFolio: Bool
+    }
+
+    private var totalBytes: UInt64 {
+        databaseBytes + managedFontBytes + previewBytes
+    }
+
+    private var volumePercentage: Double {
+        guard volumeTotalBytes > 0 else { return 0 }
+        return Double(totalBytes) / Double(volumeTotalBytes) * 100
+    }
+
+    private var otherUsedBytes: UInt64 {
+        let used = volumeTotalBytes > volumeFreeBytes ? volumeTotalBytes - volumeFreeBytes : 0
+        return used > totalBytes ? used - totalBytes : 0
+    }
+
+    private var percentageLabel: String {
+        if volumePercentage > 0, volumePercentage < 0.1 { return "<0.1%" }
+        return String(format: "%.1f%%", volumePercentage)
+    }
+
+    private var segments: [Segment] {
+        return [
+            Segment(bytes: otherUsedBytes, color: .secondary, isFolio: false),
+            Segment(bytes: managedFontBytes, color: .accentColor, isFolio: true),
+            Segment(bytes: databaseBytes, color: .primary, isFolio: true),
+            Segment(bytes: previewBytes, color: .orange, isFolio: true),
+            Segment(bytes: volumeFreeBytes, color: .primary.opacity(0.12), isFolio: false),
+        ].filter { $0.bytes > 0 }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Folio 本地占用")
+                Spacer()
+                Text(ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file))
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+            }
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    ForEach(segments.indices, id: \.self) { index in
+                        Rectangle()
+                            .fill(segments[index].color)
+                            .frame(width: segmentWidth(segments[index], in: geometry.size.width))
+                    }
+                }
+            }
+            .frame(height: 18)
+            .background(Color.primary.opacity(0.12))
+            .clipShape(Capsule())
+            HStack {
+                Text("\(ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeTotalBytes), countStyle: .file)) · Folio 数据所在磁盘")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(percentageLabel).font(.callout.weight(.semibold)).monospacedDigit()
+            }
+            HStack(spacing: 18) {
+                Circle().fill(Color.secondary).frame(width: 9, height: 9)
+                Text("其他应用与系统 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: otherUsedBytes), countStyle: .file))")
+                Circle().fill(Color.primary.opacity(0.12)).frame(width: 9, height: 9)
+                Text("可用空间 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeFreeBytes), countStyle: .file))")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Folio 本地占用 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file))，占用所在磁盘空间 \(percentageLabel)，其他应用与系统 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: otherUsedBytes), countStyle: .file))，可用空间 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeFreeBytes), countStyle: .file))")
+    }
+
+    private func segmentWidth(_ segment: Segment, in width: CGFloat) -> CGFloat {
+        guard volumeTotalBytes > 0 else { return 0 }
+        let exact = width * min(CGFloat(Double(segment.bytes) / Double(volumeTotalBytes)), 1)
+        return segment.isFolio ? max(2, exact) : exact
+    }
+}
+
 private enum SettingsSection: String, CaseIterable, Identifiable {
     case cloud
     case onlineFonts
@@ -519,6 +800,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
     case display
     case theme
     case cards
+    case storage
     case about
 
     var id: String { rawValue }
@@ -531,6 +813,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
         case .display: "显示"
         case .theme: "主题色"
         case .cards: "字体卡片"
+        case .storage: "存储"
         case .about: "关于"
         }
     }

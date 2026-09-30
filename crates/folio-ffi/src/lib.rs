@@ -5,7 +5,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use folio_core::{
     Catalog, CollectionColor, CollectionIcon, CollectionId, FontCategory, FontFace, FontFaceId,
@@ -18,6 +18,21 @@ use folio_query::{
 };
 use folio_storage::{AddRootOutcome, FolioDatabase, RefreshIssueKind, RefreshMode};
 use folio_sync::{ConflictResolution, SyncProfile, SyncProgress};
+
+fn library_refresh_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct StorageUsageDto {
+    pub database_bytes: u64,
+    pub volume_total_bytes: u64,
+    pub volume_free_bytes: u64,
+    pub managed_font_bytes: u64,
+    pub catalog_cache_entries: u64,
+    pub catalog_cache_estimated_bytes: u64,
+}
 
 uniffi::setup_scaffolding!();
 
@@ -397,6 +412,12 @@ impl FolioOnline {
         folio_online::catalog().commit.clone()
     }
 
+    pub fn preview_cache_bytes(&self) -> Result<u64, FolioFfiError> {
+        self.client
+            .preview_cache_bytes()
+            .map_err(FolioFfiError::operation)
+    }
+
     pub fn query(
         &self,
         text: String,
@@ -655,6 +676,66 @@ impl FolioSync {
                     automatic: value.automatic,
                 })
             })
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn storage_usage(&self) -> Result<StorageUsageDto, FolioFfiError> {
+        let db = FolioDatabase::open(&self.database_path).map_err(FolioFfiError::operation)?;
+        let usage = db.storage_usage().map_err(FolioFfiError::operation)?;
+        let support = Path::new(&self.managed_directory)
+            .parent()
+            .ok_or_else(|| FolioFfiError::operation("字体存储路径不可用"))?;
+        let managed = folio_storage::directory_bytes(Path::new(&self.managed_directory))
+            .map_err(FolioFfiError::operation)?;
+        let installed = folio_storage::directory_bytes(&support.join("InstalledFonts"))
+            .map_err(FolioFfiError::operation)?;
+        Ok(StorageUsageDto {
+            database_bytes: usage.database_bytes,
+            volume_total_bytes: usage.volume_total_bytes,
+            volume_free_bytes: usage.volume_free_bytes,
+            managed_font_bytes: managed.saturating_add(installed),
+            catalog_cache_entries: usage.catalog_cache_entries,
+            catalog_cache_estimated_bytes: usage.catalog_cache_estimated_bytes,
+        })
+    }
+
+    pub fn clear_catalog_cache(&self) -> Result<u64, FolioFfiError> {
+        let state = self.state.lock().map_err(FolioFfiError::operation)?;
+        if state.running {
+            return Err(FolioFfiError::operation("请等待同步完成"));
+        }
+        let _refresh = library_refresh_lock()
+            .try_lock()
+            .map_err(|_| FolioFfiError::operation("请等待字体库刷新完成"))?;
+        let db = FolioDatabase::open(&self.database_path).map_err(FolioFfiError::operation)?;
+        db.clear_catalog_cache_and_compact()
+            .map_err(FolioFfiError::operation)
+    }
+
+    pub fn rebuild_sync_indexes(&self) -> Result<(), FolioFfiError> {
+        let state = self.state.lock().map_err(FolioFfiError::operation)?;
+        if state.running {
+            return Err(FolioFfiError::operation("请等待同步完成"));
+        }
+        let _refresh = library_refresh_lock()
+            .try_lock()
+            .map_err(|_| FolioFfiError::operation("请等待字体库刷新完成"))?;
+        let mut db = FolioDatabase::open(&self.database_path).map_err(FolioFfiError::operation)?;
+        db.rebuild_sync_indexes().map_err(FolioFfiError::operation)
+    }
+
+    pub fn clear_preview_cache(&self, cache_directory: String) -> Result<u64, FolioFfiError> {
+        let state = self.state.lock().map_err(FolioFfiError::operation)?;
+        if state.running {
+            return Err(FolioFfiError::operation("请等待同步完成"));
+        }
+        let _refresh = library_refresh_lock()
+            .try_lock()
+            .map_err(|_| FolioFfiError::operation("请等待字体库刷新完成"))?;
+        let client =
+            folio_online::OnlineClient::new(&cache_directory).map_err(FolioFfiError::operation)?;
+        client
+            .clear_preview_cache()
             .map_err(FolioFfiError::operation)
     }
 
@@ -950,6 +1031,9 @@ impl FolioEngine {
     }
 
     pub fn refresh_library(&self) -> Result<RefreshOutcomeDto, FolioFfiError> {
+        let _refresh = library_refresh_lock()
+            .lock()
+            .map_err(FolioFfiError::operation)?;
         let mut state = self.lock()?;
         let result = state
             .database
@@ -2277,6 +2361,39 @@ fn root_dto(root: &folio_storage::LibraryRoot) -> RootDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn storage_maintenance_waits_for_sync_and_refresh() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("folio.sqlite");
+        let sync = FolioSync::open(
+            path.to_string_lossy().into_owned(),
+            directory
+                .path()
+                .join("ManagedFonts")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .unwrap();
+        assert!(sync.storage_usage().unwrap().database_bytes > 0);
+        sync.state.lock().unwrap().running = true;
+        assert!(sync.clear_catalog_cache().is_err());
+        assert!(sync.rebuild_sync_indexes().is_err());
+        assert!(sync
+            .clear_preview_cache(directory.path().to_string_lossy().into_owned())
+            .is_err());
+        sync.state.lock().unwrap().running = false;
+        {
+            let _refresh = library_refresh_lock().lock().unwrap();
+            assert!(sync.clear_catalog_cache().is_err());
+            assert!(sync.rebuild_sync_indexes().is_err());
+            assert!(sync
+                .clear_preview_cache(directory.path().to_string_lossy().into_owned())
+                .is_err());
+        }
+        sync.rebuild_sync_indexes().unwrap();
+        assert_eq!(sync.clear_catalog_cache().unwrap(), 0);
+    }
 
     #[test]
     fn typed_identifier_round_trip() {

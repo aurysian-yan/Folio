@@ -73,6 +73,7 @@ import {
 import {
   addLibraryRoot,
   cancelSync,
+  clearCatalogCache,
   convertCollectionToSmartFolder,
   convertSmartFolderToCollection,
   deleteCollection,
@@ -80,6 +81,7 @@ import {
   disconnectSync,
   getSyncProfile,
   getSyncStatus,
+  getStorageUsage,
   listCloudFonts,
   listCollections,
   listSmartFolders,
@@ -88,6 +90,7 @@ import {
   queryLibrary,
   quitApp,
   recordRecent,
+  rebuildSyncIndexes,
   refreshLibrary,
   resolveSyncConflict,
   restoreCloudFont,
@@ -108,6 +111,7 @@ import type {
   LibraryPageDto,
   LibrarySnapshotDto,
   SmartFolderDto,
+  StorageUsageDto,
   SyncConflictDto,
   SyncProfileDto,
   SyncItemDto,
@@ -127,6 +131,7 @@ type LibraryScope =
   | "cloudFonts";
 type SettingsPage =
   | "cloud"
+  | "storage"
   | "importing"
   | "display"
   | "font-cards"
@@ -291,12 +296,46 @@ function collectionColorValue(color: string) {
 
 const settingsPages: { id: SettingsPage; title: string }[] = [
   { id: "cloud", title: "云同步" },
+  { id: "storage", title: "存储" },
   { id: "importing", title: "导入" },
   { id: "display", title: "显示" },
   { id: "font-cards", title: "字体卡片" },
   { id: "shortcuts", title: "快捷键" },
   { id: "about", title: "关于" },
 ];
+
+function StorageVolumeBar({ usage }: { usage: StorageUsageDto }) {
+  const segments = [
+    { label: "托管字体", bytes: usage.managedFontBytes, className: "storage-fonts" },
+    { label: "字体库数据库", bytes: usage.databaseBytes, className: "storage-database" },
+  ];
+  const total = segments.reduce((sum, segment) => sum + segment.bytes, 0);
+  const used = Math.max(0, usage.volumeTotalBytes - usage.volumeFreeBytes);
+  const otherUsed = Math.max(0, used - total);
+  const diskSegments = [
+    { label: "其他应用与系统", bytes: otherUsed, className: "storage-other" },
+    ...segments,
+    { label: "可用空间", bytes: usage.volumeFreeBytes, className: "storage-free" },
+  ];
+  const percentage = usage.volumeTotalBytes > 0 ? total / usage.volumeTotalBytes * 100 : 0;
+  const percentageLabel = percentage > 0 && percentage < 0.1 ? "<0.1%" : `${percentage.toFixed(1)}%`;
+
+  return (
+    <div className="storage-volume">
+      <div className="storage-volume-heading"><span>Folio 本地占用</span><strong>{formatFileSize(total)}</strong></div>
+      <div className="storage-volume-track" role="img" aria-label={`Folio 本地占用 ${formatFileSize(total)}，占用所在磁盘空间 ${percentageLabel}；${diskSegments.map((segment) => `${segment.label} ${formatFileSize(segment.bytes)}`).join("，")}`}>
+        {diskSegments.filter((segment) => segment.bytes > 0).map((segment) => (
+          <span key={segment.label} className={segment.className} style={{ width: `${usage.volumeTotalBytes > 0 ? Math.min(segment.bytes / usage.volumeTotalBytes * 100, 100) : 0}%`, minWidth: segment.className === "storage-fonts" || segment.className === "storage-database" ? 2 : 0 }} />
+        ))}
+      </div>
+      <div className="storage-volume-foot"><span>{formatFileSize(total)} / {formatFileSize(usage.volumeTotalBytes)} · Folio 数据所在磁盘</span><strong>{percentageLabel}</strong></div>
+      <div className="storage-volume-legend">
+        <span><i className="storage-dot storage-other" aria-hidden="true" />其他应用与系统 <strong>{formatFileSize(otherUsed)}</strong></span>
+        <span><i className="storage-dot storage-free" aria-hidden="true" />可用空间 <strong>{formatFileSize(usage.volumeFreeBytes)}</strong></span>
+      </div>
+    </div>
+  );
+}
 
 // WebDAV 服务商预设，与 macOS 版本 WebDAVPreset 保持一致。
 const webdavPresets: { id: string; label: string; url: string | null }[] = [
@@ -670,6 +709,10 @@ export default function App() {
   const [syncAutomatic, setSyncAutomatic] = useState(true);
   const [syncStatus, setSyncStatus] = useState<SyncStatusDto | null>(null);
   const [syncMessage, setSyncMessage] = useState("");
+  const [storageUsage, setStorageUsage] = useState<StorageUsageDto | null>(null);
+  const [storageMessage, setStorageMessage] = useState("");
+  const [storageBusy, setStorageBusy] = useState(false);
+  const [confirmRebuild, setConfirmRebuild] = useState(false);
   const [cloudFonts, setCloudFonts] = useState<CloudFontDto[]>([]);
   const [syncConflicts, setSyncConflicts] = useState<SyncConflictDto[]>([]);
   const [cloudLoaded, setCloudLoaded] = useState(false);
@@ -1022,6 +1065,15 @@ export default function App() {
     };
   }, [settingsWindow]);
 
+  useEffect(() => {
+    if (!settingsWindow || settingsPage !== "storage") return;
+    let active = true;
+    void getStorageUsage()
+      .then((usage) => { if (active) setStorageUsage(usage); })
+      .catch((cause) => { if (active) setStorageMessage(errorMessage(cause)); });
+    return () => { active = false; };
+  }, [settingsWindow, settingsPage]);
+
   const runRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -1153,6 +1205,35 @@ export default function App() {
     username: syncUsername.trim(),
     automatic: syncAutomatic,
   });
+
+  const clearStoredCatalog = async () => {
+    setStorageBusy(true);
+    setStorageMessage("");
+    try {
+      const removed = await clearCatalogCache();
+      setStorageUsage(await getStorageUsage());
+      setStorageMessage(`已清理 ${removed} 条目录缓存记录。下次刷新字体库时会重新扫描。`);
+    } catch (cause) {
+      setStorageMessage(errorMessage(cause));
+    } finally {
+      setStorageBusy(false);
+    }
+  };
+
+  const rebuildStoredSyncIndexes = async () => {
+    setConfirmRebuild(false);
+    setStorageBusy(true);
+    setStorageMessage("");
+    try {
+      await rebuildSyncIndexes();
+      setStorageUsage(await getStorageUsage());
+      setStorageMessage("同步索引已重建，连接和本地记录均已保留。");
+    } catch (cause) {
+      setStorageMessage(errorMessage(cause));
+    } finally {
+      setStorageBusy(false);
+    }
+  };
 
   const testCloudConnection = async () => {
     setSyncMessage("正在测试连接…");
@@ -1998,7 +2079,51 @@ export default function App() {
             tabIndex={0}
           >
             <h1>{settings?.title}</h1>
-            {settingsPage === "display" ? (
+            {settingsPage === "storage" ? (
+              <>
+                <p className="settings-description">查看 Folio 在本机占用的空间，并管理可重建的缓存与同步索引。</p>
+                {storageUsage ? (
+                  <>
+                    <section className="settings-group storage-summary" aria-label="存储空间概览">
+                      <StorageVolumeBar usage={storageUsage} />
+                      <p>总量包含数据库与托管字体。目录扫描缓存已计入数据库，不会重复计算。</p>
+                    </section>
+                    <section className="settings-group storage-details">
+                      <h2>占用明细</h2>
+                      <div className="storage-detail-row">
+                        <span className="storage-dot storage-fonts" aria-hidden="true" />
+                        <div><strong>托管字体</strong><p>由 Folio 保存的字体文件</p></div>
+                        <span className="storage-detail-size">{formatFileSize(storageUsage.managedFontBytes)}</span>
+                      </div>
+                      <div className="storage-detail-row">
+                        <span className="storage-dot storage-database" aria-hidden="true" />
+                        <div><strong>字体库数据库</strong><p>收藏夹、同步记录与字体库索引</p></div>
+                        <span className="storage-detail-size">{formatFileSize(storageUsage.databaseBytes)}</span>
+                      </div>
+                      <div className="storage-detail-row">
+                        <span className="storage-dot storage-cache" aria-hidden="true" />
+                        <div><strong>目录扫描缓存</strong><p>{storageUsage.catalogCacheEntries} 条记录 · 占用为估算值，已计入数据库</p></div>
+                        <span className="storage-detail-size">{formatFileSize(storageUsage.catalogCacheEstimatedBytes)}</span>
+                        <Button size="sm" variant="secondary" aria-label="清理目录缓存" isDisabled={storageBusy || syncStatus?.running} onPress={() => void clearStoredCatalog()}>清理</Button>
+                      </div>
+                    </section>
+                  </>
+                ) : <section className="settings-group"><p className="settings-note">正在统计本机存储…</p></section>}
+                <section className="settings-group">
+                  <h2>同步索引</h2>
+                  <p>根据本机现有同步事件修复序号和接收位置，保留连接、事件历史与云端文件。</p>
+                  <div className="setting-actions">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      isDisabled={storageBusy || syncStatus?.running}
+                      onPress={() => setConfirmRebuild(true)}
+                    >重建同步索引</Button>
+                  </div>
+                </section>
+                {storageMessage && <p className="settings-note" role="status">{storageMessage}</p>}
+              </>
+            ) : settingsPage === "display" ? (
               <>
                 <section className="settings-group">
                   <h2>浏览设置</h2>
@@ -2860,6 +2985,23 @@ export default function App() {
           onClose={closeFavoriteFolderEditor}
           onSave={saveFavoriteFolder}
         />
+      )}
+
+      {settingsWindow && confirmRebuild && (
+        <Modal isOpen onOpenChange={(open) => { if (!open) setConfirmRebuild(false); }}>
+          <Modal.Backdrop className="storage-confirm-backdrop">
+            <Modal.Container placement="center" className="storage-confirm-container">
+              <Modal.Dialog className="storage-confirm-dialog" aria-label="重建同步索引">
+                <h2>重建同步索引？</h2>
+                <p>将依据本机已有事件修复序号与接收位置。WebDAV 连接、字体和个人数据均会保留。</p>
+                <div className="setting-actions">
+                  <Button variant="secondary" onPress={() => setConfirmRebuild(false)}>取消</Button>
+                  <Button onPress={() => void rebuildStoredSyncIndexes()}>重建</Button>
+                </div>
+              </Modal.Dialog>
+            </Modal.Container>
+          </Modal.Backdrop>
+        </Modal>
       )}
     </main>
   );
@@ -3821,9 +3963,10 @@ function errorMessage(cause: unknown) {
 }
 
 function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1000) return `${Math.round(bytes)} B`;
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1000)), units.length - 1);
+  return `${(bytes / 1000 ** unit).toFixed(1)} ${units[unit]}`;
 }
 
 function cloudConnectionName(profile: SyncProfileDto) {
