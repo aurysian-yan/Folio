@@ -1,0 +1,17 @@
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
+
+The original code in this repository is licensed under the GNU Affero
+General Public License, version 3 only (AGPL-3.0-only).
+
+You may redistribute and/or modify it under the terms of version 3 of the
+GNU Affero General Public License as published by the Free Software
+Foundation. This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+The complete license text is available at:
+https://www.gnu.org/licenses/agpl-3.0.txt
+
+Third-party dependencies and test font fixtures remain subject to their own
+licenses. See the applicable dependency metadata and fixtures/fonts/README.md.

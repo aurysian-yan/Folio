@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Folio desktop application"
 authors = ["Folio"]
 edition = "2021"
+license = "AGPL-3.0-only"
 rust-version = "1.91"
 
 [lib]

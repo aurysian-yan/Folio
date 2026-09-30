@@ -200,5 +200,5 @@ pnpm -C apps/desktop-ui test
 
 ## 许可证
 
-Rust 工作区以 MIT 或 Apache-2.0 双许可证发布，具体声明见工作区清单。测试字体
-采用各自的许可证，使用前请查阅[测试字体说明](fixtures/fonts/README.md)。
+Folio 项目以 GNU Affero 通用公共许可证第 3 版（仅该版本）发布，授权声明及
+完整条款链接见根目录 `LICENSE`。测试字体采用各自的许可证，使用前请查阅[测试字体说明](fixtures/fonts/README.md)。

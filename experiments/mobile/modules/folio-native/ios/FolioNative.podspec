@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.description = s.summary
   s.author = 'Folio'
   s.homepage = 'https://github.com/aurysian-yan/Folio'
-  s.license = { :type => 'MIT OR Apache-2.0' }
+  s.license = { :type => 'AGPL-3.0-only' }
   s.source = { :path => '.' }
   s.platform = :ios, '16.4'
   s.swift_version = '5.9'
