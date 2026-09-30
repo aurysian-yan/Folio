@@ -1,171 +1,82 @@
-# Folio
+<div align="center">
+  <img src="apps/desktop-ui/src-tauri/icons/128x128@2x.png" width="128" height="128" alt="Folio 应用图标">
+  <h1>Folio</h1>
+  <p>跨平台字体资产管理器</p>
+</div>
 
-Folio is a cross-device font asset manager. This repository contains
-**Phase 2: Local Library Core** — the UI-independent, platform-independent font
-catalog, persistent local library state, metadata and query engine, plus an
-inspection CLI.
+Folio 用于整理、检索、预览和同步本地字体资产。项目以跨平台 Rust 字体目录为
+核心，提供 macOS 原生客户端，以及由 React 和 Tauri 2 承载的 Windows/Linux
+桌面客户端；移动端目前位于隔离的概念验证工程中。
 
-The core discovers font assets, parses them, derives stable identities and
-revisions, groups faces into families and reports diagnostics. The storage
-crate persists library roots in SQLite and reuses cached parse state so an
-unchanged library is not re-read or reparsed. Folio performs **no** font
-activation, installation, watching, syncing or platform integration.
+> 当前项目仍在开发阶段。各平台能力和验收范围并不完全相同，请以
+> [项目路线图](FOLIO_ROADMAP.md)中的状态说明为准。
 
-## Current capabilities
+## 主要能力
 
-* Directory scans (recursive by default) and explicit file-list scans
-* TTF and OTF parsing via the Fontations stack (`read-fonts`, `skrifa`)
-* TTC/OTC collections: neutral collection container with per-face sfnt format;
-  TTC and runtime-generated CFF-only/mixed collections verified
-* Variable font detection with `fvar` axes and named instances
-* OpenType metadata: names with language tags, weight, width, style,
-  version, units per em
-* Domain-separated BLAKE3 identifiers:
-  `FontFamilyId`, `FontFaceId`, `FontIdentityId`, `FontRevisionId`
-  (`FontIdentityId` is the logical reference; `FontFaceId` changes with revision)
-* BLAKE3 `ContentFingerprint`; paths never affect identity or revision
-* Global metadata-based family grouping across files, directories and collections,
-  with Unicode whitespace, NFC and case normalization
-* Conservative `Normal` / `SystemLike` / `Internal` classification, with
-  classified fonts kept in the catalog
-* Structured diagnostics and scan statistics; one broken font never fails
-  a scan
-* WOFF and WOFF2 are recognized as known formats but are **not supported**
-  yet (planned for Folio v2)
-* `folio-cli` human-readable report and stable JSON output
+- 递归扫描目录或显式扫描文件，并解析 TTF、OTF、TTC 和 OTC 字体。
+- 读取字体家族、字重、字宽、样式、版本、语言名称、变量轴、命名实例、
+  OpenType 特性、许可证和字符脚本等元数据。
+- 使用 BLAKE3 生成稳定的字体身份、修订、字体面和家族标识；文件路径不会影响
+  字体身份或修订。
+- 跨文件、目录和字体集合聚合家族，同时保留重复来源、多修订和元数据冲突信息。
+- 使用 SQLite 保存字体库根目录、可重建解析缓存、收藏夹、收藏状态、最近访问和
+  智慧收藏夹。
+- 提供 Unicode 规范化搜索、多维筛选、分页、范围查询和字体库健康分析。
+- 支持增量刷新：未变化的文件直接复用缓存，时间变化时重新校验内容，只有内容
+  真正变化时才重新解析。
+- 提供命令行检查工具、UniFFI 接口、WebDAV 同步模块和在线字体模块。
+- 提供 macOS SwiftUI 客户端，以及 Windows/Linux 共用的 React/Tauri 桌面界面。
 
-Phase 2A adds `folio-storage`:
+目前尚未完整交付文件系统实时监听、WOFF/WOFF2 解析、跨平台字符表、Linux 实机
+验收，以及 Windows/Linux 完整字体安装流程。WebDAV、在线字体、智慧收藏夹和移动
+端也仍有待补充跨设备或目标平台验收。
 
-* Persistent **library roots** (durable user state) in a local SQLite database;
-  roots are distinct from font sources
-* A **rebuildable catalog cache** of per-file parse state, with explicit schema
-  migrations and a typed `DatabaseTooNew` guard
-* **Incremental refresh**: an unchanged file is a metadata cache hit and is not
-  read, hashed or reparsed; a `touch` is rehashed but not reparsed; only real
-  content changes are reparsed
-* **Global catalog reconstruction** from the cache, identical to a live scan,
-  including cross-file, cross-directory and cross-root families
-* Overlapping roots, temporarily unavailable roots and incomplete traversals
-  without losing cached data; malformed and known-unsupported results are cached
-* `load_cached_catalog()` for fast startup without touching the filesystem
-
-Phase 2B adds durable library state and `folio-query`:
-
-* Collections, favorites and explicit recent access, bound to logical font identities
-* Transactional schema v2 migration and versioned metadata cache rebuilds
-* License, embedding permissions, manufacturer/designer, observed Unicode scripts,
-  font categories and OpenType feature metadata
-* Unicode-normalized search, multi-facet filtering and library scopes
-* Family results with matched faces, deterministic ranking, pagination and facet counts
-* Duplicate-source, multiple-revision and metadata-conflict analysis
-
-Not implemented (deliberately out of scope): file watchers, hot reload, platform font registration,
-activation/installation, WebDAV/sync, UniFFI/FFI, UI apps, WOFF parsing.
-
-## Build
-
-Rust 1.91 or newer is required by the dependency set; audited with Rust 1.94.1.
-
-```sh
-cargo build --workspace
-```
-
-## Test
-
-```sh
-cargo test --workspace
-```
-
-## Lint and format
-
-```sh
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-```
-
-## Scan a directory
-
-```sh
-cargo run -p folio-cli -- scan <folder>
-```
-
-Useful flags:
-
-* `--no-recursive` – stay on the top level
-* `--show-internal` – include faces classified as internal
-* `--json` – emit deterministic CLI/debug JSON (not a storage or FFI schema)
-* `--verbose` – debug logging on stderr
-
-## Scan explicit files
-
-```sh
-cargo run -p folio-cli -- scan-files font1.ttf font2.otf font3.ttc
-```
-
-Explicit files do not need known extensions; every provided path is a
-candidate. This is the entry point future Finder/Explorer "Open With Folio"
-integrations will use.
-
-## Repository layout
+## 项目结构
 
 ```text
 Folio/
-├── Cargo.toml
-├── package.json
-├── pnpm-workspace.yaml
+├── apps/
+│   ├── macos/                 # macOS SwiftUI 客户端
+│   └── desktop-ui/            # Windows/Linux React + Tauri 客户端
 ├── crates/
-│   ├── folio-core/     # catalog core (no UI, no platform APIs, no DB)
-│   ├── folio-storage/  # SQLite persistence + incremental refresh + library state
-│   ├── folio-query/    # in-memory search, facets and health analysis
-│   └── folio-cli/      # inspection CLI
-├── apps/desktop-ui/     # shared Windows/Linux React UI dependency baseline
-├── fixtures/fonts/     # legally redistributable test fonts
-├── docs/architecture.md
-└── rustfmt.toml
+│   ├── folio-core/            # 字体扫描、解析、身份与家族聚合
+│   ├── folio-storage/         # SQLite 持久化与增量缓存
+│   ├── folio-query/           # 搜索、筛选、分页与健康分析
+│   ├── folio-cli/             # 命令行检查工具
+│   ├── folio-ffi/             # 面向客户端的 UniFFI 接口
+│   ├── folio-sync/            # WebDAV 同步
+│   └── folio-online/          # 在线字体目录与下载
+├── experiments/mobile/        # Android/iOS 隔离概念验证
+├── fixtures/fonts/            # 可再分发的测试字体
+├── docs/                      # 架构、审计与开发文档
+└── FOLIO_ROADMAP.md           # 当前能力状态与开发路线
 ```
 
-## Documentation
+## 环境要求
 
-* `docs/architecture.md` – every core design decision, identity/revision
-  strategy, grouping, classification, limitations, future platform order
-* `fixtures/fonts/README.md` – fixture provenance and licenses
-* `PHASE1_REPORT.md` – final verification report
-* `PHASE1_AUDIT.md` – independent findings, regression evidence and final verdict
-* `PHASE2A_REPORT.md` – Phase 2A verification report
-* `PHASE2B_REPORT.md` – library state, metadata and query verification report
-* `AGENTS.md` – project rules for the shared Windows/Linux React front end
+### 通用环境
 
-## Windows/Linux 桌面开发
+- Rust 1.91 或更高版本
+- Node.js 20.19 或更高版本，或 Node.js 22.12 或更高版本
+- pnpm 11.19.0
 
-桌面端使用 React、TypeScript、Vite 和 Tauri 2。Windows 与未来的 Linux 版本
-共用 `apps/desktop-ui` 前端，提供字体库浏览、筛选、收藏与云同步界面。
+仓库根目录的 `package.json` 固定了 pnpm 版本。JavaScript 依赖和脚本统一使用
+pnpm 管理。
 
-### Windows 环境
+### Windows 额外环境
 
-安装以下工具：
+- Visual Studio 2022 Build Tools
+- “使用 C++ 的桌面开发”工作负载和 Windows SDK
+- Rust stable MSVC 工具链
+- WebView2 Runtime（Windows 10/11 通常已预装）
 
-* Visual Studio 2022 Build Tools，并选择 **Desktop development with C++** 工作负载和 Windows SDK
-* Rust stable MSVC 工具链：`rustup default stable-msvc`
-* Node.js 20.19+ 或 22.12+，以及 pnpm 11.19.0（版本由根目录 `package.json` 固定）
-* WebView2 Runtime（Windows 10/11 通常已预装）
-
-在仓库根目录安装前端依赖并启动桌面端：
-
-```sh
-pnpm install
-pnpm -C apps/desktop-ui tauri dev
+```powershell
+rustup default stable-msvc
 ```
 
-构建 Windows 安装包：
+### Linux 额外环境
 
-```sh
-pnpm -C apps/desktop-ui tauri build
-```
-
-### Linux 环境
-
-Linux 继续使用同一个 React/Tauri 工程。Debian/Ubuntu 开发环境需要先安装 Tauri
-系统依赖：
+Debian/Ubuntu 可安装以下 Tauri 系统依赖：
 
 ```sh
 sudo apt update
@@ -173,22 +84,121 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
   libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
 
-随后安装 Linux Rust 工具链及 Node.js/pnpm，再运行同样的 `pnpm install` 和
-`pnpm -C apps/desktop-ui tauri dev` 命令。
+### macOS 额外环境
 
-HeroUI is the only default React component library. Fluent UI, Chakra UI, MUI,
-Radix, Ant Design and Mantine are excluded for this project. PrimeReact remains
-a future fallback only if data-heavy controls cannot be covered without mixing
-component systems.
+安装当前稳定版 Xcode 及其命令行工具，并确保本机已有可用的 Rust 工具链。
 
-## Planned
+## 获取与构建
 
-移动端隔离实验位于 [`experiments/mobile`](experiments/mobile/README.md)，对应
-[`FOLIO_ROADMAP.md`](FOLIO_ROADMAP.md) 阶段 D；启动、原生打包与验证范围见实验文档。
-RN + Expo 的生产采用结论仍待 PoC 验收。
+安装前端依赖：
 
-* Folio v2: WOFF/WOFF2 support, managed library storage, collection
-* Windows desktop app first, then Linux using the shared React UI; Android,
-  iOS/iPadOS
-* Activate/deactivate, install/uninstall, hot reload, duplicate and
-  revision detection, WebDAV sync
+```sh
+pnpm install
+```
+
+构建全部 Rust 工作区成员：
+
+```sh
+cargo build --workspace
+```
+
+构建 Windows/Linux 共用前端：
+
+```sh
+pnpm -C apps/desktop-ui build
+```
+
+## 运行桌面客户端
+
+### Windows/Linux
+
+启动 Tauri 开发环境：
+
+```sh
+pnpm -C apps/desktop-ui tauri dev
+```
+
+生成当前平台的安装包：
+
+```sh
+pnpm -C apps/desktop-ui tauri build
+```
+
+### macOS
+
+使用 Xcode 打开 `apps/macos/Folio.xcodeproj`，选择 `Folio` 方案后运行或构建。
+
+## 使用命令行工具
+
+扫描目录（默认递归扫描）：
+
+```sh
+cargo run -p folio-cli -- scan <字体目录>
+```
+
+常用参数：
+
+- `--no-recursive`：只扫描目录顶层。
+- `--show-internal`：显示被归类为内部字体的字体面。
+- `--json`：输出稳定的检查用 JSON；该格式不是持久化或 FFI 协议。
+- `--verbose`：在标准错误输出调试日志。
+
+显式扫描多个文件：
+
+```sh
+cargo run -p folio-cli -- scan-files font1.ttf font2.otf font3.ttc
+```
+
+显式传入的文件不要求具有已知扩展名，每个路径都会作为候选字体处理。
+
+## 测试与代码检查
+
+运行 Rust 测试：
+
+```sh
+cargo test --workspace
+```
+
+检查 Rust 格式和静态分析：
+
+```sh
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+检查并测试 Windows/Linux 前端：
+
+```sh
+pnpm -C apps/desktop-ui typecheck
+pnpm -C apps/desktop-ui lint
+pnpm -C apps/desktop-ui test
+```
+
+## 技术边界
+
+- `folio-core` 保持无界面、无数据库和无平台 API，负责跨平台字体语义。
+- `folio-storage` 负责设备本地持久化和可重建缓存，`folio-query` 统一查询语义。
+- macOS 客户端使用 SwiftUI/AppKit 和 UniFFI。
+- Windows/Linux 客户端共用 React、TypeScript、Vite、Tauri 2、HeroUI v3 和
+  Tailwind CSS v4。
+- 移动端当前仅用于验证 React Native/Expo、UniFFI 和原生字体预览边界，尚未确定
+  正式客户端架构。
+
+## 延伸阅读
+
+- [项目路线图](FOLIO_ROADMAP.md)：当前能力、验证缺口和后续阶段。
+- [核心架构](docs/architecture.md)：字体身份、修订、家族聚合和持久化设计。
+- [第一阶段报告](docs/PHASE1_REPORT.md)与[第一阶段审计](docs/PHASE1_AUDIT.md)：
+  字体目录核心的实现与验证。
+- [第二阶段 A 报告](docs/PHASE2A_REPORT.md)与[第二阶段 A 审计](docs/PHASE2A_AUDIT.md)：
+  SQLite 持久化和增量刷新。
+- [第二阶段 B 报告](docs/PHASE2B_REPORT.md)：用户状态、元数据和查询能力。
+- [第三阶段界面报告](docs/PHASE3_UI_REPORT.md)：macOS 界面的阶段性验证。
+- [同步迁移报告](docs/sync-migration-v7-report.md)：当前同步模型、迁移与已知边界。
+- [移动端实验说明](experiments/mobile/README.md)：隔离概念验证的范围和运行方式。
+- [测试字体说明](fixtures/fonts/README.md)：字体样本来源与许可证。
+
+## 许可证
+
+Rust 工作区以 MIT 或 Apache-2.0 双许可证发布，具体声明见工作区清单。测试字体
+采用各自的许可证，使用前请查阅[测试字体说明](fixtures/fonts/README.md)。
