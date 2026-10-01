@@ -118,3 +118,12 @@ Android SDK/JDK 等前置条件，并对缺失项给出安装建议：
 ```sh
 node tools/folio.mjs doctor
 ```
+
+## 错误处理
+
+单个任务执行失败时，脚本只输出一行提示并返回菜单，不会以原始堆栈中断交互；
+命令行模式则以退出码 1 结束。排查问题时设置 `FOLIO_DEBUG=1` 可额外输出完整堆栈：
+
+```sh
+FOLIO_DEBUG=1 node tools/folio.mjs
+```

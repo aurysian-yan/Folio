@@ -59,6 +59,17 @@ function fail(message) {
   throw new FolioError(message);
 }
 
+// 将任意异常归一为单行信息，避免把原始堆栈直接暴露给使用者。
+function describeError(error) {
+  if (error instanceof FolioError) return error.message;
+  return error instanceof Error ? error.message : String(error);
+}
+
+// 仅在设置 FOLIO_DEBUG 时输出完整堆栈，便于排查而非默认刷屏。
+function debugStack(error) {
+  return process.env.FOLIO_DEBUG && error?.stack ? `\n${error.stack}` : '';
+}
+
 function shorten(target) {
   const path = relative(REPO_ROOT, target);
   return path.startsWith('..') ? target : path;
@@ -731,17 +742,15 @@ async function choose(c, message, options) {
   return c.isCancel(result) ? BACK : result;
 }
 
-// 执行外部动作并捕获可预期的错误，避免中断 TUI。
+// 执行外部动作；任何异常都在此收敛为一行提示，返回菜单而不中断 TUI。
 async function runAction(c, label, action) {
   c.log.step(label);
   try {
-    return action();
+    return await action();
   } catch (error) {
-    if (error instanceof FolioError) {
-      c.log.error(error.message);
-      return undefined;
-    }
-    throw error;
+    c.log.error(describeError(error));
+    if (debugStack(error)) c.log.info(debugStack(error));
+    return undefined;
   }
 }
 
@@ -892,8 +901,9 @@ async function runTui() {
   try {
     await tuiMain(c);
   } catch (error) {
-    if (error instanceof FolioError) c.log.error(error.message);
-    else throw error;
+    // 兜底：任何未收敛的异常都只提示一行，不再向终端抛出原始堆栈。
+    c.log.error(describeError(error));
+    if (debugStack(error)) c.log.info(debugStack(error));
   }
   c.outro('已退出');
 }
@@ -980,11 +990,18 @@ async function bootstrap() {
   return dispatch(group, action, rest);
 }
 
+// 进程级兜底，保证任何位置漏出的异常都只输出一行提示。
+process.on('uncaughtException', (error) => {
+  process.stderr.write(`错误：${describeError(error)}${debugStack(error)}\n`);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  process.stderr.write(`错误：${describeError(error)}${debugStack(error)}\n`);
+  process.exit(1);
+});
+
 bootstrap().catch((error) => {
-  if (error instanceof FolioError) {
-    process.stderr.write(`错误：${error.message}\n`);
-    process.exit(1);
-  }
-  console.error(error);
+  process.stderr.write(`错误：${describeError(error)}${debugStack(error)}\n`);
   process.exit(1);
 });
