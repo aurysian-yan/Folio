@@ -2,12 +2,11 @@ import { getDocumentAsync } from 'expo-document-picker';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import {
-  CaretDownIcon, CheckIcon, ListIcon,
-  MagnifyingGlassIcon, PlusIcon, SquaresFourIcon, XIcon,
+  MagnifyingGlassIcon, PlusIcon, XIcon,
 } from 'phosphor-react-native';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet,
+  AccessibilityInfo, ActivityIndicator, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
   Text, TextInput, useColorScheme, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +14,8 @@ import { FontCard } from './FontCard';
 import { FontDetails } from './FontDetails';
 import { FontNavigation } from './FontNavigation';
 import { ImportResults } from './ImportResults';
+import { ViewModeMenu } from './ViewModeMenu';
+import { AndroidHeaderBackdrop, AndroidHeaderControls } from './HeaderControls';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, summarizeImport, type FontFamily, type ImportReport, type LibraryPage, type LibraryQuery, type LibrarySnapshot } from './library';
 import { library } from './native';
@@ -26,11 +27,13 @@ import { IconButton, themes, type Theme } from './ui';
 
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [] };
+const LibraryList = Platform.OS === 'android' ? Animated.FlatList<FontFamily> : FlatList<FontFamily>;
 
-function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'all', destination = 'local', onSnapshotChange, onOpenFamily }: {
+function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, scope = 'all', destination = 'local', onSnapshotChange, onOpenFamily }: {
   theme: Theme;
   bottomInset: number;
   active: boolean;
+  sourceId?: string;
   sidebar?: boolean;
   scope?: LibraryQuery['scope'];
   destination?: NativeDestination;
@@ -42,6 +45,8 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [brandOpacity] = useState(() => new Animated.Value(1));
+  const [headerScrollOffset] = useState(() => new Animated.Value(0));
   const [searchText, setSearchText] = useState('');
   const [queryText, setQueryText] = useState('');
   const [pagination, setPagination] = useState({ scope, offset: 0 });
@@ -54,7 +59,6 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   const [importDetailsOpen, setImportDetailsOpen] = useState(false);
   const [revision, setRevision] = useState(0);
   const [mode, setMode] = useState<'grid' | 'list'>('grid');
-  const [menuOpen, setMenuOpen] = useState(false);
   const searchInput = useRef<TextInput>(null);
   const list = useRef<FlatList<FontFamily>>(null);
   const inset = useSafeAreaInsets();
@@ -66,6 +70,7 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   const [contentWidth, setContentWidth] = useState(0);
   const width = contentWidth || windowWidth - inset.left - inset.right;
   const scrollTopInset = nativeInsets.contentTop ?? nativeInsets.top + (sidebar ? 0 : headerHeight * 1.25);
+  const androidContentTop = inset.top + headerHeight;
   const reservesWindowControls = usesNativeSidebar && !sidebar && Number(Platform.Version) >= 26;
   const queryKey = JSON.stringify([scope, queryText, revision, retry]);
   const requestKey = JSON.stringify([queryKey, offset]);
@@ -73,6 +78,23 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   const page = loadedQuery.key === queryKey ? loadedQuery.page : emptyPage;
   const waitingForSearch = searchText.trim() !== queryText;
   const importCounts = importReport ? summarizeImport(importReport.items) : null;
+
+  useEffect(() => {
+    if (Platform.OS === 'android') headerScrollOffset.setValue(0);
+  }, [headerScrollOffset, mode]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    let mounted = true;
+    let transition: Animated.CompositeAnimation | undefined;
+    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+      if (!mounted) return;
+      transition = Animated.timing(brandOpacity, { toValue: searchOpen ? 0 : 1,
+        duration: reduced ? 0 : 180, useNativeDriver: true });
+      transition.start();
+    });
+    return () => { mounted = false; transition?.stop(); };
+  }, [brandOpacity, searchOpen]);
 
   useEffect(() => {
     let mounted = true;
@@ -122,7 +144,6 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   async function importFont() {
     if (!ready || importInFlight.current) return;
     importInFlight.current = true;
-    setMenuOpen(false);
     setImporting(true);
     setImportError(null);
     try {
@@ -170,62 +191,20 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
 
   const toggleSearch = () => { if (searchOpen) closeSearch(); else setSearchOpen(true); };
   const titles = { local: '全部字体', recent: '最近', favorites: '收藏', cloud: '云端字体', settings: '设置' };
-  const content = (
-    <NativeScrollContainer hasHeader={!sidebar}
-      onInsetsChange={(event) => setNativeInsets(event.nativeEvent)}
-      style={[styles.screen, { backgroundColor: theme.background }, reservesWindowControls && styles.windowControlsInset]}
-      onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)}>
-      {!sidebar && <View collapsable={false} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
-        style={[styles.header, usesNativeControls && [styles.floatingHeader, { top: nativeInsets.top,
-          backgroundColor: Number(Platform.Version) < 26 ? theme.background : undefined }]]}>
-        {!searchOpen && <View style={[styles.brand, usesNativeControls && styles.nativeBrand]}>
-          <Image source={require('../assets/design/folio.svg')} style={styles.logo}
-            tintColor={theme.label} contentFit="contain" accessibilityLabel="Folio" />
-          <Text numberOfLines={1} style={[styles.libraryCount, { color: theme.muted }]}>
-            {snapshot ? `${snapshot.familyCount} 个本地字体` : '本地字体'}
-          </Text>
-        </View>}
-        {usesNativeControls ? <NativeHeaderControls theme={theme} mode={mode} searchOpen={searchOpen}
-          width={width - 52} searchText={searchText} onSearchTextChange={setSearchText}
-          ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
-          onSearch={toggleSearch} /> : searchOpen ? (
-          <View style={[styles.search, { backgroundColor: theme.surface }]}>
-            <MagnifyingGlassIcon size={20} color={theme.secondary} />
-            <TextInput ref={searchInput} autoFocus accessibilityLabel="搜索字体" placeholder="搜索字体名称或样式"
-              placeholderTextColor={theme.muted} value={searchText} editable={ready}
-              onChangeText={setSearchText} style={[styles.searchInput, { color: theme.label }]}
-              autoCapitalize="none" autoCorrect={false} returnKeyType="search" onSubmitEditing={() => Keyboard.dismiss()} />
-            {searchText.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel="清除搜索"
-              hitSlop={10} onPress={() => { setSearchText(''); searchInput.current?.focus(); }}>
-              <XIcon size={18} color={theme.secondary} />
-            </Pressable>}
-            <Pressable accessibilityRole="button" accessibilityLabel="关闭搜索" onPress={closeSearch} style={styles.cancelSearch}>
-              <XIcon size={20} color={theme.label} />
-            </Pressable>
-          </View>
-        ) : <View style={styles.headerActions}>
-          <IconButton theme={theme} label="视图选项" selected={menuOpen} onPress={() => { Keyboard.dismiss(); setMenuOpen(true); }}
-            style={styles.viewButton}>
-            {mode === 'grid' ? <SquaresFourIcon size={20} color={theme.label} /> : <ListIcon size={20} color={theme.label} />}
-            <CaretDownIcon size={10} color={theme.label} />
-          </IconButton>
-          <IconButton theme={theme} label="搜索字体" onPress={() => setSearchOpen(true)}>
-            <MagnifyingGlassIcon size={20} color={theme.label} />
-          </IconButton>
-          <IconButton theme={theme} label={importing ? '正在导入…' : '导入字体'} disabled={!ready || importing} onPress={importFont}>
-            <PlusIcon size={20} color={theme.label} />
-          </IconButton>
-        </View>}
-      </View>}
-      <FlatList ref={list} key={mode} data={page.families} keyExtractor={(family) => family.id}
+  const fontList = (
+      <LibraryList ref={list} key={mode} data={page.families} keyExtractor={(family) => family.id}
         numColumns={mode === 'grid' ? 2 : 1} columnWrapperStyle={mode === 'grid' ? styles.columns : undefined}
         contentContainerStyle={[styles.content, {
-          paddingTop: usesNativeControls ? scrollTopInset : 0,
+          paddingTop: Platform.OS === 'android' ? androidContentTop : usesNativeControls ? scrollTopInset : 0,
           paddingBottom: usesNativeControls ? nativeInsets.bottom + 24 : navigationContentInset(bottomInset),
         }]}
         contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
         scrollIndicatorInsets={usesNativeControls ? { top: scrollTopInset, bottom: nativeInsets.bottom } : undefined}
         keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
+        onScroll={Platform.OS === 'android' ? Animated.event(
+          [{ nativeEvent: { contentOffset: { y: headerScrollOffset } } }], { useNativeDriver: true },
+        ) : undefined}
+        scrollEventThrottle={Platform.OS === 'android' ? 16 : undefined}
         initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
         onEndReached={loadMore} onEndReachedThreshold={0.4}
         renderItem={({ item }) => (
@@ -289,29 +268,67 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
         ListFooterComponent={loading && page.families.length > 0
           ? <ActivityIndicator style={styles.loadingMore} color={theme.accent} accessibilityLabel="正在读取更多字体" /> : null}
       />
+  );
+  const content = (
+    <NativeScrollContainer hasHeader={!sidebar}
+      onInsetsChange={(event) => setNativeInsets(event.nativeEvent)}
+      style={[styles.screen, { backgroundColor: theme.background }, reservesWindowControls && styles.windowControlsInset]}
+      onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)}>
+      {Platform.OS === 'android' && !sidebar && <Animated.View pointerEvents="none"
+        accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+        style={[styles.headerBackdrop, { height: androidContentTop + 34,
+          opacity: headerScrollOffset.interpolate({ inputRange: [0, 56], outputRange: [0, 1], extrapolate: 'clamp' }) }]}>
+        <AndroidHeaderBackdrop sourceId={sourceId} active={active} theme={theme} style={styles.screen} />
+      </Animated.View>}
+      {!sidebar && <View collapsable={false} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+        style={[styles.header, (usesNativeControls || Platform.OS === 'android') && [styles.floatingHeader, {
+          top: Platform.OS === 'android' ? inset.top : nativeInsets.top,
+          backgroundColor: Platform.OS === 'ios' && Number(Platform.Version) < 26 ? theme.background : undefined }],
+          Platform.OS === 'android' && styles.androidHeader]}>
+        {(!searchOpen || Platform.OS === 'android') && <Animated.View pointerEvents={searchOpen ? 'none' : 'auto'}
+          style={[styles.brand, (usesNativeControls || Platform.OS === 'android') && styles.nativeBrand,
+            Platform.OS === 'android' && { opacity: brandOpacity }]}>
+          <Image source={require('../assets/design/folio.svg')} style={styles.logo}
+            tintColor={theme.label} contentFit="contain" accessibilityLabel="Folio" />
+          <Text numberOfLines={1} style={[styles.libraryCount, { color: theme.muted }]}>
+            {snapshot ? `${snapshot.familyCount} 个本地字体` : '本地字体'}
+          </Text>
+        </Animated.View>}
+        {Platform.OS === 'android' ? <AndroidHeaderControls theme={theme} sourceId={sourceId} active={active}
+          mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
+          ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
+          onSearch={toggleSearch} onSearchTextChange={setSearchText} /> : usesNativeControls ? <NativeHeaderControls theme={theme} mode={mode} searchOpen={searchOpen}
+          width={width - 52} searchText={searchText} onSearchTextChange={setSearchText}
+          ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
+          onSearch={toggleSearch} /> : searchOpen ? (
+          <View style={[styles.search, { backgroundColor: theme.surface }]}>
+            <MagnifyingGlassIcon size={20} color={theme.secondary} />
+            <TextInput ref={searchInput} autoFocus accessibilityLabel="搜索字体" placeholder="搜索字体名称或样式"
+              placeholderTextColor={theme.muted} value={searchText} editable={ready}
+              onChangeText={setSearchText} style={[styles.searchInput, { color: theme.label }]}
+              autoCapitalize="none" autoCorrect={false} returnKeyType="search" onSubmitEditing={() => Keyboard.dismiss()} />
+            {searchText.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel="清除搜索"
+              hitSlop={10} onPress={() => { setSearchText(''); searchInput.current?.focus(); }}>
+              <XIcon size={18} color={theme.secondary} />
+            </Pressable>}
+            <Pressable accessibilityRole="button" accessibilityLabel="关闭搜索" onPress={closeSearch} style={styles.cancelSearch}>
+              <XIcon size={20} color={theme.label} />
+            </Pressable>
+          </View>
+        ) : <View style={styles.headerActions}>
+          <ViewModeMenu sourceId={sourceId} theme={theme} mode={mode} active={active && !importing} onModeChange={setMode} />
+          <IconButton theme={theme} label="搜索字体" onPress={() => setSearchOpen(true)}>
+            <MagnifyingGlassIcon size={20} color={theme.label} />
+          </IconButton>
+          <IconButton theme={theme} label={importing ? '正在导入…' : '导入字体'} disabled={!ready || importing} busy={importing} onPress={importFont}>
+            {importing ? <ActivityIndicator size="small" color={theme.label} /> : <PlusIcon size={20} color={theme.label} />}
+          </IconButton>
+        </View>}
+      </View>}
+      {Platform.OS === 'android' ? <NavigationBackdrop sourceId={active ? sourceId : ''}
+        active={active} style={[styles.screen, { backgroundColor: theme.background }]}>{fontList}</NavigationBackdrop> : fontList}
       <ImportResults report={importReport} visible={importDetailsOpen && active} theme={theme}
         onClose={() => setImportDetailsOpen(false)} />
-      <Modal transparent visible={!usesNativeControls && menuOpen && active} animationType="none" onRequestClose={() => setMenuOpen(false)}>
-        <View style={styles.menuOverlay}>
-          <Pressable accessibilityLabel="关闭视图选项" onPress={() => setMenuOpen(false)}
-            style={[StyleSheet.absoluteFill, { backgroundColor: theme.scrim }]} />
-          <View accessibilityViewIsModal style={[styles.menu, {
-            top: inset.top + 62, right: Math.max(22, inset.right + 10),
-            backgroundColor: theme.raised, borderColor: theme.border,
-          }]}>
-            <Text style={[styles.menuTitle, { color: theme.secondary }]}>视图</Text>
-            {(['grid', 'list'] as const).map((value) => (
-              <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: mode === value }}
-                onPress={() => { setMode(value); setMenuOpen(false); }}
-                style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: theme.surface }]}>
-                {value === 'grid' ? <SquaresFourIcon size={20} color={theme.label} /> : <ListIcon size={20} color={theme.label} />}
-                <Text style={[styles.menuLabel, { color: theme.label }]}>{value === 'grid' ? '网格视图' : '列表视图'}</Text>
-                {mode === value && <CheckIcon size={18} color={theme.accent} />}
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      </Modal>
     </NativeScrollContainer>
   );
 
@@ -379,15 +396,16 @@ function MobileApp() {
     </View>
   ) : (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.app, { backgroundColor: theme.background, paddingTop: inset.top,
+      style={[styles.app, { backgroundColor: theme.background, paddingTop: Platform.OS === 'android' ? 0 : inset.top,
       paddingLeft: inset.left, paddingRight: inset.right }]}>
       <StatusBar style="auto" />
-      <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible} style={styles.screen}>
+      <View style={styles.screen}>
         <View style={[styles.screen, tab !== 'local' && styles.hidden]}>
-          <LibraryScreen theme={theme} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily} />
+          <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily} />
         </View>
-        {tab !== 'local' && <View style={[styles.screen, { backgroundColor: theme.background }]} />}
-      </NavigationBackdrop>
+        {tab !== 'local' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
+          style={[styles.screen, { backgroundColor: theme.background }]}><View style={styles.screen} /></NavigationBackdrop>}
+      </View>
       {!keyboardVisible && <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
         onSelectionChange={(id) => { Keyboard.dismiss(); setTab(id); }} />}
@@ -412,10 +430,12 @@ const styles = StyleSheet.create({
   windowControlsInset: { paddingTop: 44 },
   header: { minHeight: 64, paddingHorizontal: 26, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   floatingHeader: { position: 'absolute', left: 0, right: 0, zIndex: 1 },
+  androidHeader: { zIndex: 2 },
+  headerBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
   brand: { flex: 1, gap: 8 }, logo: { width: 45.011, height: 16 },
   nativeBrand: { position: 'absolute', left: 26, right: 210 },
   libraryCount: { fontSize: 14, lineHeight: 16, fontWeight: '500' },
-  headerActions: { flexDirection: 'row', gap: 10, alignItems: 'center' }, viewButton: { paddingHorizontal: 12 },
+  headerActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   search: { flex: 1, paddingHorizontal: 12, minHeight: 44, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchInput: { flex: 1, minHeight: 44, fontSize: 15, paddingVertical: 8 },
   cancelSearch: { minWidth: 32, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
@@ -430,9 +450,4 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '600' }, emptyDetail: { fontSize: 14, lineHeight: 22, textAlign: 'center' },
   importButton: { marginTop: 8, paddingHorizontal: 20, minHeight: 44, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 6 },
   importLabel: { fontSize: 15, fontWeight: '600' }, loadingMore: { paddingVertical: 16 },
-  menuOverlay: { flex: 1 },
-  menu: { position: 'absolute', width: 220, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingVertical: 6, overflow: 'hidden' },
-  menuTitle: { fontSize: 12, paddingHorizontal: 16, paddingVertical: 8 },
-  menuItem: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 },
-  menuLabel: { flex: 1, fontSize: 16 },
 });

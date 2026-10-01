@@ -26,6 +26,27 @@ class FolioNavigationModule : Module() {
             Prop("active") { view: FolioBackdropSourceView, value: Boolean -> view.active = value }
         }
 
+        View(FolioHeaderBackdropView::class) {
+            Prop("sourceId") { view: FolioHeaderBackdropView, value: String -> view.sourceId = value }
+            Prop("active") { view: FolioHeaderBackdropView, value: Boolean -> view.active = value }
+            Prop("tintColor") { view: FolioHeaderBackdropView, value: String -> view.tintColor = value }
+        }
+
+        View(FolioHeaderControlsView::class) {
+            Events("onModeChange", "onExpandedChange", "onSearch", "onImport", "onSearchTextChange")
+            Prop("sourceId") { view: FolioHeaderControlsView, value: String -> view.sourceId = value }
+            Prop("mode") { view: FolioHeaderControlsView, value: String ->
+                if (value == "grid" || value == "list") view.mode = value
+            }
+            Prop("active") { view: FolioHeaderControlsView, value: Boolean -> view.active = value }
+            Prop("dark") { view: FolioHeaderControlsView, value: Boolean -> view.dark = value }
+            Prop("ready") { view: FolioHeaderControlsView, value: Boolean -> view.ready = value }
+            Prop("importing") { view: FolioHeaderControlsView, value: Boolean -> view.importing = value }
+            Prop("searchOpen") { view: FolioHeaderControlsView, value: Boolean -> view.searchOpen = value }
+            Prop("searchText") { view: FolioHeaderControlsView, value: String -> view.searchText = value }
+            Prop("colors") { view: FolioHeaderControlsView, value: FolioViewMenuColors -> view.colors = value }
+        }
+
         View(FolioLiquidTabsView::class) {
             Events("onSelectionChange")
             Prop("sourceId") { view: FolioLiquidTabsView, value: String -> view.sourceId = value }

@@ -24,7 +24,8 @@ import kotlinx.coroutines.launch
 
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
-    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
+    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset },
+    private val consumeDrag: Boolean = false,
 ) {
 
     private val pressProgressAnimationSpec =
@@ -38,6 +39,7 @@ class InteractiveHighlight(
         Animatable(Offset.Zero, Offset.VectorConverter, Offset.VisibilityThreshold)
 
     private var startPosition = Offset.Zero
+    private var hasDragged = false
     val pressProgress: Float get() = pressProgressAnimation.value
     val offset: Offset get() = positionAnimation.value - startPosition
 
@@ -96,9 +98,10 @@ half4 main(float2 coord) {
         }
 
     val gestureModifier: Modifier =
-        Modifier.pointerInput(animationScope) {
+        Modifier.pointerInput(animationScope, consumeDrag) {
             inspectDragGestures(
                 onDragStart = { down ->
+                    hasDragged = false
                     startPosition = down.position
                     animationScope.launch {
                         launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
@@ -118,6 +121,11 @@ half4 main(float2 coord) {
                     }
                 }
             ) { change, _ ->
+                // 按钮拖动越过阈值后取消点击，回到起点也不触发操作。
+                if (consumeDrag && (change.position - startPosition).getDistance() > viewConfiguration.touchSlop) {
+                    hasDragged = true
+                }
+                if (consumeDrag && hasDragged) change.consume()
                 animationScope.launch { positionAnimation.snapTo(change.position) }
             }
         }

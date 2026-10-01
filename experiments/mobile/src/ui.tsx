@@ -25,12 +25,13 @@ export const themes = {
 
 export type Theme = typeof themes.light;
 
-export function IconButton({ label, onPress, children, theme, disabled, selected, style, systemImage }: {
+export function IconButton({ label, onPress, children, theme, disabled, busy, selected, style, systemImage }: {
   label: string;
   onPress: () => void;
   children: ReactNode;
   theme: Theme;
   disabled?: boolean;
+  busy?: boolean;
   selected?: boolean;
   style?: StyleProp<ViewStyle>;
   systemImage?: string;
@@ -43,7 +44,7 @@ export function IconButton({ label, onPress, children, theme, disabled, selected
   }
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label}
-      accessibilityState={{ disabled: !!disabled, selected: !!selected }}
+      accessibilityState={{ disabled: !!disabled, selected: !!selected, busy: !!busy }}
       disabled={disabled} onPress={onPress} hitSlop={8}
       style={({ pressed }) => [styles.iconButton, {
         backgroundColor: theme.tab, borderColor: theme.border,

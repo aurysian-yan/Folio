@@ -89,7 +89,7 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
     }
 }
 
-private object EmptyNavigationBackdrop : Backdrop {
+internal object EmptyNavigationBackdrop : Backdrop {
     override val isCoordinatesDependent = false
     override fun DrawScope.drawBackdrop(density: Density, coordinates: LayoutCoordinates?, layerBlock: (GraphicsLayerScope.() -> Unit)?) = Unit
 }

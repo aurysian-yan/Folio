@@ -15,7 +15,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.unit.Density
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.internal.InverseLayerScope
@@ -126,8 +126,9 @@ internal class FolioViewBackdrop(private val source: FolioBackdropSourceView) : 
         if (!content.hasDisplayList()) return
         val canvas = drawContext.canvas.nativeCanvas
         if (!canvas.isHardwareAccelerated) return
-        source.getLocationInWindow(location)
-        val position = coordinates.positionInWindow()
+        // 弹层与主窗口共用屏幕坐标，保持背景采样位置一致。
+        source.getLocationOnScreen(location)
+        val position = coordinates.positionOnScreen()
         withTransform({
             if (layerBlock != null) {
                 inverse.reset()
