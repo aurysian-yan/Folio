@@ -8,7 +8,11 @@
 
 在 `experiments/mobile` 建立独立 Expo development build，复用现有 UniFFI Swift/Kotlin bindings。RN 只负责输入、分页和页面状态，原生模块负责沙盒文件与后台调用，Rust 保持身份、解析、持久化和查询的唯一实现。iOS 原生库以 XCFramework 静态链接；Android 以 ABI 独立的 `.so` 加 JNA AAR 接入。
 
-本实验暴露 `initialize`、`query`、`importFonts`、`setFavorite`、`copyText` 和原生视图，不为 PoC 新建 C ABI、不修改 `folio-ffi` 或生产 SQLite schema。Swift 串行后台队列和 Kotlin 单线程执行器持有各自的引擎；模块销毁后按顺序释放，JS 不持有 Rust 指针。
+本实验暴露 `initialize`、`snapshot`、`query`、`importFonts`、`setFavorite`、收藏夹创建/更新/删除/成员操作、`copyText` 和原生视图，不为 PoC 新建 C ABI、不修改 `folio-ffi` 或生产 SQLite schema。Swift 串行后台队列和 Kotlin 单线程执行器持有各自的引擎；模块销毁后按顺序释放，JS 不持有 Rust 指针。
+
+筛选及手动收藏夹复用现有 Rust DTO。查询返回完整字族身份、命中字款、实时 facet 计数与不可用成员数；星标和成员操作使用完整身份集合。变更成功后返回缓存快照并刷新当前查询，失败时保留原状态。筛选选择直接提交查询，各范围独立保存搜索与条件；本轮不扩展智能收藏夹、最近历史或云同步。
+
+Android 筛选抽屉使用 `@gorhom/bottom-sheet` 5.2.14，复用其拖动、遮罩、收起动画和 `BottomSheetFlatList` 滚动协调；保留现有分类卡片与浅深色主题，不采用 Material 3 面板。手势与动画依赖固定为 Expo SDK 57 对应的 Gesture Handler 2.32.0、Reanimated 4.5.1 和 Worklets 0.10.1，不自行实现拖动逻辑。iOS 继续使用系统 Sheet。
 
 批量导入的复制、SHA-256 去重和 ZIP 解压留在原生文件边界，Rust 继续负责字体内容校验、来源、身份与目录。Android 使用系统 `ZipFile`，iOS 本地模块固定使用 MIT 许可的 ZIPFoundation 0.9.20；依赖不进入桌面端或 Rust 核心。显式单文件来源按内容解析，扩展名筛选只用于目录发现，兼容已有安卓 `.font` 副本。
 
@@ -30,6 +34,7 @@ UniFFI 0.32.1 使用全局配置的 `crates.folio_ffi` 节点。Kotlin 的错误
 
 - [Expo 自定义原生代码](https://docs.expo.dev/workflow/customizing/)
 - [Expo Modules API](https://docs.expo.dev/modules/module-api/)
+- [Gorhom Bottom Sheet](https://gorhom.dev/react-native-bottom-sheet/)
 - [UniFFI Kotlin/JNA](https://mozilla.github.io/uniffi-rs/latest/kotlin/gradle.html)
 - [Android TextRunShaper](https://developer.android.com/reference/android/graphics/text/TextRunShaper)
 - [Android Canvas.drawGlyphs](https://developer.android.com/reference/android/graphics/Canvas#drawGlyphs(int[],int,float[],int,int,android.graphics.fonts.Font,android.graphics.Paint))

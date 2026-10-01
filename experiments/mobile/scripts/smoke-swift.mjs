@@ -20,6 +20,8 @@ execFileSync('swiftc', ['-swift-version', '5', '-module-name', 'ZIPFoundation', 
 execFileSync('swiftc', ['-I', generated, '-I', libraries, '-L', libraries, '-lZIPFoundation',
   '-L', join(repository, 'target/debug'), '-lfolio_ffi', join(generated, 'folio_ffi.swift'),
   join(project, 'modules/folio-native/ios/src/FolioFontImporter.swift'),
+  join(project, 'modules/folio-native/ios/src/FolioLibraryMapper.swift'),
+  join(project, 'tests/SwiftLibrarySmoke.swift'),
   join(project, 'tests/SwiftImportSmoke.swift'), join(project, 'tests/SwiftSmoke.swift'), '-o', output],
 { cwd: project, stdio: 'inherit' });
 execFileSync(output, [join(project, 'samples')], {

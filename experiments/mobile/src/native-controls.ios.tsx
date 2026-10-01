@@ -13,6 +13,7 @@ import {
 import { requireNativeView } from 'expo';
 import { useEffect, useId, useState } from 'react';
 import { AccessibilityInfo, Keyboard, Platform, StyleSheet, View } from 'react-native';
+import { collectionColorValue, collectionSystemImage } from './collection-style';
 import type {
   NativeActionProps, NativeDestination, NativeHeaderProps, NativeLibraryContentProps, NativeNavigationProps, NativeScrollContainerProps,
 } from './native-controls';
@@ -43,9 +44,10 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
   const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
 
   if (sidebar) {
-    const row = (id: NativeDestination, title: string, symbol: ButtonProps['systemImage'], count?: number) => (
+    const row = (id: NativeDestination, title: string, symbol: ButtonProps['systemImage'], count?: number, color?: string) => (
       <HStack key={id} modifiers={[tag(id)]}>
-        <Label title={title} systemImage={symbol} />
+        {color ? <><Image systemName={symbol!} modifiers={[foregroundStyle(color)]} /><Text>{title}</Text></>
+          : <Label title={title} systemImage={symbol} />}
         <Spacer />
         {count !== undefined && <Text modifiers={[foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>{count}</Text>}
       </HStack>
@@ -58,16 +60,20 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
           <NavigationSplitView.Sidebar>
             <List selection={[destination]} onSelectionChange={(selection) => {
               const value = selection[0];
-              if (value === 'local' || value === 'recent' || value === 'favorites' || value === 'cloud' || value === 'settings') {
-                onDestinationChange(value);
+              if (value === 'local' || value === 'recent' || value === 'favorites' || value === 'cloud' || value === 'settings' || (typeof value === 'string' && value.startsWith('collection:'))) {
+                onDestinationChange(value as NativeDestination);
                 setCompactColumn('detail');
               }
             }} modifiers={[listStyle('sidebar'), navigationTitle('Folio')]}>
               <Section title="本地">
                 {row('local', '全部字体', 'textformat.alt', snapshot?.familyCount)}
                 {row('recent', '最近', 'clock', snapshot?.recentCount)}
-                {row('favorites', '收藏', 'star')}
+                {row('favorites', '星标收藏', 'star')}
               </Section>
+              {!!snapshot?.collections.length && <Section title="收藏夹">
+                {snapshot.collections.map((collection) => row(`collection:${collection.id}`, collection.name,
+                  collectionSystemImage(collection.icon) as ButtonProps['systemImage'], collection.memberCount, collectionColorValue(collection.color)))}
+              </Section>}
               <Section title="云端">{row('cloud', '云端字体', 'cloud')}</Section>
               <Section>{row('settings', '设置', 'gear')}</Section>
             </List>
@@ -105,7 +111,7 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
 
 // 分栏详情只保留系统工具栏，React Native 内容不再绘制顶部操作区。
 export function NativeLibraryContent({ children, title, subtitle, active, theme, mode, width,
-  searchOpen, searchText, ready, importing, onModeChange, onSearch, onSearchTextChange, onImport }: NativeLibraryContentProps) {
+  searchOpen, searchText, ready, importing, onModeChange, onSearch, onSearchTextChange, onImport, onFilter, filterCount }: NativeLibraryContentProps) {
   const text = useNativeState(searchText);
   useEffect(() => { if (!searchOpen) text.set(''); }, [searchOpen, text]);
 
@@ -146,6 +152,8 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
                   <Label title="列表视图" systemImage="list.bullet" modifiers={[tag('list')]} />
                 </Picker>
               </Menu>
+              <Button label={filterCount ? `筛选字体，已选 ${filterCount} 项` : '筛选字体'} systemImage="line.3.horizontal.decrease"
+                onPress={onFilter} modifiers={[...actionModifiers, tint(filterCount ? theme.accent : theme.label), disabled(!ready)]} />
               <Button label="搜索字体" systemImage="magnifyingglass" onPress={onSearch} modifiers={actionModifiers} />
               <Button label={importing ? '正在导入…' : '导入字体'} systemImage="plus" onPress={onImport}
                 modifiers={[...actionModifiers, disabled(!ready || importing)]} />
@@ -159,8 +167,9 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
 
 // 系统 Menu 保留原生展开、收起与菜单项选择行为。
 export function NativeHeaderControls({ theme, mode, width, searchOpen, searchText, ready, importing,
-  onModeChange, onSearch, onSearchTextChange, onImport }: NativeHeaderProps) {
+  onModeChange, onSearch, onSearchTextChange, onImport, onFilter, filterCount }: NativeHeaderProps) {
   const namespace = useId();
+  const menuWidth = width < toolbarHeight * 7 ? toolbarHeight : 64;
   const text = useNativeState(searchText);
   const [reduceMotion, setReduceMotion] = useState(false);
 
@@ -199,19 +208,25 @@ export function NativeHeaderControls({ theme, mode, width, searchOpen, searchTex
               </Button>
             </> : <>
               <Menu label={<HStack spacing={6}
-                modifiers={[frame({ width: 64, height: toolbarHeight }), contentShape(shapes.capsule())]}>
+                modifiers={[frame({ width: menuWidth, height: toolbarHeight }), contentShape(shapes.capsule())]}>
                 <Image systemName={mode === 'grid' ? 'square.grid.2x2' : 'list.bullet'} size={20} color={theme.label} />
                 <Image systemName="chevron.down" size={10} color={theme.secondary} />
               </HStack>}
                 modifiers={[menuStyle('button'), buttonStyle(glass ? 'plain' : 'bordered'),
                   controlSize('large'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel('视图选项'),
-                  frame({ width: 64, height: toolbarHeight }),
+                  frame({ width: menuWidth, height: toolbarHeight }),
                   ...(glass ? [glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'capsule' })] : [])]}>
                 <Picker label="视图" selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
                   <Label title="网格视图" systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
                   <Label title="列表视图" systemImage="list.bullet" modifiers={[tag('list')]} />
                 </Picker>
               </Menu>
+              <Button onPress={onFilter}
+                modifiers={[...iconButtonModifiers(filterCount ? theme.accent : theme.label), disabled(!ready),
+                  accessibilityLabel(filterCount ? `筛选字体，已选 ${filterCount} 项` : '筛选字体')]}>
+                <Image systemName="line.3.horizontal.decrease" size={20} color={filterCount ? theme.accent : theme.label}
+                  modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
+              </Button>
               <Button onPress={onSearch}
                 modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel('搜索字体'),
                   ...(glass ? [glassEffectId('search', namespace)] : [])]}>
@@ -239,7 +254,7 @@ export function NativeActionButton({ label, systemImage, color, onPress, disable
         modifiers={iconOnly ? [...iconButtonModifiers(color, diameter, plain), disabled(!!unavailable), accessibilityLabel(label)] : [
           buttonStyle(plain ? 'plain' : glass ? (prominent ? 'glassProminent' : 'glass') : (prominent ? 'borderedProminent' : 'bordered')),
           labelStyle('titleAndIcon'), disabled(!!unavailable),
-          controlSize('large'), tint(color), accessibilityLabel(label),
+          controlSize('large'), frame({ minHeight: toolbarHeight }), tint(color), accessibilityLabel(label),
         ]}>
         {iconOnly && systemImage ? <Image systemName={systemImage as ButtonProps['systemImage']}
           size={diameter < toolbarHeight ? 14 : 20} color={color}

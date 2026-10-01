@@ -33,7 +33,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioHeaderControlsView::class) {
-            Events("onModeChange", "onExpandedChange", "onSearch", "onImport", "onSearchTextChange")
+            Events("onModeChange", "onExpandedChange", "onSearch", "onImport", "onSearchTextChange", "onFilter")
             Prop("sourceId") { view: FolioHeaderControlsView, value: String -> view.sourceId = value }
             Prop("mode") { view: FolioHeaderControlsView, value: String ->
                 if (value == "grid" || value == "list") view.mode = value
@@ -44,6 +44,7 @@ class FolioNavigationModule : Module() {
             Prop("importing") { view: FolioHeaderControlsView, value: Boolean -> view.importing = value }
             Prop("searchOpen") { view: FolioHeaderControlsView, value: Boolean -> view.searchOpen = value }
             Prop("searchText") { view: FolioHeaderControlsView, value: String -> view.searchText = value }
+            Prop("filterCount") { view: FolioHeaderControlsView, value: Int -> view.filterCount = value.coerceAtLeast(0) }
             Prop("colors") { view: FolioHeaderControlsView, value: FolioViewMenuColors -> view.colors = value }
         }
 

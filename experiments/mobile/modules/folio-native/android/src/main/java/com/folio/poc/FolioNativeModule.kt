@@ -4,11 +4,10 @@ import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import com.folio.poc.ffi.CollectionIdDto
 import com.folio.poc.ffi.FolioEngine
 import com.folio.poc.ffi.IdentityIdDto
-import com.folio.poc.ffi.LibraryQueryDto
 import com.folio.poc.ffi.LibrarySnapshotDto
-import com.folio.poc.ffi.QueryScopeDto
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -22,8 +21,21 @@ import java.util.concurrent.RejectedExecutionException
 class FolioQuery : Record {
     @Field var text: String = ""
     @Field var scope: String = "all"
+    @Field var collectionId: String? = null
+    @Field var facets: List<FolioFacetSelection> = emptyList()
     @Field var offset: Long = 0
     @Field var limit: Int = 40
+}
+
+class FolioFacetSelection : Record {
+    @Field var kind: String = ""
+    @Field var value: String = ""
+}
+
+class FolioCollectionInput : Record {
+    @Field var name: String = ""
+    @Field var icon: String = "folder"
+    @Field var color: String = "gray"
 }
 
 class FolioImportFile : Record {
@@ -59,34 +71,15 @@ class FolioNativeModule : Module() {
             }
         }
 
+        AsyncFunction("snapshot") { promise: Promise ->
+            perform(promise) { snapshot(requireEngine().loadCachedLibrary()) }
+        }
+
         AsyncFunction("query") { request: FolioQuery, promise: Promise ->
             perform(promise) {
-                if (request.offset < 0 || request.limit !in 1..100) {
-                    throw CodedException("ERR_FOLIO_QUERY", "查询范围无效。", null)
-                }
-                val scope = when (request.scope) {
-                    "all" -> QueryScopeDto.ALL
-                    "favorites" -> QueryScopeDto.FAVORITES
-                    "recent" -> QueryScopeDto.RECENT
-                    else -> throw CodedException("ERR_FOLIO_QUERY", "查询范围无效。", null)
-                }
-                val page = requireEngine().queryLibrary(LibraryQueryDto(
-                    text = request.text.takeIf { it.isNotEmpty() }, scope = scope, collectionId = null,
-                    facets = emptyList(), allowedFaceIds = null, allowedSourcePaths = null,
-                    offset = request.offset.toULong(), limit = request.limit.toULong()
-                ))
-                mapOf("totalMatches" to page.totalMatches.toDouble(), "families" to page.families.map { family ->
-                    mapOf("id" to family.id.value, "displayName" to family.displayName,
-                        "isFavorite" to family.isFavorite, "faces" to family.faces.map { face ->
-                            mapOf("id" to face.id.value, "identityId" to face.identityId.value,
-                                "revisionId" to face.revisionId, "styleName" to face.styleName,
-                                "sourcePath" to face.sourcePath, "faceIndex" to face.faceIndex.toLong(),
-                                "axes" to face.axes.map { axis ->
-                                    mapOf("tag" to axis.tag, "name" to axis.name, "minimum" to axis.minValue,
-                                        "defaultValue" to axis.defaultValue, "maximum" to axis.maxValue)
-                                })
-                        })
-                })
+                val query = FolioLibraryMapper.query(request.text, request.scope, request.collectionId,
+                    request.facets.map { it.kind to it.value }, request.offset, request.limit)
+                FolioLibraryMapper.page(requireEngine().queryLibrary(query))
             }
         }
 
@@ -105,6 +98,35 @@ class FolioNativeModule : Module() {
         AsyncFunction("setFavorite") { identityIds: List<String>, favorite: Boolean, promise: Promise ->
             perform(promise) {
                 requireEngine().setFavorite(identityIds.map { IdentityIdDto(it) }, favorite)
+                snapshot(requireEngine().loadCachedLibrary())
+            }
+        }
+
+        AsyncFunction("createCollection") { input: FolioCollectionInput, promise: Promise ->
+            perform(promise) {
+                requireEngine().createCollectionWithIcon(input.name, input.icon, input.color)
+                snapshot(requireEngine().loadCachedLibrary())
+            }
+        }
+
+        AsyncFunction("updateCollection") { id: String, input: FolioCollectionInput, promise: Promise ->
+            perform(promise) {
+                requireEngine().updateCollection(CollectionIdDto(id), input.name, input.icon, input.color)
+                snapshot(requireEngine().loadCachedLibrary())
+            }
+        }
+
+        AsyncFunction("deleteCollection") { id: String, promise: Promise ->
+            perform(promise) {
+                requireEngine().deleteCollection(CollectionIdDto(id))
+                snapshot(requireEngine().loadCachedLibrary())
+            }
+        }
+
+        AsyncFunction("setCollectionMembers") { id: String, identityIds: List<String>, member: Boolean, promise: Promise ->
+            perform(promise) {
+                requireEngine().setCollectionMembers(CollectionIdDto(id), identityIds.map { IdentityIdDto(it) }, member)
+                snapshot(requireEngine().loadCachedLibrary())
             }
         }
 
@@ -136,11 +158,7 @@ class FolioNativeModule : Module() {
     private fun requireEngine() = engine
         ?: throw CodedException("ERR_FOLIO_NOT_READY", "字体库尚未就绪。", null)
 
-    private fun snapshot(value: LibrarySnapshotDto) = mapOf(
-        "familyCount" to value.familyCount.toDouble(), "faceCount" to value.faceCount.toDouble(),
-        "variableFamilyCount" to value.variableFamilyCount.toDouble(), "recentCount" to value.recentCount.toDouble(),
-        "damagedCount" to value.health.damagedFiles.toDouble()
-    )
+    private fun snapshot(value: LibrarySnapshotDto) = FolioLibraryMapper.snapshot(value)
 
     private fun perform(promise: Promise, action: () -> Any) {
         try {

@@ -1,15 +1,19 @@
 import { getDocumentAsync } from 'expo-document-picker';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import {
-  MagnifyingGlassIcon, PlusIcon, XIcon,
+  CaretDownIcon, FunnelSimpleIcon, MagnifyingGlassIcon, PlusIcon, XIcon,
 } from 'phosphor-react-native';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   AccessibilityInfo, ActivityIndicator, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
   Text, TextInput, useColorScheme, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CollectionsPanel } from './CollectionsPanel';
+import { FilterPanel } from './FilterPanel';
+import { PanelAction } from './panel-content';
 import { FontCard } from './FontCard';
 import { FontDetails } from './FontDetails';
 import { FontNavigation } from './FontNavigation';
@@ -17,7 +21,7 @@ import { ImportResults } from './ImportResults';
 import { ViewModeMenu } from './ViewModeMenu';
 import { AndroidHeaderBackdrop, AndroidHeaderControls } from './HeaderControls';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
-import { LibraryError, summarizeImport, type FontFamily, type ImportReport, type LibraryPage, type LibraryQuery, type LibrarySnapshot } from './library';
+import { LibraryError, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
 import { library } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
@@ -26,38 +30,58 @@ import {
 import { IconButton, themes, type Theme } from './ui';
 
 const pageSize = 40;
-const emptyPage: LibraryPage = { totalMatches: 0, families: [] };
+const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
+const emptyBrowse = { searchText: '', searchOpen: false, facets: [] as FacetSelection[] };
 const LibraryList = Platform.OS === 'android' ? Animated.FlatList<FontFamily> : FlatList<FontFamily>;
 
-function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, scope = 'all', destination = 'local', onSnapshotChange, onOpenFamily }: {
+function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, target, destination = 'local',
+  snapshot, libraryVersion, initialError, onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily }: {
   theme: Theme;
   bottomInset: number;
   active: boolean;
   sourceId?: string;
   sidebar?: boolean;
-  scope?: LibraryQuery['scope'];
+  target: LibraryTarget;
   destination?: NativeDestination;
-  onSnapshotChange?: (snapshot: LibrarySnapshot) => void;
-  onOpenFamily: (family: FontFamily, onFavorite: (family: FontFamily) => Promise<void>) => void;
+  snapshot: LibrarySnapshot | null;
+  libraryVersion: number;
+  initialError: string | null;
+  onSnapshotChange: (snapshot: LibrarySnapshot) => void;
+  onRetryInitialize: () => void;
+  onTargetChange: (target: LibraryTarget) => void;
+  onOpenFamily: (family: FontFamily) => void;
 }) {
-  const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
-  const [ready, setReady] = useState(false);
+  const { scope } = target;
+  const collectionId = target.scope === 'collection' ? target.collectionId : undefined;
+  const scopeKey = targetKey(target);
+  const ready = snapshot !== null;
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [browseStates, setBrowseStates] = useState<Record<string, typeof emptyBrowse>>({});
+  const browse = browseStates[scopeKey] ?? emptyBrowse;
+  const { searchText, searchOpen, facets: selectedFacets } = browse;
+  const updateBrowse = (change: Partial<typeof emptyBrowse>) => setBrowseStates((previous) => ({
+    ...previous, [scopeKey]: { ...(previous[scopeKey] ?? emptyBrowse), ...change },
+  }));
+  const setSearchText = (value: string) => updateBrowse({ searchText: value });
+  const setSearchOpen = (value: boolean) => updateBrowse({ searchOpen: value });
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [collectionsOpen, setCollectionsOpen] = useState(false);
+  const [facetOptions, setFacetOptions] = useState<{ key: string; options: FacetOption[] }>({ key: '', options: [] });
+  const [facetFailure, setFacetFailure] = useState<{ key: string; message: string } | null>(null);
   const [brandOpacity] = useState(() => new Animated.Value(1));
   const [headerScrollOffset] = useState(() => new Animated.Value(0));
-  const [searchText, setSearchText] = useState('');
-  const [queryText, setQueryText] = useState('');
-  const [pagination, setPagination] = useState({ scope, offset: 0 });
-  const offset = pagination.scope === scope ? pagination.offset : 0;
-  const [loadedQuery, setLoadedQuery] = useState({ key: '', request: '', page: emptyPage });
+  const [debouncedSearch, setDebouncedSearch] = useState({ key: scopeKey, text: '' });
+  const queryText = debouncedSearch.key === scopeKey ? debouncedSearch.text : searchText.trim();
+  const [pagination, setPagination] = useState({ key: '', offset: 0 });
+  const [loadedQuery, setLoadedQuery] = useState({ key: '', request: '', version: -1, page: emptyPage });
+  const loadedQueryRef = useRef(loadedQuery);
+  useEffect(() => { loadedQueryRef.current = loadedQuery; }, [loadedQuery]);
   const [importing, setImporting] = useState(false);
   const importInFlight = useRef(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [importDetailsOpen, setImportDetailsOpen] = useState(false);
-  const [revision, setRevision] = useState(0);
   const [mode, setMode] = useState<'grid' | 'list'>('grid');
   const searchInput = useRef<TextInput>(null);
   const list = useRef<FlatList<FontFamily>>(null);
@@ -69,11 +93,19 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const { width: windowWidth } = useWindowDimensions();
   const [contentWidth, setContentWidth] = useState(0);
   const width = contentWidth || windowWidth - inset.left - inset.right;
-  const scrollTopInset = nativeInsets.contentTop ?? nativeInsets.top + (sidebar ? 0 : headerHeight * 1.25);
+  const scrollTopInset = Math.max(nativeInsets.contentTop ?? 0, nativeInsets.top + (sidebar ? 0 : headerHeight * 1.25));
   const androidContentTop = inset.top + headerHeight;
   const reservesWindowControls = usesNativeSidebar && !sidebar && Number(Platform.Version) >= 26;
-  const queryKey = JSON.stringify([scope, queryText, revision, retry]);
-  const requestKey = JSON.stringify([queryKey, offset]);
+  const queryKey = JSON.stringify([scope, collectionId, queryText, selectedFacets, retry]);
+  const offset = pagination.key === queryKey && loadedQuery.key === queryKey ? pagination.offset : 0;
+  const requestKey = JSON.stringify([queryKey, offset, libraryVersion]);
+  const optionsKey = JSON.stringify([scopeKey, queryText, libraryVersion, retry]);
+  const facetError = facetFailure?.key === optionsKey ? facetFailure.message : null;
+  const optionsLoading = ready && facetOptions.key !== optionsKey && !facetError;
+  const shownError = initialError ?? error;
+  const hasConditions = !!queryText || selectedFacets.length > 0;
+  const scopeTitle = scope === 'collection' ? snapshot?.collections.find((item) => item.id === collectionId)?.name ?? '收藏夹'
+    : scope === 'favorites' ? '星标收藏' : scope === 'recent' ? '最近' : '全部字体';
   const loading = ready && loadedQuery.request !== requestKey;
   const page = loadedQuery.key === queryKey ? loadedQuery.page : emptyPage;
   const waitingForSearch = searchText.trim() !== queryText;
@@ -97,49 +129,66 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   }, [brandOpacity, searchOpen]);
 
   useEffect(() => {
-    let mounted = true;
-    library.initialize().then((value) => {
-      if (mounted) { setSnapshot(value); setReady(true); setError(null); }
-    }).catch(() => {
-      if (mounted) setError('无法打开字体库，请重试。');
-    });
-    return () => { mounted = false; };
-  }, [retry]);
-
-  useEffect(() => { if (snapshot) onSnapshotChange?.(snapshot); }, [snapshot, onSnapshotChange]);
+    const timer = setTimeout(() => setDebouncedSearch({ key: scopeKey, text: searchText.trim() }), 180);
+    return () => clearTimeout(timer);
+  }, [searchText, scopeKey]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setQueryText(searchText.trim());
-      setPagination({ scope, offset: 0 });
-      list.current?.scrollToOffset({ offset: 0, animated: false });
-    }, 180);
-    return () => clearTimeout(timer);
-  }, [searchText, scope]);
+    list.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [queryKey]);
 
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
-    library.query({ text: queryText, scope, offset, limit: pageSize }, controller.signal)
+    const queryTarget: LibraryTarget = collectionId ? { scope: 'collection', collectionId }
+      : { scope: scope as 'all' | 'favorites' | 'recent' };
+    library.query({ ...queryTarget, text: queryText, facets: [], offset: 0, limit: 1 }, controller.signal)
       .then((result) => {
-        if (controller.signal.aborted) return;
-        setLoadedQuery((previous) => {
-          const families = offset > 0 && previous.key === queryKey
-            ? Array.from(new Map([...previous.page.families, ...result.families].map((family) => [family.id, family])).values())
-            : result.families;
-          return { key: queryKey, request: requestKey, page: { ...result, families } };
-        });
-        setError(null);
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted && !(cause instanceof LibraryError && cause.code === 'cancelled')) {
-          setError('暂时无法读取字体库，请重试。');
-          setLoadedQuery((previous) => ({ key: queryKey, request: requestKey,
-            page: previous.key === queryKey ? previous.page : emptyPage }));
-        }
+        if (!controller.signal.aborted) setFacetOptions({ key: optionsKey, options: result.facets });
+      }).catch(() => {
+        if (!controller.signal.aborted) setFacetFailure({ key: optionsKey, message: '暂时无法读取筛选条件，请重试。' });
       });
     return () => controller.abort();
-  }, [ready, queryText, scope, offset, queryKey, requestKey]);
+  }, [ready, scope, collectionId, queryText, optionsKey]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+    const queryTarget: LibraryTarget = collectionId ? { scope: 'collection', collectionId }
+      : { scope: scope as 'all' | 'favorites' | 'recent' };
+    const previous = loadedQueryRef.current;
+    const reloading = previous.key === queryKey && previous.version !== libraryVersion;
+    async function readPage() {
+      const request = { ...queryTarget, text: queryText, facets: selectedFacets, limit: pageSize };
+      const result = await library.query({ ...request, offset: reloading ? 0 : offset }, controller.signal);
+      // 用户状态变化后重读已加载窗口，保留详情返回时的浏览位置。
+      if (reloading) {
+        for (let start = pageSize; start <= offset && start < result.totalMatches; start += pageSize) {
+          const next = await library.query({ ...request, offset: start }, controller.signal);
+          result.families.push(...next.families);
+        }
+      }
+      return result;
+    }
+    readPage().then((result) => {
+      if (controller.signal.aborted) return;
+      if (previous.key !== queryKey) setPagination({ key: queryKey, offset: 0 });
+      setLoadedQuery((previous) => {
+        const families = offset > 0 && !reloading && previous.key === queryKey
+          ? Array.from(new Map([...previous.page.families, ...result.families].map((family) => [family.id, family])).values())
+          : result.families;
+        return { key: queryKey, request: requestKey, version: libraryVersion, page: { ...result, families } };
+      });
+      setError(null);
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted && !(cause instanceof LibraryError && cause.code === 'cancelled')) {
+        setError('暂时无法读取字体库，请重试。');
+        setLoadedQuery((previous) => ({ key: queryKey, request: requestKey, version: previous.version,
+          page: previous.key === queryKey ? previous.page : emptyPage }));
+      }
+    });
+    return () => controller.abort();
+  }, [ready, queryText, scope, collectionId, selectedFacets, offset, queryKey, requestKey, libraryVersion]);
 
   async function importFont() {
     if (!ready || importInFlight.current) return;
@@ -152,22 +201,12 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       setImportReport(null);
       const report = await library.importFonts(result.assets.map(({ uri, name }) => ({ uri, name })));
       setImportReport(report);
-      setSnapshot(report.snapshot);
-      setPagination({ scope, offset: 0 });
-      setRevision((value) => value + 1);
+      onSnapshotChange(report.snapshot);
+      setPagination({ key: queryKey, offset: 0 });
+      list.current?.scrollToOffset({ offset: 0, animated: false });
     } catch (cause: unknown) {
       setImportError(cause instanceof LibraryError ? cause.message : '无法完成导入，请确认文件可用、空间充足后重试。');
     } finally { importInFlight.current = false; setImporting(false); }
-  }
-
-  async function favorite(family: FontFamily) {
-    await library.setFavorite([...new Set(family.faces.map((face) => face.identityId))], !family.isFavorite);
-    setLoadedQuery((previous) => ({ ...previous, page: { ...previous.page,
-      families: previous.page.families.map((item) => item.id === family.id ? { ...item, isFavorite: !family.isFavorite } : item) } }));
-    if (scope === 'favorites') {
-      setPagination({ scope, offset: 0 });
-      setRevision((value) => value + 1);
-    }
   }
 
   function closeSearch() {
@@ -178,19 +217,22 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
 
   function retryQuery() {
     setError(null);
-    setPagination({ scope, offset: 0 });
+    setPagination({ key: queryKey, offset: 0 });
     setRetry((value) => value + 1);
+    if (!ready) onRetryInitialize();
   }
 
   function loadMore() {
-    if (loading || error || waitingForSearch || page.families.length === 0) return;
+    if (loading || shownError || waitingForSearch || page.families.length === 0) return;
     if (offset + pageSize < page.totalMatches) {
-      setPagination((value) => value.scope === scope && value.offset !== offset ? value : { scope, offset: offset + pageSize });
+      setPagination((value) => value.key === queryKey && value.offset !== offset ? value : { key: queryKey, offset: offset + pageSize });
     }
   }
 
   const toggleSearch = () => { if (searchOpen) closeSearch(); else setSearchOpen(true); };
-  const titles = { local: '全部字体', recent: '最近', favorites: '收藏', cloud: '云端字体', settings: '设置' };
+  const title = active ? scopeTitle : destination === 'cloud' ? '云端字体' : destination === 'settings' ? '设置' : '最近';
+  const openFilter = () => { Keyboard.dismiss(); setFilterOpen(true); };
+  const openCollections = () => { Keyboard.dismiss(); setCollectionsOpen(true); };
   const fontList = (
       <LibraryList ref={list} key={mode} data={page.families} keyExtractor={(family) => family.id}
         numColumns={mode === 'grid' ? 2 : 1} columnWrapperStyle={mode === 'grid' ? styles.columns : undefined}
@@ -210,12 +252,20 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         renderItem={({ item }) => (
           <View style={mode === 'grid' ? { width: (width - 32) / 2 } : styles.listItem}>
             <FontCard family={item} mode={mode} theme={theme}
-              onOpen={() => { Keyboard.dismiss(); onOpenFamily(item, favorite); }} />
+              onOpen={() => { Keyboard.dismiss(); onOpenFamily(item); }} />
           </View>
         )}
         ListHeaderComponent={
           <View>
-            {!queryText && scope === 'all' && (
+            <View style={styles.libraryTools}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`切换字体库，当前${scopeTitle}`}
+                disabled={!ready} onPress={openCollections} style={styles.rangeButton}>
+                <Text numberOfLines={1} style={[styles.rangeTitle, { color: theme.label }]}>{scopeTitle}</Text>
+                <CaretDownIcon size={16} color={theme.secondary} />
+              </Pressable>
+              {(searchOpen || selectedFacets.length > 0) && <PanelAction label={selectedFacets.length ? `${selectedFacets.length} 项筛选` : '筛选'} theme={theme} onPress={openFilter} />}
+            </View>
+            {!hasConditions && scope === 'all' && (
               <View style={styles.hero}>
                 <Image source={require('../assets/design/lasso.svg')} style={styles.lasso} contentFit="contain" />
                 <Text accessibilityRole="header" style={[styles.heroTitle, { color: theme.label }]}>
@@ -226,8 +276,11 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
                 </Text>}
               </View>
             )}
-            {(queryText !== '' || scope !== 'all') && <Text accessibilityRole="header" style={[styles.searchSummary, { color: theme.secondary }]}>
+            {(hasConditions || scope !== 'all') && <Text accessibilityRole="header" style={[styles.searchSummary, { color: theme.secondary }]}>
               {loading && page.families.length === 0 ? '正在读取…' : `${page.totalMatches} 个${queryText ? '搜索结果' : '字体'}`}
+            </Text>}
+            {page.unresolvedScopeItems > 0 && <Text style={[styles.searchSummary, { color: theme.secondary }]}>
+              {page.unresolvedScopeItems} 个成员暂不可用
             </Text>}
             {(importReport || importError) && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
               <Text accessibilityRole="alert" style={[styles.noticeText, { color: importError ? theme.danger : theme.secondary }]}>
@@ -240,8 +293,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
                   <Text style={{ color: theme.accent }}>{importError ? '重新选择' : '查看详情'}</Text>
                 </Pressable>}
             </View>}
-            {error && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
-              <Text accessibilityRole="alert" style={[styles.noticeText, { color: theme.danger }]}>{error}</Text>
+            {shownError && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
+              <Text accessibilityRole="alert" style={[styles.noticeText, { color: theme.danger }]}>{shownError}</Text>
               {usesNativeControls ? <NativeActionButton label="重试" color={theme.accent} onPress={retryQuery} plain />
                 : <Pressable accessibilityRole="button" onPress={retryQuery} style={styles.retry}>
                 <Text style={{ color: theme.accent }}>重试</Text>
@@ -250,13 +303,14 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           </View>
         }
         ListEmptyComponent={
-          !ready || loading || waitingForSearch ? (error ? null : <ActivityIndicator style={styles.empty} color={theme.accent} accessibilityLabel="正在读取字体库" />)
-            : error ? null : <View style={styles.empty}>
-              <Text style={[styles.emptyTitle, { color: theme.label }]}>{queryText ? '没有找到匹配的字体'
-                : scope === 'favorites' ? '还没有收藏字体' : scope === 'recent' ? '还没有最近加入的字体' : '从第一个字体开始'}</Text>
-              <Text style={[styles.emptyDetail, { color: theme.secondary }]}>{queryText ? '试试其他名称或样式。'
-                : scope === 'favorites' ? '收藏的字体会显示在这里。' : '多选 TTF、OTF、TTC、OTC 字体，或导入 ZIP 字体包。'}</Text>
-              {!queryText && scope !== 'favorites' && (usesNativeControls ? <NativeActionButton label={importing ? '正在导入…' : '导入字体'}
+          !ready || loading || waitingForSearch ? (shownError ? null : <ActivityIndicator style={styles.empty} color={theme.accent} accessibilityLabel="正在读取字体库" />)
+            : shownError ? null : <View style={styles.empty}>
+              <Text style={[styles.emptyTitle, { color: theme.label }]}>{hasConditions ? '没有找到匹配的字体'
+                : page.unresolvedScopeItems > 0 ? '暂无可用字体' : scope === 'favorites' ? '还没有收藏字体' : scope === 'collection' ? '收藏夹为空' : scope === 'recent' ? '还没有最近加入的字体' : '从第一个字体开始'}</Text>
+              <Text style={[styles.emptyDetail, { color: theme.secondary }]}>{hasConditions ? '调整搜索或筛选条件。'
+                : page.unresolvedScopeItems > 0 ? '成员记录已保留，请确认字体来源可用。' : scope === 'favorites' ? '收藏的字体会显示在这里。' : scope === 'collection' ? '在字体详情中将字体加入收藏夹。' : '多选 TTF、OTF、TTC、OTC 字体，或导入 ZIP 字体包。'}</Text>
+              {selectedFacets.length > 0 && <PanelAction label="清空筛选" theme={theme} onPress={() => updateBrowse({ facets: [] })} />}
+              {!hasConditions && scope === 'all' && (usesNativeControls ? <NativeActionButton label={importing ? '正在导入…' : '导入字体'}
                 systemImage="plus" color={theme.accent} onPress={importFont} disabled={importing} prominent />
                 : <Pressable accessibilityRole="button" disabled={importing} onPress={importFont}
                 style={({ pressed }) => [styles.importButton, { backgroundColor: theme.accent, opacity: pressed || importing ? 0.6 : 1 }]}>
@@ -297,10 +351,10 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         {Platform.OS === 'android' ? <AndroidHeaderControls theme={theme} sourceId={sourceId} active={active}
           mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
           ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
-          onSearch={toggleSearch} onSearchTextChange={setSearchText} /> : usesNativeControls ? <NativeHeaderControls theme={theme} mode={mode} searchOpen={searchOpen}
+          onSearch={toggleSearch} onSearchTextChange={setSearchText} onFilter={openFilter} filterCount={selectedFacets.length} /> : usesNativeControls ? <NativeHeaderControls theme={theme} mode={mode} searchOpen={searchOpen}
           width={width - 52} searchText={searchText} onSearchTextChange={setSearchText}
           ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
-          onSearch={toggleSearch} /> : searchOpen ? (
+          onSearch={toggleSearch} onFilter={openFilter} filterCount={selectedFacets.length} /> : searchOpen ? (
           <View style={[styles.search, { backgroundColor: theme.surface }]}>
             <MagnifyingGlassIcon size={20} color={theme.secondary} />
             <TextInput ref={searchInput} autoFocus accessibilityLabel="搜索字体" placeholder="搜索字体名称或样式"
@@ -317,6 +371,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
             </Pressable>
           </View>
         ) : <View style={styles.headerActions}>
+          <IconButton theme={theme} label="筛选字体" disabled={!ready} selected={selectedFacets.length > 0} onPress={openFilter}>
+            <FunnelSimpleIcon size={20} color={selectedFacets.length > 0 ? theme.accent : theme.label} />
+          </IconButton>
           <ViewModeMenu sourceId={sourceId} theme={theme} mode={mode} active={active && !importing} onModeChange={setMode} />
           <IconButton theme={theme} label="搜索字体" onPress={() => setSearchOpen(true)}>
             <MagnifyingGlassIcon size={20} color={theme.label} />
@@ -328,17 +385,24 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       </View>}
       {Platform.OS === 'android' ? <NavigationBackdrop sourceId={active ? sourceId : ''}
         active={active} style={[styles.screen, { backgroundColor: theme.background }]}>{fontList}</NavigationBackdrop> : fontList}
+      <FilterPanel visible={filterOpen && active} theme={theme}
+        options={facetOptions.key === optionsKey ? facetOptions.options : page.facets} counts={page.facets}
+        selected={selectedFacets} loading={loading || optionsLoading || waitingForSearch} error={shownError ?? facetError}
+        totalMatches={page.totalMatches} onChange={(facets) => updateBrowse({ facets })}
+        onClose={() => setFilterOpen(false)} onRetry={retryQuery} />
+      <CollectionsPanel visible={collectionsOpen && active} theme={theme} target={target} snapshot={snapshot}
+        onSnapshot={onSnapshotChange} onSelect={onTargetChange} onClose={() => setCollectionsOpen(false)} />
       <ImportResults report={importReport} visible={importDetailsOpen && active} theme={theme}
         onClose={() => setImportDetailsOpen(false)} />
     </NativeScrollContainer>
   );
 
   if (sidebar) {
-    return <NativeLibraryContent theme={theme} title={titles[destination]} active={active}
+    return <NativeLibraryContent theme={theme} title={title} active={active}
       subtitle={snapshot ? `${scope === 'all' ? snapshot.familyCount : page.totalMatches} 个字体` : '字体库'}
       mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
       ready={ready} importing={importing} onModeChange={setMode} onSearch={toggleSearch}
-      onSearchTextChange={setSearchText} onImport={importFont}>
+      onSearchTextChange={setSearchText} onImport={importFont} onFilter={openFilter} filterCount={selectedFacets.length}>
       {active ? content : <View style={[styles.screen, { backgroundColor: theme.background }]} />}
     </NativeLibraryContent>;
   }
@@ -357,24 +421,51 @@ function MobileApp() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [nativeDestination, setNativeDestination] = useState<NativeDestination>('local');
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
-  const [fontPage, setFontPage] = useState<{
-    family: FontFamily;
-    onFavorite: (family: FontFamily) => Promise<void>;
-  } | null>(null);
+  const [libraryVersion, setLibraryVersion] = useState(0);
+  const [initializeRetry, setInitializeRetry] = useState(0);
+  const [initialError, setInitialError] = useState<string | null>(null);
+  const [libraryTarget, setLibraryTarget] = useState<LibraryTarget>({ scope: 'all' });
+  const [fontPage, setFontPage] = useState<FontFamily | null>(null);
   const [fontPageVisible, setFontPageVisible] = useState(false);
-  const destination = !sidebar && nativeDestination === 'favorites' ? 'local' : nativeDestination;
+  const destination: NativeDestination = sidebar && nativeDestination === 'local'
+    ? libraryTarget.scope === 'favorites' ? 'favorites'
+      : libraryTarget.scope === 'collection' ? `collection:${libraryTarget.collectionId}` : 'local'
+    : nativeDestination;
+  const screenTarget: LibraryTarget = sidebar && nativeDestination === 'recent' ? { scope: 'recent' } : libraryTarget;
+  const libraryActive = nativeDestination === 'local' || (sidebar && nativeDestination === 'recent');
 
-  function openFamily(family: FontFamily, onFavorite: (family: FontFamily) => Promise<void>) {
-    setFontPage({ family, onFavorite });
-    setFontPageVisible(true);
+  useEffect(() => {
+    let mounted = true;
+    library.initialize().then((value) => {
+      if (mounted) { setSnapshot(value); setInitialError(null); }
+    }).catch(() => { if (mounted) setInitialError('无法打开字体库，请重试。'); });
+    return () => { mounted = false; };
+  }, [initializeRetry]);
+
+  const applySnapshot = useCallback((value: LibrarySnapshot) => {
+    setSnapshot(value);
+    setLibraryVersion((version) => version + 1);
+    setLibraryTarget((target) => target.scope === 'collection' && !value.collections.some((item) => item.id === target.collectionId)
+      ? { scope: 'all' } : target);
+  }, []);
+
+  function selectTarget(target: LibraryTarget) { setLibraryTarget(target); setNativeDestination('local'); }
+  function navigate(value: NativeDestination) {
+    Keyboard.dismiss();
+    if (value === 'favorites') selectTarget({ scope: 'favorites' });
+    else if (value.startsWith('collection:')) selectTarget({ scope: 'collection', collectionId: value.slice('collection:'.length) });
+    else {
+      setNativeDestination(value);
+      if (value === 'local' && sidebar) setLibraryTarget({ scope: 'all' });
+    }
   }
+  function openFamily(family: FontFamily) { setFontPage(family); setFontPageVisible(true); }
 
   async function favorite() {
     if (!fontPage) return;
-    const { family, onFavorite } = fontPage;
-    await onFavorite(family);
-    setFontPage((current) => current?.family.id === family.id
-      ? { ...current, family: { ...current.family, isFavorite: !family.isFavorite } } : current);
+    const family = fontPage;
+    applySnapshot(await library.setFavorite([...new Set(family.identityIds)], !family.isFavorite));
+    setFontPage((current) => current?.id === family.id ? { ...current, isFavorite: !family.isFavorite } : current);
   }
 
   useEffect(() => {
@@ -387,11 +478,11 @@ function MobileApp() {
     <View style={[styles.app, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
-        onDestinationChange={(value) => { Keyboard.dismiss(); setNativeDestination(value); }}>
-        <LibraryScreen theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={setSnapshot}
-          scope={sidebar && destination === 'favorites' ? 'favorites'
-            : sidebar && destination === 'recent' ? 'recent' : 'all'}
-          active={destination === 'local' || (sidebar && (destination === 'recent' || destination === 'favorites'))}
+        onDestinationChange={navigate}>
+        <LibraryScreen theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
+          target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
+          onTargetChange={selectTarget} onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
+          active={libraryActive}
           onOpenFamily={openFamily} />
       </NativeNavigation>
     </View>
@@ -402,7 +493,10 @@ function MobileApp() {
       <StatusBar style="auto" />
       <View style={styles.screen}>
         <View style={[styles.screen, tab !== 'local' && styles.hidden]}>
-          <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily} />
+          <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
+            target={libraryTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
+            onSnapshotChange={applySnapshot} onTargetChange={setLibraryTarget}
+            onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />
         </View>
         {tab !== 'local' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
           style={[styles.screen, { backgroundColor: theme.background }]}><View style={styles.screen} /></NavigationBackdrop>}
@@ -415,13 +509,16 @@ function MobileApp() {
 
   return <FontNavigation visible={fontPageVisible} theme={theme}
     onDismissed={() => { setFontPageVisible(false); setFontPage(null); }}
-    detail={fontPage && <FontDetails key={fontPage.family.id} family={fontPage.family} theme={theme}
-      onClose={() => setFontPageVisible(false)} onFavorite={favorite} />}>
+    detail={fontPage && <FontDetails key={fontPage.id} family={fontPage} theme={theme}
+      snapshot={snapshot} collectionId={screenTarget.scope === 'collection' ? screenTarget.collectionId : undefined}
+      onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />}>
     {content}
   </FontNavigation>;
 }
 
 export default function App() {
+  // 原生导航完成挂载后移除启动画面。
+  useEffect(() => { SplashScreen.hide(); }, []);
   return <SafeAreaProvider><MobileApp /></SafeAreaProvider>;
 }
 
@@ -434,7 +531,10 @@ const styles = StyleSheet.create({
   androidHeader: { zIndex: 2 },
   headerBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
   brand: { flex: 1, gap: 8 }, logo: { width: 45.011, height: 16 },
-  nativeBrand: { position: 'absolute', left: 26, right: 210 },
+  nativeBrand: { position: 'absolute', left: 26, right: 254 },
+  libraryTools: { paddingHorizontal: 12, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rangeButton: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rangeTitle: { fontSize: 16, fontWeight: '500', flexShrink: 1 },
   libraryCount: { fontSize: 14, lineHeight: 16, fontWeight: '500' },
   headerActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   search: { flex: 1, paddingHorizontal: 12, minHeight: 44, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 8 },

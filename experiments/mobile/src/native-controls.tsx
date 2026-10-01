@@ -6,7 +6,7 @@ import type { Theme } from './ui';
 export const usesNativeControls = false;
 export const usesNativeSidebar = false;
 
-export type NativeDestination = 'local' | 'recent' | 'favorites' | 'cloud' | 'settings';
+export type NativeDestination = 'local' | 'recent' | 'favorites' | 'cloud' | 'settings' | `collection:${string}`;
 
 export interface NativeNavigationProps {
   children: ReactNode;
@@ -29,6 +29,8 @@ export interface NativeHeaderProps {
   onSearch: () => void;
   onSearchTextChange: (text: string) => void;
   onImport: () => void;
+  onFilter: () => void;
+  filterCount: number;
 }
 
 export interface NativeActionProps {

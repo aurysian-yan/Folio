@@ -7,10 +7,13 @@
 - 独立 pnpm workspace、固定依赖及锁文件，Android/iOS 正式身份使用 `com.folio.mobile.poc`，Debug 身份使用 `com.folio.mobile.poc.dev`。
 - 共享 React Native 字体主页按 Figma 实现双列卡片、网格/列表切换、真实文件导入、搜索、分页、字款选择、收藏和原生预览；空库不填充示例数据。
 - Swift/Kotlin 本地 Expo Module 复用 `folio-ffi`；SQLite、解析和查询均由现有 Rust 实现。
+- 筛选面板选择后立即生效，支持九组条件、同组并集与跨组交集；保留零匹配候选以便取消条件，并可一键清空。搜索、筛选和分页共用 Rust 查询。
+- Android 筛选使用 Gorhom 底部 Drawer，沿用应用主题和分类卡片，支持向下拖动、遮罩点击及返回键关闭。新增手势与动画原生依赖后，需重新编译 development build，不能仅热更新 JS。
+- 本地范围支持全部字体、星标收藏和手动收藏夹。收藏夹支持新建、改名、图标、颜色、删除，以及在字体详情中加入或移出完整字族；删除收藏夹保留字体与星标。各范围分别保留搜索与筛选条件。
 - 导入是复制到实验应用的托管目录，验证通过后以文件根加入 Rust 库；无系统字体安装、全盘存储权限或 iCloud capability。
 - 系统文件选择器支持多选字体与 ZIP；原生逐项读取、校验和按内容去重，完成后显示汇总及文件明细。ZIP 遍历子目录中的 TTF/OTF/TTC/OTC，支持 Stored/Deflate，忽略说明文件和嵌套压缩包，不支持加密、分卷或文件夹导入。单字体上限 64 MiB、单 ZIP 上限 256 MiB、每包 10,000 条目，每批最多 1,000 个字体且总读取字体内容不超过 512 MiB；失败继续处理其他文件，刷新失败仅回滚本批新增来源。
 - 预览按文件、TTC index、revision 和 axes 定位；不通过全局注册字体。iOS 使用 CoreText，Android 使用原生 Font/字形塑形与绘制。
-- iPadOS 常规宽度使用 `@expo/ui` 的原生 SwiftUI NavigationSplitView、侧边栏 List 和系统 Toolbar，提供全部字体、最近与收藏导航；侧拉及宽度小于 600 点的窗口沿用 iPhone 的原生 TabView、顶部操作区与搜索布局。Menu 和 Button 在 iOS 26 及以上使用系统 Liquid Glass，旧系统使用原生兼容样式。云端、设置与紧凑布局最近页面保持空白。
+- iPadOS 常规宽度使用 `@expo/ui` 的原生 SwiftUI NavigationSplitView、侧边栏 List 和系统 Toolbar，提供全部字体、最近、星标与收藏夹导航；侧拉及宽度小于 600 点的窗口沿用 iPhone 的原生 TabView、顶部操作区与搜索布局。iPhone/Android 从字体库范围入口访问收藏夹，iOS 筛选和收藏夹使用系统 Sheet。Menu 和 Button 在 iOS 26 及以上使用系统 Liquid Glass，旧系统使用原生兼容样式。云端、设置与紧凑布局最近页面保持空白，智能收藏夹及云同步尚未接入。
 - 系统浅色/深色、Safe Area 和列表虚拟化。更新 iOS 开发包后重定位托管字体，保留字体库和收藏。
 - Android 底栏由本地 Expo `FolioNavigation` 模块承载 Compose，保留本地、最近、云端、设置四项。外观与动效采用 Nexio 固定提交的均衡材质，RN 内容通过独立 RenderNode 提供背景；API 33+ 支持胶囊折射、31–32 支持模糊、28–30 使用半透明兼容材质。来源及许可见 [源码记录](modules/folio-native/android/third-party/NOTICE.md)。
 
@@ -112,6 +115,6 @@ pnpm exec expo install --check
 pnpm exec expo export --platform all --output-dir .build/bundle
 ```
 
-`test:swift` 需要先生成 bindings/samples 并执行 `pnpm pods`，验证 macOS 主机上的真实 Swift ↔ Rust 调用及 Swift 原生批量/ZIP 导入器，不能代表移动运行验收。Android 导入器回归测试在生成 bindings/samples 后从 `android` 目录执行 `./gradlew :folio-native:testDebugUnitTest`，使用 `pnpm bindings` 构建的主机 Rust 库，不代表 Android 设备预览验收。查询的 `AbortSignal` 立即取消 JS 等待并丢弃迟到结果；现有同步 Rust 调用会继续执行，没有原生查询中断承诺。
+`test:swift` 需要先生成 bindings/samples 并执行 `pnpm pods`，验证 macOS 主机上的真实 Swift ↔ Rust 调用、查询映射、收藏夹持久化及 Swift 原生批量/ZIP 导入器，不能代表移动运行验收。Android 导入器与查询映射回归测试在生成 bindings/samples 后从 `android` 目录执行 `./gradlew :folio-native:testDebugUnitTest`，使用 `pnpm bindings` 构建的主机 Rust 库，不代表 Android 设备预览验收。查询的 `AbortSignal` 立即取消 JS 等待并丢弃迟到结果；现有同步 Rust 调用会继续执行，没有原生查询中断承诺。
 
 当前结果、实验边界和后续验收项见 [VALIDATION.md](VALIDATION.md)，架构决策见 [DECISION.md](DECISION.md)。

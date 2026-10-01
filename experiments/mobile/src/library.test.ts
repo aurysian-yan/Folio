@@ -1,15 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createLibraryClient, LibraryError, summarizeImport, type LibraryBridge, type LibraryPage } from './library.ts';
+import { createLibraryClient, LibraryError, mergeFacetOptions, normalizeFacets, summarizeImport, targetKey, type LibraryBridge, type LibraryPage, type LibrarySnapshot } from './library.ts';
 
-const emptyPage: LibraryPage = { totalMatches: 0, families: [] };
+const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
+const emptySnapshot: LibrarySnapshot = { familyCount: 0, faceCount: 0, variableFamilyCount: 0, recentCount: 0, damagedCount: 0, collections: [] };
 const query = { text: '衬线', scope: 'all' as const, offset: 40, limit: 40 };
 
 function mockBridge(run: LibraryBridge['query']): LibraryBridge {
   return {
-    initialize: async () => ({ familyCount: 0, faceCount: 0, variableFamilyCount: 0, recentCount: 0, damagedCount: 0 }),
-    importFonts: async () => ({ snapshot: { familyCount: 0, faceCount: 0, variableFamilyCount: 0, recentCount: 0, damagedCount: 0 }, items: [] }),
-    setFavorite: async () => {},
+    initialize: async () => emptySnapshot,
+    snapshot: async () => emptySnapshot,
+    importFonts: async () => ({ snapshot: emptySnapshot, items: [] }),
+    setFavorite: async () => emptySnapshot,
+    createCollection: async () => emptySnapshot,
+    updateCollection: async () => emptySnapshot,
+    deleteCollection: async () => emptySnapshot,
+    setCollectionMembers: async () => emptySnapshot,
     query: run,
   };
 }
@@ -102,4 +108,52 @@ test('原生错误保留原因，界面消息不包含底层信息', async () =>
     assert.equal(error.message, '暂时无法读取字体库，请重试。');
     return true;
   });
+});
+
+
+test('收藏夹查询和多维筛选原样传递，保留 Rust 计数与不可用成员', async () => {
+  const request = { ...query, scope: 'collection' as const, collectionId: 'collection-a', facets: [
+    { kind: 'weight' as const, value: '400' }, { kind: 'weight' as const, value: '700' },
+    { kind: 'script' as const, value: 'Latn' },
+  ] };
+  const response: LibraryPage = { ...emptyPage, totalMatches: 42, unresolvedScopeItems: 2,
+    facets: [{ kind: 'weight', value: '400', label: '常规', familyCount: 12 }] };
+  const client = createLibraryClient(mockBridge(async (received) => { assert.deepEqual(received, request); return response; }));
+  assert.equal(await client.query(request), response);
+});
+
+test('缺少收藏夹或非法筛选在调用原生前拒绝', () => {
+  const client = createLibraryClient(mockBridge(async () => assert.fail('不能调用原生')));
+  for (const invalid of [
+    { scope: 'collection' }, { scope: 'collection', collectionId: ' ' }, { collectionId: 'unexpected' },
+    { facets: [{ kind: 'unknown', value: 'x' }] }, { facets: [{ kind: 'weight', value: '' }] },
+    { facets: [{ kind: 'weight', value: null }] }, { facets: [null] }, { facets: {} },
+  ]) {
+    assert.throws(() => client.query({ ...query, ...invalid } as typeof query),
+      (error) => error instanceof LibraryError && error.code === 'invalid-query');
+  }
+});
+
+test('实时筛选保留零匹配候选和已选项，计数不使用全库旧值', () => {
+  const options = [{ kind: 'weight' as const, value: '400', label: '常规', familyCount: 8 },
+    { kind: 'weight' as const, value: '700', label: '粗体', familyCount: 6 }];
+  const merged = mergeFacetOptions(options, [{ ...options[0]!, familyCount: 2 }], [{ kind: 'script', value: 'Latn' }]);
+  assert.deepEqual(merged.map((item) => [item.value, item.familyCount]), [['400', 2], ['700', 0], ['Latn', 0]]);
+  assert.equal(merged[1]?.label, '粗体');
+  assert.deepEqual(normalizeFacets([{ kind: 'weight', value: '700' }, { kind: 'script', value: 'Latn' },
+    { kind: 'weight', value: '700' }]), [{ kind: 'script', value: 'Latn' }, { kind: 'weight', value: '700' }]);
+  assert.notEqual(targetKey({ scope: 'collection', collectionId: 'a' }), targetKey({ scope: 'collection', collectionId: 'b' }));
+});
+
+test('成员操作传递完整身份集合，返回后端快照，失败不伪造成功', async () => {
+  const bridge = mockBridge(async () => emptyPage);
+  const snapshot = { ...emptySnapshot, collections: [{ id: 'a', name: '中文', icon: 'books', color: 'blue', memberCount: 2 }] };
+  bridge.setCollectionMembers = async (id, identities, member) => {
+    assert.equal(id, 'a'); assert.deepEqual(identities, ['regular', 'bold']); assert.equal(member, true); return snapshot;
+  };
+  const client = createLibraryClient(bridge);
+  assert.equal(await client.setCollectionMembers('a', ['regular', 'bold'], true), snapshot);
+  const cause = new Error('写入失败');
+  bridge.deleteCollection = async () => { throw cause; };
+  await assert.rejects(client.deleteCollection('a'), (error) => error === cause);
 });

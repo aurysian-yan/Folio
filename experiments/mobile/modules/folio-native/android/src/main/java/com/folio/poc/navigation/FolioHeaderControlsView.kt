@@ -133,12 +133,14 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
     var importing by mutableStateOf(false)
     var searchOpen by mutableStateOf(false)
     var searchText by mutableStateOf("")
+    var filterCount by mutableStateOf(0)
     var colors by mutableStateOf<FolioViewMenuColors?>(null)
     private var expanded by mutableStateOf(false)
     private val onModeChange by EventDispatcher()
     private val onExpandedChange by EventDispatcher()
     private val onSearch by EventDispatcher()
     private val onImport by EventDispatcher()
+    private val onFilter by EventDispatcher()
     private val onSearchTextChange by EventDispatcher()
     private val compose = ComposeView(context)
 
@@ -153,9 +155,10 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
             LaunchedEffect(active, importing, searchOpen) {
                 if (!active || importing || searchOpen) updateExpanded(false)
             }
-            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, searchOpen, searchText, palette, backdrop,
+            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, searchOpen, searchText, filterCount, palette, backdrop,
                 onExpandedChange = ::updateExpanded,
                 onSearch = { onSearch(emptyMap<String, Any>()) },
+                onFilter = { if (ready) onFilter(emptyMap<String, Any>()) },
                 onImport = { if (ready && !importing) onImport(emptyMap<String, Any>()) },
                 onSearchTextChange = { text ->
                     searchText = text
@@ -247,9 +250,9 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
 
 @Composable
 private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean, dark: Boolean,
-    ready: Boolean, importing: Boolean, searchOpen: Boolean, searchText: String,
+    ready: Boolean, importing: Boolean, searchOpen: Boolean, searchText: String, filterCount: Int,
     colors: FolioViewMenuColors, backdrop: Backdrop, onExpandedChange: (Boolean) -> Unit,
-    onSelect: (String) -> Unit, onSearch: () -> Unit, onImport: () -> Unit, onSearchTextChange: (String) -> Unit) {
+    onSelect: (String) -> Unit, onSearch: () -> Unit, onImport: () -> Unit, onFilter: () -> Unit, onSearchTextChange: (String) -> Unit) {
     val searchProgress = remember { Animatable(0f) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -269,7 +272,9 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
         }.then(if (searchOpen) Modifier.clearAndSetSemantics {} else Modifier),
             horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             FolioViewModeMenu(mode, expanded, active && !searchOpen && !importing, dark, colors, backdrop,
-                onExpandedChange, onSelect, Modifier.size(64.dp, HeaderButtonHeight))
+                onExpandedChange, onSelect, Modifier.size(if (availableWidth < HeaderButtonHeight * 7) HeaderButtonHeight else 64.dp, HeaderButtonHeight))
+            HeaderAction("filter", if (filterCount > 0) "筛选字体，已选 $filterCount 项" else "筛选字体",
+                active && ready && !searchOpen, false, dark, colors, backdrop, onFilter, selected = filterCount > 0)
             HeaderAction("search", "搜索字体", active && !searchOpen, false, dark, colors, backdrop, onSearch)
             HeaderAction("plus", if (importing) "正在导入…" else "导入字体",
                 active && ready && !importing && !searchOpen, importing, dark, colors, backdrop, onImport)
@@ -316,11 +321,11 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
 
 @Composable
 private fun HeaderAction(icon: String, label: String, enabled: Boolean, loading: Boolean,
-    dark: Boolean, colors: FolioViewMenuColors, backdrop: Backdrop, onClick: () -> Unit) {
+    dark: Boolean, colors: FolioViewMenuColors, backdrop: Backdrop, onClick: () -> Unit, selected: Boolean = false) {
     Box(Modifier.size(HeaderButtonHeight).headerButtonSurface(enabled, dark, colors, backdrop, onClick)
         .semantics { contentDescription = label; if (loading) stateDescription = "正在导入" },
         contentAlignment = Alignment.Center) {
-        val tint = colors.label.menuColor().copy(alpha = if (enabled || loading) 1f else 0.4f)
+        val tint = (if (selected) colors.accent else colors.label).menuColor().copy(alpha = if (enabled || loading) 1f else 0.4f)
         if (loading) AndroidView(factory = { context -> ProgressBar(context, null, android.R.attr.progressBarStyleSmall) },
             modifier = Modifier.size(20.dp), update = { it.indeterminateTintList = ColorStateList.valueOf(tint.toArgb()) })
         else ViewMenuIcon(icon, tint, 20.dp)
@@ -500,6 +505,7 @@ private fun ViewMenuIcon(name: String, tint: Color, size: Dp, modifier: Modifier
             "list" -> "M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8M40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16m176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16"
             "caret" -> "m213.66 101.66-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32"
             "search" -> "M229.66 218.34 179.6 168.28a88.12 88.12 0 1 0-11.32 11.32l50.06 50.06a8 8 0 0 0 11.32-11.32ZM40 112a72 72 0 1 1 72 72 72.08 72.08 0 0 1-72-72"
+            "filter" -> "M200 136a8 8 0 0 1-8 8H64a8 8 0 0 1 0-16h128a8 8 0 0 1 8 8m32-56H24a8 8 0 0 0 0 16h208a8 8 0 0 0 0-16m-80 96h-48a8 8 0 0 0 0 16h48a8 8 0 0 0 0-16"
             "plus" -> "M224 128a8 8 0 0 1-8 8h-80v80a8 8 0 0 1-16 0v-80H40a8 8 0 0 1 0-16h80V40a8 8 0 0 1 16 0v80h80a8 8 0 0 1 8 8"
             "close" -> "m205.66 194.34-66.35-66.34 66.35-66.34a8 8 0 0 0-11.32-11.32L128 116.69 61.66 50.34a8 8 0 0 0-11.32 11.32L116.69 128l-66.35 66.34a8 8 0 0 0 11.32 11.32L128 139.31l66.34 66.35a8 8 0 0 0 11.32-11.32"
             else -> "m229.66 77.66-128 128a8 8 0 0 1-11.32 0l-56-56a8 8 0 0 1 11.32-11.32L96 188.69 218.34 66.34a8 8 0 0 1 11.32 11.32"

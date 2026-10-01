@@ -5,8 +5,21 @@ import UIKit
 struct FolioQuery: Record {
     @Field var text: String = ""
     @Field var scope: String = "all"
+    @Field var collectionId: String? = nil
+    @Field var facets: [FolioFacetSelection] = []
     @Field var offset: Int = 0
     @Field var limit: Int = 40
+}
+
+struct FolioFacetSelection: Record {
+    @Field var kind: String = ""
+    @Field var value: String = ""
+}
+
+struct FolioCollectionInput: Record {
+    @Field var name: String = ""
+    @Field var icon: String = "folder"
+    @Field var color: String = "gray"
 }
 
 struct FolioImportFile: Record {
@@ -78,33 +91,15 @@ public final class FolioNativeModule: Module {
             return self.snapshot(relocated ? try engine.refreshLibrary().snapshot : cached)
         }.runOnQueue(queue)
 
+        AsyncFunction("snapshot") { () throws -> [String: Any] in
+            self.snapshot(try self.requireEngine().loadCachedLibrary())
+        }.runOnQueue(queue)
+
         AsyncFunction("query") { (request: FolioQuery) throws -> [String: Any] in
-            guard request.offset >= 0, (1...100).contains(request.limit) else {
-                throw Exception(name: "FolioQuery", description: "查询范围无效。", code: "ERR_FOLIO_QUERY")
-            }
-            let scope: QueryScopeDto
-            switch request.scope {
-            case "all": scope = .all
-            case "favorites": scope = .favorites
-            case "recent": scope = .recent
-            default: throw Exception(name: "FolioQuery", description: "查询范围无效。", code: "ERR_FOLIO_QUERY")
-            }
-            let page = try self.requireEngine().queryLibrary(query: LibraryQueryDto(
-                text: request.text.isEmpty ? nil : request.text, scope: scope, collectionId: nil,
-                facets: [], allowedFaceIds: nil, allowedSourcePaths: nil,
-                offset: UInt64(request.offset), limit: UInt64(request.limit)))
-            return ["totalMatches": page.totalMatches, "families": page.families.map { family in
-                ["id": family.id.value, "displayName": family.displayName,
-                 "isFavorite": family.isFavorite, "faces": family.faces.map { face in
-                    ["id": face.id.value, "identityId": face.identityId.value,
-                     "revisionId": face.revisionId, "styleName": face.styleName,
-                     "sourcePath": face.sourcePath as Any? ?? NSNull(), "faceIndex": face.faceIndex,
-                     "axes": face.axes.map { axis in
-                        ["tag": axis.tag, "name": axis.name, "minimum": axis.minValue,
-                         "defaultValue": axis.defaultValue, "maximum": axis.maxValue] as [String: Any]
-                     }] as [String: Any]
-                 }] as [String: Any]
-            }]
+            let query = try FolioLibraryMapper.query(text: request.text, scope: request.scope,
+                collectionId: request.collectionId, facets: request.facets.map { ($0.kind, $0.value) },
+                offset: request.offset, limit: request.limit)
+            return FolioLibraryMapper.page(try self.requireEngine().queryLibrary(query: query))
         }.runOnQueue(queue)
 
         AsyncFunction("importFonts") { (files: [FolioImportFile]) throws -> [String: Any] in
@@ -117,9 +112,35 @@ public final class FolioNativeModule: Module {
             }
         }.runOnQueue(queue)
 
-        AsyncFunction("setFavorite") { (identityIds: [String], favorite: Bool) throws in
-            try self.requireEngine().setFavorite(identityIds: identityIds.map { IdentityIdDto(value: $0) },
-                                                favorite: favorite)
+        AsyncFunction("setFavorite") { (identityIds: [String], favorite: Bool) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            try engine.setFavorite(identityIds: identityIds.map { IdentityIdDto(value: $0) }, favorite: favorite)
+            return self.snapshot(try engine.loadCachedLibrary())
+        }.runOnQueue(queue)
+
+        AsyncFunction("createCollection") { (input: FolioCollectionInput) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            _ = try engine.createCollectionWithIcon(name: input.name, icon: input.icon, color: input.color)
+            return self.snapshot(try engine.loadCachedLibrary())
+        }.runOnQueue(queue)
+
+        AsyncFunction("updateCollection") { (id: String, input: FolioCollectionInput) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            try engine.updateCollection(id: CollectionIdDto(value: id), name: input.name, icon: input.icon, color: input.color)
+            return self.snapshot(try engine.loadCachedLibrary())
+        }.runOnQueue(queue)
+
+        AsyncFunction("deleteCollection") { (id: String) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            try engine.deleteCollection(id: CollectionIdDto(value: id))
+            return self.snapshot(try engine.loadCachedLibrary())
+        }.runOnQueue(queue)
+
+        AsyncFunction("setCollectionMembers") { (id: String, identityIds: [String], member: Bool) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            try engine.setCollectionMembers(collectionId: CollectionIdDto(value: id),
+                identityIds: identityIds.map { IdentityIdDto(value: $0) }, member: member)
+            return self.snapshot(try engine.loadCachedLibrary())
         }.runOnQueue(queue)
 
         AsyncFunction("copyText") { (text: String) in
@@ -156,8 +177,6 @@ public final class FolioNativeModule: Module {
     }
 
     private func snapshot(_ value: LibrarySnapshotDto) -> [String: Any] {
-        ["familyCount": value.familyCount, "faceCount": value.faceCount,
-         "variableFamilyCount": value.variableFamilyCount, "recentCount": value.recentCount,
-         "damagedCount": value.health.damagedFiles]
+        FolioLibraryMapper.snapshot(value)
     }
 }

@@ -3,6 +3,7 @@ import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-n
 import type { FontFamily } from './library';
 import { NativeFontPreview, type PreviewStatus } from './native';
 import type { Theme } from './ui';
+import { StarIcon } from 'phosphor-react-native';
 
 export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: {
   family: FontFamily;
@@ -18,7 +19,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
   const compact = mode === 'list';
 
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`查看 ${family.displayName} 字体详情`}
+    <Pressable accessibilityRole="button" accessibilityLabel={`查看 ${family.displayName} 字体详情${family.isFavorite ? '，已收藏' : ''}`}
       onPress={onOpen} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border },
         compact && [styles.listCard, { backgroundColor: theme.listCardSurface }]]}>
       {compact && <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.outline, { borderColor: theme.listCardBorder }]} />}
@@ -40,6 +41,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
       <View pointerEvents="none" style={[styles.metadata, compact && styles.listMetadata]}>
         <Text numberOfLines={1} style={[styles.name, { color: theme.label }, compact && styles.listName]}>{family.displayName}</Text>
         <View style={styles.details}>
+          {family.isFavorite && <StarIcon size={12} weight="fill" color={theme.accent} />}
           <Text style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>{family.faces.length}个样式</Text>
           {variable && <>
             <View style={[styles.separator, { backgroundColor: compact ? theme.listCardBorder : theme.border }]} />

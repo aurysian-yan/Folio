@@ -1,19 +1,25 @@
-import { CaretLeftIcon, CheckIcon, CopyIcon, StarIcon } from 'phosphor-react-native';
-import { useState } from 'react';
+import { CaretLeftIcon, CheckIcon, CopyIcon, FolderPlusIcon, StarIcon } from 'phosphor-react-native';
+import { useRef, useState } from 'react';
 import { FlatList, PixelRatio, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import type { FontFace, FontFamily } from './library';
+import type { FontFace, FontFamily, LibrarySnapshot } from './library';
+import { FamilyCollectionsPanel } from './CollectionsPanel';
 import { copyText, NativeFontPreview, type PreviewStatus } from './native';
 import { IconButton, type Theme } from './ui';
 
 // 字体二级页展示家族字款，并承接复制与收藏操作。
-export function FontDetails({ family, theme, onClose, onFavorite }: {
+export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotChange, onClose, onFavorite }: {
   family: FontFamily;
   theme: Theme;
+  snapshot: LibrarySnapshot | null;
+  collectionId?: string;
+  onSnapshotChange: (snapshot: LibrarySnapshot) => void;
   onClose: () => void;
   onFavorite: () => Promise<void>;
 }) {
   const [favoritePending, setFavoritePending] = useState(false);
+  const favoriteInFlight = useRef(false);
+  const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,12 +32,14 @@ export function FontDetails({ family, theme, onClose, onFavorite }: {
   }
 
   async function favorite() {
+    if (favoriteInFlight.current) return;
+    favoriteInFlight.current = true;
     setFavoritePending(true);
     try {
       await onFavorite();
       setError(null);
     } catch { setError('无法更新收藏，请重试。'); }
-    finally { setFavoritePending(false); }
+    finally { favoriteInFlight.current = false; setFavoritePending(false); }
   }
 
   return <SafeAreaProvider>
@@ -51,6 +59,10 @@ export function FontDetails({ family, theme, onClose, onFavorite }: {
               disabled={favoritePending} selected={family.isFavorite} onPress={favorite}>
               <StarIcon size={20} weight={family.isFavorite ? 'fill' : 'regular'} color={family.isFavorite ? theme.accent : theme.label} />
             </IconButton>
+            <IconButton theme={theme} label="添加到收藏夹" systemImage="folder.badge.plus"
+              onPress={() => setCollectionsOpen(true)}>
+              <FolderPlusIcon size={20} color={theme.label} />
+            </IconButton>
           </View>
           <FlatList data={family.faces} keyExtractor={(face) => face.id}
             contentContainerStyle={styles.content} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
@@ -59,6 +71,8 @@ export function FontDetails({ family, theme, onClose, onFavorite }: {
               {error && <Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{error}</Text>}
             </View>}
             renderItem={({ item }) => <FacePreview key={`${item.id}:${item.revisionId}`} face={item} familyName={family.displayName} theme={theme} />} />
+          <FamilyCollectionsPanel visible={collectionsOpen} family={family} snapshot={snapshot} collectionId={collectionId}
+            theme={theme} onSnapshot={onSnapshotChange} onClose={() => setCollectionsOpen(false)} />
         </View>
       </SafeAreaView>
   </SafeAreaProvider>;

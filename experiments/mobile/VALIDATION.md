@@ -62,6 +62,27 @@ API 31–32 的系统模糊渐隐与 API 28–30 的主题材质已实现，旧�
 
 Android 原生结果界面的完整交互、所有字体的真机预览与再次冷启动、iOS 实机 Files/iCloud 文件读取和性能压力测试仍待验收。本轮 iOS 设备 slice 已构建，未进行实机签名、安装或运行；阶段 D 仍为 PARTIAL。
 
+## Realtime Filters and Manual Collections
+
+2026-10-01：接入移动端实时筛选、星标范围及手动收藏夹；Swift/Kotlin 继续使用既有 Rust 查询与成员接口，没有修改 Rust ABI、数据库结构或 JS 依赖。智能收藏夹、最近历史与云同步不在本轮范围。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| JS 检查 | PASS，`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm lint`、`pnpm test`；12 项测试覆盖查询透传、取消、facet 合并、零匹配保留、完整成员身份与失败结果。 |
+| Swift ↔ Rust | PASS，`pnpm test:swift`；新增生产映射器场景覆盖九种 facet、同组并集、跨组交集、完整身份星标、收藏夹样式更新、重复加入、移出、删除及重新打开后的持久化。沿用真实临时数据库与仓库字体样本，主机测试不代表 iOS 实机验收。 |
+| Kotlin ↔ Rust | PASS，`:folio-native:testDebugUnitTest`；新增映射器 2 项测试通过，原生导入器 8 项回归通过。使用主机 Rust/JNA 与临时数据库，验证条件组合、映射字段、非法范围和收藏夹完整生命周期。 |
+| 双端构建 | PASS，Android `:app:assembleDebug`（arm64-v8a / x86_64）、iOS arm64 Simulator Debug `xcodebuild`，以及更新后的 Android/iOS Hermes export。 |
+| iPhone 界面 | PASS，iOS 27 iPhone 18 Pro 模拟器确认筛选选择立即更新匹配数，类型多选从 3 增至 4，跨组组合降至 0，取消后恢复；确认范围入口、收藏夹名称输入、38 个图标选项与键盘布局。修复并检查启动画面移除、Sheet 锚点不占用列表、冷启动网格及顶栏留白。 |
+| iPad 界面 | PASS，iPadOS 27 iPad mini 常规窗口确认原生分栏、收藏范围 Sheet、星标范围切换及空态，侧栏选择跟随范围更新。 |
+
+本轮没有通过界面创建或删除模拟器中的收藏夹，也没有改变已有星标；持久化与成员变更的验证使用独立临时数据库。Android 当前没有连接设备，尚未执行本轮真机交互；iOS 实机、完整无障碍与压力测试仍待验收。
+
+2026-10-01：移动筛选改为与 SwiftUI/Tauri 相同的可折叠分类卡片及换行标签流。卡片与标签圆角沿用桌面尺寸；标题触摸区和选项按钮至少 44 点高，标签文字从桌面 11 点放大至 14 点，使用既有浅深色语义主题。`pnpm typecheck`、筛选组件 ESLint 及 `git diff --check` 通过；iPhone 模拟器确认九组卡片、展开/折叠、选中标记、厂牌长名称换行与选择后匹配数立即从 21 更新为 3。本次仅更新 React Native 面板，没有重建原生包。
+
+2026-10-01：Android 筛选接入 Gorhom Bottom Sheet 5.2.14，保留应用主题与既有卡片，使用组件内置拖动、遮罩与列表滚动协调。依赖安装、`pnpm typecheck`、`pnpm lint`、Expo 依赖兼容检查、双端 Hermes export 和 Android arm64 `:app:assembleDebug` 通过，已保留数据更新 API 36 USB 真机开发包。Android Studio 镜像确认抽屉呈现、分类展开及向下拖动关闭；本轮没有更改收藏夹或星标。
+
+用户反馈下拉时短暂收缩回弹、列表底部安全区切断滚动后，将 SafeAreaProvider 移到静止的 Modal 根节点，固定抽屉停靠点引用；列表视口延伸到系统导航区，安全区留白放入列表内容底部。类型检查、相关组件 ESLint、Android Hermes export 与 `git diff --check` 通过；真机确认再次打开、下拉与返回键关闭，以及最后分类展开后的滚动和手势条留白。此次修正仅更新 JS，无需再次编译原生包；短暂闪动的连续帧及浅色外观未单独录制验收。
+
 ## Environment
 
 macOS 27.2 arm64、Xcode 27.0（27A266a）、Rust 1.98.1、Node.js 24.14.1、pnpm 11.19.0、JDK 17.0.19、CocoaPods 1.16.2。Rust Android 库使用 NDK 29.0.13846066；Expo 生成工程使用其默认 NDK 27.1.12297006。依赖以本目录 `package.json` 和 `pnpm-lock.yaml` 为准。
