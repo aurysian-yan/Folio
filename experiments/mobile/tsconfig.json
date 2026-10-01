@@ -3,6 +3,7 @@
   "compilerOptions": {
     "strict": true,
     "types": ["node", "react", "react-native"],
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noUncheckedIndexedAccess": true
   },

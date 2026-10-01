@@ -6,6 +6,8 @@ dist/
 apps/desktop-ui/src-tauri/gen/schemas/
 apps/desktop-ui/src-tauri/target/
 apps/macos/.build/
+# macOS 本地化资源由 tools/i18n/build.mjs 从 locales/ 生成，不入库。
+apps/macos/Folio/Resources/
 experiments/mobile/.build/
 .DS_Store
 xcuserdata/

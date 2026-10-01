@@ -75,23 +75,23 @@ struct RootView: View {
         .onChange(of: preferredPreviewSize) { _, size in
             model.applyPreferredPreviewSize(size)
         }
-        .alert("无法完成操作", isPresented: Binding(
+        .alert(L.text("common.operationFailed"), isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )) {
-            Button("好") { model.errorMessage = nil }
+            Button(L.text("common.ok")) { model.errorMessage = nil }
         } message: {
-            Text(model.errorMessage ?? "发生未知错误")
+            Text(model.errorMessage ?? L.text("common.unknownError"))
         }
         .sheet(item: $model.favoriteFolderEditor) { intent in
             FavoriteFolderEditorView(model: model, intent: intent)
         }
-        .confirmationDialog("导入字体", isPresented: $model.isImportChoicePresented) {
-            Button("复制到 Folio 字体库") { model.importPending(as: .copy) }
-            Button("引用原文件") { model.importPending(as: .reference) }
-            Button("取消", role: .cancel) {}
+        .confirmationDialog(L.text("import.importFonts"), isPresented: $model.isImportChoicePresented) {
+            Button(L.text("import.copyToLibrary")) { model.importPending(as: .copy) }
+            Button(L.text("import.referenceOriginal")) { model.importPending(as: .reference) }
+            Button(L.text("common.cancel"), role: .cancel) {}
         } message: {
-            Text("选择字体文件的保存方式")
+            Text(L.text("import.chooseMode"))
         }
         .sheet(isPresented: $model.isImportReportPresented) {
             ImportReportView(model: model)
@@ -108,10 +108,10 @@ private struct ImportReportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(model.isCloudImportReport ? "添加至云端" : "导入结果")
+            Text(model.isCloudImportReport ? L.text("import.addToCloud") : L.text("import.importResults"))
                 .font(.headline)
             List {
-                Section(model.isCloudImportReport ? "字体" : "导入") {
+                Section(model.isCloudImportReport ? L.text("font.fonts") : L.text("import.title")) {
                     ForEach(model.importOutcomes.indices, id: \.self) { index in
                         outcomeRow(model.importOutcomes[index])
                     }
@@ -127,18 +127,18 @@ private struct ImportReportView: View {
             HStack {
                 if model.importOutcomes.contains(where: { $0.error != nil })
                     || model.batchOutcomes.contains(where: { $0.error != nil }) {
-                    Button("重试失败项") { model.retryFailedOutcomes() }
+                    Button(L.text("import.retryFailed")) { model.retryFailedOutcomes() }
                 }
                 if !model.isCloudImportReport, model.importOutcomes.contains(where: { $0.error == nil }) {
-                    Button("激活成功导入的字体") {
+                    Button(L.text("import.activateImported")) {
                         model.performImportedBatch(.activate)
                     }
-                    Button("安装成功导入的字体") {
+                    Button(L.text("import.installImported")) {
                         model.performImportedBatch(.install)
                     }
                 }
                 Spacer()
-                Button("完成") { dismiss() }
+                Button(L.text("common.done")) { dismiss() }
             }
         }
         .padding()
@@ -230,8 +230,8 @@ private enum FavoriteFolderEditorTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: "常规"
-        case .filters: "筛选条件"
+        case .general: L.text("collection.general")
+        case .filters: L.text("filters.conditions")
         }
     }
 }
@@ -273,9 +273,9 @@ private struct FavoriteFolderEditorView: View {
 
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L.text("common.cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(intent.isCreate ? "创建" : "保存", action: save)
+                Button(intent.isCreate ? L.text("common.create") : L.text("common.save"), action: save)
                     .keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading || loadFailed)
             }
@@ -289,7 +289,7 @@ private struct FavoriteFolderEditorView: View {
 
     private var favoriteFolderPicker: some View {
         GlassTabPicker(
-            title: "收藏夹设置",
+            title: L.text("collection.settings"),
             options: FavoriteFolderEditorTab.allCases.map {
                 GlassTabPicker<FavoriteFolderEditorTab>.Option(value: $0, title: $0.title)
             },
@@ -365,10 +365,10 @@ private struct FavoriteFolderEditorView: View {
     private var generalSettings: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                TextField("收藏夹名称", text: $name)
+                TextField(L.text("collection.name"), text: $name)
                     .focused($nameFocused)
                     .onSubmit(save)
-                Text("图标")
+                Text(L.text("common.icon"))
                     .font(.subheadline)
                     .padding(.horizontal, 6)
                     .padding(.top, 8)
@@ -390,7 +390,7 @@ private struct FavoriteFolderEditorView: View {
                     }
                 }
                 HStack {
-                    Text("颜色")
+                    Text(L.text("common.color"))
                         .font(.subheadline)
                         .padding(.horizontal, 6)
                     Spacer()
@@ -416,23 +416,23 @@ private struct FavoriteFolderEditorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("搜索字体")
+                    Text(L.text("library.searchFonts"))
                         .font(.system(size: 12))
                         .padding(.horizontal, 6)
                         .padding(.top, 8)
-                    Text("按字体名称、设计师或厂商等关键词匹配，多个关键词需同时满足。")
+                    Text(L.text("library.searchHint"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                 }
-                TextField("输入关键词", text: $text)
+                TextField(L.text("filters.inputKeyword"), text: $text)
                     .textFieldStyle(.roundedBorder)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("筛选条件")
+                    Text(L.text("filters.conditions"))
                         .font(.system(size: 12))
                         .padding(.horizontal, 6)
                         .padding(.top, 8)
-                    Text("添加筛选条件后，符合条件的字体会自动显示在此收藏夹中。")
+                    Text(L.text("filters.smartHint"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)

@@ -1,5 +1,6 @@
 import { CaretDownIcon, CaretUpIcon, CheckIcon } from "@phosphor-icons/react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { FacetOptionDto } from "../types";
 
 // 筛选分组卡片对应 macOS 的 FacetDisclosureGroupView：标题栏可折叠，选项以可换行的标签流展示。
@@ -16,6 +17,7 @@ export function FacetGroup({
   defaultOpen?: boolean;
   onToggle: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(defaultOpen);
   return (
     <div className="facet-group">
@@ -40,7 +42,7 @@ export function FacetGroup({
                 type="button"
                 className={`facet-chip${isSelected ? " selected" : ""}`}
                 aria-pressed={isSelected}
-                aria-label={`${option.label}，${option.familyCount} 个字族`}
+                aria-label={t("filters.facetOption", { name: option.label, count: option.familyCount })}
                 title={option.label}
                 onClick={() => onToggle(option.value)}
               >

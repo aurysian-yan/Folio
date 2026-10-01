@@ -1,5 +1,6 @@
 import { CaretLeftIcon, CheckIcon, CopyIcon, FolderPlusIcon, StarIcon } from 'phosphor-react-native';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FlatList, PixelRatio, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { FontFace, FontFamily, LibrarySnapshot } from './library';
@@ -17,6 +18,7 @@ export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotC
   onClose: () => void;
   onFavorite: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [favoritePending, setFavoritePending] = useState(false);
   const favoriteInFlight = useRef(false);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
@@ -28,7 +30,7 @@ export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotC
       await copyText(family.displayName);
       setCopied(true);
       setError(null);
-    } catch { setError('无法复制字体名称，请重试。'); }
+    } catch { setError(t('mobile.errorCopyName')); }
   }
 
   async function favorite() {
@@ -38,7 +40,7 @@ export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotC
     try {
       await onFavorite();
       setError(null);
-    } catch { setError('无法更新收藏，请重试。'); }
+    } catch { setError(t('mobile.errorFavorite')); }
     finally { favoriteInFlight.current = false; setFavoritePending(false); }
   }
 
@@ -46,20 +48,20 @@ export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotC
       <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
         <View accessibilityViewIsModal style={styles.screen}>
           <View style={styles.header}>
-            <IconButton theme={theme} label="返回字体库" systemImage="chevron.left" onPress={onClose}>
+            <IconButton theme={theme} label={t('mobile.backToLibrary')} systemImage="chevron.left" onPress={onClose}>
               <CaretLeftIcon size={20} color={theme.label} />
             </IconButton>
             <Text accessibilityRole="header" numberOfLines={1} style={[styles.title, { color: theme.label }]}>{family.displayName}</Text>
-            <IconButton theme={theme} label={copied ? '已复制字体名称' : '复制字体名称'}
+            <IconButton theme={theme} label={copied ? t('mobile.copiedName') : t('mobile.copyName')}
               systemImage={copied ? 'checkmark' : 'document.on.document'} onPress={copy}>
               {copied ? <CheckIcon size={20} color={theme.accent} /> : <CopyIcon size={20} color={theme.label} />}
             </IconButton>
-            <IconButton theme={theme} label={family.isFavorite ? '取消收藏' : '收藏字体'}
+            <IconButton theme={theme} label={family.isFavorite ? t('collection.unfavorite') : t('collection.favorite')}
               systemImage={family.isFavorite ? 'star.fill' : 'star'}
               disabled={favoritePending} selected={family.isFavorite} onPress={favorite}>
               <StarIcon size={20} weight={family.isFavorite ? 'fill' : 'regular'} color={family.isFavorite ? theme.accent : theme.label} />
             </IconButton>
-            <IconButton theme={theme} label="添加到收藏夹" systemImage="folder.badge.plus"
+            <IconButton theme={theme} label={t('collection.addTo')} systemImage="folder.badge.plus"
               onPress={() => setCollectionsOpen(true)}>
               <FolderPlusIcon size={20} color={theme.label} />
             </IconButton>
@@ -67,7 +69,7 @@ export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotC
           <FlatList data={family.faces} keyExtractor={(face) => face.id}
             contentContainerStyle={styles.content} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
             ListHeaderComponent={<View style={styles.summary}>
-              <Text style={[styles.detail, { color: theme.secondary }]}>{family.faces.length}个样式</Text>
+              <Text style={[styles.detail, { color: theme.secondary }]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
               {error && <Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{error}</Text>}
             </View>}
             renderItem={({ item }) => <FacePreview key={`${item.id}:${item.revisionId}`} face={item} familyName={family.displayName} theme={theme} />} />
@@ -79,18 +81,19 @@ export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotC
 }
 
 function FacePreview({ face, familyName, theme }: { face: FontFace; familyName: string; theme: Theme }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<PreviewStatus['status'] | null>(null);
   return <View style={[styles.face, { borderColor: theme.border }]}>
     <Text style={[styles.styleName, { color: theme.label }]}>{face.styleName}</Text>
     <View style={styles.preview}>
       {face.sourcePath && status !== 'error' && status !== 'missing-glyph' ? (
-        <NativeFontPreview style={styles.screen} accessibilityLabel={`${familyName}，${face.styleName} 字体预览`}
+        <NativeFontPreview style={styles.screen} accessibilityLabel={t('mobile.previewLabel', { name: familyName, style: face.styleName })}
           selection={{ sourcePath: face.sourcePath, faceIndex: face.faceIndex, revisionId: face.revisionId,
             axes: Object.fromEntries(face.axes.map((axis) => [axis.tag, axis.defaultValue])),
             text: 'Preview Text', fontSize: 24 * PixelRatio.getFontScale(), centered: false }}
           onStatus={(event) => setStatus(event.nativeEvent.status)} />
       ) : <Text style={[styles.detail, { color: theme.secondary }]}>
-        {status === 'missing-glyph' ? '缺少预览字符' : '暂时无法预览'}
+        {status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t('mobile.previewUnavailable')}
       </Text>}
     </View>
   </View>;

@@ -1,0 +1,27 @@
+# Crowdin 翻译管理配置。
+# 三套客户端（macOS SwiftUI、Windows/Linux React、移动端 Expo）共用 locales/ 下的同一份
+# 语言目录，因此 Crowdin 中只需要维护一个项目、一套字段，避免同一文案在多个客户端重复登记。
+#
+# 使用前提：仓库采用 AGPL-3.0 开源许可，可申请 Crowdin 的开源免费方案，不需要自建服务器。
+# 认证通过环境变量提供，不要把凭据写入仓库：
+#   CROWDIN_PROJECT_ID         Crowdin 项目 ID
+#   CROWDIN_PERSONAL_TOKEN     个人访问令牌（Tokens 页面创建）
+#
+# 常用命令：
+#   pnpm i18n:push    上传 locales/zh-CN.json 作为源文案
+#   pnpm i18n:pull    拉取已翻译内容，写回 locales/<locale>.json
+
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+preserve_hierarchy: true
+
+files:
+  - source: /locales/zh-CN.json
+    translation: /locales/%locale%.json
+    # 源语言为简体中文；英文为当前唯一目标语言，新增语言时在此处扩展 languages_mapping。
+    languages_mapping:
+      locale:
+        zh-CN: zh-CN
+        en: en
+    # 译文先作为待审校内容拉回仓库，避免未经检查的机器翻译直接进入客户端。
+    update_option: update_as_unapproved

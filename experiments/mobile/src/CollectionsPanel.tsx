@@ -1,5 +1,6 @@
 import { CheckIcon, PencilSimpleIcon } from 'phosphor-react-native';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { collectionColors, collectionIcons, CollectionSymbol, collectionColorValue } from './collection-style';
 import { LibraryPanel } from './LibraryPanel';
@@ -13,6 +14,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, onSelect, o
   visible: boolean; theme: Theme; target: LibraryTarget; snapshot: LibrarySnapshot | null;
   onSelect: (target: LibraryTarget) => void; onSnapshot: (snapshot: LibrarySnapshot) => void; onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [editor, setEditor] = useState<{ collection: FontCollection | null; input: CollectionInput } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,29 +39,29 @@ export function CollectionsPanel({ visible, theme, target, snapshot, onSelect, o
       const updated = remove && editor.collection ? await library.deleteCollection(editor.collection.id)
         : editor.collection ? await library.updateCollection(editor.collection.id, input) : await library.createCollection(input);
       onSnapshot(updated); setEditor(null); setDeleting(false); setExpanded(null);
-    } catch { setError(remove ? '无法删除收藏夹，请重试。' : '无法保存收藏夹，请检查名称后重试。'); }
+    } catch { setError(remove ? t('mobile.errorCollectionDelete') : t('mobile.errorCollectionSave')); }
     finally { pending.current = false; setBusy(false); }
   }
   function updateInput(change: Partial<CollectionInput>) {
     setEditor((value) => value && ({ ...value, input: { ...value.input, ...change } }));
   }
   function select(value: LibraryTarget) { onSelect(value); close(); }
-  const iconLabel = collectionIcons.find((item) => item.key === editor?.input.icon)?.label ?? '文件夹';
-  const colorLabel = collectionColors.find((item) => item.key === editor?.input.color)?.label ?? '灰色';
+  const iconLabel = collectionIcons.find((item) => item.key === editor?.input.icon)?.label ?? t('collectionIcon.folder');
+  const colorLabel = collectionColors.find((item) => item.key === editor?.input.color)?.label ?? t('color.gray');
 
-  return <LibraryPanel visible={visible} title={editor ? deleting ? '删除收藏夹' : editor.collection ? '编辑收藏夹' : '新建收藏夹' : '字体库'}
-    theme={theme} busy={busy} closeLabel={editor ? '取消' : '完成'} onClose={close}>
+  return <LibraryPanel visible={visible} title={editor ? deleting ? t('collection.delete') : editor.collection ? t('collection.edit') : t('collection.new') : t('library.title')}
+    theme={theme} busy={busy} closeLabel={editor ? t('common.cancel') : t('common.done')} onClose={close}>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={panelStyles.content}>
       {error && <Text accessibilityRole="alert" style={[panelStyles.section, { color: theme.danger }]}>{error}</Text>}
       {editor ? deleting ? <View>
-        <Text style={[panelStyles.section, { color: theme.label }]}>删除「{editor.input.name}」？</Text>
-        <Text style={[panelStyles.detail, { color: theme.secondary }]}>其中的字体和星标收藏会保留。</Text>
-        <PanelAction label={busy ? '正在删除…' : '删除收藏夹'} theme={theme} destructive disabled={busy} onPress={() => { void save(true); }} />
-        <PanelAction label="返回编辑" theme={theme} disabled={busy} onPress={() => setDeleting(false)} />
+        <Text style={[panelStyles.section, { color: theme.label }]}>{t('collection.deleteConfirmTitle', { name: editor.input.name })}</Text>
+        <Text style={[panelStyles.detail, { color: theme.secondary }]}>{t('collection.deleteConfirmMessage')}</Text>
+        <PanelAction label={busy ? t('mobile.deleting') : t('collection.delete')} theme={theme} destructive disabled={busy} onPress={() => { void save(true); }} />
+        <PanelAction label={t('mobile.backToEditing')} theme={theme} disabled={busy} onPress={() => setDeleting(false)} />
       </View> : <View>
-        <Text style={[panelStyles.section, { color: theme.secondary }]}>名称</Text>
-        <TextInput autoFocus accessibilityLabel="收藏夹名称" value={editor.input.name} editable={!busy}
-          placeholder="输入收藏夹名称" placeholderTextColor={theme.muted} autoCorrect={false}
+        <Text style={[panelStyles.section, { color: theme.secondary }]}>{t('common.name')}</Text>
+        <TextInput autoFocus accessibilityLabel={t('collection.name')} value={editor.input.name} editable={!busy}
+          placeholder={t('collection.namePlaceholder')} placeholderTextColor={theme.muted} autoCorrect={false}
           style={[panelStyles.input, { color: theme.label, borderColor: theme.border }]}
           onChangeText={(name) => updateInput({ name })} returnKeyType="done" onSubmitEditing={() => {
             if (editor.input.name.trim()) void save();
@@ -67,7 +69,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, onSelect, o
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: expanded === 'icon', disabled: busy }} disabled={busy}
           onPress={() => setExpanded(expanded === 'icon' ? null : 'icon')} style={[panelStyles.row, { borderColor: theme.border }]}>
           <CollectionSymbol icon={editor.input.icon} color={collectionColorValue(editor.input.color)} />
-          <Text style={[panelStyles.label, { color: theme.label }]}>图标</Text>
+          <Text style={[panelStyles.label, { color: theme.label }]}>{t('common.icon')}</Text>
           <Text style={[panelStyles.detail, { color: theme.secondary }]}>{iconLabel}</Text>
         </Pressable>
         {expanded === 'icon' && <View accessibilityRole="radiogroup" style={panelStyles.choices}>
@@ -80,7 +82,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, onSelect, o
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: expanded === 'color', disabled: busy }} disabled={busy}
           onPress={() => setExpanded(expanded === 'color' ? null : 'color')} style={[panelStyles.row, { borderColor: theme.border }]}>
           <CollectionSymbol icon={editor.input.icon} color={collectionColorValue(editor.input.color)} />
-          <Text style={[panelStyles.label, { color: theme.label }]}>颜色</Text>
+          <Text style={[panelStyles.label, { color: theme.label }]}>{t('common.color')}</Text>
           <Text style={[panelStyles.detail, { color: theme.secondary }]}>{colorLabel}</Text>
         </Pressable>
         {expanded === 'color' && <View accessibilityRole="radiogroup" style={panelStyles.choices}>
@@ -91,22 +93,22 @@ export function CollectionsPanel({ visible, theme, target, snapshot, onSelect, o
             <Text style={{ color: editor.input.color === key ? theme.accent : theme.label }}>{label}</Text>
           </Pressable>)}
         </View>}
-        <PanelAction label={busy ? '正在保存…' : '保存收藏夹'} theme={theme} disabled={busy || !editor.input.name.trim()} onPress={() => { void save(); }} />
-        {editor.collection && <PanelAction label="删除收藏夹" theme={theme} destructive disabled={busy} onPress={() => setDeleting(true)} />}
-        <PanelAction label="返回字体库" theme={theme} disabled={busy} onPress={() => { setEditor(null); setError(null); }} />
+        <PanelAction label={busy ? t('mobile.saving') : t('common.save')} theme={theme} disabled={busy || !editor.input.name.trim()} onPress={() => { void save(); }} />
+        {editor.collection && <PanelAction label={t('collection.delete')} theme={theme} destructive disabled={busy} onPress={() => setDeleting(true)} />}
+        <PanelAction label={t('mobile.backToLibrary')} theme={theme} disabled={busy} onPress={() => { setEditor(null); setError(null); }} />
       </View> : <View>
         {([{ scope: 'all' }, { scope: 'favorites' }] as LibraryTarget[]).map((value) => <Pressable key={value.scope}
           accessibilityRole="radio" accessibilityState={{ checked: targetKey(target) === targetKey(value) }} onPress={() => select(value)}
           style={[panelStyles.row, { borderColor: theme.border }]}>
-          <Text style={[panelStyles.label, { color: theme.label }]}>{value.scope === 'all' ? '全部字体' : '星标收藏'}</Text>
+          <Text style={[panelStyles.label, { color: theme.label }]}>{value.scope === 'all' ? t('mobile.allFonts') : t('mobile.starredCollections')}</Text>
           {targetKey(target) === targetKey(value) && <CheckIcon size={20} color={theme.accent} />}
         </Pressable>)}
         <View style={panelStyles.header}>
-          <Text accessibilityRole="header" style={[panelStyles.section, { color: theme.secondary }]}>收藏夹</Text>
-          <PanelAction label="新建" theme={theme} disabled={!snapshot} onPress={() => edit(null)} />
+          <Text accessibilityRole="header" style={[panelStyles.section, { color: theme.secondary }]}>{t('collection.collections')}</Text>
+          <PanelAction label={t('mobile.new')} theme={theme} disabled={!snapshot} onPress={() => edit(null)} />
         </View>
         {snapshot?.collections.map((collection) => <View key={collection.id} style={[panelStyles.row, { borderColor: theme.border }]}>
-          <Pressable accessibilityRole="radio" accessibilityLabel={`${collection.name}，${collection.memberCount} 个成员`}
+          <Pressable accessibilityRole="radio" accessibilityLabel={t('mobile.collectionCount', { name: collection.name, count: collection.memberCount })}
             accessibilityState={{ checked: target.scope === 'collection' && target.collectionId === collection.id }}
             onPress={() => select({ scope: 'collection', collectionId: collection.id })}
             style={[panelStyles.row, { flex: 1, borderBottomWidth: 0 }]}>
@@ -115,11 +117,11 @@ export function CollectionsPanel({ visible, theme, target, snapshot, onSelect, o
             <Text style={[panelStyles.detail, { color: theme.secondary }]}>{collection.memberCount}</Text>
             {target.scope === 'collection' && target.collectionId === collection.id && <CheckIcon size={20} color={theme.accent} />}
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`编辑${collection.name}`} onPress={() => edit(collection)} style={panelStyles.action}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.editCollection', { name: collection.name })} onPress={() => edit(collection)} style={panelStyles.action}>
             <PencilSimpleIcon size={20} color={theme.accent} />
           </Pressable>
         </View>)}
-        {snapshot?.collections.length === 0 && <Text style={[panelStyles.section, { color: theme.secondary }]}>还没有收藏夹。</Text>}
+        {snapshot?.collections.length === 0 && <Text style={[panelStyles.section, { color: theme.secondary }]}>{t('collection.none')}</Text>}
       </View>}
     </ScrollView>
   </LibraryPanel>;
@@ -130,6 +132,7 @@ export function FamilyCollectionsPanel({ visible, family, snapshot, collectionId
   visible: boolean; family: FontFamily; snapshot: LibrarySnapshot | null; collectionId?: string; theme: Theme;
   onSnapshot: (snapshot: LibrarySnapshot) => void; onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -139,27 +142,27 @@ export function FamilyCollectionsPanel({ visible, family, snapshot, collectionId
     pending.current = true; setBusy(true); setError(null); setMessage(null);
     try {
       onSnapshot(await library.setCollectionMembers(collection.id, [...new Set(family.identityIds)], member));
-      setMessage(`已${member ? '加入' : '移出'}「${collection.name}」`);
-    } catch { setError('无法更新收藏夹，请重试。'); }
+      setMessage(member ? t('collection.memberAdded', { name: collection.name }) : t('collection.memberRemoved', { name: collection.name }));
+    } catch { setError(t('mobile.errorCollection')); }
     finally { pending.current = false; setBusy(false); }
   }
   const current = snapshot?.collections.find((item) => item.id === collectionId);
-  return <LibraryPanel visible={visible} title="添加到收藏夹" theme={theme} busy={busy}
+  return <LibraryPanel visible={visible} title={t('collection.addTo')} theme={theme} busy={busy}
     onClose={() => { if (!pending.current) { setMessage(null); setError(null); onClose(); } }}>
     <ScrollView contentContainerStyle={panelStyles.content} keyboardShouldPersistTaps="handled">
       <Text style={[panelStyles.section, { color: theme.secondary }]}>{family.displayName}</Text>
       {message && <Text accessibilityLiveRegion="polite" style={[panelStyles.section, { color: theme.secondary }]}>{message}</Text>}
       {error && <Text accessibilityRole="alert" style={[panelStyles.section, { color: theme.danger }]}>{error}</Text>}
       {snapshot?.collections.map((collection) => <Pressable key={collection.id} accessibilityRole="button"
-        accessibilityLabel={`将字体加入${collection.name}`} accessibilityState={{ disabled: busy }} disabled={busy}
+        accessibilityLabel={t('collection.addToNamed', { name: collection.name })} accessibilityState={{ disabled: busy }} disabled={busy}
         onPress={() => { void change(collection, true); }} style={[panelStyles.row, { borderColor: theme.border }]}>
         <CollectionSymbol icon={collection.icon} color={collectionColorValue(collection.color)} />
         <Text style={[panelStyles.label, { color: theme.label }]}>{collection.name}</Text>
-        <Text style={[panelStyles.detail, { color: theme.secondary }]}>加入</Text>
+        <Text style={[panelStyles.detail, { color: theme.secondary }]}>{t('collection.add')}</Text>
       </Pressable>)}
-      {current && <PanelAction label={`移出「${current.name}」`} theme={theme} destructive disabled={busy}
+      {current && <PanelAction label={t('collection.removeFromNamed', { name: current.name })} theme={theme} destructive disabled={busy}
         onPress={() => { void change(current, false); }} />}
-      {snapshot?.collections.length === 0 && <Text style={[panelStyles.detail, { color: theme.secondary }]}>还没有收藏夹，请在字体库中创建。</Text>}
+      {snapshot?.collections.length === 0 && <Text style={[panelStyles.detail, { color: theme.secondary }]}>{t('collection.emptyCreateHint')}</Text>}
     </ScrollView>
   </LibraryPanel>;
 }

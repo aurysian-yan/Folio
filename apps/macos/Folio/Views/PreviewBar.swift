@@ -29,12 +29,12 @@ struct PreviewBar: View {
             Divider()
                 .frame(height: 20)
 
-            ColorPicker("卡片", selection: cardBackgroundColor, supportsOpacity: true)
+            ColorPicker(L.text("libraryView.card"), selection: cardBackgroundColor, supportsOpacity: true)
                 .fixedSize()
-                .help("卡片背景色")
-            ColorPicker("文字", selection: $model.previewColor, supportsOpacity: true)
+                .help(L.text("theme.cardBackground"))
+            ColorPicker(L.text("common.text"), selection: $model.previewColor, supportsOpacity: true)
                 .fixedSize()
-                .help("文字颜色")
+                .help(L.text("theme.textColor"))
         }
         .frame(minWidth: 520)
     }
@@ -46,12 +46,12 @@ struct PreviewBar: View {
             sizeSlider(width: 72)
             sizeValue
             compactColorPicker(
-                "卡片背景色",
+                L.text("theme.cardBackground"),
                 systemImage: "rectangle.fill",
                 selection: cardBackgroundColor
             )
             compactColorPicker(
-                "文字颜色",
+                L.text("theme.textColor"),
                 systemImage: "textformat",
                 selection: $model.previewColor
             )
@@ -86,12 +86,12 @@ struct PreviewBar: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .accessibilityLabel("预览文字类型")
-        .help("选择预览文字类型")
+        .accessibilityLabel(L.text("preview.textType"))
+        .help(L.text("desktop.selectPreviewTextType"))
     }
 
     private func previewTextField(minWidth: CGFloat) -> some View {
-        TextField("Preview Text", text: previewText)
+        TextField(L.text("preview.inputText"), text: previewText)
             .textFieldStyle(.roundedBorder)
             .frame(minWidth: minWidth, maxWidth: .infinity)
     }
@@ -108,7 +108,7 @@ struct PreviewBar: View {
             }
         }
             .frame(width: width)
-            .accessibilityLabel("预览字号")
+            .accessibilityLabel(L.text("preview.size"))
             .sliderHaptics(value: model.previewSize, in: 18...106, feedbackStep: 1)
     }
 

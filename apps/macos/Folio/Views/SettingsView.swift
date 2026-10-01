@@ -40,7 +40,7 @@ struct SettingsView: View {
         pager
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Picker("设置分类", selection: pickerSelection) {
+                    Picker(L.text("settings.category"), selection: pickerSelection) {
                         ForEach(SettingsSection.allCases) { section in
                             Text(section.title).tag(section)
                         }
@@ -56,20 +56,20 @@ struct SettingsView: View {
                 bottomBar
             }
             .confirmationDialog(
-                "恢复默认值？",
+                L.text("settings.resetTitle"),
                 isPresented: $showResetConfirmation
             ) {
-                Button("恢复默认值", role: .destructive) { resetToDefaults() }
+                Button(L.text("settings.resetAction"), role: .destructive) { resetToDefaults() }
             } message: {
-                Text("所有偏好将恢复为初始设置，WebDAV 连接信息不受影响。")
+                Text(L.text("settings.resetMessage"))
             }
             .confirmationDialog(
-                "重建同步索引？",
+                L.text("settings.rebuildTitle"),
                 isPresented: $showSyncRebuildConfirmation
             ) {
-                Button("重建同步索引") { rebuildSyncIndexes() }
+                Button(L.text("settings.rebuildAction")) { rebuildSyncIndexes() }
             } message: {
-                Text("将依据本机已有事件修复序号与接收位置，保留 WebDAV 连接、字体和个人数据。")
+                Text(L.text("settings.rebuildMessage"))
             }
             .onAppear {
                 cloud.start()
@@ -143,13 +143,13 @@ struct SettingsView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 12) {
-            circleButton("arrow.counterclockwise", label: "恢复默认值") {
+            circleButton("arrow.counterclockwise", label: L.text("settings.resetAction")) {
                 showResetConfirmation = true
             }
             Spacer()
-            circleButton("xmark", label: "取消") { closeWindow() }
+            circleButton("xmark", label: L.text("common.cancel")) { closeWindow() }
                 .keyboardShortcut(.cancelAction)
-            circleButton("checkmark", label: "好", filled: true) { commit() }
+            circleButton("checkmark", label: L.text("common.ok"), filled: true) { commit() }
                 .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 20)
@@ -199,30 +199,30 @@ struct SettingsView: View {
     private var cloudForm: some View {
         Form {
             Section {
-                Picker("服务商", selection: webDAVPresetSelection) {
+                Picker(L.text("cloud.provider"), selection: webDAVPresetSelection) {
                     ForEach(WebDAVPreset.allCases) { preset in
                         Text(preset.title).tag(preset)
                     }
                 }
                 .pickerStyle(.segmented)
-                TextField("服务器地址", text: $draft.serverURL, prompt: Text("https://"))
+                TextField(L.text("cloud.serverURL"), text: $draft.serverURL, prompt: Text("https://"))
                     .textContentType(.URL)
                     .onChange(of: draft.serverURL) { _, serverURL in
                         draft.webDAVPreset = WebDAVPreset.matching(serverURL)
                     }
-                TextField("远端目录", text: $draft.remoteDirectory)
-                TextField("账号", text: $draft.username)
-                SecureField("密码或应用密码", text: $draft.password)
-                Toggle("自动同步", isOn: $draft.automatic)
+                TextField(L.text("cloud.remoteDirectory"), text: $draft.remoteDirectory)
+                TextField(L.text("cloud.username"), text: $draft.username)
+                SecureField(L.text("cloud.password"), text: $draft.password)
+                Toggle(L.text("cloud.autoSync"), isOn: $draft.automatic)
             } header: {
-                Text("WebDAV 连接")
+                Text(L.text("cloud.connection"))
             } footer: {
-                Text("密码保存在 macOS 钥匙串中，不会写入字体库数据库。")
+                Text(L.text("cloud.passwordInKeychain"))
             }
 
             Section {
                 HStack(spacing: 10) {
-                    Button("测试连接") {
+                    Button(L.text("cloud.testConnection")) {
                         testingConnection = true
                         Task {
                             _ = await cloud.testConnection(
@@ -239,7 +239,7 @@ struct SettingsView: View {
                     if testingConnection {
                         ProgressView()
                             .controlSize(.small)
-                            .accessibilityLabel("正在连接")
+                            .accessibilityLabel(L.text("cloud.connecting"))
                     }
                     Spacer()
                 }
@@ -250,11 +250,11 @@ struct SettingsView: View {
                         .foregroundStyle(cloud.errorMessage == nil ? Color.secondary : Color.red)
                 }
             } footer: {
-                Text("填写后点击“好”保存连接。")
+                Text(L.text("cloud.saveConnectionHint"))
             }
 
             if cloud.isConnected {
-                Section("同步状态") {
+                Section(L.text("cloud.syncStatus")) {
                     HStack(spacing: 10) {
                         Group {
                             if cloud.isRunning {
@@ -270,10 +270,10 @@ struct SettingsView: View {
                             }
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(cloud.isRunning ? "正在同步 \(cloud.status?.percent ?? 0)%" : "已连接 \(cloud.connectionName)")
+                            Text(cloud.isRunning ? L.format("cloud.syncingPercent", String(cloud.status?.percent ?? 0)) : L.format("cloud.connectedTo", cloud.connectionName))
                             if cloud.isRunning {
                                 if let status = cloud.status {
-                                    Text("\(status.stage) \(status.stageCompleted)/\(status.stageTotal) · 上传 \(status.uploadedFiles) 个 · 下载 \(status.downloadedFiles) 个")
+                                    Text("\(status.stage) \(status.stageCompleted)/\(status.stageTotal) · \(L.format("cloud.uploadedCount", String(status.uploadedFiles))) · \(L.format("cloud.downloadedCount", String(status.downloadedFiles)))")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -287,11 +287,11 @@ struct SettingsView: View {
                     }
 
                     HStack {
-                        Button(cloud.isRunning ? "取消同步" : "立即同步") {
+                        Button(cloud.isRunning ? L.text("cloud.cancelSync") : L.text("cloud.syncNow")) {
                             if cloud.isRunning { cloud.cancel() } else { cloud.syncNow() }
                         }
                         Spacer()
-                        Button("断开连接", role: .destructive) { cloud.disconnect() }
+                        Button(L.text("cloud.disconnect"), role: .destructive) { cloud.disconnect() }
                     }
                 }
             }
@@ -302,15 +302,15 @@ struct SettingsView: View {
     private var importForm: some View {
         Form {
             Section {
-                Toggle("每次询问导入方式", isOn: $draft.askImportMode)
-                Picker("默认导入方式", selection: $draft.defaultImportMode) {
+                Toggle(L.text("import.askEachTime"), isOn: $draft.askImportMode)
+                Picker(L.text("import.defaultMode"), selection: $draft.defaultImportMode) {
                     ForEach(FontImportMode.allCases) { mode in
                         Text(mode.title).tag(mode.rawValue)
                     }
                 }
                 .disabled(draft.askImportMode)
             } footer: {
-                Text("关闭“每次询问”后，导入字体将直接使用默认方式。")
+                Text(L.text("import.askDisabledHint"))
             }
         }
         .formStyle(.grouped)
@@ -319,9 +319,9 @@ struct SettingsView: View {
     private var onlineFontsForm: some View {
         Form {
             Section {
-                Picker("地址", selection: $draft.useCustomGoogleFontsMirror) {
-                    Text("官方地址").tag(false)
-                    Text("自定义下载镜像").tag(true)
+                Picker(L.text("macos.address"), selection: $draft.useCustomGoogleFontsMirror) {
+                    Text(L.text("macos.officialAddress")).tag(false)
+                    Text(L.text("macos.customMirror")).tag(true)
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: draft.useCustomGoogleFontsMirror) { _, enabled in
@@ -330,17 +330,17 @@ struct SettingsView: View {
                     }
                 }
                 if draft.useCustomGoogleFontsMirror {
-                    TextField("HTTPS 地址模板", text: $draft.googleFontsMirrorTemplate)
+                    TextField(L.text("macos.httpsTemplate"), text: $draft.googleFontsMirrorTemplate)
                         .textContentType(.URL)
                         .disabled(testingMirror)
                         .onChange(of: draft.googleFontsMirrorTemplate) { _, _ in
                             mirrorMessage = nil
                         }
-                    Text("地址需包含 {commit} 和 {path}，用于获取同一版本的字体文件。")
+                    Text(L.text("macos.mirrorHint"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack {
-                        Button("测试镜像") { testMirror() }
+                        Button(L.text("macos.testMirror")) { testMirror() }
                             .disabled(testingMirror)
                         if testingMirror { ProgressView().controlSize(.small) }
                         if let mirrorMessage {
@@ -349,9 +349,9 @@ struct SettingsView: View {
                     }
                 }
             } header: {
-                Text("字体下载地址")
+                Text(L.text("macos.fontDownloadAddress"))
             } footer: {
-                Text("镜像不可用或文件校验失败时，将尝试官方地址。")
+                Text(L.text("macos.mirrorFallback"))
             }
         }
         .formStyle(.grouped)
@@ -368,7 +368,7 @@ struct SettingsView: View {
                 let online = try FolioOnline.open(cacheDirectory: cacheDirectory)
                 try online.validateMirror(template: template)
                 try online.testMirror(template: template)
-                message = "镜像可用"
+                message = L.text("macos.mirrorAvailable")
             } catch {
                 message = error.localizedDescription
             }
@@ -382,14 +382,14 @@ struct SettingsView: View {
     private var displayForm: some View {
         Form {
             Section {
-                Picker("当前视图", selection: $draft.libraryViewMode) {
+                Picker(L.text("settings.defaultView"), selection: $draft.libraryViewMode) {
                     ForEach(LibraryViewMode.allCases) { mode in
                         Text(mode.accessibilityTitle)
                             .tag(mode.rawValue)
                     }
                 }
                 PreferenceSliderRow(
-                    title: "预览字号",
+                    title: L.text("preview.size"),
                     value: $draft.previewSize,
                     range: 18...106,
                     step: 1
@@ -402,12 +402,12 @@ struct SettingsView: View {
     private var themeForm: some View {
         Form {
             Section {
-                Picker("默认主题色", selection: $draft.defaultThemeColor) {
+                Picker(L.text("theme.default"), selection: $draft.defaultThemeColor) {
                     ForEach(DefaultThemeColor.allCases) { option in
                         Text(option.title).tag(option.rawValue)
                     }
                 }
-                Toggle("进入收藏夹时使用收藏夹颜色", isOn: $draft.useCollectionThemeColor)
+                Toggle(L.text("theme.useCollectionColor"), isOn: $draft.useCollectionThemeColor)
             }
         }
         .formStyle(.grouped)
@@ -416,24 +416,24 @@ struct SettingsView: View {
     private var cardsForm: some View {
         Form {
             Section {
-                Toggle("悬停时选中字体卡片", isOn: $draft.selectCardsOnHover)
-                Toggle("切换字体卡片时提供触觉反馈", isOn: $draft.hoverSelectionHaptics)
-                Toggle("拖动滑块时提供触觉反馈", isOn: $draft.sliderHaptics)
+                Toggle(L.text("cards.selectOnHover"), isOn: $draft.selectCardsOnHover)
+                Toggle(L.text("cards.hoverHaptics"), isOn: $draft.hoverSelectionHaptics)
+                Toggle(L.text("cards.sliderHaptics"), isOn: $draft.sliderHaptics)
                 HStack {
-                    Text("滚轮滚动速度")
+                    Text(L.text("cards.scrollSpeed"))
                     Slider(
                         value: $draft.expandedCardWheelSpeed,
                         in: 0.5...2.0,
                         step: 0.05
                     )
-                    .accessibilityLabel("滚轮滚动速度")
+                    .accessibilityLabel(L.text("cards.scrollSpeed"))
                     Text("\(draft.expandedCardWheelSpeed, specifier: "%.2f")×")
                         .font(.system(.body, design: .monospaced))
                         .monospacedDigit()
                         .frame(width: 54, alignment: .trailing)
                 }
             } footer: {
-                Text("触觉反馈仅适用于支持该功能的内建或外接妙控板。")
+                Text(L.text("cards.hapticsNote"))
             }
         }
         .formStyle(.grouped)
@@ -441,7 +441,7 @@ struct SettingsView: View {
 
     private var storageForm: some View {
         Form {
-            Section("存储空间") {
+            Section(L.text("storage.space")) {
                 if let storageUsage {
                     StorageOverviewChart(
                         databaseBytes: storageUsage.databaseBytes,
@@ -451,65 +451,65 @@ struct SettingsView: View {
                         volumeFreeBytes: storageUsage.volumeFreeBytes
                     )
                     .padding(.vertical, 12)
-                    Text("总量包含数据库、托管与已安装字体、在线预览缓存。目录扫描缓存已计入数据库。")
+                    Text(L.text("storage.totalNote"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    ProgressView("正在统计本机存储…")
+                    ProgressView(L.text("storage.measuring"))
                 }
             }
             Section {
                 if let storageUsage {
                     storageDetail(
-                        "托管与已安装字体",
-                        detail: "由 Folio 保存的字体文件",
+                        L.text("storage.managedFonts"),
+                        detail: L.text("storage.managedFontsDetail"),
                         bytes: storageUsage.managedFontBytes,
                         color: .accentColor
                     )
                     storageDetail(
-                        "字体库数据库",
-                        detail: "收藏夹、同步记录与字体库索引",
+                        L.text("storage.libraryDatabase"),
+                        detail: L.text("storage.libraryDatabaseDetail"),
                         bytes: storageUsage.databaseBytes,
                         color: .primary
                     )
                     HStack(spacing: 10) {
                         Circle().fill(Color.secondary).frame(width: 9, height: 9)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("目录扫描缓存")
-                            Text("\(storageUsage.catalogCacheEntries) 条记录 · 估算占用，已计入数据库")
+                            Text(L.text("storage.catalogCache"))
+                            Text(L.format("storage.catalogCacheDetail", String(storageUsage.catalogCacheEntries)))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Text(formatBytes(storageUsage.catalogCacheEstimatedBytes))
                             .foregroundStyle(.secondary)
-                        Button("清理") { clearCatalogCache() }
-                            .accessibilityLabel("清理目录缓存")
+                        Button(L.text("storage.clean")) { clearCatalogCache() }
+                            .accessibilityLabel(L.text("storage.cleanCatalogCache"))
                             .disabled(storageBusy || cloud.isRunning)
                     }
                     storageDetail(
-                        "在线字体预览缓存",
-                        detail: "可重新下载的预览文件",
+                        L.text("storage.onlinePreviewCache"),
+                        detail: L.text("storage.onlinePreviewCacheDetail"),
                         bytes: previewCacheBytes ?? 0,
                         color: .orange
                     ) {
-                        Button("清理") { clearPreviewCache() }
-                            .accessibilityLabel("清理在线预览缓存")
+                        Button(L.text("storage.clean")) { clearPreviewCache() }
+                            .accessibilityLabel(L.text("storage.cleanPreviewCache"))
                             .disabled(storageBusy || cloud.isRunning)
                     }
                 }
             } header: {
-                Text("占用明细")
+                Text(L.text("storage.usageDetails"))
             } footer: {
-                Text("清理缓存后会在下次使用时重新生成，字体文件和个人数据会保留。")
+                Text(L.text("storage.cleanHint"))
             }
             Section {
-                Button("重建同步索引") { showSyncRebuildConfirmation = true }
+                Button(L.text("storage.rebuildIndex")) { showSyncRebuildConfirmation = true }
                     .disabled(storageBusy || cloud.isRunning)
             } header: {
-                Text("同步索引")
+                Text(L.text("cloud.syncIndex"))
             } footer: {
-                Text("依据现有事件修复序号和接收位置，不清空同步历史。")
+                Text(L.text("storage.syncIndexDetail"))
             }
             if let storageMessage {
                 Section {
@@ -574,7 +574,7 @@ struct SettingsView: View {
             defer { storageBusy = false }
             do {
                 let removed = try await cloud.clearCatalogCache()
-                storageMessage = "已清理 \(removed) 条目录缓存记录。下次刷新字体库时会重新扫描。"
+                storageMessage = L.format("storage.catalogCleaned", String(removed))
                 loadStorageUsage()
             } catch {
                 storageMessage = error.localizedDescription
@@ -590,7 +590,7 @@ struct SettingsView: View {
             defer { storageBusy = false }
             do {
                 let bytes = try await cloud.clearPreviewCache(cacheDirectory: cacheDirectory)
-                storageMessage = "已清理 \(formatBytes(bytes)) 在线预览缓存。"
+                storageMessage = L.format("storage.previewCleaned", formatBytes(bytes))
                 loadStorageUsage()
             } catch {
                 storageMessage = error.localizedDescription
@@ -605,7 +605,7 @@ struct SettingsView: View {
             defer { storageBusy = false }
             do {
                 try await cloud.rebuildSyncIndexes()
-                storageMessage = "同步索引已重建，连接和本地记录均已保留。"
+                storageMessage = L.text("cloud.rebuildDone")
                 loadStorageUsage()
             } catch {
                 storageMessage = error.localizedDescription
@@ -748,7 +748,7 @@ private struct StorageOverviewChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Folio 本地占用")
+                Text(L.text("storage.folioUsage"))
                 Spacer()
                 Text(ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file))
                     .font(.title2.weight(.semibold))
@@ -767,7 +767,7 @@ private struct StorageOverviewChart: View {
             .background(Color.primary.opacity(0.12))
             .clipShape(Capsule())
             HStack {
-                Text("\(ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeTotalBytes), countStyle: .file)) · Folio 数据所在磁盘")
+                Text(L.format("storage.diskOf", ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file), ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeTotalBytes), countStyle: .file)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -775,15 +775,21 @@ private struct StorageOverviewChart: View {
             }
             HStack(spacing: 18) {
                 Circle().fill(Color.secondary).frame(width: 9, height: 9)
-                Text("其他应用与系统 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: otherUsedBytes), countStyle: .file))")
+                Text("\(L.text("storage.otherApps")) \(ByteCountFormatter.string(fromByteCount: Int64(clamping: otherUsedBytes), countStyle: .file))")
                 Circle().fill(Color.primary.opacity(0.12)).frame(width: 9, height: 9)
-                Text("可用空间 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeFreeBytes), countStyle: .file))")
+                Text(L.format("storage.freeSpace", ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeFreeBytes), countStyle: .file)))
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Folio 本地占用 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file))，占用所在磁盘空间 \(percentageLabel)，其他应用与系统 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: otherUsedBytes), countStyle: .file))，可用空间 \(ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeFreeBytes), countStyle: .file))")
+        .accessibilityLabel(L.format(
+            "storage.accessibilityUsage",
+            ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file),
+            percentageLabel,
+            ByteCountFormatter.string(fromByteCount: Int64(clamping: otherUsedBytes), countStyle: .file),
+            ByteCountFormatter.string(fromByteCount: Int64(clamping: volumeFreeBytes), countStyle: .file)
+        ))
     }
 
     private func segmentWidth(_ segment: Segment, in width: CGFloat) -> CGFloat {
@@ -807,14 +813,14 @@ private enum SettingsSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .cloud: "云同步"
-        case .onlineFonts: "在线字体"
-        case .importing: "导入"
-        case .display: "显示"
-        case .theme: "主题色"
-        case .cards: "字体卡片"
-        case .storage: "存储"
-        case .about: "关于"
+        case .cloud: L.text("settings.cloud")
+        case .onlineFonts: L.text("settings.onlineFonts")
+        case .importing: L.text("settings.importing")
+        case .display: L.text("settings.display")
+        case .theme: L.text("settings.theme")
+        case .cards: L.text("settings.cards")
+        case .storage: L.text("settings.storage")
+        case .about: L.text("settings.about")
         }
     }
 }
@@ -828,9 +834,9 @@ private enum WebDAVPreset: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .none: "无"
-        case .pan123: "123 云盘"
-        case .jianguoyun: "坚果云"
+        case .none: L.text("macos.providerNone")
+        case .pan123: L.text("macos.provider123")
+        case .jianguoyun: L.text("macos.providerJianguoyun")
         }
     }
 

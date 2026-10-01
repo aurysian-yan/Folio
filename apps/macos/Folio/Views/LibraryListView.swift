@@ -6,7 +6,7 @@ struct LibraryListView: View {
 
     var body: some View {
         Table(model.families, selection: $model.selectedFamilyID) {
-            TableColumn("预览") { family in
+            TableColumn(L.text("common.preview")) { family in
                 FontPreviewView(
                     text: model.previewText,
                     face: family.defaultFace,
@@ -20,25 +20,25 @@ struct LibraryListView: View {
             }
             .width(min: 110, ideal: 160)
 
-            TableColumn("字族") { family in
+            TableColumn(L.text("font.family")) { family in
                 Text(family.displayName)
                     .lineLimit(1)
             }
             .width(min: 120, ideal: 180)
 
-            TableColumn("字款") { family in
+            TableColumn(L.text("font.faces")) { family in
                 Text(family.faces.count, format: .number)
             }
             .width(50)
 
-            TableColumn("可变") { family in
+            TableColumn(L.text("font.variableShort")) { family in
                 Image.englishSystemName(family.isVariable ? "checkmark" : "minus")
                     .foregroundStyle(family.isVariable ? themeColor : Color.secondary)
-                    .accessibilityLabel(family.isVariable ? "可变字体" : "非可变字体")
+                    .accessibilityLabel(family.isVariable ? L.text("font.variable") : L.text("font.static"))
             }
             .width(50)
 
-            TableColumn("厂牌") { family in
+            TableColumn(L.text("font.manufacturer")) { family in
                 Text(family.manufacturer ?? "—")
                     .lineLimit(1)
                     .foregroundStyle(.secondary)

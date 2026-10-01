@@ -47,6 +47,7 @@ Folio/
 │   ├── folio-sync/            # WebDAV 同步
 │   └── folio-online/          # 在线字体目录与下载
 ├── experiments/mobile/        # Android/iOS 隔离概念验证
+├── locales/                   # 三端共用的界面语言目录（zh-CN 源、en）
 ├── fixtures/fonts/            # 可再分发的测试字体
 ├── docs/                      # 架构、审计与开发文档
 └── FOLIO_ROADMAP.md           # 当前能力状态与开发路线

@@ -12,6 +12,7 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 import { requireNativeView } from 'expo';
 import { useEffect, useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AccessibilityInfo, Keyboard, Platform, StyleSheet, View } from 'react-native';
 import { collectionColorValue, collectionSystemImage } from './collection-style';
 import type {
@@ -40,6 +41,7 @@ function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = fa
 
 // iPad 常规窗口使用原生分栏，紧凑窗口沿用 iPhone 标签栏。
 export function NativeNavigation({ children, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
+  const { t } = useTranslation();
   const [visibility, setVisibility] = useState<NavigationSplitViewVisibility>('all');
   const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
 
@@ -65,17 +67,17 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
                 setCompactColumn('detail');
               }
             }} modifiers={[listStyle('sidebar'), navigationTitle('Folio')]}>
-              <Section title="本地">
-                {row('local', '全部字体', 'textformat.alt', snapshot?.familyCount)}
-                {row('recent', '最近', 'clock', snapshot?.recentCount)}
-                {row('favorites', '星标收藏', 'star')}
+              <Section title={t('navigation.local')}>
+                {row('local', t('navigation.allFonts'), 'textformat.alt', snapshot?.familyCount)}
+                {row('recent', t('navigation.recent'), 'clock', snapshot?.recentCount)}
+                {row('favorites', t('mobile.starredCollections'), 'star')}
               </Section>
-              {!!snapshot?.collections.length && <Section title="收藏夹">
+              {!!snapshot?.collections.length && <Section title={t('navigation.collections')}>
                 {snapshot.collections.map((collection) => row(`collection:${collection.id}`, collection.name,
                   collectionSystemImage(collection.icon) as ButtonProps['systemImage'], collection.memberCount, collectionColorValue(collection.color)))}
               </Section>}
-              <Section title="云端">{row('cloud', '云端字体', 'cloud')}</Section>
-              <Section>{row('settings', '设置', 'gear')}</Section>
+              <Section title={t('navigation.cloud')}>{row('cloud', t('mobile.cloudFonts'), 'cloud')}</Section>
+              <Section>{row('settings', t('navigation.settings'), 'gear')}</Section>
             </List>
           </NavigationSplitView.Sidebar>
           <NavigationSplitView.Detail>{children}</NavigationSplitView.Detail>
@@ -90,18 +92,18 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
         if (value === 'local' || value === 'recent' || value === 'cloud' || value === 'settings') onDestinationChange(value);
       }}
         modifiers={[tabViewStyle({ type: 'automatic' }), tint(theme.accent), background(theme.background)]}>
-        <TabView.Tab value="local" label="本地" systemImage="textformat.alt">
+        <TabView.Tab value="local" label={t('navigation.local')} systemImage="textformat.alt">
           <NativeTabContent>
             <RNHostView><View style={styles.fill}>{children}</View></RNHostView>
           </NativeTabContent>
         </TabView.Tab>
-        <TabView.Tab value="recent" label="最近" systemImage="clock">
+        <TabView.Tab value="recent" label={t('navigation.recent')} systemImage="clock">
           <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
         </TabView.Tab>
-        <TabView.Tab value="cloud" label="云端" systemImage="cloud">
+        <TabView.Tab value="cloud" label={t('navigation.cloud')} systemImage="cloud">
           <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
         </TabView.Tab>
-        <TabView.Tab value="settings" label="设置" systemImage="gear">
+        <TabView.Tab value="settings" label={t('navigation.settings')} systemImage="gear">
           <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
         </TabView.Tab>
       </TabView>
@@ -112,6 +114,7 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
 // 分栏详情只保留系统工具栏，React Native 内容不再绘制顶部操作区。
 export function NativeLibraryContent({ children, title, subtitle, active, theme, mode, width,
   searchOpen, searchText, ready, importing, onModeChange, onSearch, onSearchTextChange, onImport, onFilter, filterCount }: NativeLibraryContentProps) {
+  const { t } = useTranslation();
   const text = useNativeState(searchText);
   useEffect(() => { if (!searchOpen) text.set(''); }, [searchOpen, text]);
 
@@ -126,15 +129,15 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
             ...(glass ? [glassEffect({ glass: { variant: 'regular' }, shape: 'capsule' })] : []),
           ]}>
             <Image systemName="magnifyingglass" size={20} color={theme.secondary} />
-            <TextField text={text} placeholder="搜索字体名称或样式" autoFocus
+            <TextField text={text} placeholder={t('mobile.searchPlaceholder')} autoFocus
               onTextChange={onSearchTextChange} modifiers={[
                 textFieldStyle(glass ? 'plain' : 'roundedBorder'), font({ textStyle: 'body' }), tint(theme.accent),
-                accessibilityLabel('搜索字体'), autocorrectionDisabled(), disabled(!ready),
+                accessibilityLabel(t('mobile.searchFonts')), autocorrectionDisabled(), disabled(!ready),
                 textInputAutocapitalization('never'), submitLabel('search'), onSubmit(() => Keyboard.dismiss()),
               ]} />
-            {searchText.length > 0 && <Button label="清除搜索" systemImage="xmark.circle.fill"
+            {searchText.length > 0 && <Button label={t('mobile.clearSearch')} systemImage="xmark.circle.fill"
               onPress={() => { text.set(''); onSearchTextChange(''); }}
-              modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel('清除搜索')]} />}
+              modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch'))]} />}
           </HStack> : <VStack>
             <Text modifiers={[font({ textStyle: 'headline' })]}>{title}</Text>
             {active && <Text modifiers={[font({ textStyle: 'caption' }), foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>{subtitle}</Text>}
@@ -143,19 +146,19 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
         {active && <ToolbarItem placement="topBarTrailing">
           <HStack>
             {searchOpen ? <>
-              <Button label="关闭搜索" systemImage="xmark" onPress={onSearch} modifiers={actionModifiers} />
+              <Button label={t('mobile.closeSearch')} systemImage="xmark" onPress={onSearch} modifiers={actionModifiers} />
             </> : <>
-              <Menu label={<Label title="视图选项" systemImage={mode === 'grid' ? 'square.grid.2x2' : 'list.bullet'} />}
-                modifiers={[labelStyle('iconOnly'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel('视图选项')]}>
-                <Picker label="视图" selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
-                  <Label title="网格视图" systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
-                  <Label title="列表视图" systemImage="list.bullet" modifiers={[tag('list')]} />
+              <Menu label={<Label title={t('libraryView.viewOptions')} systemImage={mode === 'grid' ? 'square.grid.2x2' : 'list.bullet'} />}
+                modifiers={[labelStyle('iconOnly'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel(t('libraryView.viewOptions'))]}>
+                <Picker label={t('mobile.viewMode')} selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
+                  <Label title={t('mobile.gridView')} systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
+                  <Label title={t('mobile.listView')} systemImage="list.bullet" modifiers={[tag('list')]} />
                 </Picker>
               </Menu>
-              <Button label={filterCount ? `筛选字体，已选 ${filterCount} 项` : '筛选字体'} systemImage="line.3.horizontal.decrease"
+              <Button label={filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts')} systemImage="line.3.horizontal.decrease"
                 onPress={onFilter} modifiers={[...actionModifiers, tint(filterCount ? theme.accent : theme.label), disabled(!ready)]} />
-              <Button label="搜索字体" systemImage="magnifyingglass" onPress={onSearch} modifiers={actionModifiers} />
-              <Button label={importing ? '正在导入…' : '导入字体'} systemImage="plus" onPress={onImport}
+              <Button label={t('mobile.searchFonts')} systemImage="magnifyingglass" onPress={onSearch} modifiers={actionModifiers} />
+              <Button label={importing ? t('mobile.loadingImport') : t('import.importFonts')} systemImage="plus" onPress={onImport}
                 modifiers={[...actionModifiers, disabled(!ready || importing)]} />
             </>}
           </HStack>
@@ -168,6 +171,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
 // 系统 Menu 保留原生展开、收起与菜单项选择行为。
 export function NativeHeaderControls({ theme, mode, width, searchOpen, searchText, ready, importing,
   onModeChange, onSearch, onSearchTextChange, onImport, onFilter, filterCount }: NativeHeaderProps) {
+  const { t } = useTranslation();
   const namespace = useId();
   const menuWidth = width < toolbarHeight * 7 ? toolbarHeight : 64;
   const text = useNativeState(searchText);
@@ -194,15 +198,15 @@ export function NativeHeaderControls({ theme, mode, width, searchOpen, searchTex
                 ...(glass ? [glassEffect({ glass: { variant: 'regular' }, shape: 'capsule' }), glassEffectId('search', namespace)] : []),
               ]}>
                 <Image systemName="magnifyingglass" size={20} color={theme.secondary} />
-                <TextField text={text} placeholder="搜索字体名称或样式" autoFocus onTextChange={onSearchTextChange}
+                <TextField text={text} placeholder={t('mobile.searchPlaceholder')} autoFocus onTextChange={onSearchTextChange}
                   modifiers={[textFieldStyle(glass ? 'plain' : 'roundedBorder'), font({ textStyle: 'body' }), tint(theme.accent),
-                    accessibilityLabel('搜索字体'), autocorrectionDisabled(),
+                    accessibilityLabel(t('mobile.searchFonts')), autocorrectionDisabled(),
                     textInputAutocapitalization('never'), submitLabel('search'), onSubmit(() => Keyboard.dismiss())]} />
-                {searchText.length > 0 && <Button label="清除搜索" systemImage="xmark.circle.fill"
+                {searchText.length > 0 && <Button label={t('mobile.clearSearch')} systemImage="xmark.circle.fill"
                   onPress={() => { text.set(''); onSearchTextChange(''); }}
-                  modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel('清除搜索')]} />}
+                  modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch'))]} />}
               </HStack>
-              <Button onPress={onSearch} modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel('关闭搜索')]}>
+              <Button onPress={onSearch} modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel(t('mobile.closeSearch'))]}>
                 <Image systemName="xmark" size={20} color={theme.label}
                   modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
               </Button>
@@ -213,28 +217,28 @@ export function NativeHeaderControls({ theme, mode, width, searchOpen, searchTex
                 <Image systemName="chevron.down" size={10} color={theme.secondary} />
               </HStack>}
                 modifiers={[menuStyle('button'), buttonStyle(glass ? 'plain' : 'bordered'),
-                  controlSize('large'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel('视图选项'),
+                  controlSize('large'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel(t('libraryView.viewOptions')),
                   frame({ width: menuWidth, height: toolbarHeight }),
                   ...(glass ? [glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'capsule' })] : [])]}>
-                <Picker label="视图" selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
-                  <Label title="网格视图" systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
-                  <Label title="列表视图" systemImage="list.bullet" modifiers={[tag('list')]} />
+                <Picker label={t('mobile.viewMode')} selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
+                  <Label title={t('mobile.gridView')} systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
+                  <Label title={t('mobile.listView')} systemImage="list.bullet" modifiers={[tag('list')]} />
                 </Picker>
               </Menu>
               <Button onPress={onFilter}
                 modifiers={[...iconButtonModifiers(filterCount ? theme.accent : theme.label), disabled(!ready),
-                  accessibilityLabel(filterCount ? `筛选字体，已选 ${filterCount} 项` : '筛选字体')]}>
+                  accessibilityLabel(filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'))]}>
                 <Image systemName="line.3.horizontal.decrease" size={20} color={filterCount ? theme.accent : theme.label}
                   modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
               </Button>
               <Button onPress={onSearch}
-                modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel('搜索字体'),
+                modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel(t('mobile.searchFonts')),
                   ...(glass ? [glassEffectId('search', namespace)] : [])]}>
                 <Image systemName="magnifyingglass" size={20} color={theme.label}
                   modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
               </Button>
               <Button onPress={onImport}
-                modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel(importing ? '正在导入…' : '导入字体'), disabled(!ready || importing)]}>
+                modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel(importing ? t('mobile.loadingImport') : t('import.importFonts')), disabled(!ready || importing)]}>
                 <Image systemName="plus" size={20} color={theme.label}
                   modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
               </Button>

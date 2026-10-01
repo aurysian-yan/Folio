@@ -1,5 +1,6 @@
 import { requireNativeView } from 'expo';
 import { StyleSheet, useWindowDimensions, type NativeSyntheticEvent, type ViewProps } from 'react-native';
+import i18n from './i18n/instance';
 import type { BottomNavigationProps, MobileTab, NavigationBackdropProps } from './bottom-navigation';
 
 // 导航按可用宽度居中，承载层为按压形变保留溢出空间。
@@ -7,10 +8,10 @@ const containerHeight = 60;
 const pressedHeight = 78;
 const overflow = (pressedHeight - containerHeight) / 2;
 const items = [
-  { id: 'local', label: '本地', icon: 'text-aa' },
-  { id: 'recent', label: '最近', icon: 'clock' },
-  { id: 'cloud', label: '云端', icon: 'cloud' },
-  { id: 'settings', label: '设置', icon: 'gear' },
+  { id: 'local', label: i18n.t('navigation.local'), icon: 'text-aa' },
+  { id: 'recent', label: i18n.t('navigation.recent'), icon: 'clock' },
+  { id: 'cloud', label: i18n.t('navigation.cloud'), icon: 'cloud' },
+  { id: 'settings', label: i18n.t('navigation.settings'), icon: 'gear' },
 ] as const;
 export const navigationItems = items;
 

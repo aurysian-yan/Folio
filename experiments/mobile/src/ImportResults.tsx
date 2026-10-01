@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { summarizeImport, type ImportReport } from './library';
@@ -11,23 +12,24 @@ export function ImportResults({ report, visible, theme, onClose }: {
   theme: Theme;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   if (!report) return null;
   const counts = summarizeImport(report.items);
-  const labels = { imported: '已导入', duplicate: '已跳过重复文件', failed: '导入失败' };
+  const labels = { imported: t('mobile.imported'), duplicate: t('mobile.skippedDuplicates'), failed: t('mobile.importFailed') };
   return <Modal visible={visible} presentationStyle="pageSheet" animationType="none" onRequestClose={onClose}>
     <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
       <View accessibilityViewIsModal style={styles.screen}>
         <View style={styles.header}>
-          <Text accessibilityRole="header" style={[styles.title, { color: theme.label }]}>导入结果</Text>
-          {usesNativeControls ? <NativeActionButton label="完成" color={theme.accent} onPress={onClose} plain />
+          <Text accessibilityRole="header" style={[styles.title, { color: theme.label }]}>{t('import.importResults')}</Text>
+          {usesNativeControls ? <NativeActionButton label={t('common.done')} color={theme.accent} onPress={onClose} plain />
             : <Pressable accessibilityRole="button" onPress={onClose} style={styles.action}>
-              <Text style={{ color: theme.accent }}>完成</Text>
+              <Text style={{ color: theme.accent }}>{t('common.done')}</Text>
             </Pressable>}
         </View>
         <FlatList data={report.items} keyExtractor={(_, index) => String(index)}
           contentContainerStyle={styles.content} initialNumToRender={12}
           ListHeaderComponent={<Text style={[styles.summary, { color: theme.secondary }]}>
-            {`成功 ${counts.imported} · 重复 ${counts.duplicate} · 失败 ${counts.failed}`}
+            {t('mobile.importSummary', { imported: counts.imported, duplicate: counts.duplicate, failed: counts.failed })}
           </Text>}
           renderItem={({ item }) => <View style={[styles.item, { borderColor: theme.border }]}>
             <Text selectable style={[styles.name, { color: theme.label }]}>

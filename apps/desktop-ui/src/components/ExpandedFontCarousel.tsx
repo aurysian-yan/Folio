@@ -1,6 +1,7 @@
 import { Button } from "@heroui/react";
 import { CaretLeftIcon, CaretRightIcon, ListIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type PointerEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { FamilyDto } from "../types";
 import type { EditingPreview } from "../preview-appearance";
 import { ClaralightSlider } from "./ClaralightSlider";
@@ -53,6 +54,7 @@ function savedRatio() {
 }
 
 export function ExpandedFontCarousel({ families, selectedId, styleKey, total, wheelSpeed, isLoading, onLoadMore, onRequestRange, onPreviewSelect, header, emptyState, editingPreview, onSelect, ...cardProps }: Props) {
+  const { t } = useTranslation();
   const stage = useRef<HTMLDivElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(820);
@@ -265,7 +267,7 @@ export function ExpandedFontCarousel({ families, selectedId, styleKey, total, wh
       void onRequestRange(start, Math.min(5, total - start)).then((result) => {
         if (requestSerial.current !== serial) return;
         const found = result[target - start];
-        if (!found) throw new Error("字体不存在");
+        if (!found) throw new Error(t("desktop.fontMissing"));
         setRequestedFamilies((current) => {
           const next = new Map(current);
           result.forEach((family, offset) => next.set(start + offset, family));
@@ -276,7 +278,7 @@ export function ExpandedFontCarousel({ families, selectedId, styleKey, total, wh
       }).catch(() => {
         if (requestSerial.current !== serial) return;
         setPendingIndex(null);
-        setRequestError("无法加载该位置的字体，请重试。");
+        setRequestError(t("desktop.loadFontFailed"));
       });
       return;
     }
@@ -296,7 +298,7 @@ export function ExpandedFontCarousel({ families, selectedId, styleKey, total, wh
       loadingFrom.current = families.length;
       onLoadMore?.();
     }
-  }, [cancelWheel, currentIndex, families, total, isLoading, onLoadMore, onRequestRange, onSelect, selectedId, familyAt, animateTo]);
+  }, [cancelWheel, currentIndex, families, total, isLoading, onLoadMore, onRequestRange, onSelect, selectedId, familyAt, animateTo, t]);
 
   const selectCard = useCallback((family: FamilyDto) => {
     const loaded = families.findIndex((entry) => entry.id === family.id);
@@ -356,7 +358,7 @@ export function ExpandedFontCarousel({ families, selectedId, styleKey, total, wh
       void onRequestRange(start, Math.min(5, total - start)).then((result) => {
         if (requestSerial.current !== serial || scrubRequest.current?.serial !== serial) return;
         const found = result[target - start];
-        if (!found) throw new Error("字体不存在");
+        if (!found) throw new Error(t("desktop.fontMissing"));
         setRequestedFamilies((current) => {
           const next = new Map(current);
           result.forEach((family, offset) => next.set(start + offset, family));
@@ -369,13 +371,13 @@ export function ExpandedFontCarousel({ families, selectedId, styleKey, total, wh
         if (requestSerial.current !== serial) return;
         scrubRequest.current = null;
         setPendingIndex(null);
-        setRequestError("无法加载该位置的字体，请重试。");
+        setRequestError(t("desktop.loadFontFailed"));
       });
     };
     startScrubFetch.current = fetchTarget;
     if (commit) fetchTarget();
     else scrubFetchTimer.current = window.setTimeout(fetchTarget, 60);
-  }, [total, cancelWheel, familyAt, onPreviewSelect, onSelect, onRequestRange]);
+  }, [total, cancelWheel, familyAt, onPreviewSelect, onSelect, onRequestRange, t]);
 
   useEffect(() => {
     const element = stage.current;
@@ -473,11 +475,11 @@ export function ExpandedFontCarousel({ families, selectedId, styleKey, total, wh
     }
   };
 
-  return <div ref={scroll} className="font-grid expanded-carousel-scroll mode-expanded" role="region" aria-label="字体浏览" onKeyDown={onKeyDown}>
+  return <div ref={scroll} className="font-grid expanded-carousel-scroll mode-expanded" role="region" aria-label={t("desktop.fontBrowse")} onKeyDown={onKeyDown}>
     <div className="font-grid-header">{header}</div>
-    {families.length ? <div className="expanded-carousel" role="group" aria-label="展开卡片">
+    {families.length ? <div className="expanded-carousel" role="group" aria-label={t("libraryView.stack")}>
       <div ref={stage} className={`expanded-carousel-stage${motion?.phase === "moving" ? " is-moving" : ""}`} style={{ height: cardHeight }} onPointerDownCapture={onPointerDown} onPointerUpCapture={onPointerUp} onPointerCancelCapture={() => { pointerStart.current = null; }}>
-        <div className="expanded-carousel-stack" role="list" aria-label="字体卡片" style={{ width: stackWidth, height: cardHeight }}>
+        <div className="expanded-carousel-stack" role="list" aria-label={t("settings.cards")} style={{ width: stackWidth, height: cardHeight }}>
           {visibleCards.map(({ family, familyIndex, virtualIndex }) => {
             const depth = visualProgress - virtualIndex;
             const { scale, offset, opacity, blur, zIndex } = cardPosition(depth, cardWidth);
@@ -489,20 +491,20 @@ export function ExpandedFontCarousel({ families, selectedId, styleKey, total, wh
                 textColor={editingPreview?.familyId === family.id ? editingPreview.appearance.textColor : cardProps.textColor}
                 backgroundColor={editingPreview?.familyId === family.id ? editingPreview.appearance.backgroundColor : cardProps.backgroundColor}
                 onSelect={selectCard} position={familyIndex + 1} total={total} />
-              {current && <button type="button" role="slider" className="carousel-resize-handle" aria-label="调整卡片高度" aria-valuemin={45} aria-valuemax={140} aria-valuenow={Math.round((draftRatio ?? ratio) * 100)} aria-valuetext={`${Math.round((draftRatio ?? ratio) * 100)}%`} onPointerDown={beginResize} onPointerMove={updateResize} onPointerUp={finishResize} onPointerCancel={finishResize}
+              {current && <button type="button" role="slider" className="carousel-resize-handle" aria-label={t("inspector.adjustCardHeight")} aria-valuemin={45} aria-valuemax={140} aria-valuenow={Math.round((draftRatio ?? ratio) * 100)} aria-valuetext={`${Math.round((draftRatio ?? ratio) * 100)}%`} onPointerDown={beginResize} onPointerMove={updateResize} onPointerUp={finishResize} onPointerCancel={finishResize}
                 onKeyDown={(event) => { if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return; event.preventDefault(); const next = Math.min(1.4, Math.max(0.45, ratio + (event.key === "ArrowDown" ? 0.05 : -0.05))); setRatio(next); localStorage.setItem(ratioKey, String(next)); }}><ListIcon /></button>}
             </div>;
           })}
         </div>
       </div>
-      <div className="expanded-carousel-pager" aria-label="字体位置">
+      <div className="expanded-carousel-pager" aria-label={t("desktop.fontPosition")}>
         <div className="expanded-carousel-pager-row">
-          <Button isIconOnly size="sm" variant="ghost" aria-label="上一个字体" isDisabled={total < 2 || !onRequestRange && currentIndex === 0 && families.length < total} onPress={() => moveTo(currentIndex - 1)}><CaretLeftIcon /></Button>
+          <Button isIconOnly size="sm" variant="ghost" aria-label={t("desktop.prevFont")} isDisabled={total < 2 || !onRequestRange && currentIndex === 0 && families.length < total} onPress={() => moveTo(currentIndex - 1)}><CaretLeftIcon /></Button>
           <output aria-live="polite">{draftPage ?? (pendingIndex !== null && pendingIndex >= families.length ? pendingIndex + 1 : currentIndex + 1)}</output>
-          <Button isIconOnly size="sm" variant="ghost" aria-label="下一个字体" isDisabled={total < 2 || !onRequestRange && isLoading && currentIndex >= families.length - 1} onPress={() => moveTo(currentIndex + 1)}><CaretRightIcon /></Button>
+          <Button isIconOnly size="sm" variant="ghost" aria-label={t("desktop.nextFont")} isDisabled={total < 2 || !onRequestRange && isLoading && currentIndex >= families.length - 1} onPress={() => moveTo(currentIndex + 1)}><CaretRightIcon /></Button>
         </div>
         <ClaralightSlider className="folio-slider" min={1} max={Math.max(1, onRequestRange ? total : families.length)} step={1} value={draftPage ?? currentIndex + 1}
-          disabled={total < 2} aria-label="字体位置" aria-valuetext={`第 ${draftPage ?? currentIndex + 1} 个，共 ${total} 个`}
+          disabled={total < 2} aria-label={t("desktop.fontPosition")} aria-valuetext={t("common.indexOfTotal", { index: draftPage ?? currentIndex + 1, total })}
           onValueChangeStart={() => setDraftPage(currentIndex + 1)}
           onValueChange={(value) => { setDraftPage(value); scrubTo(value - 1, false); }}
           onValueChangeEnd={(value) => { setDraftPage(null); scrubTo(value - 1, true); }} />

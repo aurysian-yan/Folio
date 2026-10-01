@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { ClockIcon, CloudIcon, GearIcon, TextAaIcon } from 'phosphor-react-native';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle, type ViewProps } from 'react-native';
+import i18n from './i18n/instance';
 import type { Theme } from './ui';
 
 export const navigationItems = [
-  { id: 'local', label: '本地', icon: 'text-aa' },
-  { id: 'recent', label: '最近', icon: 'clock' },
-  { id: 'cloud', label: '云端', icon: 'cloud' },
-  { id: 'settings', label: '设置', icon: 'gear' },
+  { id: 'local', label: i18n.t('navigation.local'), icon: 'text-aa' },
+  { id: 'recent', label: i18n.t('navigation.recent'), icon: 'clock' },
+  { id: 'cloud', label: i18n.t('navigation.cloud'), icon: 'cloud' },
+  { id: 'settings', label: i18n.t('navigation.settings'), icon: 'gear' },
 ] as const;
 
 export type MobileTab = typeof navigationItems[number]['id'];

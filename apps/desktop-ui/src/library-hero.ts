@@ -1,3 +1,4 @@
+import i18n from "./i18n";
 import type { CloudFontDto, LibrarySnapshotDto, SyncConflictDto, SyncProfileDto, SyncStatusDto } from "./types";
 
 export type HeroKind = "normal" | "damaged" | "update" | "cloudAhead" | "localUnsynced" | "cloudStorageLow" | "conflict";
@@ -40,9 +41,9 @@ export function createLibraryHero(input: HeroInput): HeroPresentation {
   const { snapshot, profile, status, fonts, conflicts, updateCount = 0, storage } = input;
   const count = snapshot?.familyCount ?? 0;
   const summary = snapshot
-    ? `${count} 个字族 · ${snapshot.variableFamilyCount} 个可变字族 · ${snapshot.recentCount} 个最近访问`
-    : "正在读取字体库…";
-  const connection = profile ? heroConnectionName(profile) : "云端";
+    ? i18n.t("library.summary", { families: count, variable: snapshot.variableFamilyCount, recent: snapshot.recentCount })
+    : i18n.t("common.loadingLibrary");
+  const connection = profile ? heroConnectionName(profile) : i18n.t("navigation.cloud");
   // 队列按文件指纹去重；仅在云端保留的字体不等同于待下载任务。
   const uploads = new Set(status?.items.filter((item) => item.action === "upload" && item.status !== "done").map((item) => item.fingerprint));
   const downloads = new Set(status?.items.filter((item) => item.action === "download" && item.status !== "done").map((item) => item.fingerprint));
@@ -53,56 +54,56 @@ export function createLibraryHero(input: HeroInput): HeroPresentation {
 
   // 与 SwiftUI 一致，字体损坏优先；其后先提示冲突与空间问题。
   if (snapshot && snapshot.health.damagedFiles > 0) {
-    return { ...base, kind: "damaged", title: `发现 ${snapshot.health.damagedFiles} 个损坏字体`, action: "fontHealth", actionLabel: "查看字体健康" };
+    return { ...base, kind: "damaged", title: i18n.t("health.damagedCount", { count: snapshot.health.damagedFiles }), action: "fontHealth", actionLabel: i18n.t("health.viewFontHealth") };
   }
   const fontConflicts = conflicts.filter((conflict) => conflict.kind.startsWith("font_"));
   if (snapshot && snapshot.health.metadataConflicts > 0) {
-    return { ...base, kind: "conflict", title: `发现 ${snapshot.health.metadataConflicts} 个字族存在冲突`,
-      subtitle: `${snapshot.health.multipleRevisions} 个字族有多个版本 · ${snapshot.health.metadataConflicts} 个字族有元数据冲突`,
-      detail: summary, action: "fontHealth", actionLabel: "查看字体冲突" };
+    return { ...base, kind: "conflict", title: i18n.t("health.conflictCountShort", { count: snapshot.health.metadataConflicts }),
+      subtitle: i18n.t("library.summaryConflict", { revisions: snapshot.health.multipleRevisions, conflicts: snapshot.health.metadataConflicts }),
+      detail: summary, action: "fontHealth", actionLabel: i18n.t("health.viewConflicts") };
   }
   if (profile && fontConflicts.length > 0) {
     const revisions = fontConflicts.filter((conflict) => conflict.kind === "font_revision").length;
     const names = fontConflicts.filter((conflict) => conflict.kind === "font_name").length;
     const other = fontConflicts.length - revisions - names;
-    return { ...base, kind: "conflict", title: `发现 ${fontConflicts.length} 个字体同步冲突`,
-      subtitle: [revisions ? `${revisions} 个版本冲突` : "", names ? `${names} 个命名冲突` : "", other ? `${other} 个其他字体冲突` : ""].filter(Boolean).join(" · "),
-      detail: summary, action: "cloudSettings", actionLabel: "处理同步冲突" };
+    return { ...base, kind: "conflict", title: i18n.t("cloud.conflictCount", { count: fontConflicts.length }),
+      subtitle: [revisions ? i18n.t("health.revisions", { count: revisions }) : "", names ? i18n.t("health.names", { count: names }) : "", other ? i18n.t("health.otherConflicts", { count: other }) : ""].filter(Boolean).join(" · "),
+      detail: summary, action: "cloudSettings", actionLabel: i18n.t("cloud.handleConflicts") };
   }
   if (profile && (storage?.low || /可用空间不足|状态码\s*507|insufficient storage/i.test(status?.error ?? ""))) {
-    return { ...base, kind: "cloudStorageLow", title: storage?.low ? "云端空间即将用尽" : "云端空间不足",
-      subtitle: storage ? `${connection} 剩余 ${formatStorage(storage.availableBytes)}` : "请释放云端空间后再同步字体",
-      detail: summary, action: "cloudSettings", actionLabel: "查看云同步设置" };
+    return { ...base, kind: "cloudStorageLow", title: storage?.low ? i18n.t("cloud.spaceAlmostFull") : i18n.t("cloud.spaceLow"),
+      subtitle: storage ? i18n.t("cloud.remainingSpace", { connection, size: formatStorage(storage.availableBytes) }) : i18n.t("cloud.spaceLowHint"),
+      detail: summary, action: "cloudSettings", actionLabel: i18n.t("cloud.viewCloudSettings") };
   }
   if (updateCount > 0) {
-    return { ...base, kind: "update", title: `检测到 ${updateCount} 个字体更新`, action: "fontHealth", actionLabel: "查看字体版本" };
+    return { ...base, kind: "update", title: i18n.t("desktop.updatesAvailable", { count: updateCount }), action: "fontHealth", actionLabel: i18n.t("health.viewVersions") };
   }
   if (profile && availableRemote.size > 0) {
-    return { ...base, kind: "cloudAhead", title: downloads.size > 0 ? `云端有 ${downloads.size} 个字体待下载` : `云端有 ${cloudOnly.size} 个字体可下载`,
-      action: "cloudFonts", actionLabel: "查看云端字体" };
+    return { ...base, kind: "cloudAhead", title: downloads.size > 0 ? i18n.t("cloud.pendingDownloads", { count: downloads.size }) : i18n.t("cloud.cloudOnlyAvailable", { count: cloudOnly.size }),
+      action: "cloudFonts", actionLabel: i18n.t("cloud.viewCloudFonts") };
   }
   if (profile && uploads.size > 0) {
-    return { ...base, kind: "localUnsynced", title: `本地有 ${uploads.size} 个字体待上传`, action: "cloudSettings", actionLabel: "查看同步进度" };
+    return { ...base, kind: "localUnsynced", title: i18n.t("cloud.pendingUploads", { count: uploads.size }), action: "cloudSettings", actionLabel: i18n.t("cloud.viewSyncProgress") };
   }
-  return { ...base, kind: "normal", title: snapshot ? (count > 0 ? `现有 ${count} 个字族，随时可用` : "添加字体，开始你的字库") : "正在读取字体库…",
-    subtitle: snapshot ? `${snapshot.health.damagedFiles} 个损坏字体 · ${snapshot.variableFamilyCount} 个可变字族 · ${snapshot.recentCount} 个最近访问` : "读取完成后即可搜索、筛选与预览" };
+  return { ...base, kind: "normal", title: snapshot ? (count > 0 ? i18n.t("library.availableNow", { count }) : i18n.t("library.emptyAddFonts")) : i18n.t("common.loadingLibrary"),
+    subtitle: snapshot ? i18n.t("library.summaryDamaged", { damaged: snapshot.health.damagedFiles, variable: snapshot.variableFamilyCount, recent: snapshot.recentCount }) : i18n.t("library.loadingList") };
 }
 
 function syncPresentation(input: HeroInput, connection: string, uploads: number, downloads: number): HeroPresentation["sync"] {
   const { profile, status, cloudLoaded } = input;
-  if (!cloudLoaded) return { state: "checking", text: "正在读取同步状态…" };
-  if (input.cloudReadError) return { state: "error", text: "无法读取同步状态", action: "cloudSettings" };
-  if (!profile) return { state: "disconnected", text: "未连接云端", action: "cloudSettings" };
-  if (!status) return { state: "checking", text: `${connection} · 读取中…` };
+  if (!cloudLoaded) return { state: "checking", text: i18n.t("common.loading") };
+  if (input.cloudReadError) return { state: "error", text: i18n.t("cloud.readStatusError"), action: "cloudSettings" };
+  if (!profile) return { state: "disconnected", text: i18n.t("cloud.notConnected"), action: "cloudSettings" };
+  if (!status) return { state: "checking", text: i18n.t("cloud.readingCloud", { connection }) };
   if (status.running) {
     const progress = Math.round(Math.min(100, Math.max(0, status.percent)));
-    return { state: "running", text: `${connection} · 同步中 ${progress}%` };
+    return { state: "running", text: i18n.t("cloud.syncingCloud", { connection, percent: progress }) };
   }
-  if (status.error) return { state: "error", text: `${connection} 同步未完成`, action: "cloudSettings" };
-  if (uploads + downloads > 0) return { state: "pending", text: [connection, uploads > 0 ? `${uploads} 个待上传` : "", downloads > 0 ? `${downloads} 个待下载` : ""].filter(Boolean).join(" · "), action: "cloudSettings" };
-  if (input.conflicts.length > 0) return { state: "pending", text: `${connection} · ${input.conflicts.length} 个同步冲突待处理`, action: "cloudSettings" };
-  if (status.percent === 100 && status.stage === "已同步") return { state: "synced", text: `云字体库已同步到 ${connection}` };
-  return { state: "connected", text: `已连接 ${connection}`, action: "cloudSettings" };
+  if (status.error) return { state: "error", text: `${connection} ${i18n.t("cloud.syncIncomplete")}`, action: "cloudSettings" };
+  if (uploads + downloads > 0) return { state: "pending", text: [connection, uploads > 0 ? i18n.t("cloud.uploadedFiles", { count: uploads }) : "", downloads > 0 ? i18n.t("cloud.downloadedFiles", { count: downloads }) : ""].filter(Boolean).join(" · "), action: "cloudSettings" };
+  if (input.conflicts.length > 0) return { state: "pending", text: i18n.t("cloud.conflictsPending", { connection, count: input.conflicts.length }), action: "cloudSettings" };
+  if (status.percent === 100 && status.stage === "已同步") return { state: "synced", text: i18n.t("cloud.librarySyncedTo", { connection }) };
+  return { state: "connected", text: i18n.t("cloud.connectedTo", { connection }), action: "cloudSettings" };
 }
 
 function formatStorage(bytes: number): string {

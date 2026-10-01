@@ -1,4 +1,5 @@
 import { loadPreviewFont, renderPreviews } from "./api";
+import i18n from "./i18n";
 import { PreviewCache, PreviewScheduler, type PreviewPriority } from "./preview-cache";
 import { subscribePreviewCache } from "./preview-cache-events";
 import { startMetric } from "./performance-metrics";
@@ -57,9 +58,9 @@ subscribePreviewCache(() => { cache.invalidate(); images.invalidate(); browserRe
 
 export function acquirePreviewFont(face: FaceDto, priority: PreviewPriority = "visible") {
   return cache.acquire(face.id, priority, async (wanted) => {
-    if (browserRejected.has(face.id)) throw new Error("此字体使用原生预览");
+    if (browserRejected.has(face.id)) throw new Error(i18n.t("preview.nativePreview"));
     const source = await loadPreviewFont(face.id);
-    if (!wanted()) throw new DOMException("预览请求已取消", "AbortError");
+    if (!wanted()) throw new DOMException(i18n.t("preview.requestCancelled"), "AbortError");
     const family = `folio-preview-${++sequence}`;
     const axis = face.variableAxes.find((axis) => axis.tag === "wght");
     const finish = startMetric("font-face-load");
@@ -74,7 +75,7 @@ export function acquirePreviewFont(face: FaceDto, priority: PreviewPriority = "v
       if (browserRejected.size > 64) browserRejected.delete(browserRejected.values().next().value!);
       throw error;
     } finally { finish(); }
-    if (!wanted()) throw new DOMException("预览请求已取消", "AbortError");
+    if (!wanted()) throw new DOMException(i18n.t("preview.requestCancelled"), "AbortError");
     document.fonts.add(font);
     return { value: { family, font, coverage: source.coverage, sample: source.sample }, bytes: source.bytes.byteLength };
   });

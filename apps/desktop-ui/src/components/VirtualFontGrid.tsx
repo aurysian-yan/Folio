@@ -1,4 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { gridGeometry, visibleRows } from "../grid-layout";
 import type { FamilyDto } from "../types";
 import type { EditingPreview } from "../preview-appearance";
@@ -22,6 +23,7 @@ type Props = Pick<CardProps, "mode" | "previewText" | "previewSize" | "textColor
 };
 
 export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selectedId, styleKey, total, wheelSpeed, isLoading, onLoadMore, onRequestRange, onPreviewSelect, header, emptyState, editingPreview, ...props }: Props) {
+  const { t } = useTranslation();
   const root = useRef<HTMLDivElement>(null);
   const headerRoot = useRef<HTMLDivElement>(null);
   const contentRoot = useRef<HTMLDivElement>(null);
@@ -130,7 +132,7 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
   if (mode === "expanded") return <ExpandedFontCarousel {...props} families={families} selectedId={selectedId} styleKey={styleKey} total={total}
     wheelSpeed={wheelSpeed} isLoading={isLoading} onLoadMore={onLoadMore} onRequestRange={onRequestRange} onPreviewSelect={onPreviewSelect} header={header} emptyState={emptyState} editingPreview={editingPreview} />;
 
-  return <div ref={root} className={`font-grid virtual-font-grid mode-${mode}`} tabIndex={-1} role="region" aria-label="字体浏览"
+  return <div ref={root} className={`font-grid virtual-font-grid mode-${mode}`} tabIndex={-1} role="region" aria-label={t("desktop.fontBrowse")}
     onKeyDownCapture={onKeyDown}
     onFocusCapture={(event) => {
       const card = (event.target as HTMLElement).closest<HTMLElement>(".font-card");
@@ -147,7 +149,7 @@ export const VirtualFontGrid = memo(function VirtualFontGrid({ families, selecte
     }}>
     <div ref={headerRoot} className="font-grid-header">{header}</div>
     <div ref={contentRoot} className="font-grid-content">
-      {families.length ? <div className="font-grid-rows" style={{ height: gridHeight }} role="list" aria-label="字体列表">
+      {families.length ? <div className="font-grid-rows" style={{ height: gridHeight }} role="list" aria-label={t("desktop.fontList")}>
         {rows.map((row) => <div key={row} className="font-grid-row" style={{ top: row * geometry.stride, height: geometry.cardHeight, gap: geometry.gap, gridTemplateColumns: `repeat(${geometry.columns}, minmax(0, 1fr))` }}>
           {families.slice(row * geometry.columns, (row + 1) * geometry.columns).map((family, column) => <FontCard
             {...props} key={family.id} family={family} selected={selectedId === family.id} styleKey={selectedId === family.id ? styleKey : null}

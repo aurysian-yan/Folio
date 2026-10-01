@@ -23,16 +23,16 @@ struct OnlineFontsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Picker("分类", selection: $category) {
+                    Picker(L.text("online.category"), selection: $category) {
                         ForEach(categories, id: \.self) { Text(categoryTitle($0)).tag($0) }
                     }
                     .frame(maxWidth: 180)
-                    Picker("文字", selection: $subset) {
+                    Picker(L.text("online.script"), selection: $subset) {
                         ForEach(subsets, id: \.self) { Text(subsetTitle($0)).tag($0) }
                     }
                     .frame(maxWidth: 180)
                     Spacer()
-                    Text("\(total) 个字族")
+                    Text(L.format("online.familyCount", String(total)))
                         .foregroundStyle(.secondary)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 12)], spacing: 12) {
@@ -42,18 +42,18 @@ struct OnlineFontsView: View {
                                              collected: collected)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(family.name)，\(family.styles.count) 个字款")
+                        .accessibilityLabel(L.format("online.styleCount", family.name, String(family.styles.count)))
                     }
                 }
                 if UInt64(families.count) < total {
-                    Button("加载更多") { loadMore() }
+                    Button(L.text("online.loadMore")) { loadMore() }
                         .frame(maxWidth: .infinity)
                 }
             }
             .padding()
         }
-        .searchable(text: $searchText, placement: .toolbar, prompt: "搜索在线字体")
-        .navigationTitle("在线字体")
+        .searchable(text: $searchText, placement: .toolbar, prompt: L.text("online.search"))
+        .navigationTitle(L.text("online.title"))
         .task {
             do {
                 online = try FolioOnline.open(cacheDirectory: Self.cacheDirectory)
@@ -81,12 +81,12 @@ struct OnlineFontsView: View {
                 .frame(minWidth: 520, minHeight: 540)
             }
         }
-        .alert("在线字体", isPresented: Binding(
+        .alert(L.text("online.title"), isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) {
-            Button("好") { errorMessage = nil }
+            Button(L.text("common.ok")) { errorMessage = nil }
         } message: {
-            Text(errorMessage ?? "无法完成操作")
+            Text(errorMessage ?? L.text("common.operationFailed"))
         }
     }
 
@@ -130,14 +130,17 @@ struct OnlineFontsView: View {
     }
 
     private func categoryTitle(_ value: String) -> String {
-        ["全部": "全部分类", "serif": "衬线", "sans-serif": "无衬线", "display": "展示",
-         "handwriting": "手写", "monospace": "等宽"][value] ?? value
+        ["全部": L.text("filters.allCategories"), "serif": L.text("fontCategory.serif"),
+         "sans-serif": L.text("fontCategory.sansSerif"), "display": L.text("macos.sectionDisplay"),
+         "handwriting": L.text("fontCategory.handwriting"),
+         "monospace": L.text("fontCategory.monospace")][value] ?? value
     }
 
     private func subsetTitle(_ value: String) -> String {
-        ["全部": "全部文字", "chinese-simplified": "简体中文", "chinese-traditional": "繁体中文",
-         "latin": "拉丁文", "cyrillic": "西里尔文", "arabic": "阿拉伯文",
-         "devanagari": "天城文"][value] ?? value
+        ["全部": L.text("filters.allScripts"), "chinese-simplified": L.text("script.chineseSimplified"),
+         "chinese-traditional": L.text("script.chineseTraditional"),
+         "latin": L.text("script.latin"), "cyrillic": L.text("script.cyrillic"),
+         "arabic": L.text("script.arabic"), "devanagari": L.text("script.devanagari")][value] ?? value
     }
 }
 
@@ -155,23 +158,23 @@ private struct OnlineFamilyCard: View {
                 OnlineFontSample(url: previewURL, text: sampleText, size: 30)
                     .frame(height: 82)
             } else if previewError {
-                Text("预览暂不可用")
+                Text(L.text("preview.unavailable"))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 82)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 82)
-                    .accessibilityLabel("正在加载字体预览")
+                    .accessibilityLabel(L.text("preview.loading"))
             }
             HStack {
                 Text(family.name).font(.headline).lineLimit(1)
                 Spacer()
                 if family.styles.contains(where: { collected.contains($0.gitOid) }) {
                     Image.englishSystemName("checkmark.circle.fill")
-                        .accessibilityLabel("已收集")
+                        .accessibilityLabel(L.text("macos.collected"))
                 }
             }
-            Text("\(family.styles.count) 个字款 · \(family.designer)")
+            Text(L.format("macos.familyStylesCount", String(family.styles.count), family.designer))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -226,17 +229,17 @@ private struct OnlineFamilyDetail: View {
                     Text(family.designer).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(L.text("common.close")) { dismiss() }
             }
-            TextField("输入预览文字", text: $previewText)
+            TextField(L.text("preview.inputText"), text: $previewText)
             if let previewURL {
                 OnlineFontSample(url: previewURL, text: previewText, size: 44)
                     .frame(height: 100)
             } else {
-                ProgressView("正在加载预览")
+                ProgressView(L.text("preview.loadingShort"))
                     .frame(maxWidth: .infinity, minHeight: 100)
             }
-            Text("选择字款").font(.headline)
+            Text(L.text("macos.selectStyle")).font(.headline)
             List(family.styles, id: \.id) { style in
                 Toggle(isOn: Binding(
                     get: { selected.contains(style.id) },
@@ -246,7 +249,7 @@ private struct OnlineFamilyDetail: View {
                         Text(style.style)
                         Spacer()
                         if collected.contains(style.gitOid) {
-                            Text("已收集").foregroundStyle(.secondary)
+                            Text(L.text("macos.collected")).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -254,14 +257,14 @@ private struct OnlineFamilyDetail: View {
             .frame(minHeight: 160)
             HStack {
                 Text(family.license)
-                Button("查看来源") {
+                Button(L.text("macos.viewSource")) {
                     if let url = URL(string: family.sourceUrl) { openURL(url) }
                 }
                 Spacer()
                 Text(status).foregroundStyle(.secondary)
             }
             .font(.caption)
-            DisclosureGroup("授权条款") {
+            DisclosureGroup(L.text("macos.licenseTerms")) {
                 ScrollView {
                     Text(family.licenseText)
                         .textSelection(.enabled)
@@ -278,10 +281,10 @@ private struct OnlineFamilyDetail: View {
             }
             HStack {
                 if collecting {
-                    Button("取消下载") { collectTask?.cancel() }
+                    Button(L.text("cloud.cancelDownload")) { collectTask?.cancel() }
                 }
                 Spacer()
-                Button("收集所选字款") { collect() }
+                Button(L.text("import.collectSelected")) { collect() }
                     .disabled(selected.isEmpty || collecting)
             }
         }
@@ -325,7 +328,7 @@ private struct OnlineFamilyDetail: View {
                     if let error = outcomes.first?.error {
                         results.append("\(style.style)：\(error)")
                     } else {
-                        results.append("\(style.style)：已收集 · \(result.source)")
+                        results.append("\(style.style)：\(L.text("macos.collected")) · \(result.source)")
                         onCollected()
                     }
                     try? FileManager.default.removeItem(atPath: result.path)
@@ -390,7 +393,7 @@ private extension FolioOnline {
             let state = try job(id: id)
             progress?(state)
             if let path = state.path {
-                return OnlineDownloadResult(path: path, source: state.source ?? "官方地址")
+                return OnlineDownloadResult(path: path, source: state.source ?? L.text("macos.officialAddress"))
             }
             if let error = state.error {
                 throw NSError(domain: "FolioOnline", code: 1, userInfo: [NSLocalizedDescriptionKey: error])

@@ -9,8 +9,8 @@ enum SidebarPage: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .navigation: "导航"
-        case .filters: "筛选"
+        case .navigation: L.text("navigation.navigation")
+        case .filters: L.text("navigation.filters")
         }
     }
 
@@ -39,7 +39,7 @@ struct SidebarView: View {
 
     /// 侧栏分页切换控件；放进侧栏列工具栏，使用系统原生的玻璃分段样式。
     private var sidebarPagePicker: some View {
-        Picker("侧边栏分类", selection: sidebarPageSelection) {
+        Picker(L.text("navigation.sidebarCategory"), selection: sidebarPageSelection) {
             ForEach(SidebarPage.allCases) { page in
                 Image.englishSystemName(page.symbolName)
                     .accessibilityLabel(page.title)
@@ -84,12 +84,12 @@ struct SidebarView: View {
                 dismissedCloudStatusKey = nil
             }
         }
-        .alert("重命名云端", isPresented: $isRenamingCloud) {
-            TextField("名称", text: $cloudNameDraft)
-            Button("取消", role: .cancel) {}
-            Button("保存") { cloud.renameConnection(cloudNameDraft) }
+        .alert(L.text("cloud.renameConnection"), isPresented: $isRenamingCloud) {
+            TextField(L.text("common.name"), text: $cloudNameDraft)
+            Button(L.text("common.cancel"), role: .cancel) {}
+            Button(L.text("common.save")) { cloud.renameConnection(cloudNameDraft) }
         } message: {
-            Text("留空则显示服务器名称。")
+            Text(L.text("cloud.renameHint"))
         }
     }
 
@@ -105,14 +105,14 @@ struct SidebarView: View {
             switch page {
             case .navigation:
                 Section {
-                    sidebarRow("全部字体", symbol: "textformat.alt", count: model.snapshot.familyCount, destination: .allFonts)
+                    sidebarRow(L.text("navigation.allFonts"), symbol: "textformat.alt", count: model.snapshot.familyCount, destination: .allFonts)
                         .tag(SidebarDestination.allFonts)
-                    sidebarRow("最近", symbol: "clock", count: model.snapshot.recentCount, destination: .recent)
+                    sidebarRow(L.text("navigation.recent"), symbol: "clock", count: model.snapshot.recentCount, destination: .recent)
                         .tag(SidebarDestination.recent)
-                    sidebarRow("收藏", symbol: "star", count: nil, destination: .favorites)
+                    sidebarRow(L.text("navigation.favorites"), symbol: "star", count: nil, destination: .favorites)
                         .tag(SidebarDestination.favorites)
                 } header: {
-                    sidebarSectionHeader("本地")
+                    sidebarSectionHeader(L.text("navigation.local"))
                 }
                 Section {
                     ForEach(model.snapshot.smartFolders) { folder in
@@ -126,10 +126,10 @@ struct SidebarView: View {
                         )
                         .tag(SidebarDestination.smartFolder(folder.id))
                         .contextMenu {
-                            Button("编辑收藏夹…") {
+                            Button(L.text("collection.editEllipsis")) {
                                 model.favoriteFolderEditor = .editSmartFolder(folder)
                             }
-                            Button("删除收藏夹", role: .destructive) {
+                            Button(L.text("collection.delete"), role: .destructive) {
                                 model.deleteSmartFolder(folder)
                             }
                         }
@@ -144,10 +144,10 @@ struct SidebarView: View {
                         )
                         .tag(SidebarDestination.collection(collection.id))
                         .contextMenu {
-                            Button("编辑收藏夹…") {
+                            Button(L.text("collection.editEllipsis")) {
                                 model.favoriteFolderEditor = .editCollection(collection)
                             }
-                            Button("删除收藏夹", role: .destructive) {
+                            Button(L.text("collection.delete"), role: .destructive) {
                                 model.deleteCollection(collection)
                             }
                         }
@@ -157,7 +157,7 @@ struct SidebarView: View {
                     } label: {
                         HStack {
                             Label {
-                                Text("新建收藏夹")
+                                Text(L.text("collection.new"))
                                     .foregroundStyle(Color.secondary)
                             } icon: {
                                 Image.englishSystemName("plus")
@@ -168,7 +168,7 @@ struct SidebarView: View {
                     }
                     .buttonStyle(.plain)
                 } header: {
-                    sidebarSectionHeader("收藏夹")
+                    sidebarSectionHeader(L.text("navigation.collections"))
                 }
                 Section {
                     cloudSidebarRowContent(isSelected: model.selectedDestination == .cloudFonts)
@@ -181,42 +181,42 @@ struct SidebarView: View {
                         .tag(SidebarDestination.cloudFonts)
                         .contextMenu {
                             if cloud.isConnected {
-                                Button("重命名…") {
+                                Button(L.text("common.renameEllipsis")) {
                                     cloudNameDraft = cloud.connectionName
                                     isRenamingCloud = true
                                 }
                             }
                         }
                 } header: {
-                    sidebarSectionHeader("云端")
+                    sidebarSectionHeader(L.text("navigation.cloud"))
                 }
                 Section {
-                    sidebarRow("已挂载", symbol: "checkmark.diamond", count: model.fontStateCounts[.active] ?? 0, destination: .fontState(.active))
+                    sidebarRow(L.text("fontState.active"), symbol: "checkmark.diamond", count: model.fontStateCounts[.active] ?? 0, destination: .fontState(.active))
                         .tag(SidebarDestination.fontState(.active))
-                        .help("当前登录会话已激活")
-                    sidebarRow("已安装", symbol: "square.and.arrow.down", count: model.fontStateCounts[.installed] ?? 0, destination: .fontState(.installed), speed: 1.29)
+                        .help(L.text("fontState.helpActive"))
+                    sidebarRow(L.text("fontState.installed"), symbol: "square.and.arrow.down", count: model.fontStateCounts[.installed] ?? 0, destination: .fontState(.installed), speed: 1.29)
                         .tag(SidebarDestination.fontState(.installed))
-                        .help("包含手动安装和 Folio 安装的字体")
-                    sidebarRow("仅在字体库", symbol: "book.closed", count: model.fontStateCounts[.available] ?? 0, destination: .fontState(.available))
+                        .help(L.text("fontState.helpInstalled"))
+                    sidebarRow(L.text("fontState.available"), symbol: "book.closed", count: model.fontStateCounts[.available] ?? 0, destination: .fontState(.available))
                         .tag(SidebarDestination.fontState(.available))
-                        .help("Folio 字体库中尚未挂载或安装的副本")
-                    sidebarRow("外部文件", symbol: "doc", count: model.fontStateCounts[.external] ?? 0, destination: .fontState(.external))
+                        .help(L.text("fontState.helpAvailable"))
+                    sidebarRow(L.text("fontState.external"), symbol: "doc", count: model.fontStateCounts[.external] ?? 0, destination: .fontState(.external))
                         .tag(SidebarDestination.fontState(.external))
-                        .help("引用的文件和已添加文件夹中的字体")
-                    sidebarRow("系统字体", symbol: "laptopcomputer.and.arrow.down", count: model.fontStateCounts[.system] ?? 0, destination: .fontState(.system))
+                        .help(L.text("fontState.helpExternal"))
+                    sidebarRow(L.text("fontState.system"), symbol: "laptopcomputer.and.arrow.down", count: model.fontStateCounts[.system] ?? 0, destination: .fontState(.system))
                         .tag(SidebarDestination.fontState(.system))
-                    sidebarRow("文件不可用", symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0, destination: .fontState(.unavailable))
+                    sidebarRow(L.text("fontState.unavailable"), symbol: "exclamationmark.triangle", count: model.fontStateCounts[.unavailable] ?? 0, destination: .fontState(.unavailable))
                         .tag(SidebarDestination.fontState(.unavailable))
                 } header: {
-                    sidebarSectionHeader("字体状态")
+                    sidebarSectionHeader(L.text("navigation.fontState"))
                 }
                 Section {
-                    sidebarRow("在线字体", symbol: "globe", count: nil, destination: .onlineFonts)
+                    sidebarRow(L.text("navigation.onlineFonts"), symbol: "globe", count: nil, destination: .onlineFonts)
                         .tag(SidebarDestination.onlineFonts)
-                    sidebarRow("字体健康", symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
+                    sidebarRow(L.text("navigation.fontHealth"), symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
                         .tag(SidebarDestination.fontHealth)
                 } header: {
-                    sidebarSectionHeader("工具")
+                    sidebarSectionHeader(L.text("navigation.tools"))
                 }
             case .filters:
                 Section {
@@ -241,7 +241,7 @@ struct SidebarView: View {
                         }
                     }
                 } header: {
-                    sidebarSectionHeader("筛选")
+                    sidebarSectionHeader(L.text("filters.title"))
                 }
             }
         }
@@ -275,10 +275,10 @@ struct SidebarView: View {
     }
 
     private var runningSyncSummary: String {
-        guard let status = cloud.status else { return "正在同步" }
+        guard let status = cloud.status else { return L.text("cloud.syncing") }
         var parts = ["\(status.stage) \(status.stageCompleted)/\(status.stageTotal)"]
-        if status.uploadedFiles > 0 { parts.append("上传 \(status.uploadedFiles) 个") }
-        if status.downloadedFiles > 0 { parts.append("下载 \(status.downloadedFiles) 个") }
+        if status.uploadedFiles > 0 { parts.append(L.format("cloud.uploadedCount", String(status.uploadedFiles))) }
+        if status.downloadedFiles > 0 { parts.append(L.format("cloud.downloadedCount", String(status.downloadedFiles))) }
         return parts.joined(separator: " · ")
     }
 
@@ -289,7 +289,7 @@ struct SidebarView: View {
                 cloudStatusCard(
                     icon: "arrow.triangle.2.circlepath",
                     iconColor: themeColor,
-                    title: "正在同步 \(cloud.status?.percent ?? 0)%",
+                    title: L.format("cloud.syncingPercent", String(cloud.status?.percent ?? 0)),
                     ringProgress: Double(cloud.status?.percent ?? 0) / 100,
                     onDismiss: { dismissedCloudStatusKey = statusKey }
                 ) {
@@ -300,13 +300,13 @@ struct SidebarView: View {
                 cloudStatusCard(
                     icon: "exclamationmark.icloud.fill",
                     iconColor: .orange,
-                    title: cloud.status?.phase == "已取消" ? "同步已取消" : "同步未完成",
+                    title: cloud.status?.phase == "已取消" ? L.text("cloud.syncCancelled") : L.text("cloud.syncIncomplete"),
                     onDismiss: { dismissedCloudStatusKey = statusKey }
                 ) {
                     Button {
                         cloud.syncNow()
                     } label: {
-                        syncActionLabel("立即同步")
+                        syncActionLabel(L.text("cloud.syncNow"))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.orange)
@@ -315,13 +315,13 @@ struct SidebarView: View {
                 cloudStatusCard(
                     icon: "exclamationmark.icloud.fill",
                     iconColor: .orange,
-                    title: "\(cloud.conflicts.count) 个同步冲突待处理",
+                    title: L.format("cloud.conflictsPendingShort", String(cloud.conflicts.count)),
                     onDismiss: { dismissedCloudStatusKey = statusKey }
                 ) {
                     Button {
                         model.selectedDestination = .cloudFonts
                     } label: {
-                        syncActionLabel("查看冲突")
+                        syncActionLabel(L.text("macos.viewConflicts"))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.orange)
@@ -331,19 +331,19 @@ struct SidebarView: View {
             cloudStatusCard(
                 icon: "checkmark.icloud.fill",
                 iconColor: themeColor,
-                title: "本地与云端均为最新"
+                title: L.text("cloud.allSynced")
             ) {
                 Button {
                     cloud.syncNow()
                 } label: {
-                    syncActionLabel("立即同步")
+                    syncActionLabel(L.text("cloud.syncNow"))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(themeColor)
             }
         } else {
-            cloudStatusCard(icon: "icloud", iconColor: .secondary, title: "未连接云端") {
-                Text("在设置中连接 WebDAV")
+            cloudStatusCard(icon: "icloud", iconColor: .secondary, title: L.text("cloud.notConnected")) {
+                Text(L.text("cloud.connectInSettings"))
                     .foregroundStyle(.secondary)
             }
         }
@@ -401,7 +401,7 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.tertiary)
-                .accessibilityLabel("关闭同步状态")
+                .accessibilityLabel(L.text("cloud.closeStatus"))
             }
         }
         .frame(minHeight: 35)
@@ -448,7 +448,7 @@ struct SidebarView: View {
                     .lineLimit(1)
                     .foregroundStyle(isSelected ? Color.white : Color.primary)
                 if cloud.isConnected {
-                    Text("字体占用 \(cloudFontStorage)")
+                    Text(L.format("cloud.fontUsage", cloudFontStorage))
                         .font(.system(size: 12))
                         .foregroundStyle(isSelected ? Color.white.opacity(0.88) : Color.secondary)
                 }
@@ -516,7 +516,7 @@ struct SidebarView: View {
                     if let trailingSymbol {
                         Image.englishSystemName(trailingSymbol)
                             .font(.caption2)
-                            .accessibilityLabel("智慧收藏夹")
+                            .accessibilityLabel(L.text("navigation.smartCollections"))
                     }
                 }
                 .foregroundStyle(isSelected ? Color.white : Color.primary)

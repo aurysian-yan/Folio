@@ -16,11 +16,11 @@ struct CloudLibraryView: View {
     }
 
     private func syncItemLabel(_ item: SyncItemDto) -> String {
-        let action = item.action == "download" ? "下载" : "上传"
+        let action = item.action == "download" ? L.text("cloud.download") : L.text("cloud.upload")
         switch item.status {
-        case "running": return "\(action)中"
-        case "done": return "\(action)完成"
-        default: return "等待\(action)"
+        case "running": return L.format("cloud.running", action)
+        case "done": return L.format("cloud.completed", action)
+        default: return L.format("cloud.waiting", action)
         }
     }
 
@@ -42,7 +42,7 @@ struct CloudLibraryView: View {
     var body: some View {
         List {
             if !cloud.conflicts.isEmpty {
-                Section("同步冲突") {
+                Section(L.text("cloud.conflicts")) {
                     ForEach(cloud.conflicts, id: \.id) { conflict in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(conflict.title)
@@ -50,16 +50,16 @@ struct CloudLibraryView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             HStack {
-                                Button("保留两版") { cloud.resolve(conflict, using: .keepBoth) }
-                                Button("采用本地版") { cloud.resolve(conflict, using: .useLocal) }
-                                Button("采用云端版") { cloud.resolve(conflict, using: .useRemote) }
+                                Button(L.text("cloud.keepBoth")) { cloud.resolve(conflict, using: .keepBoth) }
+                                Button(L.text("cloud.useLocal")) { cloud.resolve(conflict, using: .useLocal) }
+                                Button(L.text("cloud.useRemote")) { cloud.resolve(conflict, using: .useRemote) }
                             }
                             .controlSize(.small)
                         }
                     }
                 }
             }
-            Section("云字体库") {
+            Section(L.text("cloud.library")) {
                 ForEach(visibleFonts, id: \.fingerprint) { font in
                     HStack {
                         Image.englishSystemName(font.cloudOnly ? "icloud" : "checkmark.icloud")
@@ -74,19 +74,19 @@ struct CloudLibraryView: View {
                                 .font(.caption)
                                 .foregroundStyle(syncItemTint(item))
                             } else {
-                                Text(font.cloudOnly ? "仅在云端" : "本机可用")
+                                Text(font.cloudOnly ? L.text("cloud.cloudOnly") : L.text("cloud.availableLocally"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
                         Spacer()
                         if font.cloudOnly {
-                            Button("下载") { cloud.restore(font) }
+                            Button(L.text("cloud.download")) { cloud.restore(font) }
                         } else {
-                            Button("仅保留云端") { model.removeCloudFont(font) }
+                            Button(L.text("cloud.keepCloudOnly")) { model.removeCloudFont(font) }
                         }
                         Menu {
-                            Button("从所有设备删除", role: .destructive) {
+                            Button(L.text("cloud.deleteEverywhere"), role: .destructive) {
                                 pendingDeletion = font
                             }
                         } label: {
@@ -98,12 +98,12 @@ struct CloudLibraryView: View {
             }
             let deleted = cloud.fonts.filter { $0.deleted }
             if !deleted.isEmpty {
-                Section("最近删除") {
+                Section(L.text("cloud.recentlyDeleted")) {
                     ForEach(deleted, id: \.fingerprint) { font in
                         HStack {
                             Text(font.displayName)
                             Spacer()
-                            Button("恢复") { cloud.restoreDeleted(font) }
+                            Button(L.text("cloud.restore")) { cloud.restoreDeleted(font) }
                         }
                     }
                 }
@@ -111,44 +111,44 @@ struct CloudLibraryView: View {
         }
         .overlay {
             if !cloud.isConnected {
-                ContentUnavailableView("连接云字体库", systemImage: "icloud", description: Text("在设置中连接 WebDAV 后，字体会显示在这里。"))
+                ContentUnavailableView(L.text("cloud.connectTitle"), systemImage: "icloud", description: Text(L.text("cloud.connectInSettingsHint")))
             } else if cloud.fonts.isEmpty && cloud.conflicts.isEmpty {
-                ContentUnavailableView("云字体库为空", systemImage: "icloud")
+                ContentUnavailableView(L.text("cloud.empty"), systemImage: "icloud")
             }
         }
-        .searchable(text: $searchText, placement: .toolbar, prompt: "搜索云端字体")
-        .navigationTitle(cloud.isConnected ? cloud.connectionName : "云字体库")
+        .searchable(text: $searchText, placement: .toolbar, prompt: L.text("cloud.searchCloud"))
+        .navigationTitle(cloud.isConnected ? cloud.connectionName : L.text("cloud.library"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if cloud.isRunning {
-                    Button("取消同步") { cloud.cancel() }
+                    Button(L.text("cloud.cancelSync")) { cloud.cancel() }
                 } else {
-                    Button("同步") { cloud.syncNow() }
+                    Button(L.text("cloud.syncNow")) { cloud.syncNow() }
                         .disabled(!cloud.isConnected)
                 }
             }
         }
         .confirmationDialog(
-            "从所有设备删除字体？",
+            L.text("cloud.deleteConfirmTitle"),
             isPresented: Binding(
                 get: { pendingDeletion != nil },
                 set: { if !$0 { pendingDeletion = nil } }
             )
         ) {
-            Button("从所有设备删除", role: .destructive) {
+            Button(L.text("cloud.deleteEverywhere"), role: .destructive) {
                 if let pendingDeletion { model.deleteCloudFontEverywhere(pendingDeletion) }
                 pendingDeletion = nil
             }
         } message: {
-            Text("删除记录可恢复，但该字体将从所有已连接设备移除。")
+            Text(L.text("cloud.deleteConfirmMessage"))
         }
-        .alert("云字体库", isPresented: Binding(
+        .alert(L.text("cloud.library"), isPresented: Binding(
             get: { cloud.errorMessage != nil },
             set: { if !$0 { cloud.errorMessage = nil } }
         )) {
-            Button("好") { cloud.errorMessage = nil }
+            Button(L.text("common.ok")) { cloud.errorMessage = nil }
         } message: {
-            Text(cloud.errorMessage ?? "无法完成操作")
+            Text(cloud.errorMessage ?? L.text("common.operationFailed"))
         }
     }
 }

@@ -28,10 +28,14 @@ function currentIdentity() {
     const match = readFileSync(file, 'utf8').match(/applicationId\s*=?\s*['"]([^'"]+)['"]/);
     return match ? match[1] : null;
   }
-  const file = join(PROJECT_ROOT, 'ios/Folio.xcodeproj/project.pbxproj');
-  if (!existsSync(file)) return null;
-  const match = readFileSync(file, 'utf8').match(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/);
-  return match ? match[1].trim() : null;
+  // Debug 与 Release 分别生成 FolioDev / Folio 工程，按磁盘上实际存在的工程读取身份。
+  for (const name of ['FolioDev', 'Folio']) {
+    const file = join(PROJECT_ROOT, `ios/${name}.xcodeproj/project.pbxproj`);
+    if (!existsSync(file)) continue;
+    const match = readFileSync(file, 'utf8').match(/PRODUCT_BUNDLE_IDENTIFIER = "?([^";]+)"?;/);
+    return match ? match[1].trim() : null;
+  }
+  return null;
 }
 
 const current = currentIdentity();

@@ -1,3 +1,5 @@
+import i18n from './i18n/instance.ts';
+
 export interface VariableAxis {
   tag: string;
   name: string;
@@ -26,8 +28,8 @@ export interface FontFamily {
 }
 
 export const facetTitles = {
-  category: '类型', script: '文字系统', foundry: '厂牌', license: '许可',
-  weight: '字重', width: '字宽', feature: '字体特征', state: '状态', multipleVariants: '字族',
+  category: i18n.t('filters.category'), script: i18n.t('filters.script'), foundry: i18n.t('filters.foundry'), license: i18n.t('filters.license'),
+  weight: i18n.t('filters.weight'), width: i18n.t('filters.width'), feature: i18n.t('filters.feature'), state: i18n.t('filters.state'), multipleVariants: i18n.t('font.family'),
 } as const;
 
 export type FacetKind = keyof typeof facetTitles;
@@ -138,7 +140,7 @@ function validateQuery(query: LibraryQuery) {
       !facet || !Object.hasOwn(facetTitles, facet.kind) || typeof facet.value !== 'string' || !facet.value.trim())))
     || !Number.isSafeInteger(query.offset) || query.offset < 0
     || !Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > 100) {
-    throw new LibraryError('invalid-query', '查询范围无效。');
+    throw new LibraryError('invalid-query', i18n.t('mobile.errorQueryRange'));
   }
 }
 
@@ -152,8 +154,8 @@ export function createLibraryClient(bridge: LibraryBridge) {
         const rolledBack = typeof cause === 'object' && cause !== null
           && 'code' in cause && cause.code === 'ERR_FOLIO_IMPORT';
         throw new LibraryError('native', rolledBack
-          ? '无法更新字体库，本次新增字体未保留，请重试。'
-          : '无法完成导入，请确认文件可用、空间充足后重试。', { cause });
+          ? i18n.t('mobile.errorUpdate')
+          : i18n.t('mobile.errorImport'), { cause });
       }
     },
     setFavorite: (identityIds: string[], favorite: boolean) => bridge.setFavorite(identityIds, favorite),
@@ -163,19 +165,19 @@ export function createLibraryClient(bridge: LibraryBridge) {
     setCollectionMembers: (id: string, identityIds: string[], member: boolean) => bridge.setCollectionMembers(id, identityIds, member),
     query(query: LibraryQuery, signal?: AbortSignal): Promise<LibraryPage> {
       validateQuery(query);
-      if (signal?.aborted) return Promise.reject(new LibraryError('cancelled', '查询已取消。'));
+      if (signal?.aborted) return Promise.reject(new LibraryError('cancelled', i18n.t('mobile.errorQueryCancelled')));
       return new Promise((resolve, reject) => {
-        const abort = () => reject(new LibraryError('cancelled', '查询已取消。'));
+        const abort = () => reject(new LibraryError('cancelled', i18n.t('mobile.errorQueryCancelled')));
         signal?.addEventListener('abort', abort, { once: true });
         // 同步 Rust 查询不能中断；取消后仅丢弃结果，不回写界面。
         Promise.resolve().then(() => {
-          if (signal?.aborted) throw new LibraryError('cancelled', '查询已取消。');
+          if (signal?.aborted) throw new LibraryError('cancelled', i18n.t('mobile.errorQueryCancelled'));
           return bridge.query(query);
         }).then((page) => {
           if (!signal?.aborted) resolve(page);
         }, (cause: unknown) => {
           reject(cause instanceof LibraryError ? cause
-            : new LibraryError('native', '暂时无法读取字体库，请重试。', { cause }));
+            : new LibraryError('native', i18n.t('mobile.errorLibraryRead'), { cause }));
         }).finally(() => signal?.removeEventListener('abort', abort));
       });
     },

@@ -16,9 +16,9 @@ struct AboutView: View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         switch (version, build) {
-        case let (version?, build?): return "版本 \(version)（\(build)）"
-        case let (version?, nil): return "版本 \(version)"
-        default: return "版本未知"
+        case let (version?, build?): return L.format("macos.versionWithBuild", version, build)
+        case let (version?, nil): return L.format("macos.version", version)
+        default: return L.text("common.unknownVersion")
         }
     }
 
@@ -29,7 +29,7 @@ struct AboutView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
-            Text("跨设备字体资产管理工具")
+            Text(L.text("macos.aboutSubtitle"))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Text("© 2026 Folio")

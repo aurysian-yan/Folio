@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 import { acquireNativePreview, acquirePreviewFont, coversCodepoint, type PreviewFont, type PreviewStyle } from "../font-preview";
 import type { PreviewPriority } from "../preview-cache";
 import { previewCacheRevision, subscribePreviewCache } from "../preview-cache-events";
@@ -15,6 +16,7 @@ export const FontPreview = memo(function FontPreview({ style, text, size, color,
   label: string;
   priority?: PreviewPriority;
 }) {
+  const { t } = useTranslation();
   const container = useRef<HTMLDivElement>(null);
   const request = useRef<ReturnType<typeof acquirePreviewFont> | null>(null);
   const nativeRequest = useRef<ReturnType<typeof acquireNativePreview> | null>(null);
@@ -37,9 +39,9 @@ export const FontPreview = memo(function FontPreview({ style, text, size, color,
     const hasMissingText = characters.some((character) => !supports(character));
     return {
       sample: font && !hasSupportedText ? font.sample : characters.map((character) => supports(character) ? character : "□").join(""),
-      sampleNote: font && !hasSupportedText ? "字体未包含输入的字符，显示可用字形" : hasMissingText ? "方框表示字体未包含的字符" : undefined,
+      sampleNote: font && !hasSupportedText ? t("font.missingGlyphNote") : hasMissingText ? t("font.boxGlyphNote") : undefined,
     };
-  }, [font, text]);
+  }, [font, text, t]);
   const fallbackKey = JSON.stringify([revision, face?.id, sample, size]);
 
   useEffect(() => {
@@ -120,7 +122,7 @@ export const FontPreview = memo(function FontPreview({ style, text, size, color,
         : fallbackImage ? <span className="font-preview-colored-fallback" style={{ maskImage: `url("${fallbackImage}")` }} aria-hidden="true">
           <img src={fallbackImage} alt="" className="font-preview-fallback" />
         </span>
-        : <span className="preview-unavailable">{fallbackImage === null || !face ? "预览不可用" : "正在载入字体…"}</span>}
+        : <span className="preview-unavailable">{fallbackImage === null || !face ? t("preview.unavailableShort") : t("common.loadingFont")}</span>}
     </div>
   );
 });

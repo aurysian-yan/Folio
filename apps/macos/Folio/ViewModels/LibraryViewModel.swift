@@ -300,7 +300,7 @@ final class LibraryViewModel {
             .map(\.path))
             .sorted()
         guard !paths.isEmpty else {
-            errorMessage = "所选字体文件不可用"
+            errorMessage = L.text("macos.selectedFileUnavailable")
             return
         }
         let urls = paths.map { URL(fileURLWithPath: $0) }
@@ -567,7 +567,7 @@ final class LibraryViewModel {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
-        panel.prompt = "添加字体文件夹"
+        panel.prompt = L.text("import.addFontFolder")
         guard panel.runModal() == .OK, let url = panel.url, let repository else { return }
 
         Task {
@@ -592,7 +592,7 @@ final class LibraryViewModel {
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.font]
-        panel.prompt = "导入字体"
+        panel.prompt = L.text("import.importFonts")
         guard panel.runModal() == .OK else { return }
         queueImport(panel.urls)
     }
@@ -1188,27 +1188,41 @@ final class LibraryViewModel {
 
     static func hero(for snapshot: LibrarySnapshot) -> HeroPresentation {
         let health = snapshot.health
-        let summary = "\(snapshot.familyCount) 个字族 · \(snapshot.variableFamilyCount) 个可变字族 · \(snapshot.recentCount) 个最近访问"
+        let summary = L.format(
+            "library.summary",
+            String(snapshot.familyCount),
+            String(snapshot.variableFamilyCount),
+            String(snapshot.recentCount)
+        )
         if health.damagedFiles > 0 {
             return HeroPresentation(
                 kind: .damaged,
-                title: "发现 \(health.damagedFiles) 个损坏字体",
+                title: L.format("health.damagedCount", String(health.damagedFiles)),
                 subtitle: summary,
-                detail: "可在字体健康中查看扫描问题"
+                detail: L.text("health.viewScanIssues")
             )
         }
         if health.metadataConflicts > 0 {
             return HeroPresentation(
                 kind: .conflict,
-                title: "发现 \(health.metadataConflicts) 个字体冲突",
-                subtitle: "\(health.multipleRevisions) 个多版本 · \(health.metadataConflicts) 个元数据冲突",
+                title: L.format("health.conflictCount", String(health.metadataConflicts)),
+                subtitle: L.format(
+                    "library.summaryConflict",
+                    String(health.multipleRevisions),
+                    String(health.metadataConflicts)
+                ),
                 detail: summary
             )
         }
         return HeroPresentation(
             kind: .normal,
-            title: "现有 \(snapshot.familyCount) 个字族，随时可用",
-            subtitle: "\(health.damagedFiles) 个损坏字体 · \(snapshot.variableFamilyCount) 个可变字族 · \(snapshot.recentCount) 个最近访问",
+            title: L.plural("library.availableNow", Int(snapshot.familyCount)),
+            subtitle: L.format(
+                "library.summaryDamaged",
+                String(health.damagedFiles),
+                String(snapshot.variableFamilyCount),
+                String(snapshot.recentCount)
+            ),
             detail: nil
         )
     }

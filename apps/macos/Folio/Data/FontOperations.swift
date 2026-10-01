@@ -96,7 +96,7 @@ actor FontOperations {
         let url = URL(fileURLWithPath: path).standardizedFileURL
         guard url.deletingLastPathComponent() == managedDirectory.standardizedFileURL,
               manager.fileExists(atPath: path) else {
-            throw operationError("字体未收集到 Folio 字体库")
+            throw operationError(L.text("macos.importNotCollected"))
         }
         var origins: [String: OnlineFontOrigin] = [:]
         if manager.fileExists(atPath: onlineOriginsURL.path) {
@@ -153,7 +153,7 @@ actor FontOperations {
     }
 
     func perform(_ action: FontAction, path: String) async throws {
-        guard !isSystemFont(path) else { throw operationError("系统字体由 macOS 管理") }
+        guard !isSystemFont(path) else { throw operationError(L.text("macos.systemFontManaged")) }
         switch action {
         case .activate:
             try await activate(path)
@@ -169,12 +169,12 @@ actor FontOperations {
     }
 
     private func importFile(_ selectedURL: URL, mode: FontImportMode) async throws -> URL {
-        guard selectedURL.isFileURL else { throw operationError("只能导入本地字体文件") }
+        guard selectedURL.isFileURL else { throw operationError(L.text("macos.importLocalOnly")) }
         let access = selectedURL.startAccessingSecurityScopedResource()
         defer { if access { selectedURL.stopAccessingSecurityScopedResource() } }
         let source = selectedURL.resolvingSymlinksInPath().standardizedFileURL
         guard ["ttf", "otf", "ttc", "otc"].contains(source.pathExtension.lowercased()) else {
-            throw operationError("不支持此字体格式")
+            throw operationError(L.text("macos.unsupportedFormat"))
         }
         try await repository.validateFontFile(source)
 
@@ -201,7 +201,7 @@ actor FontOperations {
     }
 
     private func activate(_ path: String) async throws {
-        guard manager.fileExists(atPath: path) else { throw operationError("字体文件暂时不可用") }
+        guard manager.fileExists(atPath: path) else { throw operationError(L.text("macos.fileUnavailable")) }
         guard ledger.installed.allSatisfy({ $0.sourcePath != path }) else { return }
         let url = URL(fileURLWithPath: path)
         if ledger.activated.contains(path), CTFontManagerGetScopeForURL(url as CFURL) == .session {
@@ -213,7 +213,7 @@ actor FontOperations {
     }
 
     private func deactivate(_ path: String) async throws {
-        guard ledger.activated.contains(path) else { throw operationError("只能停用通过 Folio 挂载的字体") }
+        guard ledger.activated.contains(path) else { throw operationError(L.text("macos.onlyDeactivateMounted")) }
         let url = URL(fileURLWithPath: path)
         if CTFontManagerGetScopeForURL(url as CFURL) == .session {
             try await unregister(url, scope: .session)
@@ -223,7 +223,7 @@ actor FontOperations {
     }
 
     private func install(_ path: String) async throws {
-        guard manager.fileExists(atPath: path) else { throw operationError("字体文件暂时不可用") }
+        guard manager.fileExists(atPath: path) else { throw operationError(L.text("macos.fileUnavailable")) }
         if status(for: path).state == .installed { return }
         let source = URL(fileURLWithPath: path)
         let managed = ledger.imported.contains { $0.path == path && $0.mode == FontImportMode.copy.rawValue }
@@ -253,7 +253,7 @@ actor FontOperations {
 
     private func uninstall(_ path: String) async throws {
         guard let installation = ledger.installed.first(where: { $0.sourcePath == path }) else {
-            throw operationError("只能卸载通过 Folio 安装的字体")
+            throw operationError(L.text("macos.onlyUninstallInstalled"))
         }
         let url = URL(fileURLWithPath: installation.installedPath)
         let remaining = ledger.installed.filter { $0.sourcePath != path }
@@ -275,7 +275,7 @@ actor FontOperations {
     private func removeManaged(_ path: String) async throws {
         guard ledger.imported.contains(where: { $0.path == path && $0.mode == FontImportMode.copy.rawValue }),
               URL(fileURLWithPath: path).standardizedFileURL.deletingLastPathComponent() == managedDirectory.standardizedFileURL else {
-            throw operationError("只能移除 Folio 管理的字体副本")
+            throw operationError(L.text("macos.onlyRemoveManaged"))
         }
         if ledger.installed.contains(where: { $0.sourcePath == path }) { try await uninstall(path) }
         if ledger.activated.contains(path) { try await deactivate(path) }
@@ -293,7 +293,7 @@ actor FontOperations {
     func prepareSyncedRemoval(_ path: String) async throws {
         guard URL(fileURLWithPath: path).standardizedFileURL.deletingLastPathComponent()
                 == managedDirectory.standardizedFileURL else {
-            throw operationError("只能移除 Folio 管理的字体副本")
+            throw operationError(L.text("macos.onlyRemoveManaged"))
         }
         if ledger.installed.contains(where: { $0.sourcePath == path }) {
             try await uninstall(path)

@@ -1,4 +1,5 @@
 import { memo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FontFamily } from './library';
 import { NativeFontPreview, type PreviewStatus } from './native';
@@ -11,6 +12,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
   theme: Theme;
   onOpen: () => void;
 }) {
+  const { t } = useTranslation();
   const [previewStatus, setPreviewStatus] = useState<{ key: string; status: PreviewStatus['status'] } | null>(null);
   const face = family.faces.find((item) => /^(regular|normal|book|常规)$/i.test(item.styleName)) ?? family.faces[0];
   const variable = family.faces.some((item) => item.axes.length > 0);
@@ -19,14 +21,14 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
   const compact = mode === 'list';
 
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`查看 ${family.displayName} 字体详情${family.isFavorite ? '，已收藏' : ''}`}
+    <Pressable accessibilityRole="button" accessibilityLabel={family.isFavorite ? t('mobile.viewDetailsFavorite', { name: family.displayName }) : t('mobile.viewDetails')}
       onPress={onOpen} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border },
         compact && [styles.listCard, { backgroundColor: theme.listCardSurface }]]}>
       {compact && <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.outline, { borderColor: theme.listCardBorder }]} />}
       <View pointerEvents="none" style={[styles.preview, compact && styles.listPreview]}>
         {face?.sourcePath && status !== 'error' && status !== 'missing-glyph' ? (
           <NativeFontPreview key={previewKey} style={styles.nativePreview}
-            accessibilityLabel={`${family.displayName}，${face.styleName} 字体预览`}
+            accessibilityLabel={t('mobile.previewLabel', { name: family.displayName, style: face.styleName })}
             selection={{ sourcePath: face.sourcePath, faceIndex: face.faceIndex,
               revisionId: face.revisionId, axes: Object.fromEntries(face.axes.map((axis) => [axis.tag, axis.defaultValue])),
               text: compact ? 'Preview Text' : 'Preview\nText',
@@ -34,7 +36,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
             onStatus={(event) => setPreviewStatus({ key: previewKey, status: event.nativeEvent.status })} />
         ) : (
           <Text style={[styles.unavailable, { color: theme.secondary }, compact && styles.listUnavailable]}>
-            {status === 'missing-glyph' ? '缺少预览字符' : '暂时无法预览'}
+            {status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t('mobile.previewUnavailable')}
           </Text>
         )}
       </View>
@@ -42,10 +44,10 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
         <Text numberOfLines={1} style={[styles.name, { color: theme.label }, compact && styles.listName]}>{family.displayName}</Text>
         <View style={styles.details}>
           {family.isFavorite && <StarIcon size={12} weight="fill" color={theme.accent} />}
-          <Text style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>{family.faces.length}个样式</Text>
+          <Text style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
           {variable && <>
             <View style={[styles.separator, { backgroundColor: compact ? theme.listCardBorder : theme.border }]} />
-            <Text accessibilityLabel="可变字体" style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>VF</Text>
+            <Text accessibilityLabel={t('font.variable')} style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>VF</Text>
           </>}
         </View>
       </View>

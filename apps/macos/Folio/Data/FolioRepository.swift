@@ -222,7 +222,7 @@ actor FolioRepository {
             options.append(FacetOption(
                 kind: .feature,
                 value: "variable",
-                label: "可变字体",
+                label: L.text("fontFeature.variable"),
                 familyCount: 0
             ))
         }
@@ -230,7 +230,7 @@ actor FolioRepository {
             options.append(FacetOption(
                 kind: .multipleVariants,
                 value: "multiple",
-                label: "多字款",
+                label: L.text("fontConflict.multipleVariants"),
                 familyCount: 0
             ))
         }
@@ -499,40 +499,40 @@ private func selectionLabel(kind: FacetKind, value: String) -> String {
     switch kind {
     case .category:
         switch value {
-        case "sans_serif": "无衬线"
-        case "serif": "衬线"
-        case "monospace": "等宽"
-        case "script": "手写"
-        case "decorative": "装饰"
-        case "symbol": "符号"
-        default: "未分类"
+        case "sans_serif": L.text("fontCategory.sansSerif")
+        case "serif": L.text("fontCategory.serif")
+        case "monospace": L.text("fontCategory.monospace")
+        case "script": L.text("fontCategory.handwriting")
+        case "decorative": L.text("fontCategory.decorative")
+        case "symbol": L.text("fontCategory.symbol")
+        default: L.text("fontCategory.uncategorized")
         }
     case .license:
         switch value {
         case "ofl": "OFL"
         case "apache_2": "Apache 2.0"
         case "mit": "MIT"
-        case "custom": "自定义"
-        default: "未知"
+        case "custom": L.text("common.custom")
+        default: L.text("common.unknown")
         }
     case .feature:
         switch value {
-        case "variable": "可变字体"
-        case "italic": "斜体"
-        case "oblique": "倾斜体"
-        case "monospace": "等宽"
-        case "color": "彩色字体"
+        case "variable": L.text("fontFeature.variable")
+        case "italic": L.text("fontFeature.italic")
+        case "oblique": L.text("fontFeature.oblique")
+        case "monospace": L.text("fontFeature.monospace")
+        case "color": L.text("fontFeature.color")
         default: value
         }
     case .state:
         switch value {
-        case "favorite": "已收藏"
-        case "recent": "最近访问"
-        case "duplicate_sources": "多个来源"
-        case "multiple_revisions": "多个版本"
-        default: "元数据冲突"
+        case "favorite": L.text("fontState.favorite")
+        case "recent": L.text("macos.recentVisits")
+        case "duplicate_sources": L.text("fontConflict.duplicateSources")
+        case "multiple_revisions": L.text("fontConflict.multipleRevisions")
+        default: L.text("fontConflict.metadataConflict")
         }
-    case .multipleVariants: "多字款"
+    case .multipleVariants: L.text("fontConflict.multipleVariants")
     default: value
     }
 }

@@ -1,5 +1,6 @@
 import { CaretDownIcon, CaretUpIcon, CheckIcon } from 'phosphor-react-native';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { facetTitles, mergeFacetOptions, normalizeFacets, type FacetKind, type FacetOption, type FacetSelection } from './library';
 import { FilterDrawer, FilterList } from './FilterDrawer';
@@ -12,6 +13,7 @@ export function FilterPanel({ visible, theme, options, counts, selected, loading
   loading: boolean; error: string | null; totalMatches: number;
   onChange: (facets: FacetSelection[]) => void; onClose: () => void; onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   const available = mergeFacetOptions(options, counts, selected);
   const sections = (Object.keys(facetTitles) as FacetKind[]).map((kind) => ({
     kind, title: facetTitles[kind], data: available.filter((option) => option.kind === kind),
@@ -21,23 +23,23 @@ export function FilterPanel({ visible, theme, options, counts, selected, loading
     onChange(normalizeFacets(exists ? selected.filter((item) => item.kind !== option.kind || item.value !== option.value)
       : [...selected, { kind: option.kind, value: option.value }]));
   }
-  return <FilterDrawer visible={visible} title="筛选字体" theme={theme} onClose={onClose}>
+  return <FilterDrawer visible={visible} title={t('library.filterFonts')} theme={theme} onClose={onClose}>
     <FilterList data={sections} keyExtractor={(section) => section.kind}
       contentContainerStyle={panelStyles.content} keyboardShouldPersistTaps="handled"
       ListHeaderComponent={<View>
         <View style={[panelStyles.row, { borderColor: theme.border }]}>
           <Text accessibilityLiveRegion="polite" style={[panelStyles.label, { color: theme.secondary }]}>
-            {loading ? '正在筛选…' : `${totalMatches} 个匹配字体`}
+            {loading ? t('mobile.loadingFiltering') : t('mobile.matchCount', { total: totalMatches })}
           </Text>
-          <PanelAction label="清空筛选" theme={theme} disabled={selected.length === 0} onPress={() => onChange([])} />
+          <PanelAction label={t('mobile.clearFilters')} theme={theme} disabled={selected.length === 0} onPress={() => onChange([])} />
         </View>
         {error && <View style={[panelStyles.row, { borderColor: theme.border }]}>
           <Text accessibilityRole="alert" style={[panelStyles.label, { color: theme.danger }]}>{error}</Text>
-          <PanelAction label="重试" theme={theme} onPress={onRetry} />
+          <PanelAction label={t('common.retry')} theme={theme} onPress={onRetry} />
         </View>}
       </View>}
-      ListEmptyComponent={loading ? <ActivityIndicator color={theme.accent} accessibilityLabel="正在读取筛选条件" />
-        : <Text style={[panelStyles.section, { color: theme.secondary }]}>当前范围暂无可筛选的字体。</Text>}
+      ListEmptyComponent={loading ? <ActivityIndicator color={theme.accent} accessibilityLabel={t('mobile.loadingFilters')} />
+        : <Text style={[panelStyles.section, { color: theme.secondary }]}>{t('mobile.noFilterOptions')}</Text>}
       renderItem={({ item }) => <FilterGroup title={item.title} options={item.data} selected={selected}
         theme={theme} loading={loading} onToggle={toggle} />} />
   </FilterDrawer>;
@@ -48,6 +50,7 @@ function FilterGroup({ title, options, selected, theme, loading, onToggle }: {
   title: string; options: FacetOption[]; selected: FacetSelection[]; theme: Theme;
   loading: boolean; onToggle: (option: FacetSelection) => void;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const Chevron = expanded ? CaretUpIcon : CaretDownIcon;
   return <View style={[styles.card, { backgroundColor: theme.surface }]}>
@@ -62,7 +65,7 @@ function FilterGroup({ title, options, selected, theme, loading, onToggle }: {
         const color = checked ? theme.onAccent : theme.label;
         return <Pressable key={option.value} accessibilityRole="checkbox" accessibilityState={{ checked }}
           hitSlop={{ top: 2, bottom: 2 }}
-          accessibilityLabel={`${option.label}，${loading ? '正在读取数量' : `${option.familyCount} 个字族`}`}
+          accessibilityLabel={`${option.label}，${loading ? t('mobile.loadingCount') : t('library.familyCount', { count: option.familyCount })}`}
           onPress={() => onToggle(option)} style={({ pressed }) => [styles.chip, {
             backgroundColor: checked ? theme.accent : theme.raised, opacity: pressed ? 0.6 : 1,
           }]}>

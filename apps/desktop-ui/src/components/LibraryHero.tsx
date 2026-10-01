@@ -1,5 +1,6 @@
 import { Button } from "@heroui/react";
 import { ArrowClockwiseIcon, BookmarkIcon, CaretRightIcon, CloudArrowDownIcon, CloudArrowUpIcon, CloudCheckIcon, CloudIcon, HardDrivesIcon, LassoIcon, StethoscopeIcon, TrayArrowUpIcon, WarningIcon } from "@phosphor-icons/react";
+import { useTranslation } from "react-i18next";
 import type { HeroAction, HeroKind, HeroPresentation } from "../library-hero";
 
 const heroIcons = {
@@ -13,6 +14,7 @@ const heroIcons = {
 } satisfies Record<HeroKind, typeof LassoIcon>;
 
 export function LibraryHero({ presentation, onAction }: { presentation: HeroPresentation; onAction: (action: HeroAction) => void }) {
+  const { t } = useTranslation();
   const Icon = heroIcons[presentation.kind];
   const SyncIcon = presentation.sync.state === "running" || presentation.sync.state === "checking" ? ArrowClockwiseIcon
     : presentation.sync.state === "error" ? WarningIcon
@@ -29,7 +31,7 @@ export function LibraryHero({ presentation, onAction }: { presentation: HeroPres
             <span className="library-hero-icon-slot"><Icon className="library-hero-icon" size={24} aria-hidden="true" /></span>
             <h1 className="library-hero-heading m-0 min-w-0 text-2xl font-medium leading-8">
               {presentation.action ? (
-                <Button variant="tertiary" className="library-hero-action" aria-label={`${presentation.title}，${presentation.actionLabel ?? "查看详情"}`} onPress={() => onAction(presentation.action!)}>
+                <Button variant="tertiary" className="library-hero-action" aria-label={`${presentation.title}，${presentation.actionLabel ?? t("mobile.viewDetails")}`} onPress={() => onAction(presentation.action!)}>
                   {title}<CaretRightIcon className="library-hero-chevron" size={16} aria-hidden="true" />
                 </Button>
               ) : title}

@@ -1,5 +1,10 @@
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import i18n from "../i18n";
+
+// 测试固定使用简体中文，保持既有断言中的中文文案稳定。
+localStorage.setItem("folio.language", "zh-CN");
+await i18n.changeLanguage("zh-CN");
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 

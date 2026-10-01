@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,8 +17,11 @@ const safe = JSON.stringify('bash "$PODS_TARGET_SRCROOT/../scripts/get-app-confi
 const patched = contents.replaceAll(unsafe, safe);
 if (patched !== contents) writeFileSync(podsProject, patched);
 
-// React Native 打包入口同样按完整路径调用。
-const applicationProject = resolve(project, 'ios/Folio.xcodeproj/project.pbxproj');
+// React Native 打包入口同样按完整路径调用。工程名随变体为 FolioDev 或 Folio。
+const applicationProject = ['FolioDev', 'Folio']
+  .map((name) => resolve(project, `ios/${name}.xcodeproj/project.pbxproj`))
+  .find((file) => existsSync(file));
+if (!applicationProject) throw new Error('未找到 iOS 应用工程，请先执行 prebuild');
 const applicationContents = readFileSync(applicationProject, 'utf8');
 const quotedBundleScript = applicationContents.replace(
   /`([^`\n]*react-native-xcode\.sh[^`\n]*)`/g, '\\"$($1)\\"',

@@ -95,7 +95,7 @@ final class CloudSyncModel {
             }.value
             cacheCredential(candidatePassword, for: candidate)
             errorMessage = nil
-            message = "连接成功"
+            message = L.text("cloud.connectSuccess")
             return true
         } catch {
             record(error)
@@ -114,7 +114,7 @@ final class CloudSyncModel {
         do {
             let savedPassword = password.isEmpty ? credential(for: next) : password
             guard let savedPassword, !savedPassword.isEmpty else {
-                errorMessage = "请输入 WebDAV 密码"
+                errorMessage = L.text("cloud.passwordMissing")
                 message = errorMessage
                 return
             }
@@ -125,7 +125,7 @@ final class CloudSyncModel {
             loadConnectionAlias()
             reloadState()
             errorMessage = nil
-            message = "连接已保存"
+            message = L.text("cloud.connectionSaved")
             requestAutomaticSync()
         } catch {
             record(error)
@@ -153,7 +153,7 @@ final class CloudSyncModel {
             cachedCredential = nil
             status = try engine.status()
             errorMessage = nil
-            message = "已断开连接"
+            message = L.text("cloud.disconnected")
         } catch {
             record(error)
         }
@@ -182,7 +182,7 @@ final class CloudSyncModel {
             return
         }
         guard let password = credential(for: profile), !password.isEmpty else {
-            errorMessage = "WebDAV 密码不可用，请在设置中重新保存"
+            errorMessage = L.text("cloud.passwordUnavailable")
             message = errorMessage
             return
         }
@@ -409,8 +409,8 @@ private enum StorageManagementError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: "本地存储暂时不可用"
-        case .busy: "请等待同步或存储操作完成"
+        case .unavailable: L.text("cloud.statusUnavailable")
+        case .busy: L.text("cloud.statusBusy")
         }
     }
 }
@@ -460,6 +460,6 @@ private enum CloudCredentialError: LocalizedError {
     case keychain(OSStatus)
 
     var errorDescription: String? {
-        "无法保存 WebDAV 密码到钥匙串"
+        L.text("cloud.keychainError")
     }
 }

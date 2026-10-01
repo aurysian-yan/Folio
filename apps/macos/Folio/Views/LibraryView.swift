@@ -25,12 +25,12 @@ struct LibraryView: View {
             }
         }
         .navigationTitle("Folio")
-        .navigationSubtitle("\(model.totalMatches) 个字族")
-        .searchable(text: $model.searchText, placement: .toolbar, prompt: "搜索")
+        .navigationSubtitle(L.plural("library.familyCount", Int(model.totalMatches)))
+        .searchable(text: $model.searchText, placement: .toolbar, prompt: L.text("common.search"))
         .toolbar {
             if model.selectedDestination == .fontState(.installed) {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(model.isSelectingInstalledForCloud ? "取消选择" : "多选") {
+                    Button(model.isSelectingInstalledForCloud ? L.text("macos.cancelSelection") : L.text("library.multiSelect")) {
                         if model.isSelectingInstalledForCloud {
                             model.endInstalledCloudSelection()
                         } else {
@@ -41,7 +41,7 @@ struct LibraryView: View {
                 }
             }
             ToolbarItem(placement: .navigation) {
-                Picker("浏览方式", selection: $model.viewMode) {
+                Picker(L.text("libraryView.browseMode"), selection: $model.viewMode) {
                     ForEach(LibraryViewMode.allCases) { mode in
                         Image.englishSystemName(mode.symbolName)
                             .accessibilityLabel(mode.accessibilityTitle)
@@ -60,7 +60,7 @@ struct LibraryView: View {
                         model.importFiles()
                     } label: {
                         Label {
-                            Text("导入字体")
+                            Text(L.text("import.importFonts"))
                         } icon: {
                             Image.englishSystemName("plus")
                         }
@@ -69,7 +69,7 @@ struct LibraryView: View {
                         model.addFolder()
                     } label: {
                         Label {
-                            Text("添加文件夹")
+                            Text(L.text("import.addFolder"))
                         } icon: {
                             Image.englishSystemName("folder.badge.plus")
                         }
@@ -77,7 +77,7 @@ struct LibraryView: View {
                 } label: {
                     Image.englishSystemName("plus")
                 }
-                .accessibilityLabel("添加字体")
+                .accessibilityLabel(L.text("import.addFonts"))
             }
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
@@ -88,8 +88,8 @@ struct LibraryView: View {
                 } label: {
                     Image.englishSystemName("sidebar.right")
                 }
-                .accessibilityLabel("检查器")
-                .help("显示或隐藏检查器")
+                .accessibilityLabel(L.text("inspector.panel"))
+                .help(L.text("inspector.showOrHide"))
             }
         }
         .overlay(alignment: .top) {
@@ -103,22 +103,22 @@ struct LibraryView: View {
 
     private var installedCloudSelectionBar: some View {
         HStack {
-            Text("已选择 \(model.selectedInstalledFamilyIDs.count) 个字族")
+            Text(L.format("macos.selectedFamilies", String(model.selectedInstalledFamilyIDs.count)))
             Spacer()
             if model.isAddingInstalledToCloud {
                 ProgressView()
                     .controlSize(.small)
             }
-            Button("取消") { model.endInstalledCloudSelection() }
+            Button(L.text("common.cancel")) { model.endInstalledCloudSelection() }
                 .disabled(model.isAddingInstalledToCloud)
-            Button("添加至云端") { model.addSelectedInstalledFontsToCloud() }
+            Button(L.text("import.addToCloud")) { model.addSelectedInstalledFontsToCloud() }
                 .buttonStyle(.borderedProminent)
                 .disabled(
                     model.selectedInstalledFamilyIDs.isEmpty
                         || !cloud.isConnected
                         || model.isAddingInstalledToCloud
                 )
-                .help(cloud.isConnected ? "将所选字体加入云端同步" : "请先连接云端")
+                .help(cloud.isConnected ? L.text("import.addToCloudSync") : L.text("cloud.connectCloudFirst"))
         }
         .padding()
         .background(.bar)
@@ -136,14 +136,14 @@ struct LibraryView: View {
                 }
                 if !model.cloudOnlyFonts.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("仅在云端")
+                        Text(L.text("cloud.cloudOnly"))
                             .font(.headline)
                         ForEach(model.cloudOnlyFonts, id: \.fingerprint) { font in
                             HStack {
                                 Image.englishSystemName("icloud")
                                 Text(font.displayName)
                                 Spacer()
-                                Button("下载") { CloudSyncModel.shared.restore(font) }
+                                Button(L.text("cloud.download")) { CloudSyncModel.shared.restore(font) }
                             }
                         }
                     }
@@ -175,11 +175,11 @@ struct LibraryView: View {
                 Image.englishSystemName("textformat")
             }
         } description: {
-            Text("添加你的第一个字体文件夹")
+            Text(L.text("import.addFirstFolder"))
         } actions: {
             Button(action: model.importFiles) {
                 Label {
-                    Text("导入字体")
+                    Text(L.text("import.importFonts"))
                 } icon: {
                     Image.englishSystemName("plus")
                 }
@@ -187,7 +187,7 @@ struct LibraryView: View {
                 .buttonStyle(.borderedProminent)
             Button(action: model.addFolder) {
                 Label {
-                    Text("添加文件夹")
+                    Text(L.text("import.addFolder"))
                 } icon: {
                     Image.englishSystemName("folder.badge.plus")
                 }
@@ -198,12 +198,12 @@ struct LibraryView: View {
     private var noResults: some View {
         ContentUnavailableView {
             Label {
-                Text("没有匹配的字体")
+                Text(L.text("common.noMatch"))
             } icon: {
                 Image.englishSystemName("text.magnifyingglass")
             }
         } description: {
-            Text("尝试更改搜索内容或筛选条件")
+            Text(L.text("library.emptySearchHintShort"))
         }
     }
 }

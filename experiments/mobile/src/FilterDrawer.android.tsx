@@ -1,6 +1,7 @@
 import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList, BottomSheetHandle, type BottomSheetBackdropProps,
   type BottomSheetHandleProps } from '@gorhom/bottom-sheet';
 import { useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, StyleSheet, type FlatListProps } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,17 +21,18 @@ export function FilterList<T>(props: FlatListProps<T>) {
 export function FilterDrawer(props: LibraryPanelProps) {
   const sheet = useRef<BottomSheet>(null);
   const inset = useSafeAreaInsets();
+  const { t } = useTranslation();
   const close = () => { if (!props.busy) sheet.current?.close(); };
   const handle = useCallback((handleProps: BottomSheetHandleProps) =>
-    <BottomSheetHandle {...handleProps} accessibilityLabel="筛选面板拖动柄"
-      accessibilityHint="向下拖动关闭筛选面板，也可点击完成"
-      indicatorStyle={{ backgroundColor: props.theme.secondary }} />, [props.theme.secondary]);
+    <BottomSheetHandle {...handleProps} accessibilityLabel={t('desktop.filterDrawerHandle')}
+      accessibilityHint={t('mobile.dragCloseFilterPanel')}
+      indicatorStyle={{ backgroundColor: props.theme.secondary }} />, [props.theme.secondary, t]);
   const backdrop = useCallback((backdropProps: BottomSheetBackdropProps) =>
     <BottomSheetBackdrop {...backdropProps} appearsOnIndex={0} disappearsOnIndex={-1}
       opacity={1} pressBehavior={props.busy ? 'none' : 'close'}
-      accessibilityLabel="关闭筛选面板" accessibilityHint="关闭后返回字体库"
+      accessibilityLabel={t('desktop.closeFilterPanel')} accessibilityHint={t('mobile.closeReturnsLibrary')}
       style={[backdropProps.style, { backgroundColor: props.theme.scrim }]} />,
-  [props.busy, props.theme.scrim]);
+  [props.busy, props.theme.scrim, t]);
   if (!props.visible) return null;
 
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent

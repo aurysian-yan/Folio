@@ -6,6 +6,7 @@ import {
   CaretDownIcon, FunnelSimpleIcon, MagnifyingGlassIcon, PlusIcon, XIcon,
 } from 'phosphor-react-native';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   AccessibilityInfo, ActivityIndicator, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
   Text, TextInput, useColorScheme, useWindowDimensions, View,
@@ -51,6 +52,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   onTargetChange: (target: LibraryTarget) => void;
   onOpenFamily: (family: FontFamily) => void;
 }) {
+  const { t } = useTranslation();
   const { scope } = target;
   const collectionId = target.scope === 'collection' ? target.collectionId : undefined;
   const scopeKey = targetKey(target);
@@ -104,8 +106,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const optionsLoading = ready && facetOptions.key !== optionsKey && !facetError;
   const shownError = initialError ?? error;
   const hasConditions = !!queryText || selectedFacets.length > 0;
-  const scopeTitle = scope === 'collection' ? snapshot?.collections.find((item) => item.id === collectionId)?.name ?? '收藏夹'
-    : scope === 'favorites' ? '星标收藏' : scope === 'recent' ? '最近' : '全部字体';
+  const scopeTitle = scope === 'collection' ? snapshot?.collections.find((item) => item.id === collectionId)?.name ?? t('collection.collection')
+    : scope === 'favorites' ? t('mobile.starredCollections') : scope === 'recent' ? t('mobile.recentTitle') : t('mobile.allFonts');
   const loading = ready && loadedQuery.request !== requestKey;
   const page = loadedQuery.key === queryKey ? loadedQuery.page : emptyPage;
   const waitingForSearch = searchText.trim() !== queryText;
@@ -146,10 +148,10 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       .then((result) => {
         if (!controller.signal.aborted) setFacetOptions({ key: optionsKey, options: result.facets });
       }).catch(() => {
-        if (!controller.signal.aborted) setFacetFailure({ key: optionsKey, message: '暂时无法读取筛选条件，请重试。' });
+        if (!controller.signal.aborted) setFacetFailure({ key: optionsKey, message: t('mobile.errorFilters') });
       });
     return () => controller.abort();
-  }, [ready, scope, collectionId, queryText, optionsKey]);
+  }, [ready, scope, collectionId, queryText, optionsKey, t]);
 
   useEffect(() => {
     if (!ready) return;
@@ -182,13 +184,13 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       setError(null);
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted && !(cause instanceof LibraryError && cause.code === 'cancelled')) {
-        setError('暂时无法读取字体库，请重试。');
+        setError(t('mobile.errorLibraryRead'));
         setLoadedQuery((previous) => ({ key: queryKey, request: requestKey, version: previous.version,
           page: previous.key === queryKey ? previous.page : emptyPage }));
       }
     });
     return () => controller.abort();
-  }, [ready, queryText, scope, collectionId, selectedFacets, offset, queryKey, requestKey, libraryVersion]);
+  }, [ready, queryText, scope, collectionId, selectedFacets, offset, queryKey, requestKey, libraryVersion, t]);
 
   async function importFont() {
     if (!ready || importInFlight.current) return;
@@ -205,7 +207,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       setPagination({ key: queryKey, offset: 0 });
       list.current?.scrollToOffset({ offset: 0, animated: false });
     } catch (cause: unknown) {
-      setImportError(cause instanceof LibraryError ? cause.message : '无法完成导入，请确认文件可用、空间充足后重试。');
+      setImportError(cause instanceof LibraryError ? cause.message : t('mobile.errorImport'));
     } finally { importInFlight.current = false; setImporting(false); }
   }
 
@@ -230,7 +232,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   }
 
   const toggleSearch = () => { if (searchOpen) closeSearch(); else setSearchOpen(true); };
-  const title = active ? scopeTitle : destination === 'cloud' ? '云端字体' : destination === 'settings' ? '设置' : '最近';
+  const title = active ? scopeTitle : destination === 'cloud' ? t('mobile.cloudFonts') : destination === 'settings' ? t('common.settings') : t('mobile.recentTitle');
   const openFilter = () => { Keyboard.dismiss(); setFilterOpen(true); };
   const openCollections = () => { Keyboard.dismiss(); setCollectionsOpen(true); };
   const fontList = (
@@ -258,69 +260,69 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         ListHeaderComponent={
           <View>
             <View style={styles.libraryTools}>
-              <Pressable accessibilityRole="button" accessibilityLabel={`切换字体库，当前${scopeTitle}`}
+              <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.scopeSwitch', { scope: scopeTitle })}
                 disabled={!ready} onPress={openCollections} style={styles.rangeButton}>
                 <Text numberOfLines={1} style={[styles.rangeTitle, { color: theme.label }]}>{scopeTitle}</Text>
                 <CaretDownIcon size={16} color={theme.secondary} />
               </Pressable>
-              {(searchOpen || selectedFacets.length > 0) && <PanelAction label={selectedFacets.length ? `${selectedFacets.length} 项筛选` : '筛选'} theme={theme} onPress={openFilter} />}
+              {(searchOpen || selectedFacets.length > 0) && <PanelAction label={selectedFacets.length ? t('mobile.filterCount', { count: selectedFacets.length }) : t('mobile.filter')} theme={theme} onPress={openFilter} />}
             </View>
             {!hasConditions && scope === 'all' && (
               <View style={styles.hero}>
                 <Image source={require('../assets/design/lasso.svg')} style={styles.lasso} contentFit="contain" />
                 <Text accessibilityRole="header" style={[styles.heroTitle, { color: theme.label }]}>
-                  {snapshot ? `现有 ${snapshot.familyCount} 个字体，\n随时可用` : '你的字体，\n随时可用'}
+                  {snapshot ? t('mobile.heroSubtitle', { count: snapshot.familyCount }) : t('mobile.heroTitle')}
                 </Text>
                 {snapshot && <Text style={[styles.heroDetail, { color: theme.secondary }]}>
-                  {snapshot.damagedCount} 个损坏字体 · {snapshot.variableFamilyCount} 个可变字体 · {snapshot.recentCount} 个最近加入
+                  {t('library.summaryDamaged', { damaged: snapshot.damagedCount, variable: snapshot.variableFamilyCount, recent: snapshot.recentCount })}
                 </Text>}
               </View>
             )}
             {(hasConditions || scope !== 'all') && <Text accessibilityRole="header" style={[styles.searchSummary, { color: theme.secondary }]}>
-              {loading && page.families.length === 0 ? '正在读取…' : `${page.totalMatches} 个${queryText ? '搜索结果' : '字体'}`}
+              {loading && page.families.length === 0 ? t('mobile.loading') : queryText ? t('mobile.searchResultCount', { total: page.totalMatches }) : t('mobile.familyCount', { count: page.totalMatches })}
             </Text>}
             {page.unresolvedScopeItems > 0 && <Text style={[styles.searchSummary, { color: theme.secondary }]}>
-              {page.unresolvedScopeItems} 个成员暂不可用
+              {t('mobile.unresolvedMembers', { count: page.unresolvedScopeItems })}
             </Text>}
             {(importReport || importError) && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
               <Text accessibilityRole="alert" style={[styles.noticeText, { color: importError ? theme.danger : theme.secondary }]}>
-                {importError ?? (importCounts && `成功 ${importCounts.imported} · 重复 ${importCounts.duplicate} · 失败 ${importCounts.failed}`)}
+                {importError ?? (importCounts && t('mobile.importSummary', { imported: importCounts.imported, duplicate: importCounts.duplicate, failed: importCounts.failed }))}
               </Text>
-              {usesNativeControls ? <NativeActionButton label={importError ? '重新选择' : '查看详情'} color={theme.accent}
+              {usesNativeControls ? <NativeActionButton label={importError ? t('mobile.reselect') : t('mobile.viewDetails')} color={theme.accent}
                 onPress={importError ? importFont : () => setImportDetailsOpen(true)} disabled={importing} plain />
                 : <Pressable accessibilityRole="button" disabled={importing}
                   onPress={importError ? importFont : () => setImportDetailsOpen(true)} style={styles.retry}>
-                  <Text style={{ color: theme.accent }}>{importError ? '重新选择' : '查看详情'}</Text>
+                  <Text style={{ color: theme.accent }}>{importError ? t('mobile.reselect') : t('mobile.viewDetails')}</Text>
                 </Pressable>}
             </View>}
             {shownError && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
               <Text accessibilityRole="alert" style={[styles.noticeText, { color: theme.danger }]}>{shownError}</Text>
-              {usesNativeControls ? <NativeActionButton label="重试" color={theme.accent} onPress={retryQuery} plain />
+              {usesNativeControls ? <NativeActionButton label={t('common.retry')} color={theme.accent} onPress={retryQuery} plain />
                 : <Pressable accessibilityRole="button" onPress={retryQuery} style={styles.retry}>
-                <Text style={{ color: theme.accent }}>重试</Text>
+                <Text style={{ color: theme.accent }}>{t('common.retry')}</Text>
               </Pressable>}
             </View>}
           </View>
         }
         ListEmptyComponent={
-          !ready || loading || waitingForSearch ? (shownError ? null : <ActivityIndicator style={styles.empty} color={theme.accent} accessibilityLabel="正在读取字体库" />)
+          !ready || loading || waitingForSearch ? (shownError ? null : <ActivityIndicator style={styles.empty} color={theme.accent} accessibilityLabel={t('mobile.loadingLibrary')} />)
             : shownError ? null : <View style={styles.empty}>
-              <Text style={[styles.emptyTitle, { color: theme.label }]}>{hasConditions ? '没有找到匹配的字体'
-                : page.unresolvedScopeItems > 0 ? '暂无可用字体' : scope === 'favorites' ? '还没有收藏字体' : scope === 'collection' ? '收藏夹为空' : scope === 'recent' ? '还没有最近加入的字体' : '从第一个字体开始'}</Text>
-              <Text style={[styles.emptyDetail, { color: theme.secondary }]}>{hasConditions ? '调整搜索或筛选条件。'
-                : page.unresolvedScopeItems > 0 ? '成员记录已保留，请确认字体来源可用。' : scope === 'favorites' ? '收藏的字体会显示在这里。' : scope === 'collection' ? '在字体详情中将字体加入收藏夹。' : '多选 TTF、OTF、TTC、OTC 字体，或导入 ZIP 字体包。'}</Text>
-              {selectedFacets.length > 0 && <PanelAction label="清空筛选" theme={theme} onPress={() => updateBrowse({ facets: [] })} />}
-              {!hasConditions && scope === 'all' && (usesNativeControls ? <NativeActionButton label={importing ? '正在导入…' : '导入字体'}
+              <Text style={[styles.emptyTitle, { color: theme.label }]}>{hasConditions ? t('mobile.noMatch')
+                : page.unresolvedScopeItems > 0 ? t('mobile.noFonts') : scope === 'favorites' ? t('mobile.noFavorites') : scope === 'collection' ? t('collection.empty') : scope === 'recent' ? t('mobile.noRecent') : t('mobile.startFromFirst')}</Text>
+              <Text style={[styles.emptyDetail, { color: theme.secondary }]}>{hasConditions ? t('mobile.adjustSearch')
+                : page.unresolvedScopeItems > 0 ? t('collection.keepMembersNote') : scope === 'favorites' ? t('collection.emptyHint') : scope === 'collection' ? t('collection.favoriteInDetails') : t('mobile.importHint')}</Text>
+              {selectedFacets.length > 0 && <PanelAction label={t('mobile.clearFilters')} theme={theme} onPress={() => updateBrowse({ facets: [] })} />}
+              {!hasConditions && scope === 'all' && (usesNativeControls ? <NativeActionButton label={importing ? t('mobile.loadingImport') : t('import.importFonts')}
                 systemImage="plus" color={theme.accent} onPress={importFont} disabled={importing} prominent />
                 : <Pressable accessibilityRole="button" disabled={importing} onPress={importFont}
                 style={({ pressed }) => [styles.importButton, { backgroundColor: theme.accent, opacity: pressed || importing ? 0.6 : 1 }]}>
                 {importing ? <ActivityIndicator color={theme.onAccent} /> : <PlusIcon size={18} color={theme.onAccent} />}
-                <Text style={[styles.importLabel, { color: theme.onAccent }]}>{importing ? '正在导入…' : '导入字体'}</Text>
+                <Text style={[styles.importLabel, { color: theme.onAccent }]}>{importing ? t('mobile.loadingImport') : t('import.importFonts')}</Text>
               </Pressable>)}
             </View>
         }
         ListFooterComponent={loading && page.families.length > 0
-          ? <ActivityIndicator style={styles.loadingMore} color={theme.accent} accessibilityLabel="正在读取更多字体" /> : null}
+          ? <ActivityIndicator style={styles.loadingMore} color={theme.accent} accessibilityLabel={t('mobile.loadingMore')} /> : null}
       />
   );
   const content = (
@@ -345,7 +347,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           <Image source={require('../assets/design/folio.svg')} style={styles.logo}
             tintColor={theme.label} contentFit="contain" accessibilityLabel="Folio" />
           <Text numberOfLines={1} style={[styles.libraryCount, { color: theme.muted }]}>
-            {snapshot ? `${snapshot.familyCount} 个本地字体` : '本地字体'}
+            {snapshot ? t('mobile.localFamilyCount', { count: snapshot.familyCount }) : t('mobile.localFonts')}
           </Text>
         </Animated.View>}
         {Platform.OS === 'android' ? <AndroidHeaderControls theme={theme} sourceId={sourceId} active={active}
@@ -357,28 +359,28 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           onSearch={toggleSearch} onFilter={openFilter} filterCount={selectedFacets.length} /> : searchOpen ? (
           <View style={[styles.search, { backgroundColor: theme.surface }]}>
             <MagnifyingGlassIcon size={20} color={theme.secondary} />
-            <TextInput ref={searchInput} autoFocus accessibilityLabel="搜索字体" placeholder="搜索字体名称或样式"
+            <TextInput ref={searchInput} autoFocus accessibilityLabel={t('mobile.searchFonts')} placeholder={t('mobile.searchPlaceholder')}
               placeholderTextColor={theme.muted} selectionColor={theme.selection} cursorColor={theme.accent}
               selectionHandleColor={theme.accent} value={searchText} editable={ready}
               onChangeText={setSearchText} style={[styles.searchInput, { color: theme.label }]}
               autoCapitalize="none" autoCorrect={false} returnKeyType="search" onSubmitEditing={() => Keyboard.dismiss()} />
-            {searchText.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel="清除搜索"
+            {searchText.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.clearSearch')}
               hitSlop={10} onPress={() => { setSearchText(''); searchInput.current?.focus(); }}>
               <XIcon size={18} color={theme.secondary} />
             </Pressable>}
-            <Pressable accessibilityRole="button" accessibilityLabel="关闭搜索" onPress={closeSearch} style={styles.cancelSearch}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.closeSearch')} onPress={closeSearch} style={styles.cancelSearch}>
               <XIcon size={20} color={theme.label} />
             </Pressable>
           </View>
         ) : <View style={styles.headerActions}>
-          <IconButton theme={theme} label="筛选字体" disabled={!ready} selected={selectedFacets.length > 0} onPress={openFilter}>
+          <IconButton theme={theme} label={t('library.filterFonts')} disabled={!ready} selected={selectedFacets.length > 0} onPress={openFilter}>
             <FunnelSimpleIcon size={20} color={selectedFacets.length > 0 ? theme.accent : theme.label} />
           </IconButton>
           <ViewModeMenu sourceId={sourceId} theme={theme} mode={mode} active={active && !importing} onModeChange={setMode} />
-          <IconButton theme={theme} label="搜索字体" onPress={() => setSearchOpen(true)}>
+          <IconButton theme={theme} label={t('mobile.searchFonts')} onPress={() => setSearchOpen(true)}>
             <MagnifyingGlassIcon size={20} color={theme.label} />
           </IconButton>
-          <IconButton theme={theme} label={importing ? '正在导入…' : '导入字体'} disabled={!ready || importing} busy={importing} onPress={importFont}>
+          <IconButton theme={theme} label={importing ? t('mobile.loadingImport') : t('import.importFonts')} disabled={!ready || importing} busy={importing} onPress={importFont}>
             {importing ? <ActivityIndicator size="small" color={theme.label} /> : <PlusIcon size={20} color={theme.label} />}
           </IconButton>
         </View>}
@@ -399,7 +401,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
 
   if (sidebar) {
     return <NativeLibraryContent theme={theme} title={title} active={active}
-      subtitle={snapshot ? `${scope === 'all' ? snapshot.familyCount : page.totalMatches} 个字体` : '字体库'}
+      subtitle={snapshot ? t('mobile.familyCount', { count: scope === 'all' ? snapshot.familyCount : page.totalMatches }) : t('library.title')}
       mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
       ready={ready} importing={importing} onModeChange={setMode} onSearch={toggleSearch}
       onSearchTextChange={setSearchText} onImport={importFont} onFilter={openFilter} filterCount={selectedFacets.length}>
@@ -410,6 +412,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
 }
 
 function MobileApp() {
+  const { t } = useTranslation();
   const dark = useColorScheme() === 'dark';
   const theme = dark ? themes.dark : themes.light;
   const sourceId = useId();
@@ -438,9 +441,9 @@ function MobileApp() {
     let mounted = true;
     library.initialize().then((value) => {
       if (mounted) { setSnapshot(value); setInitialError(null); }
-    }).catch(() => { if (mounted) setInitialError('无法打开字体库，请重试。'); });
+    }).catch(() => { if (mounted) setInitialError(t('mobile.errorLibrary')); });
     return () => { mounted = false; };
-  }, [initializeRetry]);
+  }, [initializeRetry, t]);
 
   const applySnapshot = useCallback((value: LibrarySnapshot) => {
     setSnapshot(value);

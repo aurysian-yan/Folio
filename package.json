@@ -4,9 +4,15 @@
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
-    "manage": "node tools/folio.mjs"
+    "manage": "node tools/folio.mjs",
+    "i18n:validate": "node tools/i18n/validate.mjs",
+    "i18n:build": "node tools/i18n/build.mjs",
+    "i18n:unused": "node tools/i18n/report-unused.mjs",
+    "i18n:push": "crowdin upload sources",
+    "i18n:pull": "crowdin download"
   },
   "devDependencies": {
-    "@clack/prompts": "1.8.1"
+    "@clack/prompts": "1.8.1",
+    "@crowdin/cli": "5.3.0"
   }
 }

@@ -184,7 +184,7 @@ struct FontFamilyCardView: View {
         }
         .contextMenu {
             if let face, face.sources.contains(where: { !model.availableActions(for: $0).isEmpty }) {
-                Menu("字体操作") {
+                Menu(L.text("font.operations")) {
                     ForEach(face.sources.filter { !model.availableActions(for: $0).isEmpty }) { source in
                         Menu(source.path) {
                             ForEach(model.availableActions(for: source), id: \.rawValue) { action in
@@ -194,11 +194,11 @@ struct FontFamilyCardView: View {
                     }
                 }
             }
-            Button(family.isFavorite ? "取消收藏" : "收藏") {
+            Button(family.isFavorite ? L.text("collection.unfavorite") : L.text("collection.favorite")) {
                 model.toggleFavorite(family)
             }
             if let face {
-                Menu("在 Finder 中显示") {
+                Menu(L.text("inspector.showInFinder")) {
                     ForEach(face.sources) { source in
                         Button(source.path) {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: source.path)])
@@ -207,24 +207,24 @@ struct FontFamilyCardView: View {
                 }
             }
             Divider()
-            Button("复制字族名") {
+            Button(L.text("inspector.copyFamilyName")) {
                 model.copy(family.displayName)
             }
             if let postScriptName = face?.postScriptName {
-                Button("复制 PostScript 名称") {
+                Button(L.text("inspector.copyPostScriptName")) {
                     model.copy(postScriptName)
                 }
             }
             if !model.snapshot.collections.isEmpty {
                 Divider()
-                Menu("加入收藏夹") {
+                Menu(L.text("macos.addToCollection")) {
                     ForEach(model.snapshot.collections) { collection in
                         Button(collection.name) {
                             model.setCollection(collection, family: family, member: true)
                         }
                     }
                 }
-                Menu("移出收藏夹") {
+                Menu(L.text("macos.removeFromCollection")) {
                     ForEach(model.snapshot.collections) { collection in
                         Button(collection.name) {
                             model.setCollection(collection, family: family, member: false)
@@ -234,7 +234,7 @@ struct FontFamilyCardView: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(family.displayName)，\(family.faces.count) 个样式")
+        .accessibilityLabel(L.format("macos.familyMenu", family.displayName, String(family.faces.count)))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .onAppear { model.loadMoreIfNeeded(current: family) }
         .onChange(of: model.previewSizeCommitGeneration) { _, _ in
@@ -441,7 +441,7 @@ struct FontFamilyCardView: View {
 
     private var familyMetadata: some View {
         HStack(spacing: 5) {
-            Text("\(family.faces.count)个样式")
+            Text(L.format("macos.stylesCount", String(family.faces.count)))
             if family.isVariable {
                 Rectangle()
                     .fill(Color.secondary.opacity(0.45))
@@ -493,13 +493,13 @@ struct FontFamilyCardView: View {
         HStack(spacing: 8) {
             CardGlassButton(
                 systemName: "document.on.document",
-                accessibilityLabel: "复制字族名"
+                accessibilityLabel: L.text("inspector.copyFamilyName")
             ) {
                 model.copy(family.displayName)
             }
             CardGlassButton(
                 systemName: family.isFavorite ? "star.fill" : "star",
-                accessibilityLabel: family.isFavorite ? "取消收藏" : "收藏"
+                accessibilityLabel: family.isFavorite ? L.text("collection.unfavorite") : L.text("collection.favorite")
             ) {
                 model.toggleFavorite(family)
             }
@@ -508,7 +508,7 @@ struct FontFamilyCardView: View {
                 .first(where: { model.availableActions(for: $0).contains(.deactivate) }) {
                 CardGlassButton(
                     systemName: "eject",
-                    accessibilityLabel: "取消挂载"
+                    accessibilityLabel: L.text("macos.unmount")
                 ) {
                     model.perform(.deactivate, on: source)
                 }

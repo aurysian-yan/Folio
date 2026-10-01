@@ -17,12 +17,12 @@ struct FontInspectorView: View {
             } else {
                 ContentUnavailableView {
                     Label {
-                        Text("选择字体")
+                        Text(L.text("inspector.selectFont"))
                     } icon: {
                         Image.englishSystemName("character.cursor.ibeam")
                     }
                 } description: {
-                    Text("选择一个字族以查看详细信息")
+                    Text(L.text("inspector.selectFamilyHint"))
                 }
             }
         }
@@ -30,17 +30,17 @@ struct FontInspectorView: View {
             if let source = model.selectedSource {
                 let actions = model.availableActions(for: source)
                 if actions.contains(.uninstall) {
-                    Button("卸载字体", role: .destructive) {
+                    Button(L.text("inspector.uninstall"), role: .destructive) {
                         model.perform(.uninstall, on: source)
                     }
                 }
                 if actions.contains(.remove) {
-                    Button("移到废纸篓", role: .destructive) {
+                    Button(L.text("inspector.moveToTrash"), role: .destructive) {
                         model.trashSelectedFace()
                     }
                 }
             }
-            Button("取消", role: .cancel) {}
+            Button(L.text("common.cancel"), role: .cancel) {}
         } message: {
             Text(destructiveDialogMessage)
         }
@@ -52,7 +52,7 @@ struct FontInspectorView: View {
                 header(family, face: face)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    disclosureHeader("预览", isExpanded: $previewExpanded)
+                    disclosureHeader(L.text("preview.title"), isExpanded: $previewExpanded)
                     if previewExpanded {
                         InspectorFontPreview(model: model, face: face)
                     }
@@ -67,7 +67,7 @@ struct FontInspectorView: View {
 
                 if !visibleAxes(face).isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
-                        disclosureHeader("可变轴", isExpanded: $axesExpanded)
+                        disclosureHeader(L.text("inspector.variableAxes"), isExpanded: $axesExpanded)
                         if axesExpanded {
                             axes(face)
                         }
@@ -76,7 +76,7 @@ struct FontInspectorView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 0) {
-                    disclosureHeader("复制为", isExpanded: $copyExpanded)
+                    disclosureHeader(L.text("inspector.copyAs"), isExpanded: $copyExpanded)
                     if copyExpanded {
                         copySection(family, face: face)
                     }
@@ -85,7 +85,7 @@ struct FontInspectorView: View {
                 inspectorDivider
 
                 VStack(alignment: .leading, spacing: 10) {
-                    disclosureHeader("字体信息", isExpanded: $informationExpanded)
+                    disclosureHeader(L.text("inspector.information"), isExpanded: $informationExpanded)
                     if informationExpanded {
                         information(face)
                     }
@@ -143,9 +143,9 @@ struct FontInspectorView: View {
                             .frame(width: 34, height: 34)
                     }
                     .buttonStyle(InspectorButtonStyle(cornerRadius: 17))
-                    .accessibilityLabel("在 Finder 中查看")
+                    .accessibilityLabel(L.text("inspector.revealInFinder"))
                 } else {
-                    inspectorButton("在 Finder 中查看", systemImage: "finder", action: model.revealSelectedFace)
+                    inspectorButton(L.text("inspector.revealInFinder"), systemImage: "finder", action: model.revealSelectedFace)
                         .disabled(model.selectedSource == nil)
                 }
 
@@ -176,8 +176,8 @@ struct FontInspectorView: View {
             }
 
             if face.sources.count > 1 {
-                Picker("字体文件", selection: $model.selectedSourcePath) {
-                    Text("选择字体文件").tag(String?.none)
+                Picker(L.text("inspector.fontFile"), selection: $model.selectedSourcePath) {
+                    Text(L.text("inspector.selectFontFile")).tag(String?.none)
                     ForEach(face.sources) { source in
                         Text(source.path).tag(Optional(source.path))
                     }
@@ -189,12 +189,12 @@ struct FontInspectorView: View {
 
     private func sourceStatus(_ state: FontOperationState) -> String {
         switch state {
-        case .available: "仅在字体库"
-        case .active: "已挂载"
-        case .installed: "已安装"
-        case .external: "外部文件"
-        case .system: "系统字体"
-        case .unavailable: "文件暂时不可用"
+        case .available: L.text("fontState.available")
+        case .active: L.text("fontState.active")
+        case .installed: L.text("fontState.installed")
+        case .external: L.text("fontState.external")
+        case .system: L.text("fontState.system")
+        case .unavailable: L.text("fontState.unavailableTemporary")
         }
     }
 
@@ -241,30 +241,30 @@ struct FontInspectorView: View {
     }
 
     private var destructiveButtonLabel: String {
-        if destructiveActions.count > 1 { return "卸载或移除字体" }
-        return destructiveActions.first == .uninstall ? "卸载字体" : "移除字体"
+        if destructiveActions.count > 1 { return L.text("inspector.uninstallOrRemove") }
+        return destructiveActions.first == .uninstall ? L.text("inspector.uninstall") : L.text("inspector.removeFont")
     }
 
     private var destructiveDialogTitle: String {
-        destructiveActions.count > 1 ? "管理字体" : destructiveButtonLabel
+        destructiveActions.count > 1 ? L.text("inspector.manageFonts") : destructiveButtonLabel
     }
 
     private var destructiveDialogMessage: String {
         if destructiveActions.contains(.uninstall) && destructiveActions.contains(.remove) {
-            return "选择要执行的操作"
+            return L.text("inspector.chooseAction")
         }
-        if destructiveActions.contains(.uninstall) { return "字体将从系统字体中卸载。" }
-        if destructiveActions.contains(.remove) { return "字体文件会从字体库中移除，可在废纸篓中恢复。" }
+        if destructiveActions.contains(.uninstall) { return L.text("inspector.uninstallDescription") }
+        if destructiveActions.contains(.remove) { return L.text("inspector.removeDescription") }
         return ""
     }
 
     private func facePicker(_ family: FamilyCard, face: FaceSummary) -> some View {
         HStack {
-            Text("字重")
+            Text(L.text("font.weight"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
-            Picker("字重", selection: Binding(
+            Picker(L.text("font.weight"), selection: Binding(
                 get: { model.selectedFaceID ?? face.id },
                 set: { faceID in
                     guard let selectedFace = family.faces.first(where: { $0.id == faceID }) else { return }
@@ -354,10 +354,10 @@ struct FontInspectorView: View {
             .padding(.bottom, 10)
 
             VStack(spacing: 4) {
-                inspectorButton("字族名", systemImage: "doc.on.doc") {
+                inspectorButton(L.text("font.familyName"), systemImage: "doc.on.doc") {
                     model.copy(family.displayName)
                 }
-                inspectorButton("PostScript 名", systemImage: "doc.on.doc") {
+                inspectorButton(L.text("font.postScriptName"), systemImage: "doc.on.doc") {
                     model.copy(face.postScriptName)
                 }
                 .disabled(face.postScriptName == nil)
@@ -367,12 +367,12 @@ struct FontInspectorView: View {
 
     private func information(_ face: FaceSummary) -> some View {
         VStack(spacing: 4) {
-            informationRow("设计师", value: face.designer ?? "—")
-            informationRow("厂牌", value: face.manufacturer ?? "—")
-            informationRow("格式", value: formattedFontFormat(face.format))
-            informationRow("字符数", value: formattedGlyphCount(face))
-            informationRow("文件体积", value: formattedFileSize(face.fileSize))
-            informationRow("版权", value: face.copyright ?? "—")
+            informationRow(L.text("font.designer"), value: face.designer ?? "—")
+            informationRow(L.text("font.foundry"), value: face.manufacturer ?? "—")
+            informationRow(L.text("font.format"), value: formattedFontFormat(face.format))
+            informationRow(L.text("font.glyphCount"), value: formattedGlyphCount(face))
+            informationRow(L.text("font.fileSize"), value: formattedFileSize(face.fileSize))
+            informationRow(L.text("font.copyright"), value: face.copyright ?? "—")
         }
         .padding(.horizontal, 4)
     }
@@ -411,7 +411,7 @@ struct FontInspectorView: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityValue(isExpanded.wrappedValue ? "已展开" : "已折叠")
+        .accessibilityValue(isExpanded.wrappedValue ? L.text("inspector.expanded") : L.text("inspector.collapsed"))
     }
 
     private func inspectorButton(
@@ -565,14 +565,14 @@ private struct InspectorFontPreview: View {
                         dragOriginHeight = nil
                     }
             )
-            .accessibilityLabel("预览区域高度")
-            .accessibilityHint("上下拖动以调整预览区域高度")
+            .accessibilityLabel(L.text("inspector.previewAreaHeight"))
+            .accessibilityHint(L.text("inspector.previewAreaHeightHint"))
     }
 
     private var previewSizeAdjustment: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text("字号")
+                Text(L.text("preview.size"))
                     .font(.system(size: 14, weight: .medium, design: .monospaced))
                 Spacer(minLength: 0)
                 Text("\(Int(model.inspectorPreviewSize.rounded())) px")
@@ -586,7 +586,7 @@ private struct InspectorFontPreview: View {
                 .controlSize(.small)
                 .frame(height: 24)
                 .padding(.horizontal, 6)
-                .accessibilityLabel("预览字号")
+                .accessibilityLabel(L.text("preview.size"))
                 .accessibilityValue("\(Int(model.inspectorPreviewSize.rounded())) px")
                 .sliderHaptics(value: model.inspectorPreviewSize, in: 10...32, feedbackStep: 1)
 
@@ -638,7 +638,7 @@ private struct EditableInspectorFontPreview: NSViewRepresentable {
             width: 0,
             height: CGFloat.greatestFiniteMagnitude
         )
-        textView.setAccessibilityLabel("字体预览文本")
+        textView.setAccessibilityLabel(L.text("desktop.fontPreviewText"))
         scrollView.documentView = textView
         return scrollView
     }

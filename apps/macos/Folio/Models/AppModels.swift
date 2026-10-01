@@ -23,8 +23,8 @@ enum DefaultThemeColor: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .folio: "Folio 橙色"
-        case .macOS: "macOS 主题色"
+        case .folio: L.text("theme.folioOrange")
+        case .macOS: L.text("theme.macosAccent")
         }
     }
 
@@ -54,8 +54,8 @@ enum FontImportMode: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .copy: "复制到 Folio 字体库"
-        case .reference: "引用原文件"
+        case .copy: L.text("import.copyToLibrary")
+        case .reference: L.text("import.referenceOriginal")
         }
     }
 }
@@ -69,11 +69,11 @@ enum FontAction: String, CaseIterable, Sendable {
 
     var title: String {
         switch self {
-        case .activate: "激活"
-        case .deactivate: "停用"
-        case .install: "安装"
-        case .uninstall: "卸载"
-        case .remove: "移除"
+        case .activate: L.text("macos.activate")
+        case .deactivate: L.text("macos.deactivate")
+        case .install: L.text("macos.install")
+        case .uninstall: L.text("macos.uninstallAction")
+        case .remove: L.text("common.remove")
         }
     }
 }
@@ -200,15 +200,15 @@ enum FacetKind: String, Hashable, CaseIterable, Sendable {
 
     var title: String {
         switch self {
-        case .category: "类型"
-        case .script: "文字系统"
-        case .foundry: "厂牌"
-        case .license: "许可"
-        case .weight: "字重"
-        case .width: "字宽"
-        case .feature: "字体特征"
-        case .state: "状态"
-        case .multipleVariants: "字族"
+        case .category: L.text("filters.category")
+        case .script: L.text("filters.script")
+        case .foundry: L.text("filters.foundry")
+        case .license: L.text("filters.license")
+        case .weight: L.text("filters.weight")
+        case .width: L.text("filters.width")
+        case .feature: L.text("filters.feature")
+        case .state: L.text("filters.state")
+        case .multipleVariants: L.text("font.family")
         }
     }
 }
@@ -258,8 +258,8 @@ enum FavoriteFolderEditorIntent: Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .create: "新建收藏夹"
-        case .editCollection, .editSmartFolder: "编辑收藏夹"
+        case .create: L.text("collection.new")
+        case .editCollection, .editSmartFolder: L.text("collection.edit")
         }
     }
 
@@ -337,34 +337,34 @@ enum CollectionIcon: String, CaseIterable, Hashable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .folder: "文件夹"
-        case .books: "书籍"
-        case .type: "字体"
-        case .star: "星标"
-        case .heart: "爱心"
-        case .bookmark: "书签"
-        case .tag: "标签"
-        case .briefcase: "工作"
-        case .sparkles: "灵感"
-        case .slidersHorizontal: "调节"
-        case .signature: "签名"
-        case .archive: "归档"
-        case .book: "书本"
-        case .paperclip: "回形针"
-        case .package: "包裹"
-        case .swatches: "色板"
-        case .gift: "礼物"
-        case .stack: "叠层"
-        case .numberCircle0, .numberSquare0: "数字 0"
-        case .numberCircle1, .numberSquare1: "数字 1"
-        case .numberCircle2, .numberSquare2: "数字 2"
-        case .numberCircle3, .numberSquare3: "数字 3"
-        case .numberCircle4, .numberSquare4: "数字 4"
-        case .numberCircle5, .numberSquare5: "数字 5"
-        case .numberCircle6, .numberSquare6: "数字 6"
-        case .numberCircle7, .numberSquare7: "数字 7"
-        case .numberCircle8, .numberSquare8: "数字 8"
-        case .numberCircle9, .numberSquare9: "数字 9"
+        case .folder: L.text("collectionIcon.folder")
+        case .books: L.text("collectionIcon.books")
+        case .type: L.text("collectionIcon.type")
+        case .star: L.text("collectionIcon.star")
+        case .heart: L.text("collectionIcon.heart")
+        case .bookmark: L.text("collectionIcon.bookmark")
+        case .tag: L.text("collectionIcon.tag")
+        case .briefcase: L.text("collectionIcon.briefcase")
+        case .sparkles: L.text("collectionIcon.sparkles")
+        case .slidersHorizontal: L.text("collectionIcon.sliders")
+        case .signature: L.text("collectionIcon.signature")
+        case .archive: L.text("collectionIcon.archive")
+        case .book: L.text("collectionIcon.book")
+        case .paperclip: L.text("collectionIcon.paperclip")
+        case .package: L.text("collectionIcon.package")
+        case .swatches: L.text("collectionIcon.swatches")
+        case .gift: L.text("collectionIcon.gift")
+        case .stack: L.text("collectionIcon.stack")
+        case .numberCircle0, .numberSquare0: L.text("collectionIcon.number0")
+        case .numberCircle1, .numberSquare1: L.text("collectionIcon.number1")
+        case .numberCircle2, .numberSquare2: L.text("collectionIcon.number2")
+        case .numberCircle3, .numberSquare3: L.text("collectionIcon.number3")
+        case .numberCircle4, .numberSquare4: L.text("collectionIcon.number4")
+        case .numberCircle5, .numberSquare5: L.text("collectionIcon.number5")
+        case .numberCircle6, .numberSquare6: L.text("collectionIcon.number6")
+        case .numberCircle7, .numberSquare7: L.text("collectionIcon.number7")
+        case .numberCircle8, .numberSquare8: L.text("collectionIcon.number8")
+        case .numberCircle9, .numberSquare9: L.text("collectionIcon.number9")
         }
     }
 
@@ -427,15 +427,15 @@ enum CollectionColor: String, CaseIterable, Hashable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .red: "红色"
-        case .orange: "橙色"
-        case .yellow: "黄色"
-        case .lime: "黄绿色"
-        case .green: "绿色"
-        case .cyan: "青色"
-        case .blue: "蓝色"
-        case .purple: "紫色"
-        case .gray: "灰色"
+        case .red: L.text("color.red")
+        case .orange: L.text("color.orange")
+        case .yellow: L.text("color.yellow")
+        case .lime: L.text("color.lime")
+        case .green: L.text("color.green")
+        case .cyan: L.text("color.cyan")
+        case .blue: L.text("color.blue")
+        case .purple: L.text("color.purple")
+        case .gray: L.text("color.gray")
         }
     }
 
@@ -536,10 +536,10 @@ enum LibraryViewMode: String, CaseIterable, Identifiable, Sendable {
 
     var accessibilityTitle: String {
         switch self {
-        case .compactGrid: "紧凑网格"
-        case .largeGrid: "大网格"
-        case .list: "长条列表"
-        case .stack: "展开卡片"
+        case .compactGrid: L.text("libraryView.compactGrid")
+        case .largeGrid: L.text("libraryView.largeGrid")
+        case .list: L.text("libraryView.list")
+        case .stack: L.text("libraryView.stack")
         }
     }
 }

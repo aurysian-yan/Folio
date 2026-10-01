@@ -42,7 +42,7 @@ struct FacetDisclosureGroupView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(kind.title)
-            .accessibilityValue(isExpanded ? "已展开" : "已折叠")
+            .accessibilityValue(isExpanded ? L.text("inspector.expanded") : L.text("inspector.collapsed"))
 
             if isExpanded {
                 FacetChipFlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
@@ -103,7 +103,7 @@ struct FacetDisclosureGroupView: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(option.label)，\(option.familyCount) 个字族")
+        .accessibilityLabel(L.format("filters.facetOption", option.label, String(option.familyCount)))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

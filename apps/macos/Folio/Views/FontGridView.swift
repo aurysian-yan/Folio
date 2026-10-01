@@ -268,8 +268,8 @@ private struct ExpandedFontCardCarousel: View {
                         cardResizeGesture(for: index),
                         including: isCurrent ? .all : .none
                     )
-                    .help(isCurrent ? "上下拖动调整卡片高度比例" : "")
-                    .accessibilityHint(isCurrent ? "上下拖动调整卡片高度比例" : "")
+                    .help(isCurrent ? L.text("inspector.adjustCardHeightHint") : "")
+                    .accessibilityHint(isCurrent ? L.text("inspector.adjustCardHeightHint") : "")
                     .scaleEffect(cardScale(for: depth))
                     .offset(x: cardOffset(for: depth))
                     .opacity(cardOpacity(for: depth))
@@ -362,14 +362,14 @@ private struct ExpandedFontCardCarousel: View {
     private var pager: some View {
         VStack(spacing: 0) {
             HStack {
-                pageButton(systemName: "chevron.left", offset: -1, label: "上一个字体")
+                pageButton(systemName: "chevron.left", offset: -1, label: L.text("desktop.prevFont"))
                 Spacer()
                 Text(totalCount == 0 ? "0" : "\(displayedIndex + 1)")
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
                 Spacer()
-                pageButton(systemName: "chevron.right", offset: 1, label: "下一个字体")
+                pageButton(systemName: "chevron.right", offset: 1, label: L.text("desktop.nextFont"))
             }
             .frame(height: 22)
 
@@ -382,11 +382,11 @@ private struct ExpandedFontCardCarousel: View {
                 step: 1
             )
             .disabled(totalCount < 2)
-            .accessibilityLabel("字体位置")
+            .accessibilityLabel(L.text("font.position"))
             .accessibilityValue(
                 totalCount == 0
-                    ? "没有字体"
-                    : "第 \(displayedIndex + 1) 个，共 \(totalCount) 个"
+                    ? L.text("library.noFonts")
+                    : L.format("common.indexOfTotal", String(displayedIndex + 1), String(totalCount))
             )
 
             HStack {

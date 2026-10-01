@@ -41,6 +41,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { SegmentedTabs } from "./components/SegmentedTabs";
 import { FacetGroup } from "./components/FacetGroup";
 import { ClaralightSlider } from "./components/ClaralightSlider";
@@ -119,6 +120,7 @@ import type {
 } from "./types";
 import { AnimatedIcon } from "./animated-icons";
 import type { AnimatedIconName } from "./animated-icons-data";
+import i18n, { currentLanguageSetting, setLanguageSetting, type LanguageSetting } from "./i18n";
 
 type LibraryScope =
   | "all"
@@ -205,10 +207,10 @@ function matchesQuitShortcut(event: globalThis.KeyboardEvent, shortcut: QuitShor
 
 const viewModes: { id: ViewMode; label: string; Icon: typeof GridFourIcon }[] =
   [
-    { id: "compact", label: "紧凑网格", Icon: GridNineIcon },
-    { id: "large", label: "大网格", Icon: GridFourIcon },
-    { id: "list", label: "长条列表", Icon: ListBulletsIcon },
-    { id: "expanded", label: "展开卡片", Icon: StackSimpleIcon },
+    { id: "compact", label: "libraryView.compactGrid", Icon: GridNineIcon },
+    { id: "large", label: "libraryView.largeGrid", Icon: GridFourIcon },
+    { id: "list", label: "libraryView.list", Icon: ListBulletsIcon },
+    { id: "expanded", label: "libraryView.stack", Icon: StackSimpleIcon },
   ];
 
 const titlebarCapsuleCorners = { radius: 16, smoothing: 0.6 } as const;
@@ -227,44 +229,44 @@ type CollectionIconOption = {
 };
 
 const collectionIconOptions: CollectionIconOption[] = [
-  { id: "folder", label: "文件夹", animatedName: "folder" },
-  { id: "books", label: "书籍", animatedName: "books" },
-  { id: "type", label: "字体", animatedName: "text-aa" },
-  { id: "star", label: "星标", animatedName: "star" },
-  { id: "heart", label: "爱心", animatedName: "heart" },
-  { id: "bookmark", label: "书签", animatedName: "bookmark-simple" },
-  { id: "tag", label: "标签", animatedName: "tag" },
-  { id: "briefcase", label: "工作", animatedName: "briefcase" },
-  { id: "sparkles", label: "灵感", animatedName: "sparkle" },
-  { id: "sliders-horizontal", label: "调节", animatedName: "sliders-horizontal" },
-  { id: "signature", label: "签名", animatedName: "signature" },
-  { id: "archive", label: "归档", animatedName: "archive" },
-  { id: "book", label: "书本", animatedName: "book" },
-  { id: "paperclip", label: "回形针", animatedName: "paperclip" },
-  { id: "package", label: "包裹", animatedName: "package" },
-  { id: "swatches", label: "色板", animatedName: "swatches" },
-  { id: "gift", label: "礼物", animatedName: "gift" },
-  { id: "stack", label: "叠层", animatedName: "stack" },
-  { id: "number-circle-0", label: "数字 0", animatedName: "number-circle-zero" },
-  { id: "number-circle-1", label: "数字 1", animatedName: "number-circle-one" },
-  { id: "number-circle-2", label: "数字 2", animatedName: "number-circle-two" },
-  { id: "number-circle-3", label: "数字 3", animatedName: "number-circle-three" },
-  { id: "number-circle-4", label: "数字 4", animatedName: "number-circle-four" },
-  { id: "number-circle-5", label: "数字 5", animatedName: "number-circle-five" },
-  { id: "number-circle-6", label: "数字 6", animatedName: "number-circle-six" },
-  { id: "number-circle-7", label: "数字 7", animatedName: "number-circle-seven" },
-  { id: "number-circle-8", label: "数字 8", animatedName: "number-circle-eight" },
-  { id: "number-circle-9", label: "数字 9", animatedName: "number-circle-nine" },
-  { id: "number-square-0", label: "数字 0", animatedName: "number-square-zero" },
-  { id: "number-square-1", label: "数字 1", animatedName: "number-square-one" },
-  { id: "number-square-2", label: "数字 2", animatedName: "number-square-two" },
-  { id: "number-square-3", label: "数字 3", animatedName: "number-square-three" },
-  { id: "number-square-4", label: "数字 4", animatedName: "number-square-four" },
-  { id: "number-square-5", label: "数字 5", animatedName: "number-square-five" },
-  { id: "number-square-6", label: "数字 6", animatedName: "number-square-six" },
-  { id: "number-square-7", label: "数字 7", animatedName: "number-square-seven" },
-  { id: "number-square-8", label: "数字 8", animatedName: "number-square-eight" },
-  { id: "number-square-9", label: "数字 9", animatedName: "number-square-nine" },
+  { id: "folder", label: "collectionIcon.folder", animatedName: "folder" },
+  { id: "books", label: "collectionIcon.books", animatedName: "books" },
+  { id: "type", label: "collectionIcon.type", animatedName: "text-aa" },
+  { id: "star", label: "collectionIcon.star", animatedName: "star" },
+  { id: "heart", label: "collectionIcon.heart", animatedName: "heart" },
+  { id: "bookmark", label: "collectionIcon.bookmark", animatedName: "bookmark-simple" },
+  { id: "tag", label: "collectionIcon.tag", animatedName: "tag" },
+  { id: "briefcase", label: "collectionIcon.briefcase", animatedName: "briefcase" },
+  { id: "sparkles", label: "collectionIcon.sparkles", animatedName: "sparkle" },
+  { id: "sliders-horizontal", label: "collectionIcon.sliders", animatedName: "sliders-horizontal" },
+  { id: "signature", label: "collectionIcon.signature", animatedName: "signature" },
+  { id: "archive", label: "collectionIcon.archive", animatedName: "archive" },
+  { id: "book", label: "collectionIcon.book", animatedName: "book" },
+  { id: "paperclip", label: "collectionIcon.paperclip", animatedName: "paperclip" },
+  { id: "package", label: "collectionIcon.package", animatedName: "package" },
+  { id: "swatches", label: "collectionIcon.swatches", animatedName: "swatches" },
+  { id: "gift", label: "collectionIcon.gift", animatedName: "gift" },
+  { id: "stack", label: "collectionIcon.stack", animatedName: "stack" },
+  { id: "number-circle-0", label: "collectionIcon.number0", animatedName: "number-circle-zero" },
+  { id: "number-circle-1", label: "collectionIcon.number1", animatedName: "number-circle-one" },
+  { id: "number-circle-2", label: "collectionIcon.number2", animatedName: "number-circle-two" },
+  { id: "number-circle-3", label: "collectionIcon.number3", animatedName: "number-circle-three" },
+  { id: "number-circle-4", label: "collectionIcon.number4", animatedName: "number-circle-four" },
+  { id: "number-circle-5", label: "collectionIcon.number5", animatedName: "number-circle-five" },
+  { id: "number-circle-6", label: "collectionIcon.number6", animatedName: "number-circle-six" },
+  { id: "number-circle-7", label: "collectionIcon.number7", animatedName: "number-circle-seven" },
+  { id: "number-circle-8", label: "collectionIcon.number8", animatedName: "number-circle-eight" },
+  { id: "number-circle-9", label: "collectionIcon.number9", animatedName: "number-circle-nine" },
+  { id: "number-square-0", label: "collectionIcon.number0", animatedName: "number-square-zero" },
+  { id: "number-square-1", label: "collectionIcon.number1", animatedName: "number-square-one" },
+  { id: "number-square-2", label: "collectionIcon.number2", animatedName: "number-square-two" },
+  { id: "number-square-3", label: "collectionIcon.number3", animatedName: "number-square-three" },
+  { id: "number-square-4", label: "collectionIcon.number4", animatedName: "number-square-four" },
+  { id: "number-square-5", label: "collectionIcon.number5", animatedName: "number-square-five" },
+  { id: "number-square-6", label: "collectionIcon.number6", animatedName: "number-square-six" },
+  { id: "number-square-7", label: "collectionIcon.number7", animatedName: "number-square-seven" },
+  { id: "number-square-8", label: "collectionIcon.number8", animatedName: "number-square-eight" },
+  { id: "number-square-9", label: "collectionIcon.number9", animatedName: "number-square-nine" },
 ];
 
 const collectionIconMap: Record<string, AnimatedIconName> = Object.fromEntries(
@@ -278,15 +280,15 @@ type CollectionColorOption = {
 };
 
 const collectionColorOptions: CollectionColorOption[] = [
-  { id: "red", label: "红色", value: "rgb(219, 56, 64)" },
-  { id: "orange", label: "橙色", value: "rgb(232, 99, 31)" },
-  { id: "yellow", label: "黄色", value: "rgb(209, 158, 5)" },
-  { id: "lime", label: "黄绿色", value: "rgb(125, 176, 41)" },
-  { id: "green", label: "绿色", value: "rgb(31, 153, 92)" },
-  { id: "cyan", label: "青色", value: "rgb(0, 150, 161)" },
-  { id: "blue", label: "蓝色", value: "rgb(46, 120, 214)" },
-  { id: "purple", label: "紫色", value: "rgb(125, 79, 207)" },
-  { id: "gray", label: "灰色", value: "rgb(128, 128, 128)" },
+  { id: "red", label: "color.red", value: "rgb(219, 56, 64)" },
+  { id: "orange", label: "color.orange", value: "rgb(232, 99, 31)" },
+  { id: "yellow", label: "color.yellow", value: "rgb(209, 158, 5)" },
+  { id: "lime", label: "color.lime", value: "rgb(125, 176, 41)" },
+  { id: "green", label: "color.green", value: "rgb(31, 153, 92)" },
+  { id: "cyan", label: "color.cyan", value: "rgb(0, 150, 161)" },
+  { id: "blue", label: "color.blue", value: "rgb(46, 120, 214)" },
+  { id: "purple", label: "color.purple", value: "rgb(125, 79, 207)" },
+  { id: "gray", label: "color.gray", value: "rgb(128, 128, 128)" },
 ];
 
 const collectionColorMap: Record<string, string> = Object.fromEntries(
@@ -302,43 +304,44 @@ function collectionColorValue(color: string) {
 }
 
 const settingsPages: { id: SettingsPage; title: string }[] = [
-  { id: "cloud", title: "云同步" },
-  { id: "storage", title: "存储" },
-  { id: "importing", title: "导入" },
-  { id: "display", title: "显示" },
-  { id: "font-cards", title: "字体卡片" },
-  { id: "shortcuts", title: "快捷键" },
-  { id: "about", title: "关于" },
+  { id: "cloud", title: "settings.cloud" },
+  { id: "storage", title: "settings.storage" },
+  { id: "importing", title: "settings.importing" },
+  { id: "display", title: "settings.display" },
+  { id: "font-cards", title: "settings.cards" },
+  { id: "shortcuts", title: "desktop.shortcuts" },
+  { id: "about", title: "settings.about" },
 ];
 
 function StorageVolumeBar({ usage }: { usage: StorageUsageDto }) {
+  const { t } = useTranslation();
   const segments = [
-    { label: "托管字体", bytes: usage.managedFontBytes, className: "storage-fonts" },
-    { label: "字体库数据库", bytes: usage.databaseBytes, className: "storage-database" },
+    { label: t("storage.managedLabel"), bytes: usage.managedFontBytes, className: "storage-fonts" },
+    { label: t("storage.libraryDatabase"), bytes: usage.databaseBytes, className: "storage-database" },
   ];
   const total = segments.reduce((sum, segment) => sum + segment.bytes, 0);
   const used = Math.max(0, usage.volumeTotalBytes - usage.volumeFreeBytes);
   const otherUsed = Math.max(0, used - total);
   const diskSegments = [
-    { label: "其他应用与系统", bytes: otherUsed, className: "storage-other" },
+    { label: t("storage.otherApps"), bytes: otherUsed, className: "storage-other" },
     ...segments,
-    { label: "可用空间", bytes: usage.volumeFreeBytes, className: "storage-free" },
+    { label: t("desktop.availableSpace"), bytes: usage.volumeFreeBytes, className: "storage-free" },
   ];
   const percentage = usage.volumeTotalBytes > 0 ? total / usage.volumeTotalBytes * 100 : 0;
   const percentageLabel = percentage > 0 && percentage < 0.1 ? "<0.1%" : `${percentage.toFixed(1)}%`;
 
   return (
     <div className="storage-volume">
-      <div className="storage-volume-heading"><span>Folio 本地占用</span><strong>{formatFileSize(total)}</strong></div>
-      <div className="storage-volume-track" role="img" aria-label={`Folio 本地占用 ${formatFileSize(total)}，占用所在磁盘空间 ${percentageLabel}；${diskSegments.map((segment) => `${segment.label} ${formatFileSize(segment.bytes)}`).join("，")}`}>
+      <div className="storage-volume-heading"><span>{t("storage.folioUsage")}</span><strong>{formatFileSize(total)}</strong></div>
+      <div className="storage-volume-track" role="img" aria-label={t("storage.accessibilityUsage", { total: formatFileSize(total), percent: percentageLabel, other: formatFileSize(otherUsed), free: formatFileSize(usage.volumeFreeBytes) })}>
         {diskSegments.filter((segment) => segment.bytes > 0).map((segment) => (
           <span key={segment.label} className={segment.className} style={{ width: `${usage.volumeTotalBytes > 0 ? Math.min(segment.bytes / usage.volumeTotalBytes * 100, 100) : 0}%`, minWidth: segment.className === "storage-fonts" || segment.className === "storage-database" ? 2 : 0 }} />
         ))}
       </div>
-      <div className="storage-volume-foot"><span>{formatFileSize(total)} / {formatFileSize(usage.volumeTotalBytes)} · Folio 数据所在磁盘</span><strong>{percentageLabel}</strong></div>
+      <div className="storage-volume-foot"><span>{t("storage.diskOf", { used: formatFileSize(total), total: formatFileSize(usage.volumeTotalBytes) })}</span><strong>{percentageLabel}</strong></div>
       <div className="storage-volume-legend">
-        <span><i className="storage-dot storage-other" aria-hidden="true" />其他应用与系统 <strong>{formatFileSize(otherUsed)}</strong></span>
-        <span><i className="storage-dot storage-free" aria-hidden="true" />可用空间 <strong>{formatFileSize(usage.volumeFreeBytes)}</strong></span>
+        <span><i className="storage-dot storage-other" aria-hidden="true" />{t("storage.otherApps")} <strong>{formatFileSize(otherUsed)}</strong></span>
+        <span><i className="storage-dot storage-free" aria-hidden="true" />{t("desktop.availableSpace")} <strong>{formatFileSize(usage.volumeFreeBytes)}</strong></span>
       </div>
     </div>
   );
@@ -346,9 +349,9 @@ function StorageVolumeBar({ usage }: { usage: StorageUsageDto }) {
 
 // WebDAV 服务商预设，与 macOS 版本 WebDAVPreset 保持一致。
 const webdavPresets: { id: string; label: string; url: string | null }[] = [
-  { id: "none", label: "无", url: null },
-  { id: "pan123", label: "123 云盘", url: "https://webdav.123pan.cn/webdav" },
-  { id: "jianguoyun", label: "坚果云", url: "https://dav.jianguoyun.com/dav" },
+  { id: "none", label: "macos.providerNone", url: null },
+  { id: "pan123", label: "macos.provider123", url: "https://webdav.123pan.cn/webdav" },
+  { id: "jianguoyun", label: "macos.providerJianguoyun", url: "https://dav.jianguoyun.com/dav" },
 ];
 
 function matchingWebdavPreset(serverUrl: string) {
@@ -382,50 +385,64 @@ type FontStateOption = {
 const fontStateOptions: FontStateOption[] = [
   {
     id: "active",
-    label: "已挂载",
+    label: "fontState.active",
     animatedName: "seal-check",
-    help: "操作系统当前可用的字体",
+    help: "fontState.helpActive",
   },
   {
     id: "available",
-    label: "仅在字体库",
+    label: "fontState.available",
     animatedName: "book",
-    help: "Folio 字体库中尚未安装的副本",
+    help: "fontState.helpAvailable",
   },
   {
     id: "external",
-    label: "外部文件",
+    label: "fontState.external",
     animatedName: "file",
-    help: "引用的文件和已添加文件夹中的字体",
+    help: "fontState.helpExternal",
   },
   {
     id: "system",
-    label: "系统字体",
+    label: "fontState.system",
     animatedName: "laptop",
-    help: "系统字体目录中的字体，包含面向所有用户安装的字体",
+    help: "fontState.helpSystem",
   },
   {
     id: "unavailable",
-    label: "文件不可用",
+    label: "fontState.unavailable",
     animatedName: "warning",
-    help: "来源文件已不可访问",
+    help: "desktop.sourceUnavailable",
   },
 ];
 
 function fontStateOptionsFor(snapshot: LibrarySnapshotDto | null): FontStateOption[] {
+  // 保持静态分类的键为可翻译键，无对应键的说明沿用原文。
+  const localize = (value: string) => (i18n.exists(value) ? i18n.t(value) : value);
   const users = (snapshot?.userFontGroups ?? []).map((group) => ({
     id: group.id as FontStateId,
-    label: `用户字体 · ${group.name}`,
+    label: i18n.t("import.userFontsFolder", { name: group.name }),
     animatedName: "download-simple" as AnimatedIconName,
-    help: `${group.name} 的个人字体目录`,
+    help: i18n.t("import.folderOwner", { name: group.name }),
   }));
-  return [fontStateOptions[0], ...users, ...fontStateOptions.slice(1)];
+  return [
+    {
+      ...fontStateOptions[0],
+      label: localize(fontStateOptions[0].label),
+      help: localize(fontStateOptions[0].help),
+    },
+    ...users,
+    ...fontStateOptions.slice(1).map((option) => ({
+      ...option,
+      label: localize(option.label),
+      help: localize(option.help),
+    })),
+  ];
 }
 
 function fontStateLabel(id: FontStateId, snapshot: LibrarySnapshotDto | null) {
   return (
     fontStateOptionsFor(snapshot).find((option) => option.id === id)?.label ??
-    "字体状态"
+    i18n.t("navigation.fontState")
   );
 }
 
@@ -597,12 +614,14 @@ function FolioWordmark() {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   useAppScrollbars();
   useLayoutEffect(() => {
     document.documentElement.dataset.uiReady = "true";
   }, []);
 
   const settingsWindow = isSettingsWindow();
+  const [languageSetting, setLanguage] = useState<LanguageSetting>(() => currentLanguageSetting());
   const [viewMode, setViewMode] = useState<ViewMode>(
     () =>
       (localStorage.getItem("folio-view-mode") as ViewMode | null) ?? "compact",
@@ -1251,7 +1270,7 @@ export default function App() {
     try {
       const removed = await clearCatalogCache();
       setStorageUsage(await getStorageUsage());
-      setStorageMessage(`已清理 ${removed} 条目录缓存记录。下次刷新字体库时会重新扫描。`);
+      setStorageMessage(t("storage.catalogCleaned", { count: removed }));
     } catch (cause) {
       setStorageMessage(errorMessage(cause));
     } finally {
@@ -1266,7 +1285,7 @@ export default function App() {
     try {
       await rebuildSyncIndexes();
       setStorageUsage(await getStorageUsage());
-      setStorageMessage("同步索引已重建，连接和本地记录均已保留。");
+      setStorageMessage(t("cloud.rebuildDone"));
     } catch (cause) {
       setStorageMessage(errorMessage(cause));
     } finally {
@@ -1275,10 +1294,10 @@ export default function App() {
   };
 
   const testCloudConnection = async () => {
-    setSyncMessage("正在测试连接…");
+    setSyncMessage(t("cloud.testingConnection"));
     try {
       await testSyncConnection(currentSyncProfile(), syncPassword);
-      setSyncMessage("连接测试成功。");
+      setSyncMessage(t("cloud.connectSuccess"));
     } catch (cause) {
       setSyncMessage(errorMessage(cause));
     }
@@ -1290,7 +1309,7 @@ export default function App() {
       await saveSyncConnection(profile, syncPassword);
       setSyncProfile(profile);
       setSyncPassword("");
-      setSyncMessage("连接配置已安全保存。");
+      setSyncMessage(t("cloud.connectionSaved"));
       if (profile.automatic) await syncNow();
       setSyncStatus(await getSyncStatus());
     } catch (cause) {
@@ -1331,7 +1350,7 @@ export default function App() {
       setSyncProfile(null);
       setSyncStatus(await getSyncStatus());
       setSyncPassword("");
-      setSyncMessage("已断开云端连接。");
+      setSyncMessage(t("cloud.disconnected"));
     } catch (cause) {
       setSyncMessage(errorMessage(cause));
     }
@@ -1344,7 +1363,7 @@ export default function App() {
     try {
       await resolveSyncConflict(conflictId, resolution);
       setSyncConflicts(await listSyncConflicts());
-      setSyncMessage("冲突处理已保存。");
+      setSyncMessage(t("cloud.conflictsSaved"));
     } catch (cause) {
       setSyncMessage(errorMessage(cause));
     }
@@ -1355,7 +1374,7 @@ export default function App() {
       const selectedPath = await open({
         directory: true,
         multiple: false,
-        title: "添加字体文件夹",
+        title: t("import.addFontFolder"),
       });
       if (typeof selectedPath !== "string") return;
       setRefreshing(true);
@@ -1367,7 +1386,7 @@ export default function App() {
     } finally {
       setRefreshing(false);
     }
-  }, [loadPage, reloadOrganization, search, scope]);
+  }, [loadPage, reloadOrganization, search, scope, t]);
 
   useEffect(() => {
     const handleShortcut = (event: globalThis.KeyboardEvent) => {
@@ -1478,13 +1497,11 @@ export default function App() {
     if (!favoriteEditor) return;
     const name = draft.name.trim();
     if (!name) {
-      setOrganizationError("请输入收藏夹名称。");
+      setOrganizationError(t("collection.nameRequired"));
       return;
     }
     if (draft.facets.roots?.length) {
-      setOrganizationError(
-        "智慧收藏夹暂不支持按来源目录筛选，请先清除该条件。",
-      );
+      setOrganizationError(t("filters.smartUnsupportedSource"));
       return;
     }
     const text = draft.text.trim();
@@ -1654,10 +1671,10 @@ export default function App() {
   const currentScopeTitle =
     scope === "collection"
       ? (collections.find((collection) => collection.id === collectionId)
-          ?.name ?? "手动收藏夹")
+          ?.name ?? t("collection.collection"))
       : scope === "smartFolder"
         ? (smartFolders.find((folder) => folder.id === smartFolderId)?.name ??
-          "智慧收藏夹")
+          t("navigation.smartCollections"))
         : scope === "fontState"
           ? fontStateLabel(fontState, snapshot)
           : scopeTitle(scope);
@@ -1755,52 +1772,56 @@ export default function App() {
     }
   };
   const fileMenuItems: MenuEntry[] = [
-    { label: "添加字体文件夹…", action: chooseFolder, Icon: FolderPlusIcon },
-    { label: "刷新字体库", action: runRefresh, Icon: ArrowClockwiseIcon, shortcut: "Ctrl+R", ariaShortcut: "Control+R", disabled: refreshing },
-    { label: "设置…", action: openSettings, shortcut: "Ctrl+,", ariaShortcut: "Control+,", separatorBefore: true },
-    { label: "退出 Folio", action: quitApp, shortcut: quitShortcutOptions.find((option) => option.id === quitShortcut)?.label, ariaShortcut: quitShortcut, separatorBefore: true },
+    { label: t("import.addFontFolderEllipsis"), action: chooseFolder, Icon: FolderPlusIcon },
+    { label: t("desktop.refreshLibrary"), action: runRefresh, Icon: ArrowClockwiseIcon, shortcut: "Ctrl+R", ariaShortcut: "Control+R", disabled: refreshing },
+    { label: t("common.settingsEllipsis"), action: openSettings, shortcut: "Ctrl+,", ariaShortcut: "Control+,", separatorBefore: true },
+    { label: t("desktop.quit"), action: quitApp, shortcut: quitShortcutOptions.find((option) => option.id === quitShortcut)?.label, ariaShortcut: quitShortcut, separatorBefore: true },
   ];
-  const appMenus: { name: string; items: MenuEntry[] }[] = [
+  const appMenus: { id: string; label: string; items: MenuEntry[] }[] = [
     {
-      name: "编辑",
+      id: "edit",
+      label: "macos.menuEdit",
       items: [
         {
-          label: "全选字体",
+          label: t("desktop.selectAll"),
           action: () => document.querySelector<HTMLElement>(".font-grid")?.focus(),
         },
       ],
     },
     {
-      name: "显示",
+      id: "view",
+      label: "macos.menuView",
       items: [
         ...viewModes.map(({ id, label }) => ({
-          label,
+          label: t(label),
           action: () => setViewMode(id),
           checked: viewMode === id,
         })),
         {
-          label: `${leftSidebarOpen ? "收起" : "展开"}左侧侧边栏`,
+          label: t("desktop.leftSidebarToggle", { action: leftSidebarOpen ? t("desktop.collapse") : t("desktop.expand") }),
           action: () => setLeftSidebarOpen((open) => !open),
           separatorBefore: true,
         },
         {
-          label: `${rightSidebarOpen ? "收起" : "展开"}右侧侧边栏`,
+          label: t("desktop.rightSidebarToggle", { action: rightSidebarOpen ? t("desktop.collapse") : t("desktop.expand") }),
           action: () => setRightSidebarOpen((open) => !open),
         },
       ],
     },
     {
-      name: "窗口",
+      id: "window",
+      label: "macos.menuWindow",
       items: [
-        { label: "字体库", action: () => window.location.assign("index.html") },
-        { label: "设置…", action: openSettings, shortcut: "Ctrl+,", ariaShortcut: "Control+,", separatorBefore: true },
+        { label: t("navigation.library"), action: () => window.location.assign("index.html") },
+        { label: t("common.settingsEllipsis"), action: openSettings, shortcut: "Ctrl+,", ariaShortcut: "Control+,", separatorBefore: true },
       ],
     },
     {
-      name: "帮助",
+      id: "help",
+      label: "macos.menuHelp",
       items: [
         {
-          label: "关于 Folio",
+          label: t("desktop.about"),
           action: () => settingsWindow ? setSettingsPage("about") : void openSettings(),
         },
       ],
@@ -1855,7 +1876,7 @@ export default function App() {
         }}
       >
         {settingsWindow ? (
-          <span className="settings-title-mark" role="img" aria-label="设置">
+          <span className="settings-title-mark" role="img" aria-label={t("common.settings")}>
             <GearSixIcon aria-hidden="true" />
           </span>
         ) : (
@@ -1866,7 +1887,7 @@ export default function App() {
               size="sm"
               variant="tertiary"
               isDisabled={menuMode}
-              aria-label={leftSidebarOpen ? "收起左侧栏" : "展开左侧栏"}
+              aria-label={leftSidebarOpen ? t("desktop.collapseLeft") : t("desktop.expandLeft")}
               aria-pressed={leftSidebarOpen}
               onPress={() => setLeftSidebarOpen((open) => !open)}
             >
@@ -1876,55 +1897,55 @@ export default function App() {
               <button
                 type="button"
                 className="window-brand"
-                aria-label="文件菜单"
-                aria-expanded={menuMode && menuOpen === "文件"}
+                aria-label={t("desktop.fileMenu")}
+                aria-expanded={menuMode && menuOpen === "file"}
                 aria-controls="file-menu"
                 onClick={() => {
                   if (menuMode) closeMenu();
                   else {
                     setMenuMode(true);
-                    setMenuOpen("文件");
+                    setMenuOpen("file");
                   }
                 }}
                 onMouseEnter={() => {
-                  if (menuMode) setMenuOpen("文件");
+                  if (menuMode) setMenuOpen("file");
                 }}
               >
                 <FolioWordmark />
               </button>
-              {menuMode && menuOpen === "文件" && (
+              {menuMode && menuOpen === "file" && (
                 <MenuPopover
                   backdropRoot={appWindowRef.current}
                   className="file-menu-popover"
                   id="file-menu"
-                  label="文件"
+                  label={t("desktop.fileMenu")}
                 >
                   {renderMenuItems(fileMenuItems)}
                 </MenuPopover>
               )}
               {menuMode && (
-                <nav className="menubar" aria-label="应用菜单">
+                <nav className="menubar" aria-label={t("desktop.appMenu")}>
                   {appMenus.map((menu) => (
                     <div
                       className="menu-root"
-                      key={menu.name}
-                      onMouseEnter={() => setMenuOpen(menu.name)}
+                      key={menu.id}
+                      onMouseEnter={() => setMenuOpen(menu.id)}
                     >
                       <button
                         type="button"
                         className="menu-trigger"
-                        aria-expanded={menuOpen === menu.name}
-                        aria-controls={`menu-${menu.name}`}
-                        onFocus={() => setMenuOpen(menu.name)}
-                        onClick={() => setMenuOpen(menu.name)}
+                        aria-expanded={menuOpen === menu.id}
+                        aria-controls={`menu-${menu.id}`}
+                        onFocus={() => setMenuOpen(menu.id)}
+                        onClick={() => setMenuOpen(menu.id)}
                       >
-                        {menu.name}
+                        {t(menu.label)}
                       </button>
-                      {menuOpen === menu.name && (
+                      {menuOpen === menu.id && (
                         <MenuPopover
                           backdropRoot={appWindowRef.current}
-                          id={`menu-${menu.name}`}
-                          label={menu.name}
+                          id={`menu-${menu.id}`}
+                          label={t(menu.label)}
                         >
                           {renderMenuItems(menu.items)}
                         </MenuPopover>
@@ -1938,12 +1959,12 @@ export default function App() {
         )}
         {!settingsWindow && <div className="titlebar-center" hidden={menuMode}>
           <div className="titlebar-drag-space" aria-hidden="true" />
-          <Toolbar className="titlebar-actions" aria-label="字体库工具">
+          <Toolbar className="titlebar-actions" aria-label={t("desktop.tools")}>
           <SmoothCorners
             className="view-picker"
             corners={titlebarCapsuleCorners}
             autoEffects={false}
-            aria-label="浏览方式"
+            aria-label={t("libraryView.browseMode")}
           >
             <SmoothCorners
               className="view-picker-thumb"
@@ -1960,7 +1981,7 @@ export default function App() {
                   size="sm"
                   variant={viewMode === id ? "secondary" : "tertiary"}
                   className="view-mode-button"
-                  aria-label={label}
+                  aria-label={t(label)}
                   aria-pressed={viewMode === id}
                   onPress={() => setViewMode(id)}
                 >
@@ -1978,7 +1999,7 @@ export default function App() {
           >
             <SearchField
               className="search-box"
-              aria-label="搜索字体"
+              aria-label={t("library.searchFonts")}
               value={search}
               onChange={setSearch}
             >
@@ -1986,7 +2007,7 @@ export default function App() {
                 <SearchField.SearchIcon>
                   <MagnifyingGlassIcon />
                 </SearchField.SearchIcon>
-                <SearchField.Input placeholder="搜索字体" />
+                <SearchField.Input placeholder={t("desktop.searchFontsPlaceholder")} />
               </SearchField.Group>
             </SearchField>
           </div>
@@ -2003,7 +2024,7 @@ export default function App() {
               <Button
                 isIconOnly
                 size="sm"
-                aria-label="刷新字体库"
+                aria-label={t("desktop.refreshLibrary")}
                 variant="tertiary"
                 onPress={() => void runRefresh()}
                 isDisabled={refreshing}
@@ -2020,7 +2041,7 @@ export default function App() {
               <Button
                 isIconOnly
                 size="sm"
-                aria-label="添加字体文件夹"
+                aria-label={t("import.addFontFolder")}
                 variant="tertiary"
                 onPress={() => void chooseFolder()}
               >
@@ -2034,23 +2055,23 @@ export default function App() {
         {menuMode && !settingsWindow && <div className="titlebar-drag-space" aria-hidden="true" />}
         {settingsWindow && (
           <SegmentedTabs
-            items={settingsPages}
+            items={settingsPages.map(({ id, title }) => ({ id, title: t(title) }))}
             selectedKey={settingsPage}
             onSelectionChange={setSettingsPage}
             panelId="settings-panel"
             tabIdPrefix="settings-tab"
-            ariaLabel="设置分类"
+            ariaLabel={t("settings.category")}
             className="settings-tab-picker settings-titlebar-tabs"
           />
         )}
-        <div className="window-controls" aria-label="窗口控制">
+        <div className="window-controls" aria-label={t("desktop.windowControls")}>
           {!settingsWindow && <Button
             className="titlebar-sidebar-button"
             isIconOnly
             size="sm"
             variant="tertiary"
             isDisabled={menuMode}
-            aria-label={rightSidebarOpen ? "收起右侧栏" : "展开右侧栏"}
+            aria-label={rightSidebarOpen ? t("desktop.collapseRight") : t("desktop.expandRight")}
             aria-pressed={rightSidebarOpen}
             onPress={() => setRightSidebarOpen((open) => !open)}
           >
@@ -2061,7 +2082,7 @@ export default function App() {
               <Button
                 isIconOnly
                 variant="tertiary"
-                aria-label="最小化"
+                aria-label={t("desktop.minimizeWindow")}
                 onPress={() =>
                   void getCurrentWindow()
                     .minimize()
@@ -2073,7 +2094,7 @@ export default function App() {
               <Button
                 isIconOnly
                 variant="tertiary"
-                aria-label={isMaximized ? "还原窗口" : "最大化窗口"}
+                aria-label={isMaximized ? t("desktop.restoreWindow") : t("desktop.maximizeWindow")}
                 onPress={() => void toggleWindowMaximize()}
               >
                 {isMaximized ? <CopySimpleIcon size={13} /> : <SquareIcon size={13} />}
@@ -2084,7 +2105,7 @@ export default function App() {
             className="close-control"
             isIconOnly
             variant="tertiary"
-            aria-label="关闭窗口"
+            aria-label={t("desktop.closeWindow")}
             onPress={() =>
               void getCurrentWindow()
                 .close()
@@ -2100,7 +2121,7 @@ export default function App() {
         <div className="window-action-error" role="alert">
           <span>{windowActionError}</span>
           <button
-            aria-label="关闭提示"
+            aria-label={t("desktop.closeHint")}
             onClick={() => setWindowActionError(null)}
           >
             <XIcon />
@@ -2109,7 +2130,7 @@ export default function App() {
       )}
 
       {settingsWindow ? (
-        <section className="settings-content" aria-label="设置">
+        <section className="settings-content" aria-label={t("common.settings")}>
           <article
             id="settings-panel"
             className="settings-page"
@@ -2117,47 +2138,47 @@ export default function App() {
             aria-labelledby={`settings-tab-${settingsPage}`}
             tabIndex={0}
           >
-            <h1>{settings?.title}</h1>
+            <h1>{settings ? t(settings.title) : null}</h1>
             {settingsPage === "storage" ? (
               <>
-                <p className="settings-description">查看 Folio 在本机占用的空间，并管理可重建的缓存与同步索引。</p>
+                <p className="settings-description">{t("settings.storageDescription")}</p>
                 {storageUsage ? (
                   <>
-                    <section className="settings-group storage-summary" aria-label="存储空间概览">
+                    <section className="settings-group storage-summary" aria-label={t("storage.overview")}>
                       <StorageVolumeBar usage={storageUsage} />
-                      <p>总量包含数据库与托管字体。目录扫描缓存已计入数据库，不会重复计算。</p>
+                      <p>{t("storage.totalNote")}</p>
                     </section>
                     <section className="settings-group storage-details">
-                      <h2>占用明细</h2>
+                      <h2>{t("storage.usageDetails")}</h2>
                       <div className="storage-detail-row">
                         <span className="storage-dot storage-fonts" aria-hidden="true" />
-                        <div><strong>托管字体</strong><p>由 Folio 保存的字体文件</p></div>
+                        <div><strong>{t("storage.managedLabel")}</strong><p>{t("storage.managedFontsDetail")}</p></div>
                         <span className="storage-detail-size">{formatFileSize(storageUsage.managedFontBytes)}</span>
                       </div>
                       <div className="storage-detail-row">
                         <span className="storage-dot storage-database" aria-hidden="true" />
-                        <div><strong>字体库数据库</strong><p>收藏夹、同步记录与字体库索引</p></div>
+                        <div><strong>{t("storage.libraryDatabase")}</strong><p>{t("storage.libraryDatabaseDetail")}</p></div>
                         <span className="storage-detail-size">{formatFileSize(storageUsage.databaseBytes)}</span>
                       </div>
                       <div className="storage-detail-row">
                         <span className="storage-dot storage-cache" aria-hidden="true" />
-                        <div><strong>目录扫描缓存</strong><p>{storageUsage.catalogCacheEntries} 条记录 · 占用为估算值，已计入数据库</p></div>
+                        <div><strong>{t("storage.catalogCache")}</strong><p>{t("storage.catalogCacheDetail", { count: storageUsage.catalogCacheEntries })}</p></div>
                         <span className="storage-detail-size">{formatFileSize(storageUsage.catalogCacheEstimatedBytes)}</span>
-                        <Button size="sm" variant="secondary" aria-label="清理目录缓存" isDisabled={storageBusy || syncStatus?.running} onPress={() => void clearStoredCatalog()}>清理</Button>
+                        <Button size="sm" variant="secondary" aria-label={t("storage.cleanCatalogCache")} isDisabled={storageBusy || syncStatus?.running} onPress={() => void clearStoredCatalog()}>{t("storage.clean")}</Button>
                       </div>
                     </section>
                   </>
-                ) : <section className="settings-group"><p className="settings-note">正在统计本机存储…</p></section>}
+                ) : <section className="settings-group"><p className="settings-note">{t("storage.measuring")}</p></section>}
                 <section className="settings-group">
-                  <h2>同步索引</h2>
-                  <p>根据本机现有同步事件修复序号和接收位置，保留连接、事件历史与云端文件。</p>
+                  <h2>{t("cloud.syncIndex")}</h2>
+                  <p>{t("storage.syncIndexDetail")}</p>
                   <div className="setting-actions">
                     <Button
                       size="sm"
                       variant="secondary"
                       isDisabled={storageBusy || syncStatus?.running}
                       onPress={() => setConfirmRebuild(true)}
-                    >重建同步索引</Button>
+                    >{t("storage.rebuildIndex")}</Button>
                   </div>
                 </section>
                 {storageMessage && <p className="settings-note" role="status">{storageMessage}</p>}
@@ -2165,21 +2186,41 @@ export default function App() {
             ) : settingsPage === "display" ? (
               <>
                 <section className="settings-group">
-                  <h2>浏览设置</h2>
-                  <p>设置字体库的浏览视图和预览字号，修改会同步到主窗口。</p>
+                  <h2>{t("language.title")}</h2>
                   <label className="setting-field">
-                    默认浏览视图
+                    {t("language.title")}
                     <OptionSelect
-                      label="默认浏览视图"
+                      label={t("language.title")}
+                      value={languageSetting}
+                      options={[
+                        { id: "system", label: t("language.system") },
+                        { id: "zh-CN", label: t("language.zhHans") },
+                        { id: "en", label: t("language.en") },
+                      ]}
+                      onChange={(value) => {
+                        const next = value as LanguageSetting;
+                        setLanguage(next);
+                        setLanguageSetting(next);
+                      }}
+                    />
+                  </label>
+                </section>
+                <section className="settings-group">
+                  <h2>{t("settings.browseTitle")}</h2>
+                  <p>{t("settings.browseDescription")}</p>
+                  <label className="setting-field">
+                    {t("settings.defaultLibraryView")}
+                    <OptionSelect
+                      label={t("settings.defaultLibraryView")}
                       value={viewMode}
-                      options={viewModes.map(({ id, label }) => ({ id, label }))}
+                      options={viewModes.map(({ id, label }) => ({ id, label: t(label) }))}
                       onChange={(value) => setViewMode(value as ViewMode)}
                     />
                   </label>
                   <label className="setting-field">
-                    预览字号
+                    {t("preview.size")}
                     <SettingSlider
-                      label="预览字号"
+                      label={t("preview.size")}
                       minValue={previewSizeRange.min}
                       maxValue={previewSizeRange.max}
                       value={previewSize}
@@ -2199,8 +2240,8 @@ export default function App() {
             ) : settingsPage === "font-cards" ? (
               <>
                 <section className="settings-group">
-                  <h2>卡片行为</h2>
-                  <p>设置字体卡片的交互方式。</p>
+                  <h2>{t("settings.cardsTitle")}</h2>
+                  <p>{t("settings.cardsDescription")}</p>
                   <Switch
                     className="setting-toggle"
                     isSelected={cardHover}
@@ -2210,28 +2251,28 @@ export default function App() {
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      悬停时选中字体卡片
+                      {t("cards.selectOnHover")}
                     </Switch.Content>
                   </Switch>
                   <label className="setting-field">
-                    悬停选中延时
+                    {t("cards.hoverDelay")}
                     <SettingSlider
-                      label="悬停选中延时"
+                      label={t("cards.hoverDelay")}
                       minValue={0}
                       maxValue={1000}
                       step={10}
-                      unit=" 毫秒"
+                      unit={` ${t("common.milliseconds")}`}
                       isDisabled={!cardHover}
                       value={cardHoverDelay}
                       onChange={setCardHoverDelay}
                     />
-                    <output>{cardHoverDelay} 毫秒</output>
+                    <output>{cardHoverDelay} {t("common.milliseconds")}</output>
                   </label>
-                  <p className="settings-note">指针停留达到设定时间后选中，移出卡片会取消等待。默认延时为 180 毫秒。</p>
+                  <p className="settings-note">{t("cards.hoverDelayNote", { delay: 180 })}</p>
                   <label className="setting-field">
-                    滚轮滚动速度
+                    {t("cards.scrollSpeed")}
                     <SettingSlider
-                      label="滚轮滚动速度"
+                      label={t("cards.scrollSpeed")}
                       minValue={0.5}
                       maxValue={2}
                       step={0.05}
@@ -2250,18 +2291,18 @@ export default function App() {
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      显示卡片上的字体信息
+                      {t("settings.showCardMetadata")}
                     </Switch.Content>
                   </Switch>
                 </section>
               </>
             ) : settingsPage === "shortcuts" ? (
               <>
-                <p>选择退出 Folio 时使用的快捷键。</p>
+                <p>{t("settings.shortcutsDescription")}</p>
                 <label className="setting-field">
-                  退出应用
+                  {t("desktop.quitApp")}
                   <OptionSelect
-                    label="退出应用快捷键"
+                    label={t("desktop.quitShortcut")}
                     value={quitShortcut}
                     options={quitShortcutOptions}
                     onChange={(value) => setQuitShortcut(parseQuitShortcut(value))}
@@ -2270,31 +2311,28 @@ export default function App() {
               </>
             ) : settingsPage === "importing" ? (
               <>
-                <p>选择添加字体文件时使用的默认方式。</p>
+                <p>{t("import.chooseMode")}</p>
                 <label className="setting-field">
-                  导入方式
+                  {t("import.mode")}
                   <OptionSelect
-                    label="导入方式"
+                    label={t("import.mode")}
                     value={importMode}
                     options={[
-                      { id: "copy", label: "复制到 Folio 字体库" },
-                      { id: "reference", label: "引用原文件" },
+                      { id: "copy", label: t("import.copyToLibrary") },
+                      { id: "reference", label: t("import.referenceOriginal") },
                     ]}
                     onChange={setImportMode}
                   />
                 </label>
-                <p className="settings-note">
-                  复制会保留一份由 Folio
-                  管理的字体文件；引用会从原目录读取字体。
-                </p>
+                <p className="settings-note">{t("settings.importDescription")}</p>
               </>
             ) : settingsPage === "cloud" ? (
               <>
-                <p className="settings-description">连接 WebDAV 或 123PAN，同步字体文件与收藏状态。</p>
+                <p className="settings-description">{t("settings.cloudDescription")}</p>
                 <section className="settings-group sync-connection-settings">
-                  <h2>WebDAV 连接</h2>
+                  <h2>{t("cloud.connection")}</h2>
                   <div className="setting-field">
-                    <span>服务商</span>
+                    <span>{t("cloud.provider")}</span>
                     <div className="setting-choice-row setting-preset-row">
                       {webdavPresets.map((preset) => (
                         <Button
@@ -2308,13 +2346,13 @@ export default function App() {
                           }
                           onPress={() => setSyncServerUrl(preset.url ?? "")}
                         >
-                          {preset.label}
+                          {t(preset.label)}
                         </Button>
                       ))}
                     </div>
                   </div>
                   <TextField className="setting-field">
-                    <Label>服务器地址</Label>
+                    <Label>{t("cloud.serverURL")}</Label>
                     <Input
                       type="url"
                       autoComplete="url"
@@ -2324,14 +2362,14 @@ export default function App() {
                     />
                   </TextField>
                   <TextField className="setting-field">
-                    <Label>远程目录</Label>
+                    <Label>{t("cloud.remoteDirectory")}</Label>
                     <Input
                       value={syncDirectory}
                       onChange={(event) => setSyncDirectory(event.target.value)}
                     />
                   </TextField>
                   <TextField className="setting-field">
-                    <Label>用户名</Label>
+                    <Label>{t("cloud.username")}</Label>
                     <Input
                       autoComplete="username"
                       value={syncUsername}
@@ -2339,14 +2377,14 @@ export default function App() {
                     />
                   </TextField>
                   <TextField className="setting-field">
-                    <Label>密码</Label>
+                    <Label>{t("cloud.password")}</Label>
                     <Input
                       type="password"
                       autoComplete="current-password"
                       value={syncPassword}
                       onChange={(event) => setSyncPassword(event.target.value)}
                       placeholder={
-                        syncProfile ? "已保存在系统凭据库，可留空" : "WebDAV 密码"
+                        syncProfile ? t("cloud.passwordStored") : t("cloud.password")
                       }
                     />
                   </TextField>
@@ -2359,7 +2397,7 @@ export default function App() {
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      连接恢复后自动同步
+                      {t("cloud.autoSync")}
                     </Switch.Content>
                   </Switch>
                   <div className="setting-actions">
@@ -2369,7 +2407,7 @@ export default function App() {
                       variant="secondary"
                       onPress={() => void testCloudConnection()}
                     >
-                      测试连接
+                      {t("cloud.testConnection")}
                     </Button>
                     <Button
                       size="sm"
@@ -2377,12 +2415,12 @@ export default function App() {
                       onPress={() => void saveCloudConnection()}
                       isDisabled={!syncPassword}
                     >
-                      保存连接
+                      {t("common.save")}
                     </Button>
                   </div>
                 </section>
                 <section className="settings-group sync-management-settings">
-                  <h2>同步状态</h2>
+                  <h2>{t("cloud.syncStatus")}</h2>
                   {syncStatus && (
                     <div
                       className={`sync-status${syncStatus.error ? " has-error" : ""}`}
@@ -2398,9 +2436,9 @@ export default function App() {
                         <strong>
                           {syncStatus.configured
                             ? syncStatus.running
-                              ? `正在同步 ${syncStatus.percent}%`
-                              : "已连接"
-                            : "未连接"}
+                              ? t("cloud.syncingPercent", { percent: syncStatus.percent })
+                              : t("cloud.connectedStatus")
+                            : t("cloud.notConnected")}
                         </strong>
                       </div>
                       <span>{syncStatus.error ?? syncStatus.phase}</span>
@@ -2424,7 +2462,7 @@ export default function App() {
                         onPress={() => void startCloudSync()}
                         isDisabled={syncStatus.running}
                       >
-                        {syncStatus.running ? "正在同步…" : "立即同步"}
+                        {syncStatus.running ? t("cloud.syncing") : t("cloud.syncNow")}
                       </Button>
                       {syncStatus.running && (
                         <Button
@@ -2437,7 +2475,7 @@ export default function App() {
                             )
                           }
                         >
-                          取消同步
+                          {t("cloud.cancelSync")}
                         </Button>
                       )}
                       {!syncStatus.running && (
@@ -2447,12 +2485,12 @@ export default function App() {
                           variant="tertiary"
                           onPress={() => void disconnectCloud()}
                         >
-                          断开连接
+                          {t("cloud.disconnect")}
                         </Button>
                       )}
                     </div>
                   )}
-                  <h2 className="settings-subheading">云端字体</h2>
+                  <h2 className="settings-subheading">{t("cloud.cloudFiles")}</h2>
                   {cloudFonts.length ? (
                     <div className="sync-font-list">
                       {cloudFonts.map((font) => (
@@ -2460,10 +2498,10 @@ export default function App() {
                           <strong>{font.displayName}</strong>
                           <span>
                             {font.deleted
-                              ? "已删除"
+                              ? t("desktop.deleted")
                               : font.cloudOnly
-                                ? "仅在云端"
-                                : "已同步到本机"}{" "}
+                                ? t("cloud.cloudOnly")
+                                : t("cloud.syncedTo")}{" "}
                             · {formatFileSize(font.fileSize)}
                           </span>
                           {(font.deleted || font.cloudOnly) && (
@@ -2474,16 +2512,16 @@ export default function App() {
                               isDisabled={syncStatus?.running}
                               onPress={() => void restoreCloudCopy(font)}
                             >
-                              {font.deleted ? "恢复" : "下载"}
+                              {font.deleted ? t("cloud.restore") : t("cloud.download")}
                             </Button>
                           )}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="settings-note">云端尚无字体记录。</p>
+                    <p className="settings-note">{t("cloud.empty")}</p>
                   )}
-                  <h2 className="settings-subheading">同步冲突</h2>
+                  <h2 className="settings-subheading">{t("cloud.conflicts")}</h2>
                   {syncConflicts.length ? (
                     <div className="sync-conflict-list">
                       {syncConflicts.map((conflict) => (
@@ -2499,7 +2537,7 @@ export default function App() {
                                 void applySyncConflict(conflict.id, "keepBoth")
                               }
                             >
-                              保留两者
+                              {t("cloud.keepBoth")}
                             </Button>
                             <Button
                               size="sm"
@@ -2509,7 +2547,7 @@ export default function App() {
                                 void applySyncConflict(conflict.id, "useLocal")
                               }
                             >
-                              使用本机版本
+                              {t("cloud.useLocal")}
                             </Button>
                             <Button
                               size="sm"
@@ -2519,19 +2557,19 @@ export default function App() {
                                 void applySyncConflict(conflict.id, "useRemote")
                               }
                             >
-                              使用云端版本
+                              {t("cloud.useRemote")}
                             </Button>
                           </div>
                       </section>
                     ))}
                   </div>
                 ) : (
-                  <p className="settings-note">没有待处理冲突。</p>
+                  <p className="settings-note">{t("cloud.noPendingConflicts")}</p>
                 )}
                 </section>
               </>
             ) : (
-              <p>Folio 字体资产管理工具</p>
+              <p>{t("macos.aboutSubtitle")}</p>
             )}
           </article>
         </section>
@@ -2551,7 +2589,7 @@ export default function App() {
           <aside
             id="left-sidebar"
             className="sidebar"
-            aria-label="左侧导航与筛选"
+            aria-label={t("desktop.leftSidebar")}
             aria-hidden={!leftSidebarVisible}
             inert={!leftSidebarVisible}
             data-open={leftSidebarVisible}
@@ -2560,7 +2598,7 @@ export default function App() {
               <div
                 className="sidebar-pages"
                 role="tablist"
-                aria-label="侧边栏页面"
+                aria-label={t("desktop.sidebarPage")}
               >
                 <button
                   type="button"
@@ -2569,7 +2607,7 @@ export default function App() {
                   aria-selected={sidebarPage === "navigation"}
                   onClick={() => setSidebarPage("navigation")}
                 >
-                  <span className="sidebar-page-label">导航</span>
+                  <span className="sidebar-page-label">{t("navigation.navigation")}</span>
                   <span className="sidebar-page-dot" aria-hidden="true" />
                 </button>
                 <button
@@ -2580,36 +2618,36 @@ export default function App() {
                   onClick={() => setSidebarPage("filters")}
                 >
                   <span className="sidebar-page-dot" aria-hidden="true" />
-                  <span className="sidebar-page-label">筛选</span>
+                  <span className="sidebar-page-label">{t("navigation.filters")}</span>
                 </button>
               </div>
               <div className="sidebar-scroll">
                 {sidebarPage === "navigation" ? (
                   <>
-                    <div className="sidebar-section-label">本地</div>
+                    <div className="sidebar-section-label">{t("navigation.local")}</div>
                     <SidebarItem
                       className={`sidebar-link${scope === "all" ? " selected" : ""}`}
                       onClick={() => selectLibraryScope("all")}
                     >
                       <AnimatedIcon name="text-aa" />
-                      全部字体{snapshot && <span>{snapshot.familyCount}</span>}
+                      {t("navigation.allFonts")}{snapshot && <span>{snapshot.familyCount}</span>}
                     </SidebarItem>
                     <SidebarItem
                       className={`sidebar-link${scope === "recent" ? " selected" : ""}`}
                       onClick={() => selectLibraryScope("recent")}
                     >
                       <AnimatedIcon name="clock-counter-clockwise" />
-                      最近
+                      {t("navigation.recent")}
                     </SidebarItem>
                     <SidebarItem
                       className={`sidebar-link${scope === "favorites" ? " selected" : ""}`}
                       onClick={() => selectLibraryScope("favorites")}
                     >
                       <AnimatedIcon name="star" />
-                      收藏
+                      {t("navigation.favorites")}
                     </SidebarItem>
                     <div className="sidebar-section-label sidebar-section-heading">
-                      收藏夹
+                      {t("navigation.collections")}
                     </div>
                     <div className="collection-list">
                       {smartFolders.map((folder) => {
@@ -2682,7 +2720,7 @@ export default function App() {
                       onClick={beginFavoriteFolderCreation}
                     >
                       <AnimatedIcon name="plus" />
-                      新建收藏夹
+                      {t("collection.new")}
                     </SidebarItem>
                     {organizationError && !favoriteEditor && (
                       <p className="sidebar-error" role="alert">
@@ -2690,7 +2728,7 @@ export default function App() {
                       </p>
                     )}
                     <div className="sidebar-section-label sidebar-section-heading">
-                      云端
+                      {t("navigation.cloud")}
                     </div>
                     {syncProfile ? (
                       <SidebarItem
@@ -2705,7 +2743,7 @@ export default function App() {
                             {cloudConnectionName(syncProfile)}
                           </span>
                           <span className="sidebar-cloud-detail">
-                            字体占用 {cloudFontStorage}
+                            {t("cloud.fontUsage", { size: cloudFontStorage })}
                           </span>
                         </span>
                         <span className="sidebar-cloud-count">
@@ -2713,10 +2751,10 @@ export default function App() {
                         </span>
                       </SidebarItem>
                     ) : (
-                      <p className="sidebar-empty">未连接云端</p>
+                      <p className="sidebar-empty">{t("cloud.notConnected")}</p>
                     )}
                     <div className="sidebar-section-label sidebar-section-heading">
-                      字体状态
+                      {t("navigation.fontState")}
                     </div>
                     {fontStateOptionsFor(snapshot).map((option) => {
                       return (
@@ -2735,28 +2773,28 @@ export default function App() {
                       );
                     })}
                     <div className="sidebar-section-label sidebar-section-heading">
-                      工具
+                      {t("navigation.tools")}
                     </div>
                     <SidebarItem
                       className="sidebar-link sidebar-link-disabled"
                       disabled
-                      title="在线字体将在后续版本提供"
+                      title={t("online.comingSoon")}
                     >
                       <AnimatedIcon name="globe" />
-                      在线字体
+                      {t("navigation.onlineFonts")}
                     </SidebarItem>
                     <SidebarItem
                       className={`sidebar-link${scope === "fontHealth" ? " selected" : ""}`}
                       onClick={() => selectLibraryScope("fontHealth")}
                     >
                       <AnimatedIcon name="stethoscope" />
-                      字体健康
+                      {t("navigation.fontHealth")}
                       <span>{healthCount}</span>
                     </SidebarItem>
                   </>
                 ) : (
                   <>
-                    <div className="sidebar-section-label">筛选</div>
+                    <div className="sidebar-section-label">{t("navigation.filters")}</div>
                     {page?.facets.length ? (
                       <div className="facet-groups">
                         {facetGroups(page.facets).map(([kind, options]) => (
@@ -2776,7 +2814,7 @@ export default function App() {
                       </div>
                     ) : (
                       <p className="sidebar-empty">
-                        当前字体库没有可用的筛选项。
+                        {t("filters.empty")}
                       </p>
                     )}
                   </>
@@ -2836,20 +2874,20 @@ export default function App() {
                     <LibraryHero
                       presentation={scope === "all" ? libraryHero : {
                         kind: "normal", title: currentScopeTitle,
-                        subtitle: page ? `${page.totalMatches} 个字族 · 搜索、筛选与预览` : "正在读取字体库…",
+                        subtitle: page ? t("library.familyCountLabel", { total: page.totalMatches }) : t("common.loadingLibrary"),
                         sync: libraryHero.sync,
                       }}
                       onAction={handleHeroAction}
                     />
                     <div className="sort-button">
-                      <span>排序</span>
+                      <span>{t("library.sortBy")}</span>
                       <OptionSelect
-                        label="排序方式"
+                        label={t("library.sortBy")}
                         value={sort}
                         options={[
-                          { id: "name", label: "名称" },
-                          { id: "recent", label: "最近查看" },
-                          { id: "relevance", label: "相关度" },
+                          { id: "name", label: t("library.name") },
+                          { id: "recent", label: t("navigation.recent") },
+                          { id: "relevance", label: t("library.relevance") },
                         ]}
                         onChange={setSort}
                       />
@@ -2859,30 +2897,30 @@ export default function App() {
               }
               emptyState={error ? (
                 <div className="state-message error-state">
-                  <h2>无法加载字体库</h2>
+                  <h2>{t("library.loadFailed")}</h2>
                   <p>{error}</p>
-                  <Button onPress={() => void runRefresh()}>重试</Button>
+                  <Button onPress={() => void runRefresh()}>{t("common.retry")}</Button>
                 </div>
               ) : loading ? (
                 <div className="state-message">
                   <div className="loading-indicator" />
-                  <p>正在读取字体库…</p>
+                  <p>{t("common.loadingLibrary")}</p>
                 </div>
               ) : (
                 <div className="state-message empty-state">
                   <div className="empty-icon">
                     <TextAaIcon />
                   </div>
-                  <h2>{search ? "没有匹配的字体" : "字体库还是空的"}</h2>
+                  <h2>{search ? t("common.noMatch") : t("library.emptyTitle")}</h2>
                   <p>
                     {search
-                      ? "尝试更改搜索内容，或清除搜索条件。"
-                      : "添加一个字体文件夹，Folio 就会建立本地字体目录。"}
+                      ? t("library.emptySearchHint")
+                      : t("library.emptyAddFolder")}
                   </p>
                   {!search && (
                     <Button onPress={() => void chooseFolder()}>
                       <FolderPlusIcon />
-                      添加字体文件夹
+                      {t("import.addFontFolder")}
                     </Button>
                   )}
                 </div>
@@ -2899,10 +2937,10 @@ export default function App() {
               />
               <TextField
                 className="preview-text-field"
-                aria-label="自定义预览文字"
+                aria-label={t("preview.customText")}
               >
                 <Input
-                  aria-label="自定义预览文字"
+                  aria-label={t("preview.customText")}
                   className="preview-text-input"
                   value={previewText}
                   onChange={(event) => {
@@ -2918,7 +2956,7 @@ export default function App() {
                 onChangeStart={previewAppearance.begin}
                 onChangeEnd={previewAppearance.commit}
               />
-              <output className="preview-size-value" aria-label={`预览字号 ${previewSize}px`}>
+              <output className="preview-size-value" aria-label={t("preview.sizeValue", { size: previewSize })}>
                 {previewSize < 100 && <span className="preview-size-padding" aria-hidden="true">0</span>}
                 <Scritto value={previewSize} respectMotionPreference aria-hidden="true" />
                 <span aria-hidden="true">px</span>
@@ -2951,7 +2989,7 @@ export default function App() {
           <aside
             id="right-sidebar"
             className="inspector-rail"
-            aria-label="右侧字体检查器"
+            aria-label={t("desktop.rightInspector")}
             aria-hidden={!rightSidebarVisible}
             inert={!rightSidebarVisible}
             data-open={rightSidebarVisible}
@@ -2976,8 +3014,8 @@ export default function App() {
               ) : (
                 <div className="inspector-empty">
                   <TextAaIcon />
-                  <strong>字体检查器</strong>
-                  <p>选择一个字族以查看字体信息。</p>
+                  <strong>{t("inspector.title")}</strong>
+                  <p>{t("inspector.selectFamilyHint")}</p>
                 </div>
               )}
             </div>
@@ -3021,12 +3059,12 @@ export default function App() {
         <Modal isOpen onOpenChange={(open) => { if (!open) setConfirmRebuild(false); }}>
           <Modal.Backdrop className="storage-confirm-backdrop">
             <Modal.Container placement="center" className="storage-confirm-container">
-              <Modal.Dialog className="storage-confirm-dialog" aria-label="重建同步索引">
-                <h2>重建同步索引？</h2>
-                <p>将依据本机已有事件修复序号与接收位置。WebDAV 连接、字体和个人数据均会保留。</p>
+              <Modal.Dialog className="storage-confirm-dialog" aria-label={t("storage.rebuildIndex")}>
+                <h2>{t("settings.rebuildTitle")}</h2>
+                <p>{t("settings.rebuildMessage")}</p>
                 <div className="setting-actions">
-                  <Button variant="secondary" onPress={() => setConfirmRebuild(false)}>取消</Button>
-                  <Button onPress={() => void rebuildStoredSyncIndexes()}>重建</Button>
+                  <Button variant="secondary" onPress={() => setConfirmRebuild(false)}>{t("common.cancel")}</Button>
+                  <Button onPress={() => void rebuildStoredSyncIndexes()}>{t("common.rebuild")}</Button>
                 </div>
               </Modal.Dialog>
             </Modal.Container>
@@ -3046,22 +3084,23 @@ function FolderContextMenu({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="menu-popover context-menu"
       role="menu"
-      aria-label="收藏夹操作"
+      aria-label={t("desktop.collectionActions")}
       style={{ left: menu.x, top: menu.y }}
       onPointerDown={(event) => event.stopPropagation()}
     >
       <MenuItem
-        item={{ label: "编辑收藏夹…", Icon: PencilSimpleIcon, action: onEdit }}
+        item={{ label: t("collection.editEllipsis"), Icon: PencilSimpleIcon, action: onEdit }}
         onSelect={() => onEdit()}
       />
       <div className="menu-separator" role="separator" />
       <MenuItem
         item={{
-          label: "删除收藏夹",
+          label: t("collection.delete"),
           Icon: TrashIcon,
           action: onDelete,
           danger: true,
@@ -3087,6 +3126,7 @@ function FavoriteFolderEditor({
   onClose: () => void;
   onSave: (draft: FavoriteFolderDraft) => void;
 }) {
+  const { t } = useTranslation();
   const isCreate = intent.kind === "create";
   const [tab, setTab] = useState<"general" | "filters">("general");
   const [name, setName] = useState(seed.name);
@@ -3096,7 +3136,7 @@ function FavoriteFolderEditor({
   const [color, setColor] = useState(seed.color);
   const groups = facetGroups(facetOptions);
   const selectedColorLabel =
-    collectionColorOptions.find((option) => option.id === color)?.label ?? "灰色";
+    collectionColorOptions.find((option) => option.id === color)?.label ?? "color.gray";
 
   const submit = () => {
     onSave({ name, text, facets, icon, color });
@@ -3116,26 +3156,26 @@ function FavoriteFolderEditor({
         >
           <Modal.Dialog
             className="favorite-editor-dialog"
-            aria-label={isCreate ? "新建收藏夹" : "编辑收藏夹"}
+            aria-label={isCreate ? t("collection.new") : t("collection.edit")}
           >
             <div
               className="favorite-editor-tabs"
               role="tablist"
-              aria-label="收藏夹设置"
+              aria-label={t("collection.settings")}
             >
               <button
                 role="tab"
                 aria-selected={tab === "general"}
                 onClick={() => setTab("general")}
               >
-                常规
+                {t("collection.general")}
               </button>
               <button
                 role="tab"
                 aria-selected={tab === "filters"}
                 onClick={() => setTab("filters")}
               >
-                筛选条件
+                {t("filters.conditions")}
               </button>
             </div>
 
@@ -3144,17 +3184,17 @@ function FavoriteFolderEditor({
                 <div className="favorite-editor-page">
                   <TextField
                     className="favorite-editor-name"
-                    aria-label="收藏夹名称"
+                    aria-label={t("collection.name")}
                   >
                     <Input
                       autoFocus
-                      aria-label="收藏夹名称"
-                      placeholder="收藏夹名称"
+                      aria-label={t("collection.name")}
+                      placeholder={t("collection.namePlaceholder")}
                       value={name}
                       onChange={(event) => setName(event.target.value)}
                     />
                   </TextField>
-                  <div className="favorite-editor-label">图标</div>
+                  <div className="favorite-editor-label">{t("common.icon")}</div>
                   <div className="favorite-icon-grid">
                     {collectionIconOptions.map((option) => {
                       const selected = icon === option.id;
@@ -3163,9 +3203,9 @@ function FavoriteFolderEditor({
                           key={option.id}
                           type="button"
                           className={`favorite-icon-option${selected ? " selected" : ""}`}
-                          aria-label={option.label}
+                          aria-label={t(option.label)}
                           aria-pressed={selected}
-                          title={option.label}
+                          title={t(option.label)}
                           onClick={() => setIcon(option.id)}
                         >
                           <AnimatedIcon name={option.animatedName} />
@@ -3174,9 +3214,9 @@ function FavoriteFolderEditor({
                     })}
                   </div>
                   <div className="favorite-editor-label-row">
-                    <span className="favorite-editor-label">颜色</span>
+                    <span className="favorite-editor-label">{t("common.color")}</span>
                     <span className="favorite-editor-color-name">
-                      {selectedColorLabel}
+                      {t(selectedColorLabel)}
                     </span>
                   </div>
                   <div className="favorite-color-row">
@@ -3188,9 +3228,9 @@ function FavoriteFolderEditor({
                           type="button"
                           className={`favorite-color-option${selected ? " selected" : ""}`}
                           style={{ background: option.value }}
-                          aria-label={option.label}
+                          aria-label={t(option.label)}
                           aria-pressed={selected}
-                          title={option.label}
+                          title={t(option.label)}
                           onClick={() => setColor(option.id)}
                         />
                       );
@@ -3200,26 +3240,26 @@ function FavoriteFolderEditor({
               ) : (
                 <div className="favorite-editor-page">
                   <div className="favorite-editor-field-heading">
-                    <span className="favorite-editor-label">搜索字体</span>
+                    <span className="favorite-editor-label">{t("library.searchFonts")}</span>
                     <p className="favorite-editor-hint">
-                      按字体名称、设计师或厂商等关键词匹配，多个关键词需同时满足。
+                      {t("library.searchHint")}
                     </p>
                   </div>
                   <TextField
                     className="favorite-editor-search"
-                    aria-label="筛选关键词"
+                    aria-label={t("filters.keyword")}
                   >
                     <Input
-                      aria-label="筛选关键词"
-                      placeholder="输入关键词"
+                      aria-label={t("filters.keyword")}
+                      placeholder={t("filters.inputKeyword")}
                       value={text}
                       onChange={(event) => setText(event.target.value)}
                     />
                   </TextField>
                   <div className="favorite-editor-field-heading">
-                    <span className="favorite-editor-label">筛选条件</span>
+                    <span className="favorite-editor-label">{t("filters.conditions")}</span>
                     <p className="favorite-editor-hint">
-                      添加筛选条件后，符合条件的字体会自动显示在此收藏夹中。
+                      {t("filters.smartHint")}
                     </p>
                   </div>
                   {groups.length ? (
@@ -3241,7 +3281,7 @@ function FavoriteFolderEditor({
                     </div>
                   ) : (
                     <p className="sidebar-empty">
-                      当前字体库没有可用的筛选项。
+                      {t("filters.empty")}
                     </p>
                   )}
                 </div>
@@ -3256,10 +3296,10 @@ function FavoriteFolderEditor({
 
             <div className="favorite-editor-footer">
               <Button variant="tertiary" onPress={onClose}>
-                取消
+                {t("common.cancel")}
               </Button>
               <Button onPress={submit} isDisabled={!name.trim()}>
-                {isCreate ? "创建" : "保存"}
+                {isCreate ? t("common.create") : t("common.save")}
               </Button>
             </div>
           </Modal.Dialog>
@@ -3272,20 +3312,20 @@ function FavoriteFolderEditor({
 function describeSyncStage(status: SyncStatusDto | null): string {
   if (!status) return "";
   const parts = [`${status.stage} ${status.stageCompleted}/${status.stageTotal}`];
-  if (status.uploadedFiles > 0) parts.push(`上传 ${status.uploadedFiles} 个`);
-  if (status.downloadedFiles > 0) parts.push(`下载 ${status.downloadedFiles} 个`);
+  if (status.uploadedFiles > 0) parts.push(i18n.t("cloud.uploadedCount", { count: status.uploadedFiles }));
+  if (status.downloadedFiles > 0) parts.push(i18n.t("cloud.downloadedCount", { count: status.downloadedFiles }));
   return parts.join(" · ");
 }
 
 function describeSyncItem(item: SyncItemDto): string {
-  const action = item.action === "download" ? "下载" : "上传";
+  const action = item.action === "download" ? i18n.t("cloud.download") : i18n.t("cloud.upload");
   switch (item.status) {
     case "running":
-      return `${action}中`;
+      return i18n.t("cloud.running", { action });
     case "done":
-      return `${action}完成`;
+      return i18n.t("cloud.completed", { action });
     default:
-      return `等待${action}`;
+      return i18n.t("cloud.waiting", { action });
   }
 }
 
@@ -3346,14 +3386,15 @@ function CloudStatusPanel({
   onSync: () => void;
   onOpenSettings: () => void;
 }) {
+  const { t } = useTranslation();
   if (!connected) {
     return (
       <div className="sidebar-status-card">
         <CloudIcon aria-hidden="true" />
         <span className="sidebar-status-text">
-          <strong>未连接云端</strong>
+          <strong>{t("cloud.notConnected")}</strong>
           <button type="button" onClick={onOpenSettings}>
-            在设置中连接 WebDAV
+            {t("cloud.connectInSettings")}
           </button>
         </span>
       </div>
@@ -3374,10 +3415,10 @@ function CloudStatusPanel({
       <span className="sidebar-status-text">
         <strong>
           {running
-            ? `正在同步 ${percent}%`
+            ? t("cloud.syncingPercent", { percent })
             : error
-              ? "同步未完成"
-              : "本地与云端均为最新"}
+              ? t("cloud.syncIncomplete")
+              : t("cloud.allSynced")}
         </strong>
         {running ? (
           <span className="sync-progress-detail">
@@ -3385,7 +3426,7 @@ function CloudStatusPanel({
           </span>
         ) : (
           <button type="button" onClick={onSync}>
-            立即同步 ›
+            {t("cloud.syncNow")} ›
           </button>
         )}
       </span>
@@ -3408,17 +3449,18 @@ function CloudFontsPane({
   onRestore: (font: CloudFontDto) => void;
   onOpenSettings: () => void;
 }) {
+  const { t } = useTranslation();
   if (!connected) {
     return (
       <div className="state-message empty-state">
         <div className="empty-icon">
           <CloudIcon />
         </div>
-        <h2>未连接云端</h2>
-        <p>在设置中连接 WebDAV，即可在此浏览与同步云字体。</p>
+        <h2>{t("cloud.notConnected")}</h2>
+        <p>{t("cloud.connectInSettingsHint")}</p>
         <Button onPress={onOpenSettings}>
           <GearSixIcon />
-          打开设置
+          {t("common.openSettings")}
         </Button>
       </div>
     );
@@ -3429,14 +3471,14 @@ function CloudFontsPane({
     <div className="cloud-pane">
       <header className="cloud-pane-header">
         <div>
-          <h1>云端字体</h1>
+          <h1>{t("cloud.cloudFiles")}</h1>
           <p>
-            {active.length} 个字体文件 ·{" "}
-            {running ? "正在同步" : (status?.phase ?? "已连接")}
+            {t("cloud.fileCount", { count: active.length })} ·{" "}
+            {running ? t("cloud.syncing") : (status?.phase ?? t("cloud.connectedStatus"))}
           </p>
         </div>
         <Button onPress={onSync} isDisabled={running}>
-          {running ? "正在同步…" : "立即同步"}
+          {running ? t("cloud.syncing") : t("cloud.syncNow")}
         </Button>
       </header>
       {active.length ? (
@@ -3454,7 +3496,7 @@ function CloudFontsPane({
                       {describeSyncItem(item)}
                     </span>
                   ) : (
-                    <span>{font.cloudOnly ? "仅在云端" : "已同步到本机"}</span>
+                    <span>{font.cloudOnly ? t("cloud.cloudOnly") : t("cloud.syncedTo")}</span>
                   )}{" "}
                   · {formatFileSize(font.fileSize)}
                 </span>
@@ -3465,7 +3507,7 @@ function CloudFontsPane({
                     isDisabled={running}
                     onPress={() => onRestore(font)}
                   >
-                    下载
+                    {t("cloud.download")}
                   </Button>
                 )}
               </li>
@@ -3477,8 +3519,8 @@ function CloudFontsPane({
           <div className="empty-icon">
             <CloudIcon />
           </div>
-          <h2>云端尚无字体</h2>
-          <p>同步后，云端字体记录会显示在这里。</p>
+          <h2>{t("cloud.empty")}</h2>
+          <p>{t("cloud.emptyHint")}</p>
         </div>
       )}
     </div>
@@ -3508,6 +3550,7 @@ function SidebarResizeHandle({
   onPointerCancel: () => void;
   onDragChange: (dragging: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const draggingRef = useRef(false);
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -3555,13 +3598,13 @@ function SidebarResizeHandle({
       className={`sidebar-resizer sidebar-resizer-${side}`}
       data-collapsed={collapsed}
       role="separator"
-      aria-label={`${collapsed ? "展开" : "调整"}${side === "left" ? "左" : "右"}侧栏${collapsed ? "" : "宽度"}`}
+      aria-label={t("desktop.sidebarResize", { action: collapsed ? t("desktop.expand") : t("desktop.adjust"), side: side === "left" ? t("desktop.leftSide") : t("desktop.rightSide"), size: collapsed ? "" : t("desktop.width") })}
       aria-controls={`${side}-sidebar`}
       aria-orientation="vertical"
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={width}
-      aria-valuetext={collapsed ? "已收起，向内拖动或按方向键展开" : `${width} 像素`}
+      aria-valuetext={collapsed ? t("desktop.sidebarCollapsedHint") : t("common.widthPixels", { width })}
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -3598,67 +3641,68 @@ function Inspector({
   onCollectionMembershipChange: (member: boolean) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const style = currentPreviewStyle(family, styleKey);
   const face = style?.face;
   const [copyMessage, setCopyMessage] = useState("");
   const copyValue = async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      setCopyMessage(`已复制${label}`);
+      setCopyMessage(t("desktop.copiedLabel", { label }));
     } catch {
-      setCopyMessage("复制失败，请检查剪贴板权限");
+      setCopyMessage(t("desktop.copyFailedClipboard"));
     }
   };
   return (
-    <section className="inspector-panel" aria-label="字体检查器">
+    <section className="inspector-panel" aria-label={t("inspector.title")}>
       <button
         className="inspector-close"
-        aria-label="关闭检查器"
+        aria-label={t("inspector.close")}
         onClick={onClose}
       >
         <XIcon />
       </button>
       <h2>{family.displayName}</h2>
       <p className="inspector-style">
-        {style?.name ?? "常规"} <span>·</span> {face?.format ?? "字体"} <span>·</span> {family.faces.length} 个样式
+        {style?.name ?? t("font.regular")} <span>·</span> {face?.format ?? t("font.font")} <span>·</span> {t("macos.stylesCount", { count: family.faces.length })}
       </p>
       <details className="inspector-section" open>
-        <summary>预览</summary>
+        <summary>{t("common.preview")}</summary>
         <div className="inspector-preview" style={{ backgroundColor: backgroundColor ?? undefined }}>
-          <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={6} align="left" priority="selected" label={`${family.displayName}，${style?.name ?? "常规"} 预览`} />
+          <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={6} align="left" priority="selected" label={t("desktop.previewLabelShort", { name: family.displayName, style: style?.name ?? t("font.regular") })} />
         </div>
       </details>
       {face?.weight != null && (
         <div className="inspector-weight">
-          <span>字重</span>
+          <span>{t("font.weight")}</span>
           <strong>{style?.coordinates.wght ?? face.weight}</strong>
         </div>
       )}
       <details className="inspector-section" open>
-        <summary>复制为</summary>
+        <summary>{t("inspector.copyAs")}</summary>
         <div className="inspector-copy-list">
-          <button type="button" onClick={() => void copyValue(`font-family: "${family.displayName}";`, " CSS 样式")}><CopyIcon />CSS</button>
-          <button type="button" onClick={() => void copyValue(`@font-face {\n  font-family: "${family.displayName}";\n  src: url("${face?.sources[0]?.path.split(/[\\/]/).pop() ?? "font-file"}");\n}`, " CSS font-face")}><CopyIcon />CSS font-face</button>
-          <button type="button" onClick={() => void copyValue(`.font(.custom("${face?.postscriptName ?? family.displayName}", size: 16))`, " SwiftUI 代码")}><CopyIcon />SwiftUI</button>
-          <button type="button" onClick={() => void copyValue(family.displayName, "字族名")}><CopyIcon />字族名</button>
-          {face?.postscriptName && <button type="button" onClick={() => void copyValue(face.postscriptName!, " PostScript 名")}><CopyIcon />PostScript 名</button>}
+          <button type="button" onClick={() => void copyValue(`font-family: "${family.displayName}";`, "CSS")}><CopyIcon />CSS</button>
+          <button type="button" onClick={() => void copyValue(`@font-face {\n  font-family: "${family.displayName}";\n  src: url("${face?.sources[0]?.path.split(/[\\/]/).pop() ?? "font-file"}");\n}`, "CSS font-face")}><CopyIcon />CSS font-face</button>
+          <button type="button" onClick={() => void copyValue(`.font(.custom("${face?.postscriptName ?? family.displayName}", size: 16))`, "SwiftUI")}><CopyIcon />SwiftUI</button>
+          <button type="button" onClick={() => void copyValue(family.displayName, t("font.familyName"))}><CopyIcon />{t("font.familyName")}</button>
+          {face?.postscriptName && <button type="button" onClick={() => void copyValue(face.postscriptName!, t("font.postScriptName"))}><CopyIcon />{t("font.postScriptName")}</button>}
         </div>
         <span className="inspector-copy-status" role="status">{copyMessage}</span>
       </details>
       <details className="inspector-section" open>
-        <summary>字体信息</summary>
+        <summary>{t("inspector.information")}</summary>
         <dl>
-          <dt>字族样式</dt><dd>{family.faces.length}</dd>
-          <dt>格式</dt><dd>{face?.format ?? "—"}</dd>
-          <dt>PostScript 名</dt><dd>{face?.postscriptName ?? "—"}</dd>
-          <dt>来源</dt><dd className="source-path">{face?.sources[0]?.path ?? "—"}</dd>
+          <dt>{t("font.styles")}</dt><dd>{family.faces.length}</dd>
+          <dt>{t("font.format")}</dt><dd>{face?.format ?? "—"}</dd>
+          <dt>{t("font.postScriptName")}</dt><dd>{face?.postscriptName ?? "—"}</dd>
+          <dt>{t("inspector.source")}</dt><dd className="source-path">{face?.sources[0]?.path ?? "—"}</dd>
         </dl>
       </details>
       {collections.length > 0 && (
         <div className="inspector-membership">
-          <h3>手动收藏夹</h3>
+          <h3>{t("collection.collection")}</h3>
           <OptionSelect
-            label="选择收藏夹"
+            label={t("collection.select")}
             value={collectionTargetId}
             options={collections.map((collection) => ({
               id: collection.id,
@@ -3674,7 +3718,7 @@ function Inspector({
               <Switch.Control>
                 <Switch.Thumb />
               </Switch.Control>
-              加入此收藏夹
+              {t("collection.addTo")}
             </Switch.Content>
           </Switch>
         </div>
@@ -3694,6 +3738,7 @@ function OptionSelect({
   options: { id: string; label: string }[];
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Select.Root
       className="hero-select"
@@ -3708,7 +3753,7 @@ function OptionSelect({
         <Select.Indicator />
       </Select.Trigger>
       <Select.Popover>
-        <ListBox aria-label={`${label}选项`}>
+        <ListBox aria-label={t("desktop.labelOptions", { label })}>
           {options.map((option) => (
             <ListBox.Item
               key={option.id}
@@ -3775,12 +3820,13 @@ function BlurSettingsPreview({
   value: number;
   onChange: (value: number) => void;
 }) {
+  const { t } = useTranslation();
   const [previewRoot, setPreviewRoot] = useState<HTMLDivElement | null>(null);
   return (
     <section className="blur-preview-section" aria-labelledby="blur-preview-title">
       <div className="blur-preview-heading">
-        <h2 id="blur-preview-title">模糊效果</h2>
-        <p>在主页面菜单上实时预览模糊程度。</p>
+        <h2 id="blur-preview-title">{t("desktop.blurEffect")}</h2>
+        <p>{t("desktop.blurDescription")}</p>
       </div>
       <div className="blur-preview-window" ref={setPreviewRoot}>
         <header className="titlebar blur-preview-titlebar">
@@ -3808,7 +3854,7 @@ function BlurSettingsPreview({
                 backdropRoot={previewRoot}
                 className="file-menu-popover blur-preview-menu-shell"
                 id="blur-preview-menu"
-                label="文件菜单预览"
+                label={t("desktop.fileMenuPreview")}
               >
                 {items.map((item) => (
                   <Fragment key={item.label}>
@@ -3820,73 +3866,73 @@ function BlurSettingsPreview({
                 ))}
               </MenuPopover>
             </div>
-            <nav className="menubar" aria-label="应用菜单预览">
-              {["编辑", "显示", "窗口", "帮助"].map((label) => (
+            <nav className="menubar" aria-label={t("desktop.appMenuPreview")}>
+              {["macos.menuEdit", "macos.menuView", "macos.menuWindow", "macos.menuHelp"].map((label) => (
                 <span className="menu-trigger" key={label}>
-                  {label}
+                  {t(label)}
                 </span>
               ))}
             </nav>
           </div>
         </header>
         <div className="blur-preview-workspace">
-          <aside className="blur-preview-sidebar" aria-label="侧边栏预览">
+          <aside className="blur-preview-sidebar" aria-label={t("navigation.sidebarPreview")}>
             <div className="blur-preview-sidebar-inner">
               <div className="sidebar-pages" aria-hidden="true">
                 <span className="sidebar-page" aria-selected="true">
-                  <span className="sidebar-page-label">导航</span>
+                  <span className="sidebar-page-label">{t("navigation.navigation")}</span>
                   <span className="sidebar-page-dot" />
                 </span>
                 <span className="sidebar-page" aria-selected="false">
                   <span className="sidebar-page-dot" />
-                  <span className="sidebar-page-label">筛选</span>
+                  <span className="sidebar-page-label">{t("navigation.filters")}</span>
                 </span>
               </div>
               <nav
                 className="sidebar-scroll blur-preview-nav"
-                aria-label="可滚动的侧边栏导航预览"
+                aria-label={t("desktop.scrollableSidebarPreview")}
                 tabIndex={0}
               >
-                <div className="sidebar-section-label">本地</div>
+                <div className="sidebar-section-label">{t("navigation.local")}</div>
                 <div className="sidebar-link selected">
                   <AnimatedIcon name="text-aa" />
-                  全部字体<span>1,248</span>
+                  {t("navigation.allFonts")}<span>1,248</span>
                 </div>
                 <div className="sidebar-link">
                   <AnimatedIcon name="clock-counter-clockwise" />
-                  最近
+                  {t("navigation.recent")}
                 </div>
                 <div className="sidebar-link">
                   <AnimatedIcon name="star" />
-                  收藏
+                  {t("navigation.favorites")}
                 </div>
                 <div className="sidebar-section-label sidebar-section-heading">
-                  收藏夹
+                  {t("navigation.collections")}
                 </div>
                 <div className="sidebar-link sidebar-folder">
                   <span className="sidebar-link-icon">
                     <AnimatedIcon name="star" />
                   </span>
-                  <span className="sidebar-folder-name">常用字体</span>
+                  <span className="sidebar-folder-name">{t("desktop.demoFavoriteFonts")}</span>
                   <span>24</span>
                 </div>
                 <div className="sidebar-link sidebar-folder">
                   <span className="sidebar-link-icon">
                     <AnimatedIcon name="folder" />
                   </span>
-                  <span className="sidebar-folder-name">标题字体</span>
+                  <span className="sidebar-folder-name">{t("desktop.demoTitlingFonts")}</span>
                   <span>16</span>
                 </div>
                 <div className="sidebar-section-label sidebar-section-heading">
-                  字体管理
+                  {t("desktop.fontManagement")}
                 </div>
                 <div className="sidebar-link">
                   <AnimatedIcon name="sparkle" />
-                  字体健康
+                  {t("navigation.fontHealth")}
                 </div>
                 <div className="sidebar-link">
                   <AnimatedIcon name="hard-drives" />
-                  云端字体
+                  {t("cloud.cloudFiles")}
                 </div>
               </nav>
             </div>
@@ -3895,9 +3941,9 @@ function BlurSettingsPreview({
         </div>
       </div>
       <div className="blur-preview-controls">
-        <span>模糊度</span>
+        <span>{t("desktop.blur")}</span>
         <SettingSlider
-          label="模糊度"
+          label={t("desktop.blur")}
           minValue={1}
           maxValue={12}
           value={value}
@@ -3906,7 +3952,7 @@ function BlurSettingsPreview({
         <output>{value}px</output>
       </div>
       <p className="settings-note">
-        滚动侧边栏导航，查看实际菜单在不同模糊程度下的效果。
+        {t("desktop.blurScrollHint")}
       </p>
     </section>
   );
@@ -3923,10 +3969,11 @@ function PreviewSizeSlider({
   onChangeStart: () => void;
   onChangeEnd: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <SettingSlider
       className="preview-size-slider"
-      label="预览字号"
+      label={t("preview.size")}
       minValue={previewSizeRange.min}
       maxValue={previewSizeRange.max}
       value={value}
@@ -3940,17 +3987,17 @@ function PreviewSizeSlider({
 function scopeTitle(scope: LibraryScope) {
   switch (scope) {
     case "all":
-      return "全部字体";
+      return i18n.t("navigation.allFonts");
     case "recent":
-      return "最近";
+      return i18n.t("navigation.recent");
     case "favorites":
-      return "收藏";
+      return i18n.t("navigation.favorites");
     case "fontHealth":
-      return "字体健康";
+      return i18n.t("navigation.fontHealth");
     case "cloudFonts":
-      return "云端字体";
+      return i18n.t("cloud.cloudFiles");
     default:
-      return "字体";
+      return i18n.t("font.font");
   }
 }
 
@@ -3968,7 +4015,7 @@ function parseSidebarBlur(value: string | null) {
 }
 
 function errorMessage(cause: unknown) {
-  return cause instanceof Error ? cause.message : "发生未知错误，请重试。";
+  return cause instanceof Error ? cause.message : i18n.t("common.unknownError");
 }
 
 function formatFileSize(bytes: number) {
@@ -3982,9 +4029,9 @@ function cloudConnectionName(profile: SyncProfileDto) {
   const directory = profile.remoteDirectory.trim();
   if (directory) return directory;
   try {
-    return new URL(profile.serverUrl).host || "云端";
+    return new URL(profile.serverUrl).host || i18n.t("navigation.cloud");
   } catch {
-    return profile.serverUrl.trim() || "云端";
+    return profile.serverUrl.trim() || i18n.t("navigation.cloud");
   }
 }
 
@@ -3999,21 +4046,19 @@ function facetGroups(facets: FacetOptionDto[]) {
 }
 
 function facetGroupTitle(kind: string) {
-  return (
-    (
-      {
-        categories: "类型",
-        scripts: "文字系统",
-        licenses: "许可",
-        foundries: "厂牌",
-        features: "字体特征",
-        states: "状态",
-        weights: "字重",
-        widths: "字宽",
-        multipleVariants: "字族",
-      } as Record<string, string>
-    )[kind] ?? kind
-  );
+  const titles: Record<string, string> = {
+    categories: "filters.category",
+    scripts: "filters.script",
+    licenses: "filters.license",
+    foundries: "filters.foundry",
+    features: "filters.feature",
+    states: "filters.state",
+    weights: "filters.weight",
+    widths: "filters.width",
+    multipleVariants: "font.family",
+  };
+  const key = titles[kind];
+  return key ? i18n.t(key) : kind;
 }
 
 function toggleFacet(

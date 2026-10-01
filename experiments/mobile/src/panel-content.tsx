@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NativeActionButton, usesNativeControls } from './native-controls';
@@ -35,12 +36,13 @@ export function PanelBody(props: LibraryPanelProps) {
   </SafeAreaProvider>;
 }
 
-export function PanelContent({ title, theme, onClose, children, busy, closeLabel = '完成' }: LibraryPanelProps) {
+export function PanelContent({ title, theme, onClose, children, busy, closeLabel }: LibraryPanelProps) {
+  const { t } = useTranslation();
   return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     accessibilityViewIsModal style={panelStyles.screen}>
     <View style={panelStyles.header}>
       <Text accessibilityRole="header" style={[panelStyles.title, { color: theme.label }]}>{title}</Text>
-      <PanelAction label={closeLabel} theme={theme} onPress={onClose} disabled={busy} />
+      <PanelAction label={closeLabel ?? t('common.done')} theme={theme} onPress={onClose} disabled={busy} />
     </View>
     {children}
   </KeyboardAvoidingView>;

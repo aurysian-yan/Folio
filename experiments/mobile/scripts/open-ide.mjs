@@ -14,8 +14,11 @@ function fail(message) {
 if (process.platform !== 'darwin') fail('此 IDE 启动脚本仅适用于 macOS。');
 
 if (platform === 'ios') {
-  const workspace = resolve(project, 'ios/Folio.xcworkspace');
-  if (!existsSync(workspace)) fail('请先生成 iOS 工程并执行 pnpm pods。');
+  // 工程名随变体为 FolioDev（Debug）或 Folio（Release）。
+  const workspace = ['FolioDev', 'Folio']
+    .map((name) => resolve(project, `ios/${name}.xcworkspace`))
+    .find((file) => existsSync(file));
+  if (!workspace) fail('请先生成 iOS 工程并执行 pnpm pods。');
   execFileSync('open', ['-a', 'Xcode', workspace], { stdio: 'inherit' });
 } else if (platform === 'android') {
   const application = process.env.ANDROID_STUDIO_APP ?? '/Applications/Android Studio.app';
