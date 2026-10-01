@@ -45,6 +45,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   scheme: isDevelopment ? 'folio-poc-dev' : 'folio-poc',
   platforms: ['ios', 'android'],
   userInterfaceStyle: 'automatic',
+  primaryColor: '#F06835',
   ios: {
     bundleIdentifier: isDevelopment ? 'com.folio.mobile.poc.dev' : 'com.folio.mobile.poc',
     supportsTablet: true,

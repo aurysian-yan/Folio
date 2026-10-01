@@ -52,6 +52,7 @@ class FolioNavigationModule : Module() {
             Prop("sourceId") { view: FolioLiquidTabsView, value: String -> view.sourceId = value }
             Prop("selectedId") { view: FolioLiquidTabsView, value: String -> view.selectedId = value }
             Prop("dark") { view: FolioLiquidTabsView, value: Boolean -> view.dark = value }
+            Prop("accentColor") { view: FolioLiquidTabsView, value: String -> view.accentColor = value }
             Prop("items") { view: FolioLiquidTabsView, value: List<FolioNavigationItem> ->
                 if (value.size == 4 && value.map { it.id }.toSet() == setOf("local", "recent", "cloud", "settings")) {
                     view.items = value

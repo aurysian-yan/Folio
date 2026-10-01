@@ -119,6 +119,7 @@ fun LiquidBottomTabs(
     backdrop: Backdrop,
     tabsCount: Int,
     dark: Boolean,
+    accentColor: Color,
     modifier: Modifier = Modifier,
     containerHeight: Dp = 56.dp,
     highlightHeight: Dp = 48.dp,
@@ -126,9 +127,6 @@ fun LiquidBottomTabs(
     content: @Composable RowScope.() -> Unit
 ) {
     val isLightTheme = !dark
-    val accentColor =
-        if (isLightTheme) Color.Black
-        else Color.White
     val containerColor =
         if (isLightTheme) Color(0xFFFFFFFF).copy(0.6f)
         else Color(0xFF121212).copy(0.54f)

@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -33,6 +34,7 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
     var sourceId by mutableStateOf("")
     var selectedId by mutableStateOf("local")
     var dark by mutableStateOf(false)
+    var accentColor by mutableStateOf("")
     var items by mutableStateOf(emptyList<FolioNavigationItem>())
     private val onSelectionChange by EventDispatcher()
     private val compose = ComposeView(context)
@@ -45,7 +47,7 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
         compose.setContent {
             val backdrop = FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] ?: EmptyNavigationBackdrop
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (items.isNotEmpty()) {
+                if (items.isNotEmpty() && accentColor.isNotEmpty()) {
                     LiquidBottomTabs(
                         selectedTabIndex = { items.indexOfFirst { it.id == selectedId }.coerceAtLeast(0) },
                         onTabSelected = { index ->
@@ -59,6 +61,7 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
                         backdrop = backdrop,
                         tabsCount = items.size,
                         dark = dark,
+                        accentColor = Color(android.graphics.Color.parseColor(accentColor)),
                         modifier = Modifier.fillMaxWidth().height(56.dp).drawWithContent {
                             backdrop.contentVersion
                             drawContent()

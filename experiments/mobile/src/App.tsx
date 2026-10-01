@@ -304,7 +304,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           <View style={[styles.search, { backgroundColor: theme.surface }]}>
             <MagnifyingGlassIcon size={20} color={theme.secondary} />
             <TextInput ref={searchInput} autoFocus accessibilityLabel="搜索字体" placeholder="搜索字体名称或样式"
-              placeholderTextColor={theme.muted} value={searchText} editable={ready}
+              placeholderTextColor={theme.muted} selectionColor={theme.selection} cursorColor={theme.accent}
+              selectionHandleColor={theme.accent} value={searchText} editable={ready}
               onChangeText={setSearchText} style={[styles.searchInput, { color: theme.label }]}
               autoCapitalize="none" autoCorrect={false} returnKeyType="search" onSubmitEditing={() => Keyboard.dismiss()} />
             {searchText.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel="清除搜索"

@@ -29,7 +29,10 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -279,21 +282,26 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
                 Row(Modifier.size(fieldWidth, HeaderButtonHeight).headerSurface(colors).padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     ViewMenuIcon("search", colors.secondary.menuColor(), 20.dp)
-                    BasicTextField(searchText, onSearchTextChange, Modifier.weight(1f).focusRequester(focus)
-                        .semantics { contentDescription = "搜索字体" },
-                        enabled = active && ready && searchOpen, singleLine = true,
-                        textStyle = TextStyle(color = colors.label.menuColor(), fontSize = 15.sp),
-                        cursorBrush = SolidColor(colors.accent.menuColor()),
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None,
-                            autoCorrectEnabled = false, imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
-                        decorationBox = { input ->
-                            Box {
-                                if (searchText.isEmpty()) BasicText("搜索字体名称或样式", maxLines = 1,
-                                    style = TextStyle(color = colors.muted.menuColor(), fontSize = 15.sp))
-                                input()
-                            }
-                        })
+                    CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(
+                        handleColor = colors.accent.menuColor(),
+                        backgroundColor = colors.accent.menuColor().copy(alpha = if (dark) 0.25f else 0.2f)
+                    )) {
+                        BasicTextField(searchText, onSearchTextChange, Modifier.weight(1f).focusRequester(focus)
+                            .semantics { contentDescription = "搜索字体" },
+                            enabled = active && ready && searchOpen, singleLine = true,
+                            textStyle = TextStyle(color = colors.label.menuColor(), fontSize = 15.sp),
+                            cursorBrush = SolidColor(colors.accent.menuColor()),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None,
+                                autoCorrectEnabled = false, imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+                            decorationBox = { input ->
+                                Box {
+                                    if (searchText.isEmpty()) BasicText("搜索字体名称或样式", maxLines = 1,
+                                        style = TextStyle(color = colors.muted.menuColor(), fontSize = 15.sp))
+                                    input()
+                                }
+                            })
+                    }
                     if (searchText.isNotEmpty()) Box(Modifier.size(20.dp)
                         .clickable(enabled = searchOpen, role = Role.Button) { onSearchTextChange(""); focus.requestFocus() }
                         .semantics { contentDescription = "清除搜索" }) {

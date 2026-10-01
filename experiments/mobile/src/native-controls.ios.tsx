@@ -122,7 +122,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
             <Image systemName="magnifyingglass" size={20} color={theme.secondary} />
             <TextField text={text} placeholder="搜索字体名称或样式" autoFocus
               onTextChange={onSearchTextChange} modifiers={[
-                textFieldStyle(glass ? 'plain' : 'roundedBorder'), font({ textStyle: 'body' }),
+                textFieldStyle(glass ? 'plain' : 'roundedBorder'), font({ textStyle: 'body' }), tint(theme.accent),
                 accessibilityLabel('搜索字体'), autocorrectionDisabled(), disabled(!ready),
                 textInputAutocapitalization('never'), submitLabel('search'), onSubmit(() => Keyboard.dismiss()),
               ]} />
@@ -141,7 +141,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
             </> : <>
               <Menu label={<Label title="视图选项" systemImage={mode === 'grid' ? 'square.grid.2x2' : 'list.bullet'} />}
                 modifiers={[labelStyle('iconOnly'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel('视图选项')]}>
-                <Picker label="视图" selection={mode} onSelectionChange={onModeChange}>
+                <Picker label="视图" selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
                   <Label title="网格视图" systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
                   <Label title="列表视图" systemImage="list.bullet" modifiers={[tag('list')]} />
                 </Picker>
@@ -186,7 +186,7 @@ export function NativeHeaderControls({ theme, mode, width, searchOpen, searchTex
               ]}>
                 <Image systemName="magnifyingglass" size={20} color={theme.secondary} />
                 <TextField text={text} placeholder="搜索字体名称或样式" autoFocus onTextChange={onSearchTextChange}
-                  modifiers={[textFieldStyle(glass ? 'plain' : 'roundedBorder'), font({ textStyle: 'body' }),
+                  modifiers={[textFieldStyle(glass ? 'plain' : 'roundedBorder'), font({ textStyle: 'body' }), tint(theme.accent),
                     accessibilityLabel('搜索字体'), autocorrectionDisabled(),
                     textInputAutocapitalization('never'), submitLabel('search'), onSubmit(() => Keyboard.dismiss())]} />
                 {searchText.length > 0 && <Button label="清除搜索" systemImage="xmark.circle.fill"
@@ -207,7 +207,7 @@ export function NativeHeaderControls({ theme, mode, width, searchOpen, searchTex
                   controlSize('large'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel('视图选项'),
                   frame({ width: 64, height: toolbarHeight }),
                   ...(glass ? [glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'capsule' })] : [])]}>
-                <Picker label="视图" selection={mode} onSelectionChange={onModeChange}>
+                <Picker label="视图" selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
                   <Label title="网格视图" systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
                   <Label title="列表视图" systemImage="list.bullet" modifiers={[tag('list')]} />
                 </Picker>

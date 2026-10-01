@@ -18,6 +18,7 @@ interface NativeTabsProps extends ViewProps {
   sourceId: string;
   selectedId: MobileTab;
   dark: boolean;
+  accentColor: string;
   items: typeof items;
   onSelectionChange: (event: NativeSyntheticEvent<{ id: MobileTab }>) => void;
 }
@@ -35,11 +36,11 @@ export function NavigationBackdrop(props: NavigationBackdropProps) {
   return <BackdropSource {...props} collapsable={false} />;
 }
 
-export function BottomNavigation({ sourceId, selectedId, dark, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
+export function BottomNavigation({ sourceId, selectedId, dark, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
   const { width } = useWindowDimensions();
   const availableWidth = Math.max(0, width - leftInset - rightInset);
   const sideMargin = Math.max(0, availableWidth * 0.08 - 4);
-  return <LiquidTabs sourceId={sourceId} selectedId={selectedId} dark={dark} items={items}
+  return <LiquidTabs sourceId={sourceId} selectedId={selectedId} dark={dark} accentColor={theme.accent} items={items}
     style={[styles.tabs, {
       width: availableWidth - sideMargin * 2,
       left: leftInset + sideMargin,
