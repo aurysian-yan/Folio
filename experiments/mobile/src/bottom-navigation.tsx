@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
-import { ClockIcon, CloudIcon, GearIcon, TextAaIcon } from 'phosphor-react-native';
+import { MagnifyingGlassIcon, CloudIcon, GearIcon, TextAaIcon } from 'phosphor-react-native';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle, type ViewProps } from 'react-native';
 import i18n from './i18n/instance';
 import type { Theme } from './ui';
 
 export const navigationItems = [
   { id: 'local', label: i18n.t('navigation.local'), icon: 'text-aa' },
-  { id: 'recent', label: i18n.t('navigation.recent'), icon: 'clock' },
+  { id: 'search', label: i18n.t('common.search'), icon: 'search' },
   { id: 'cloud', label: i18n.t('navigation.cloud'), icon: 'cloud' },
   { id: 'settings', label: i18n.t('navigation.settings'), icon: 'gear' },
 ] as const;
@@ -37,7 +37,7 @@ export function NavigationBackdrop({ children, style }: NavigationBackdropProps)
   return <View style={style}>{children}</View>;
 }
 
-const icons = { local: TextAaIcon, recent: ClockIcon, cloud: CloudIcon, settings: GearIcon };
+const icons = { local: TextAaIcon, search: MagnifyingGlassIcon, cloud: CloudIcon, settings: GearIcon };
 
 export function BottomNavigation({ selectedId, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
   return <View style={[styles.dock, { bottom: bottomInset + 8, left: leftInset + 20, right: rightInset + 20 }]}>

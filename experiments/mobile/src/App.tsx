@@ -8,7 +8,7 @@ import {
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  AccessibilityInfo, ActivityIndicator, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
+  ActivityIndicator, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
   Text, TextInput, useColorScheme, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,10 +39,10 @@ import { createTheme, IconButton, type Theme } from './ui';
 
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
-const emptyBrowse = { searchText: '', searchOpen: false, facets: [] as FacetSelection[] };
+const emptyBrowse = { searchText: '', facets: [] as FacetSelection[] };
 const LibraryList = Platform.OS === 'android' ? Animated.FlatList<FontFamily> : FlatList<FontFamily>;
 
-function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, target, destination = 'local',
+function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, searchPage = false, target, destination = 'local',
   snapshot, libraryVersion, initialError, defaultMode, preferencesReady, showImportResults,
   onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily }: {
   theme: Theme;
@@ -50,6 +50,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   active: boolean;
   sourceId?: string;
   sidebar?: boolean;
+  searchPage?: boolean;
   target: LibraryTarget;
   destination?: NativeDestination;
   snapshot: LibrarySnapshot | null;
@@ -73,17 +74,16 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const [retry, setRetry] = useState(0);
   const [browseStates, setBrowseStates] = useState<Record<string, typeof emptyBrowse>>({});
   const browse = browseStates[scopeKey] ?? emptyBrowse;
-  const { searchText, searchOpen, facets: selectedFacets } = browse;
+  const { searchText, facets: selectedFacets } = browse;
+  const searchOpen = searchPage;
   const updateBrowse = (change: Partial<typeof emptyBrowse>) => setBrowseStates((previous) => ({
     ...previous, [scopeKey]: { ...(previous[scopeKey] ?? emptyBrowse), ...change },
   }));
   const setSearchText = (value: string) => updateBrowse({ searchText: value });
-  const setSearchOpen = (value: boolean) => updateBrowse({ searchOpen: value });
   const [filterOpen, setFilterOpen] = useState(false);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [facetOptions, setFacetOptions] = useState<{ key: string; options: FacetOption[] }>({ key: '', options: [] });
   const [facetFailure, setFacetFailure] = useState<{ key: string; message: string } | null>(null);
-  const [brandOpacity] = useState(() => new Animated.Value(1));
   const [headerScrollOffset] = useState(() => new Animated.Value(0));
   const [debouncedSearch, setDebouncedSearch] = useState({ key: scopeKey, text: '' });
   const queryText = debouncedSearch.key === scopeKey ? debouncedSearch.text : searchText.trim();
@@ -132,17 +132,10 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   }, [headerScrollOffset, mode]);
 
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    let mounted = true;
-    let transition: Animated.CompositeAnimation | undefined;
-    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
-      if (!mounted) return;
-      transition = Animated.timing(brandOpacity, { toValue: searchOpen ? 0 : 1,
-        duration: reduced ? 0 : 180, useNativeDriver: true });
-      transition.start();
-    });
-    return () => { mounted = false; transition?.stop(); };
-  }, [brandOpacity, searchOpen]);
+    if (usesNativeControls || Platform.OS === 'android' || !searchPage) return;
+    if (active && ready) searchInput.current?.focus();
+    else searchInput.current?.blur();
+  }, [active, ready, searchPage]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch({ key: scopeKey, text: searchText.trim() }), 180);
@@ -233,12 +226,6 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
     } finally { importInFlight.current = false; setImporting(false); }
   }
 
-  function closeSearch() {
-    setSearchOpen(false);
-    setSearchText('');
-    Keyboard.dismiss();
-  }
-
   function retryQuery() {
     setError(null);
     setPagination({ key: queryKey, offset: 0 });
@@ -253,8 +240,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
     }
   }
 
-  const toggleSearch = () => { if (searchOpen) closeSearch(); else setSearchOpen(true); };
-  const title = active ? scopeTitle : destination === 'cloud' ? t('mobile.cloudFonts') : destination === 'settings' ? t('common.settings') : t('mobile.recentTitle');
+  const title = searchPage ? t('common.search') : active ? scopeTitle : destination === 'cloud' ? t('mobile.cloudFonts') : t('common.settings');
   const openFilter = () => { Keyboard.dismiss(); setFilterOpen(true); };
   const openCollections = () => { Keyboard.dismiss(); setCollectionsOpen(true); };
   const fontList = (
@@ -289,7 +275,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
               </Pressable>
               {(searchOpen || selectedFacets.length > 0) && <PanelAction label={selectedFacets.length ? t('mobile.filterCount', { count: selectedFacets.length }) : t('mobile.filter')} theme={theme} onPress={openFilter} />}
             </View>
-            {!hasConditions && scope === 'all' && (
+            {!searchPage && !hasConditions && scope === 'all' && (
               <View style={styles.hero}>
                 <Image source={require('../assets/design/lasso.svg')} style={styles.lasso} contentFit="contain" />
                 <Text accessibilityRole="header" style={[styles.heroTitle, { color: theme.label }]}>
@@ -300,7 +286,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
                 </Text>}
               </View>
             )}
-            {(hasConditions || scope !== 'all') && <Text accessibilityRole="header" style={[styles.searchSummary, { color: theme.secondary }]}>
+            {(searchPage || hasConditions || scope !== 'all') && <Text accessibilityRole="header" style={[styles.searchSummary, { color: theme.secondary }]}>
               {loading && page.families.length === 0 ? t('mobile.loading') : queryText ? t('mobile.searchResultCount', { total: page.totalMatches }) : t('mobile.familyCount', { count: page.totalMatches })}
             </Text>}
             {page.unresolvedScopeItems > 0 && <Text style={[styles.searchSummary, { color: theme.secondary }]}>
@@ -334,7 +320,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
               <Text style={[styles.emptyDetail, { color: theme.secondary }]}>{hasConditions ? t('mobile.adjustSearch')
                 : page.unresolvedScopeItems > 0 ? t('collection.keepMembersNote') : scope === 'favorites' ? t('collection.emptyHint') : scope === 'collection' ? t('collection.favoriteInDetails') : scope === 'smart' ? t('filters.smartHint') : scope === 'recent' ? t('mobile.recentHint') : t('mobile.importHint')}</Text>
               {selectedFacets.length > 0 && <PanelAction label={t('mobile.clearFilters')} theme={theme} onPress={() => updateBrowse({ facets: [] })} />}
-              {!hasConditions && scope === 'all' && (usesNativeControls ? <NativeActionButton label={importing ? t('mobile.loadingImport') : t('import.importFonts')}
+              {!searchPage && !hasConditions && scope === 'all' && (usesNativeControls ? <NativeActionButton label={importing ? t('mobile.loadingImport') : t('import.importFonts')}
                 systemImage="plus" color={theme.accent} onPress={importFont} disabled={importing} prominent />
                 : <Pressable accessibilityRole="button" disabled={importing} onPress={importFont}
                 style={({ pressed }) => [styles.importButton, { backgroundColor: theme.accent, opacity: pressed || importing ? 0.6 : 1 }]}>
@@ -363,45 +349,41 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           top: Platform.OS === 'android' ? inset.top : nativeInsets.top,
           backgroundColor: Platform.OS === 'ios' && Number(Platform.Version) < 26 ? theme.background : undefined }],
           Platform.OS === 'android' && styles.androidHeader]}>
-        {(!searchOpen || Platform.OS === 'android') && <Animated.View pointerEvents={searchOpen ? 'none' : 'auto'}
-          style={[styles.brand, (usesNativeControls || Platform.OS === 'android') && styles.nativeBrand,
-            Platform.OS === 'android' && { opacity: brandOpacity }]}>
+        {!searchOpen && <View
+          style={[styles.brand, (usesNativeControls || Platform.OS === 'android') && styles.nativeBrand]}>
           <Image source={require('../assets/design/folio.svg')} style={styles.logo}
             tintColor={theme.label} contentFit="contain" accessibilityLabel="Folio" />
           <Text numberOfLines={1} style={[styles.libraryCount, { color: theme.muted }]}>
             {scope === 'recent' ? t('macos.recentVisits') : snapshot ? t('mobile.localFamilyCount', { count: snapshot.familyCount }) : t('mobile.localFonts')}
           </Text>
-        </Animated.View>}
+        </View>}
         {Platform.OS === 'android' ? <AndroidHeaderControls theme={theme} sourceId={sourceId} active={active}
           mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
           ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
-          onSearch={toggleSearch} onSearchTextChange={setSearchText} onFilter={openFilter} filterCount={selectedFacets.length} /> : usesNativeControls ? <NativeHeaderControls theme={theme} mode={mode} searchOpen={searchOpen}
+          onSearchTextChange={setSearchText} onFilter={openFilter} filterCount={selectedFacets.length} /> : usesNativeControls ? <NativeHeaderControls theme={theme} active={active} mode={mode} searchOpen={searchOpen}
           width={width - 52} searchText={searchText} onSearchTextChange={setSearchText}
           ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
-          onSearch={toggleSearch} onFilter={openFilter} filterCount={selectedFacets.length} /> : searchOpen ? (
+          onFilter={openFilter} filterCount={selectedFacets.length} /> : searchOpen ? (
           <View style={[styles.search, { backgroundColor: theme.surface }]}>
             <MagnifyingGlassIcon size={20} color={theme.secondary} />
-            <TextInput ref={searchInput} autoFocus accessibilityLabel={t('mobile.searchFonts')} placeholder={t('mobile.searchPlaceholder')}
+            <TextInput ref={searchInput} accessibilityLabel={t('mobile.searchFonts')} placeholder={t('mobile.searchPlaceholder')}
               placeholderTextColor={theme.muted} selectionColor={theme.selection} cursorColor={theme.accent}
-              selectionHandleColor={theme.accent} value={searchText} editable={ready}
+              selectionHandleColor={theme.accent} value={searchText} editable={ready && active}
               onChangeText={setSearchText} style={[styles.searchInput, { color: theme.label }]}
               autoCapitalize="none" autoCorrect={false} returnKeyType="search" onSubmitEditing={() => Keyboard.dismiss()} />
             {searchText.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.clearSearch')}
               hitSlop={10} onPress={() => { setSearchText(''); searchInput.current?.focus(); }}>
               <XIcon size={18} color={theme.secondary} />
             </Pressable>}
-            <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.closeSearch')} onPress={closeSearch} style={styles.cancelSearch}>
-              <XIcon size={20} color={theme.label} />
-            </Pressable>
+            <IconButton theme={theme} label={t('library.filterFonts')} disabled={!ready} selected={selectedFacets.length > 0} onPress={openFilter}>
+              <FunnelSimpleIcon size={20} color={selectedFacets.length > 0 ? theme.accent : theme.label} />
+            </IconButton>
           </View>
         ) : <View style={styles.headerActions}>
           <IconButton theme={theme} label={t('library.filterFonts')} disabled={!ready} selected={selectedFacets.length > 0} onPress={openFilter}>
             <FunnelSimpleIcon size={20} color={selectedFacets.length > 0 ? theme.accent : theme.label} />
           </IconButton>
           <ViewModeMenu sourceId={sourceId} theme={theme} mode={mode} active={active && !importing} onModeChange={setMode} />
-          <IconButton theme={theme} label={t('mobile.searchFonts')} onPress={() => setSearchOpen(true)}>
-            <MagnifyingGlassIcon size={20} color={theme.label} />
-          </IconButton>
           <IconButton theme={theme} label={importing ? t('mobile.loadingImport') : t('import.importFonts')} disabled={!ready || importing} busy={importing} onPress={importFont}>
             {importing ? <ActivityIndicator size="small" color={theme.label} /> : <PlusIcon size={20} color={theme.label} />}
           </IconButton>
@@ -426,7 +408,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
     return <NativeLibraryContent theme={theme} title={title} active={active}
       subtitle={snapshot ? t('mobile.familyCount', { count: scope === 'all' ? snapshot.familyCount : page.totalMatches }) : t('library.title')}
       mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
-      ready={ready} importing={importing} onModeChange={setMode} onSearch={toggleSearch}
+      ready={ready} importing={importing} onModeChange={setMode}
       onSearchTextChange={setSearchText} onImport={importFont} onFilter={openFilter} filterCount={selectedFacets.length}>
       {active ? content : <View style={[styles.screen, { backgroundColor: theme.background }]} />}
     </NativeLibraryContent>;
@@ -464,6 +446,7 @@ function MobileApp() {
   const [initializeRetry, setInitializeRetry] = useState(0);
   const [initialError, setInitialError] = useState<string | null>(null);
   const [libraryTarget, setLibraryTarget] = useState<LibraryTarget>({ scope: 'all' });
+  const [searchTarget, setSearchTarget] = useState<LibraryTarget>({ scope: 'all' });
   const [fontPage, setFontPage] = useState<FontFamily | null>(null);
   const recentAttempt = useRef(0);
   const [recentError, setRecentError] = useState<string | null>(null);
@@ -491,6 +474,8 @@ function MobileApp() {
     setSnapshot(value);
     setLibraryVersion((version) => version + 1);
     setLibraryTarget((target) => (target.scope === 'collection' && !value.collections.some((item) => item.id === target.collectionId))
+      || (target.scope === 'smart' && !value.smartFolders.some((item) => item.id === target.smartFolderId)) ? { scope: 'all' } : target);
+    setSearchTarget((target) => (target.scope === 'collection' && !value.collections.some((item) => item.id === target.collectionId))
       || (target.scope === 'smart' && !value.smartFolders.some((item) => item.id === target.smartFolderId)) ? { scope: 'all' } : target);
   }, []);
 
@@ -532,18 +517,17 @@ function MobileApp() {
 
   function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
   const settingsContent = <SettingsScreen theme={theme} onOpenPage={openSettingsPage} />;
-  const recentContent = <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
-    sidebar={sidebar} destination="recent" target={{ scope: 'recent' }} snapshot={snapshot} libraryVersion={libraryVersion}
+  const searchContent = <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
+    sidebar={sidebar} searchPage destination="search" target={searchTarget} snapshot={snapshot} libraryVersion={libraryVersion}
     initialError={initialError} defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady}
-    showImportResults={preferences.importShowResults} onSnapshotChange={applySnapshot} onOpenFamily={(family) => openFamily(family, { scope: 'recent' })}
-    onTargetChange={(target) => { selectTarget(target); setTab('local'); }}
-    onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
-    active={usesNativeControls ? nativeDestination === 'recent' : tab === 'recent'} />;
+    showImportResults={preferences.importShowResults} onSnapshotChange={applySnapshot} onOpenFamily={(family) => openFamily(family, searchTarget)}
+    onTargetChange={setSearchTarget} onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
+    active={usesNativeControls ? nativeDestination === 'search' : tab === 'search'} />;
   const content = usesNativeControls ? (
     <View style={[styles.app, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
-        settings={settingsContent} recent={recentContent} onDestinationChange={navigate}>
+        settings={settingsContent} search={searchContent} onDestinationChange={navigate}>
         <LibraryScreen theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
           target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
           defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
@@ -565,8 +549,8 @@ function MobileApp() {
             onSnapshotChange={applySnapshot} onTargetChange={setLibraryTarget}
             onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />
         </View>
-        <View style={[styles.screen, tab !== 'recent' && styles.hidden]}>{recentContent}</View>
-        {tab !== 'local' && tab !== 'recent' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
+        <View style={[styles.screen, tab !== 'search' && styles.hidden]}>{searchContent}</View>
+        {tab !== 'local' && tab !== 'search' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
           style={[styles.screen, { backgroundColor: theme.background }]}>
           {tab === 'settings' ? settingsContent : <View style={styles.screen} />}
         </NavigationBackdrop>}
@@ -614,7 +598,6 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   search: { flex: 1, paddingHorizontal: 12, minHeight: 44, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchInput: { flex: 1, minHeight: 44, fontSize: 15, paddingVertical: 8 },
-  cancelSearch: { minWidth: 32, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
   content: { paddingHorizontal: 10, gap: 12 }, columns: { gap: 12 }, listItem: { width: '100%' },
   hero: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, gap: 8 }, lasso: { width: 32, height: 32 },
   heroTitle: { fontSize: 30, fontWeight: '600', lineHeight: 36 },

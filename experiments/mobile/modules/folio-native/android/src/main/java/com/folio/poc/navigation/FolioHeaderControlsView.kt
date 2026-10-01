@@ -122,7 +122,17 @@ class FolioViewMenuColors : Record {
     @Field var raised: String = ""
 }
 
-// 安卓顶部操作区复用现有描边与背景采样，搜索与菜单独立承载转场。
+// 顶栏文案由共享语言目录提供。
+class FolioHeaderLabels : Record {
+    @Field var search: String = ""
+    @Field var searchPlaceholder: String = ""
+    @Field var clearSearch: String = ""
+    @Field var filter: String = ""
+    @Field var importFonts: String = ""
+    @Field var loadingImport: String = ""
+}
+
+// 安卓顶部操作区复用现有描边与背景采样。
 class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     override val shouldUseAndroidLayout = true
     var sourceId by mutableStateOf("")
@@ -135,10 +145,10 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
     var searchText by mutableStateOf("")
     var filterCount by mutableStateOf(0)
     var colors by mutableStateOf<FolioViewMenuColors?>(null)
+    var labels by mutableStateOf<FolioHeaderLabels?>(null)
     private var expanded by mutableStateOf(false)
     private val onModeChange by EventDispatcher()
     private val onExpandedChange by EventDispatcher()
-    private val onSearch by EventDispatcher()
     private val onImport by EventDispatcher()
     private val onFilter by EventDispatcher()
     private val onSearchTextChange by EventDispatcher()
@@ -151,13 +161,13 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
         addView(compose, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         compose.setContent {
             val palette = colors ?: return@setContent
+            val text = labels ?: return@setContent
             val backdrop = FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] ?: EmptyNavigationBackdrop
             LaunchedEffect(active, importing, searchOpen) {
                 if (!active || importing || searchOpen) updateExpanded(false)
             }
-            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, searchOpen, searchText, filterCount, palette, backdrop,
+            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, searchOpen, searchText, filterCount, palette, text, backdrop,
                 onExpandedChange = ::updateExpanded,
-                onSearch = { onSearch(emptyMap<String, Any>()) },
                 onFilter = { if (ready) onFilter(emptyMap<String, Any>()) },
                 onImport = { if (ready && !importing) onImport(emptyMap<String, Any>()) },
                 onSearchTextChange = { text ->
@@ -251,39 +261,19 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
 @Composable
 private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean, dark: Boolean,
     ready: Boolean, importing: Boolean, searchOpen: Boolean, searchText: String, filterCount: Int,
-    colors: FolioViewMenuColors, backdrop: Backdrop, onExpandedChange: (Boolean) -> Unit,
-    onSelect: (String) -> Unit, onSearch: () -> Unit, onImport: () -> Unit, onFilter: () -> Unit, onSearchTextChange: (String) -> Unit) {
-    val searchProgress = remember { Animatable(0f) }
+    colors: FolioViewMenuColors, labels: FolioHeaderLabels, backdrop: Backdrop, onExpandedChange: (Boolean) -> Unit,
+    onSelect: (String) -> Unit, onImport: () -> Unit, onFilter: () -> Unit, onSearchTextChange: (String) -> Unit) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(searchOpen) {
-        if (searchOpen) { focus.requestFocus(); keyboard?.show() }
-        else keyboard?.hide()
-        searchProgress.animateTo(if (searchOpen) 1f else 0f, spring(0.78f, 400f))
+    LaunchedEffect(searchOpen, active, ready) {
+        if (searchOpen && active && ready) { focus.requestFocus(); keyboard?.show() }
+        else if (searchOpen) keyboard?.hide()
     }
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
         val availableWidth = maxWidth
-        val fraction = searchProgress.value.coerceIn(0f, 1f)
-        Row(Modifier.graphicsLayer {
-            alpha = 1f - fraction
-            scaleX = 1f - 0.12f * fraction
-            scaleY = scaleX
-            transformOrigin = TransformOrigin(1f, 0.5f)
-        }.then(if (searchOpen) Modifier.clearAndSetSemantics {} else Modifier),
-            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            FolioViewModeMenu(mode, expanded, active && !searchOpen && !importing, dark, colors, backdrop,
-                onExpandedChange, onSelect, Modifier.size(if (availableWidth < HeaderButtonHeight * 7) HeaderButtonHeight else 64.dp, HeaderButtonHeight))
-            HeaderAction("filter", if (filterCount > 0) "筛选字体，已选 $filterCount 项" else "筛选字体",
-                active && ready && !searchOpen, false, dark, colors, backdrop, onFilter, selected = filterCount > 0)
-            HeaderAction("search", "搜索字体", active && !searchOpen, false, dark, colors, backdrop, onSearch)
-            HeaderAction("plus", if (importing) "正在导入…" else "导入字体",
-                active && ready && !importing && !searchOpen, importing, dark, colors, backdrop, onImport)
-        }
-        if (searchOpen || fraction > 0f) {
-            Row(Modifier.graphicsLayer { alpha = fraction }
-                .then(if (!searchOpen) Modifier.clearAndSetSemantics {} else Modifier),
-                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                val fieldWidth = (44.dp + (availableWidth - 98.dp) * fraction).coerceAtLeast(44.dp)
+        if (searchOpen) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val fieldWidth = (availableWidth - HeaderButtonHeight - 10.dp).coerceAtLeast(HeaderButtonHeight)
                 Row(Modifier.size(fieldWidth, HeaderButtonHeight).headerSurface(colors).padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     ViewMenuIcon("search", colors.secondary.menuColor(), 20.dp)
@@ -292,8 +282,8 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
                         backgroundColor = colors.accent.menuColor().copy(alpha = if (dark) 0.25f else 0.2f)
                     )) {
                         BasicTextField(searchText, onSearchTextChange, Modifier.weight(1f).focusRequester(focus)
-                            .semantics { contentDescription = "搜索字体" },
-                            enabled = active && ready && searchOpen, singleLine = true,
+                            .semantics { contentDescription = labels.search },
+                            enabled = active && ready, singleLine = true,
                             textStyle = TextStyle(color = colors.label.menuColor(), fontSize = 15.sp),
                             cursorBrush = SolidColor(colors.accent.menuColor()),
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None,
@@ -301,19 +291,28 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
                             keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
                             decorationBox = { input ->
                                 Box {
-                                    if (searchText.isEmpty()) BasicText("搜索字体名称或样式", maxLines = 1,
+                                    if (searchText.isEmpty()) BasicText(labels.searchPlaceholder, maxLines = 1,
                                         style = TextStyle(color = colors.muted.menuColor(), fontSize = 15.sp))
                                     input()
                                 }
                             })
                     }
                     if (searchText.isNotEmpty()) Box(Modifier.size(20.dp)
-                        .clickable(enabled = searchOpen, role = Role.Button) { onSearchTextChange(""); focus.requestFocus() }
-                        .semantics { contentDescription = "清除搜索" }) {
+                        .clickable(enabled = active && ready, role = Role.Button) { onSearchTextChange(""); focus.requestFocus() }
+                        .semantics { contentDescription = labels.clearSearch }) {
                         ViewMenuIcon("close", colors.secondary.menuColor(), 18.dp)
                     }
                 }
-                HeaderAction("close", "关闭搜索", active && searchOpen, false, dark, colors, backdrop, onSearch)
+                HeaderAction("filter", labels.filter,
+                    active && ready, false, dark, colors, backdrop, onFilter, selected = filterCount > 0)
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                FolioViewModeMenu(mode, expanded, active && !importing, dark, colors, backdrop,
+                    onExpandedChange, onSelect, Modifier.size(if (availableWidth < HeaderButtonHeight * 7) HeaderButtonHeight else 64.dp, HeaderButtonHeight))
+                HeaderAction("filter", labels.filter, active && ready, false, dark, colors, backdrop, onFilter, selected = filterCount > 0)
+                HeaderAction("plus", if (importing) labels.loadingImport else labels.importFonts,
+                    active && ready && !importing, importing, dark, colors, backdrop, onImport)
             }
         }
     }

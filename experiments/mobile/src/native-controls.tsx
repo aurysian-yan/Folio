@@ -6,13 +6,13 @@ import type { Theme } from './ui';
 export const usesNativeControls = false;
 export const usesNativeSidebar = false;
 
-export type NativeDestination = 'local' | 'recent' | 'favorites' | 'cloud' | 'settings' | `collection:${string}` | `smart:${string}`;
+export type NativeDestination = 'local' | 'search' | 'favorites' | 'cloud' | 'settings' | `collection:${string}` | `smart:${string}`;
 
 export interface NativeNavigationProps {
   children: ReactNode;
   /** 设置页内容，仅原生导航使用；基础实现忽略。 */
   settings?: ReactNode;
-  recent?: ReactNode;
+  search?: ReactNode;
   theme: Theme;
   sidebar: boolean;
   destination: NativeDestination;
@@ -22,6 +22,7 @@ export interface NativeNavigationProps {
 
 export interface NativeHeaderProps {
   theme: Theme;
+  active: boolean;
   mode: 'grid' | 'list';
   width: number;
   searchOpen: boolean;
@@ -29,7 +30,6 @@ export interface NativeHeaderProps {
   importing: boolean;
   ready: boolean;
   onModeChange: (mode: 'grid' | 'list') => void;
-  onSearch: () => void;
   onSearchTextChange: (text: string) => void;
   onImport: () => void;
   onFilter: () => void;

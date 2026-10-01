@@ -33,7 +33,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioHeaderControlsView::class) {
-            Events("onModeChange", "onExpandedChange", "onSearch", "onImport", "onSearchTextChange", "onFilter")
+            Events("onModeChange", "onExpandedChange", "onImport", "onSearchTextChange", "onFilter")
             Prop("sourceId") { view: FolioHeaderControlsView, value: String -> view.sourceId = value }
             Prop("mode") { view: FolioHeaderControlsView, value: String ->
                 if (value == "grid" || value == "list") view.mode = value
@@ -46,6 +46,7 @@ class FolioNavigationModule : Module() {
             Prop("searchText") { view: FolioHeaderControlsView, value: String -> view.searchText = value }
             Prop("filterCount") { view: FolioHeaderControlsView, value: Int -> view.filterCount = value.coerceAtLeast(0) }
             Prop("colors") { view: FolioHeaderControlsView, value: FolioViewMenuColors -> view.colors = value }
+            Prop("labels") { view: FolioHeaderControlsView, value: FolioHeaderLabels -> view.labels = value }
         }
 
         View(FolioLiquidTabsView::class) {
@@ -55,7 +56,7 @@ class FolioNavigationModule : Module() {
             Prop("dark") { view: FolioLiquidTabsView, value: Boolean -> view.dark = value }
             Prop("accentColor") { view: FolioLiquidTabsView, value: String -> view.accentColor = value }
             Prop("items") { view: FolioLiquidTabsView, value: List<FolioNavigationItem> ->
-                if (value.size == 4 && value.map { it.id }.toSet() == setOf("local", "recent", "cloud", "settings")) {
+                if (value.size == 4 && value.map { it.id }.toSet() == setOf("local", "search", "cloud", "settings")) {
                     view.items = value
                 }
             }

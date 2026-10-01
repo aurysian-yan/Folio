@@ -9,7 +9,7 @@ const pressedHeight = 78;
 const overflow = (pressedHeight - containerHeight) / 2;
 const items = [
   { id: 'local', label: i18n.t('navigation.local'), icon: 'text-aa' },
-  { id: 'recent', label: i18n.t('navigation.recent'), icon: 'clock' },
+  { id: 'search', label: i18n.t('common.search'), icon: 'search' },
   { id: 'cloud', label: i18n.t('navigation.cloud'), icon: 'cloud' },
   { id: 'settings', label: i18n.t('navigation.settings'), icon: 'gear' },
 ] as const;

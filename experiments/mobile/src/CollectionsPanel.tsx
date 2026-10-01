@@ -1,4 +1,4 @@
-import { CheckIcon, DotsThreeIcon, PlusIcon, SparkleIcon, StarIcon, TextAaIcon } from 'phosphor-react-native';
+import { CheckIcon, ClockIcon, DotsThreeIcon, PlusIcon, SparkleIcon, StarIcon, TextAaIcon } from 'phosphor-react-native';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -177,13 +177,13 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
         {error && <Text accessibilityRole="alert" style={[panelStyles.section, { color: theme.danger }]}>{error}</Text>}
         <Text accessibilityRole="header" style={[panelStyles.section, { color: theme.secondary }]}>{t('navigation.local')}</Text>
         <View style={styles.scopeOptions}>
-          {([{ scope: 'all' }, { scope: 'favorites' }] as LibraryTarget[]).map((value) => <Pressable key={value.scope}
+          {([{ scope: 'all' }, { scope: 'recent' }, { scope: 'favorites' }] as LibraryTarget[]).map((value) => <Pressable key={value.scope}
             accessibilityRole="radio" disabled={busy} accessibilityState={{ checked: targetKey(target) === targetKey(value), disabled: busy }} onPress={() => select(value)}
             style={({ pressed }) => [styles.scopeCard, { backgroundColor: targetKey(target) === targetKey(value) ? theme.selection : theme.surface,
               borderColor: targetKey(target) === targetKey(value) ? theme.accent : theme.border, opacity: pressed ? 0.6 : 1 }]}>
-            {value.scope === 'all' ? <TextAaIcon size={24} color={theme.accent} /> : <StarIcon size={24} color={theme.accent} />}
-            <Text style={[panelStyles.label, { color: theme.label }]}>{value.scope === 'all' ? t('mobile.allFonts') : t('mobile.starredCollections')}</Text>
-            {value.scope === 'all' && <Text style={[styles.count, { color: theme.secondary }]}>{snapshot?.familyCount ?? 0}</Text>}
+            {value.scope === 'all' ? <TextAaIcon size={24} color={theme.accent} /> : value.scope === 'recent' ? <ClockIcon size={24} color={theme.accent} /> : <StarIcon size={24} color={theme.accent} />}
+            <Text style={[panelStyles.label, { color: theme.label }]}>{value.scope === 'all' ? t('mobile.allFonts') : value.scope === 'recent' ? t('macos.recentVisits') : t('mobile.starredCollections')}</Text>
+            {(value.scope === 'all' || value.scope === 'recent') && <Text style={[styles.count, { color: theme.secondary }]}>{(value.scope === 'recent' ? snapshot?.recentCount : snapshot?.familyCount) ?? 0}</Text>}
             {targetKey(target) === targetKey(value) && <CheckIcon size={20} color={theme.accent} />}
           </Pressable>)}
         </View>

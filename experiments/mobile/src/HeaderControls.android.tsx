@@ -1,4 +1,5 @@
 import { requireNativeView } from 'expo';
+import { useTranslation } from 'react-i18next';
 import { Keyboard, StyleSheet, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import type { AndroidHeaderBackdropProps, AndroidHeaderProps } from './HeaderControls';
 
@@ -12,10 +13,10 @@ interface NativeAndroidHeaderProps extends ViewProps {
   searchOpen: boolean;
   searchText: string;
   filterCount: number;
+  labels: { search: string; searchPlaceholder: string; clearSearch: string; filter: string; importFonts: string; loadingImport: string };
   colors: Pick<AndroidHeaderProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'raised'>;
   onModeChange: (event: NativeSyntheticEvent<{ mode: 'grid' | 'list' }>) => void;
   onExpandedChange: (event: NativeSyntheticEvent<{ expanded: boolean }>) => void;
-  onSearch: () => void;
   onImport: () => void;
   onFilter: () => void;
   onSearchTextChange: (event: NativeSyntheticEvent<{ text: string }>) => void;
@@ -36,14 +37,18 @@ export function AndroidHeaderBackdrop({ theme, ...props }: AndroidHeaderBackdrop
   return <NativeHeaderBackdrop {...props} tintColor={String(theme.background)} />;
 }
 
-// 安卓操作区统一淡描边，搜索与视图动画由原生控件承载。
+// 安卓操作区使用原生控件与共享语言目录。
 export function AndroidHeaderControls({ sourceId, theme, mode, active, width, ready, importing,
-  searchOpen, searchText, filterCount, onFilter, onModeChange, onSearch, onImport, onSearchTextChange }: AndroidHeaderProps) {
+  searchOpen, searchText, filterCount, onFilter, onModeChange, onImport, onSearchTextChange }: AndroidHeaderProps) {
+  const { t } = useTranslation();
   const { label, secondary, muted, accent, tab, border, raised } = theme;
   return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
     ready={ready} importing={importing} searchOpen={searchOpen} searchText={searchText}
+    labels={{ search: t('mobile.searchFonts'), searchPlaceholder: t('mobile.searchPlaceholder'), clearSearch: t('mobile.clearSearch'),
+      filter: filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'),
+      importFonts: t('import.importFonts'), loadingImport: t('mobile.loadingImport') }}
     colors={{ label, secondary, muted, accent, tab, border, raised }} style={[styles.header, { width }]}
-    onSearch={onSearch} onImport={onImport} onFilter={onFilter} filterCount={filterCount}
+    onImport={onImport} onFilter={onFilter} filterCount={filterCount}
     onSearchTextChange={({ nativeEvent }) => onSearchTextChange(nativeEvent.text)}
     onExpandedChange={({ nativeEvent }) => { if (nativeEvent.expanded) Keyboard.dismiss(); }}
     onModeChange={({ nativeEvent }) => {
