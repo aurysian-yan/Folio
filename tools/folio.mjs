@@ -607,25 +607,32 @@ function expoPlatform(args) {
   return platform;
 }
 
-function expoPrepare(platform, args) {
+// variant 决定应用身份，prebuild-variant 会在身份变化时自动清理原生工程。
+function expoPrepare(platform, args, variant) {
   if (!args['no-rust']) {
     run(PNPM, [platform === 'ios' ? 'rust:ios' : 'rust:android'], { cwd: MOBILE_DIR });
   }
   if (!args['no-prebuild']) {
-    run(PNPM, ['prebuild', '--platform', platform], { cwd: MOBILE_DIR });
+    run('node', ['scripts/prebuild-variant.mjs', platform], {
+      cwd: MOBILE_DIR,
+      env: { APP_VARIANT: variant },
+    });
   }
   if (platform === 'ios') run(PNPM, ['pods'], { cwd: MOBILE_DIR });
 }
 
 function expoDev(args) {
   const platform = expoPlatform(args);
-  expoPrepare(platform, args);
-  run(PNPM, [platform, ...args._], { cwd: MOBILE_DIR });
+  expoPrepare(platform, args, 'development');
+  run(PNPM, [platform, ...(args._ ?? [])], {
+    cwd: MOBILE_DIR,
+    env: { APP_VARIANT: 'development' },
+  });
 }
 
 function expoBuild(args) {
   const platform = expoPlatform(args);
-  expoPrepare(platform, args);
+  expoPrepare(platform, args, 'production');
 
   if (platform === 'android') {
     const task = args.aab ? 'bundleRelease' : 'assembleRelease';
