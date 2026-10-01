@@ -108,6 +108,24 @@ cargo build --workspace
 pnpm -C apps/desktop-ui build
 ```
 
+## 管理脚本
+
+仓库提供统一的管理脚本，用于三个客户端框架的开发调试、构建和版本号批量提高。
+无参数运行会进入交互式 TUI，也可以直接使用命令行参数：
+
+```sh
+node tools/folio.mjs                              # 交互式 TUI
+node tools/folio.mjs doctor                       # 检查构建前置条件
+node tools/folio.mjs swiftui build                # 构建 macOS 客户端
+node tools/folio.mjs tauri build --platform windows
+node tools/folio.mjs expo build --platform android
+node tools/folio.mjs version bump patch --build   # 提高版本号并提交打标签
+```
+
+脚本使用 Node.js 实现，不产出也不依赖 cmd/ps1；交互式界面依赖 `@clack/prompts`，
+使用前先执行 `pnpm install`。完整命令、主机支持矩阵与版本号写入点见
+[管理脚本文档](docs/management-script.md)。
+
 ## 运行桌面客户端
 
 ### Windows/Linux
@@ -187,6 +205,7 @@ pnpm -C apps/desktop-ui test
 ## 延伸阅读
 
 - [项目路线图](FOLIO_ROADMAP.md)：当前能力、验证缺口和后续阶段。
+- [管理脚本](docs/management-script.md)：多框架调试、构建与版本号批量提高。
 - [核心架构](docs/architecture.md)：字体身份、修订、家族聚合和持久化设计。
 - [第一阶段报告](docs/PHASE1_REPORT.md)与[第一阶段审计](docs/PHASE1_AUDIT.md)：
   字体目录核心的实现与验证。
