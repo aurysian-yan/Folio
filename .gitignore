@@ -5,6 +5,8 @@ dist/
 *.tsbuildinfo
 apps/desktop-ui/src-tauri/gen/schemas/
 apps/desktop-ui/src-tauri/target/
+apps/macos/.build/
+experiments/mobile/.build/
 .DS_Store
 xcuserdata/
 .openchamber/

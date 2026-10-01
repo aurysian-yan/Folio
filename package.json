@@ -2,5 +2,11 @@
   "name": "folio-workspace",
   "private": true,
   "license": "AGPL-3.0-only",
-  "packageManager": "pnpm@11.19.0"
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "manage": "node tools/folio.mjs"
+  },
+  "devDependencies": {
+    "@clack/prompts": "1.8.1"
+  }
 }
