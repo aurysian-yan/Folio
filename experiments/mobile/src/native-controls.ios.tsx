@@ -10,16 +10,20 @@ import {
   labelStyle, listStyle, menuIndicator, menuStyle, navigationSplitViewStyle, navigationTitle, onSubmit, padding, submitLabel,
   shapes, tabViewStyle, tag, textFieldStyle, textInputAutocapitalization, tint,
 } from '@expo/ui/swift-ui/modifiers';
+import { requireNativeView } from 'expo';
 import { useEffect, useId, useState } from 'react';
 import { AccessibilityInfo, Keyboard, Platform, StyleSheet, View } from 'react-native';
 import type {
-  NativeActionProps, NativeDestination, NativeHeaderProps, NativeLibraryContentProps, NativeNavigationProps,
+  NativeActionProps, NativeDestination, NativeHeaderProps, NativeLibraryContentProps, NativeNavigationProps, NativeScrollContainerProps,
 } from './native-controls';
 
 export const usesNativeControls = true;
 export const usesNativeSidebar = Platform.OS === 'ios' && Platform.isPad;
 const glass = Number(Platform.Version) >= 26;
 const toolbarHeight = 44;
+
+export const NativeScrollContainer = requireNativeView<NativeScrollContainerProps>('FolioNative', 'FolioScrollContainer');
+const NativeTabContent = requireNativeView<{ children: React.ReactNode }>('FolioNative', 'FolioTabContent');
 
 // 原生玻璃尺寸与控件边界保持一致。
 function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = false) {
@@ -81,7 +85,9 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
       }}
         modifiers={[tabViewStyle({ type: 'automatic' }), tint(theme.accent), background(theme.background)]}>
         <TabView.Tab value="local" label="本地" systemImage="textformat.alt">
-          <RNHostView><View style={styles.fill}>{children}</View></RNHostView>
+          <NativeTabContent>
+            <RNHostView><View style={styles.fill}>{children}</View></RNHostView>
+          </NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="recent" label="最近" systemImage="clock">
           <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
@@ -106,7 +112,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
   const actionModifiers = [labelStyle('iconOnly'), tint(theme.label)];
   return (
     <Toolbar>
-      <RNHostView>{children}</RNHostView>
+      <NativeTabContent><RNHostView>{children}</RNHostView></NativeTabContent>
       <Toolbar.Content>
         <ToolbarItem placement="principal">
           {active && searchOpen ? <HStack spacing={8} modifiers={[

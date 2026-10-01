@@ -146,6 +146,15 @@ public final class FolioNativeModule: Module {
             }
             OnViewDidUpdateProps { (view: FolioFontPreview) in view.renderSelection() }
         }
+
+        View(FolioTabContent.self)
+
+        View(FolioScrollContainer.self) {
+            Events("onInsetsChange")
+            Prop("hasHeader") { (view: FolioScrollContainer, value: Bool) in
+                view.hasHeader = value
+            }
+        }
     }
 
     private func requireEngine() throws -> FolioEngine {

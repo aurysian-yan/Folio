@@ -16,7 +16,7 @@ import { BottomNavigation, NavigationBackdrop, navigationContentInset, type Mobi
 import { LibraryError, type FontFamily, type LibraryPage, type LibraryQuery, type LibrarySnapshot } from './library';
 import { library } from './native';
 import {
-  NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation,
+  NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
   usesNativeControls, usesNativeSidebar, type NativeDestination,
 } from './native-controls';
 import { IconButton, themes, type Theme } from './ui';
@@ -51,9 +51,14 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   const searchInput = useRef<TextInput>(null);
   const list = useRef<FlatList<FontFamily>>(null);
   const inset = useSafeAreaInsets();
+  const [nativeInsets, setNativeInsets] = useState<{ top: number; bottom: number; contentTop?: number }>({
+    top: sidebar ? 0 : inset.top, bottom: 0,
+  });
+  const [headerHeight, setHeaderHeight] = useState(64);
   const { width: windowWidth } = useWindowDimensions();
   const [contentWidth, setContentWidth] = useState(0);
   const width = contentWidth || windowWidth - inset.left - inset.right;
+  const scrollTopInset = nativeInsets.contentTop ?? nativeInsets.top + (sidebar ? 0 : headerHeight * 1.25);
   const reservesWindowControls = usesNativeSidebar && !sidebar && Number(Platform.Version) >= 26;
   const queryKey = JSON.stringify([scope, queryText, revision, retry]);
   const requestKey = JSON.stringify([queryKey, offset]);
@@ -158,9 +163,13 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   const toggleSearch = () => { if (searchOpen) closeSearch(); else setSearchOpen(true); };
   const titles = { local: '全部字体', recent: '最近', favorites: '收藏', cloud: '云端字体', settings: '设置' };
   const content = (
-    <View style={[styles.screen, { backgroundColor: theme.background }, reservesWindowControls && styles.windowControlsInset]}
+    <NativeScrollContainer hasHeader={!sidebar}
+      onInsetsChange={(event) => setNativeInsets(event.nativeEvent)}
+      style={[styles.screen, { backgroundColor: theme.background }, reservesWindowControls && styles.windowControlsInset]}
       onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)}>
-      {!sidebar && <View style={styles.header}>
+      {!sidebar && <View collapsable={false} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+        style={[styles.header, usesNativeControls && [styles.floatingHeader, { top: nativeInsets.top,
+          backgroundColor: Number(Platform.Version) < 26 ? theme.background : undefined }]]}>
         {!searchOpen && <View style={[styles.brand, usesNativeControls && styles.nativeBrand]}>
           <Image source={require('../assets/design/folio.svg')} style={styles.logo}
             tintColor={theme.label} contentFit="contain" accessibilityLabel="Folio" />
@@ -202,7 +211,12 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
       </View>}
       <FlatList ref={list} key={mode} data={page.families} keyExtractor={(family) => family.id}
         numColumns={mode === 'grid' ? 2 : 1} columnWrapperStyle={mode === 'grid' ? styles.columns : undefined}
-        contentContainerStyle={[styles.content, { paddingBottom: usesNativeControls ? 24 : navigationContentInset(bottomInset) }]}
+        contentContainerStyle={[styles.content, {
+          paddingTop: usesNativeControls ? scrollTopInset : 0,
+          paddingBottom: usesNativeControls ? nativeInsets.bottom + 24 : navigationContentInset(bottomInset),
+        }]}
+        contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
+        scrollIndicatorInsets={usesNativeControls ? { top: scrollTopInset, bottom: nativeInsets.bottom } : undefined}
         keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
         initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
         onEndReached={loadMore} onEndReachedThreshold={0.4}
@@ -278,7 +292,7 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
           </View>
         </View>
       </Modal>
-    </View>
+    </NativeScrollContainer>
   );
 
   if (sidebar) {
@@ -353,6 +367,7 @@ const styles = StyleSheet.create({
   // 紧凑 iPad 窗口为系统控制按钮保留标准工具栏高度。
   windowControlsInset: { paddingTop: 44 },
   header: { minHeight: 64, paddingHorizontal: 26, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  floatingHeader: { position: 'absolute', left: 0, right: 0, zIndex: 1 },
   brand: { flex: 1, gap: 8 }, logo: { width: 45.011, height: 16 },
   nativeBrand: { position: 'absolute', left: 26, right: 210 },
   libraryCount: { fontSize: 14, lineHeight: 16, fontWeight: '500' },

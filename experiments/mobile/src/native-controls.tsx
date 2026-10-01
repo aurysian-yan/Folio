@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { View, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import type { LibrarySnapshot } from './library';
 import type { Theme } from './ui';
 
@@ -47,6 +48,15 @@ export interface NativeLibraryContentProps extends NativeHeaderProps {
   title: string;
   subtitle: string;
   active: boolean;
+}
+
+export interface NativeScrollContainerProps extends ViewProps {
+  hasHeader: boolean;
+  onInsetsChange: (event: NativeSyntheticEvent<{ top: number; bottom: number; contentTop: number }>) => void;
+}
+
+export function NativeScrollContainer({ hasHeader: _hasHeader, onInsetsChange: _onInsetsChange, ...props }: NativeScrollContainerProps) {
+  return <View {...props} />;
 }
 
 export function NativeNavigation({ children }: NativeNavigationProps) { return <>{children}</>; }
