@@ -198,8 +198,12 @@ pnpm -C apps/desktop-ui test
 - [移动端实验说明](experiments/mobile/README.md)：隔离概念验证的范围和运行方式。
 - [测试字体说明](fixtures/fonts/README.md)：字体样本来源与许可证。
 
+## 鸣谢
+- [Nexio课程表](https://github.com/HaoZai000/NexioSchedule)：安卓端底部导航栏参考
+- [Kyant0](https://github.com/Kyant0): 液态玻璃与平滑圆角
+
 ## 许可证
 
-Folio 原创代码以 GNU Affero 通用公共许可证第 3 版（仅该版本，
+Folio 以 GNU Affero 通用公共许可证第 3 版（仅该版本，
 `AGPL-3.0-only`）发布，完整条款见 [LICENSE](LICENSE)。第三方依赖及测试字体
 保留各自的许可证；测试字体的许可信息见[测试字体说明](fixtures/fonts/README.md)。

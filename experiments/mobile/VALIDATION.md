@@ -2,6 +2,35 @@
 
 日期：2026-09-30。当前基线提交 `75869e7`；本次范围是路线图 D 的隔离基础工程，不是阶段 D 全部通过或阶段 E 正式移动客户端。
 
+## Android Navigation Implementation
+
+2026-09-30，底栏已接入 Expo `FolioNavigation` 模块，采用 Nexio 固定提交
+`291e8b9b57c8f331d8f189c52553f41dfd0ce017` 的均衡材质与弹簧参数。
+RN 页面通过独立 RenderNode 提供背景；来源和许可见
+[源码记录](modules/folio-native/android/third-party/NOTICE.md)。
+
+| 检查 | 结果 |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | PASS，未引入新 JS 依赖。 |
+| `pnpm typecheck`、`pnpm lint` | PASS。 |
+| Android `:app:assembleDebug` | PASS，新模块已进入 Expo 注册列表，生成 Debug APK。 |
+| Android Expo export | PASS，生成 Hermes 包。 |
+| 许可随 APK 打包 | PASS，包含六份许可原文及版权文件。 |
+| 安装与启动 | 2026-10-01，USB 真机开发包安装及 MainActivity 启动命令通过；完整运行验收仍待完成。 |
+| 交互、视觉、性能及旧版本验收 | 按用户要求留待后续，本轮未执行测试套件。 |
+
+API 28–30、31–32 和 33+ 的效果分级已实现，运行表现尚未分别验证。
+
+2026-10-01：拖动弹簧采用阻尼比 `0.65`、刚度 `5000`，左右边距各减少 4dp，底部距离增加 8dp，列表留白同步调整。
+`pnpm typecheck`、`pnpm lint` 和 Android `:app:assembleDebug` 通过，已更新真机开发包。
+
+2026-10-01：连续拖动改为按本次手势的完整位移计算，松手吸附使用同一目标；移动动画只保留最新任务，新手势取消上一轮移动及释放动画。
+`pnpm typecheck`、`pnpm lint` 和 Android `:app:assembleDebug` 通过，已安装至 API 36 真机。
+ADB 在已加载界面连续执行三次横向拖动（300ms、120ms、120ms），截图确认依次从设置到本地、从本地到设置、从设置到本地，均跨过全部菜单项并切换对应页面；手指操作的主观阻尼感及完整交互验收仍待确认。
+
+2026-10-01：拖动位置改为同步状态更新，移除拖动过程中的位移弹簧；点击及松手后继续使用原有吸附弹簧，按压形变和折射保留。
+Android `:app:assembleDebug` 通过，已更新 API 36 真机开发包。ADB 注入持续按下的触摸，依次移动到 x=310 和 x=540，截图确认滑块停留在菜单项之间，页面在松手前保持本地；松手后吸附到最近项。完整测试套件仍按用户要求留待后续。
+
 ## Environment
 
 macOS 27.2 arm64、Xcode 27.0（27A266a）、Rust 1.98.1、Node.js 24.14.1、pnpm 11.19.0、JDK 17.0.19、CocoaPods 1.16.2。Rust Android 库使用 NDK 29.0.13846066；Expo 生成工程使用其默认 NDK 27.1.12297006。依赖以本目录 `package.json` 和 `pnpm-lock.yaml` 为准。

@@ -1,5 +1,13 @@
+buildscript {
+  repositories { mavenCentral() }
+  dependencies {
+    classpath("org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin:${kotlinVersion}")
+  }
+}
+
 apply plugin: 'com.android.library'
 apply plugin: 'expo-module-gradle-plugin'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 group = 'com.folio.poc'
 version = '0.1.0'
@@ -13,8 +21,13 @@ android {
     consumerProguardFiles 'consumer-rules.pro'
   }
   sourceSets.main.java.srcDirs += 'generated'
+  sourceSets.main.resources.srcDirs += 'third-party'
+  buildFeatures { compose true }
 }
 
 dependencies {
   implementation 'net.java.dev.jna:jna:5.19.1@aar'
+  implementation 'androidx.compose.foundation:foundation-android:1.10.6'
+  implementation 'androidx.compose.ui:ui-android:1.10.6'
+  implementation 'org.jetbrains:annotations:26.1.0'
 }

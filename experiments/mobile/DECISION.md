@@ -18,7 +18,7 @@ UniFFI 0.32.1 使用全局配置的 `crates.folio_ffi` 节点。Kotlin 的错误
 
 桌面客户端和数据库保持原有边界。实验可独立删除；独立锁文件防止把移动依赖加入桌面 workspace。生成绑定必须与正在打包的 `folio-ffi` 来自同一源码与 Cargo.lock；变更 Rust 后重新生成两端绑定及原生库。
 
-同步 Rust 查询尚不可抢占；JS 取消只防止过期结果回写。当前预览没有多字体缓存、复杂双向文本分段或两轴连续拖动界面；Android API 28–30 的准确字形绘制另验。当前库不接 WebDAV、不保存凭据，也不承诺 Provider、Files/Share 导出、MIUIX、Liquid Glass 或移动导航已经验证。
+同步 Rust 查询尚不可抢占；JS 取消只防止过期结果回写。当前预览没有多字体缓存、复杂双向文本分段或两轴连续拖动界面；Android API 28–30 的准确字形绘制另验。安卓 Compose 玻璃底栏已通过本地 Expo 模块接入，来源和兼容策略见模块内的 `third-party/NOTICE.md`，运行与性能验收另行记录。当前库不接 WebDAV、不保存凭据，也不承诺 Provider、Files/Share 导出、MIUIX 或移动导航完整验收已经通过。
 
 ## Adoption Gate
 

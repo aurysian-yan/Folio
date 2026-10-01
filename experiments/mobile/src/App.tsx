@@ -2,16 +2,17 @@ import { getDocumentAsync } from 'expo-document-picker';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import {
-  CaretDownIcon, CheckIcon, ClockIcon, CloudIcon, GearIcon, ListIcon,
-  MagnifyingGlassIcon, PlusIcon, SquaresFourIcon, TextAaIcon, XIcon,
+  CaretDownIcon, CheckIcon, ListIcon,
+  MagnifyingGlassIcon, PlusIcon, SquaresFourIcon, XIcon,
 } from 'phosphor-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet,
   Text, TextInput, useColorScheme, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontCard } from './FontCard';
+import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, type FontFamily, type LibraryPage, type LibraryQuery, type LibrarySnapshot } from './library';
 import { library } from './native';
 import {
@@ -22,13 +23,6 @@ import { IconButton, themes, type Theme } from './ui';
 
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [] };
-const tabs = [
-  { id: 'local', label: '本地', icon: TextAaIcon },
-  { id: 'recent', label: '最近', icon: ClockIcon },
-  { id: 'cloud', label: '云端', icon: CloudIcon },
-  { id: 'settings', label: '设置', icon: GearIcon },
-] as const;
-type Tab = typeof tabs[number]['id'];
 
 function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'all', destination = 'local', onSnapshotChange }: {
   theme: Theme;
@@ -208,7 +202,7 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
       </View>}
       <FlatList ref={list} key={mode} data={page.families} keyExtractor={(family) => family.id}
         numColumns={mode === 'grid' ? 2 : 1} columnWrapperStyle={mode === 'grid' ? styles.columns : undefined}
-        contentContainerStyle={[styles.content, { paddingBottom: usesNativeControls ? 24 : bottomInset + 96 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: usesNativeControls ? 24 : navigationContentInset(bottomInset) }]}
         keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
         initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
         onEndReached={loadMore} onEndReachedThreshold={0.4}
@@ -300,12 +294,14 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
 }
 
 function MobileApp() {
-  const theme = useColorScheme() === 'dark' ? themes.dark : themes.light;
+  const dark = useColorScheme() === 'dark';
+  const theme = dark ? themes.dark : themes.light;
+  const sourceId = useId();
   const inset = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   // 紧凑窗口沿用 iPhone 导航，常规宽度启用原生侧栏。
   const sidebar = usesNativeSidebar && width >= 600;
-  const [tab, setTab] = useState<Tab>('local');
+  const [tab, setTab] = useState<MobileTab>('local');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [nativeDestination, setNativeDestination] = useState<NativeDestination>('local');
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
@@ -335,25 +331,15 @@ function MobileApp() {
       style={[styles.app, { backgroundColor: theme.background, paddingTop: inset.top,
       paddingLeft: inset.left, paddingRight: inset.right }]}>
       <StatusBar style="auto" />
-      <View style={[styles.screen, tab !== 'local' && styles.hidden]}>
-        <LibraryScreen theme={theme} bottomInset={inset.bottom} active={tab === 'local'} />
-      </View>
-      {tab !== 'local' && <View style={styles.screen} />}
-      {!keyboardVisible && <View style={[styles.tabDock, { bottom: inset.bottom + 8, left: inset.left + 20, right: inset.right + 20 }]}>
-        <View accessibilityRole="tablist" style={[styles.tabBar, { backgroundColor: theme.tab, borderColor: theme.border }]}>
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <Pressable key={id} accessibilityRole="tab" accessibilityLabel={label}
-              accessibilityState={{ selected: id === tab }} onPress={() => { Keyboard.dismiss(); setTab(id); }}
-              style={({ pressed }) => [styles.tab, {
-                backgroundColor: id === tab ? theme.activeTab : 'transparent',
-                opacity: pressed ? 0.6 : 1,
-              }]}>
-              <Icon size={27} color={id === tab ? theme.accent : theme.label} />
-              <Text style={[styles.tabLabel, { color: id === tab ? theme.accent : theme.label }]}>{label}</Text>
-            </Pressable>
-          ))}
+      <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible} style={styles.screen}>
+        <View style={[styles.screen, tab !== 'local' && styles.hidden]}>
+          <LibraryScreen theme={theme} bottomInset={inset.bottom} active={tab === 'local'} />
         </View>
-      </View>}
+        {tab !== 'local' && <View style={[styles.screen, { backgroundColor: theme.background }]} />}
+      </NavigationBackdrop>
+      {!keyboardVisible && <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme}
+        bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
+        onSelectionChange={(id) => { Keyboard.dismiss(); setTab(id); }} />}
     </KeyboardAvoidingView>
   );
 }
@@ -390,8 +376,4 @@ const styles = StyleSheet.create({
   menuTitle: { fontSize: 12, paddingHorizontal: 16, paddingVertical: 8 },
   menuItem: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 },
   menuLabel: { flex: 1, fontSize: 16 },
-  tabDock: { position: 'absolute' },
-  tabBar: { minHeight: 64, borderRadius: 32, borderWidth: StyleSheet.hairlineWidth, padding: 4, flexDirection: 'row', alignItems: 'center' },
-  tab: { flex: 1, minHeight: 54, borderRadius: 27, justifyContent: 'center', alignItems: 'center', gap: 3, paddingVertical: 4 },
-  tabLabel: { fontSize: 10, fontWeight: '600', lineHeight: 13 },
 });

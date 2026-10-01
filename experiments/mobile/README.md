@@ -11,6 +11,7 @@
 - 预览按文件、TTC index、revision 和 axes 定位；不通过全局注册字体。iOS 使用 CoreText，Android 使用原生 Font/字形塑形与绘制。
 - iPadOS 常规宽度使用 `@expo/ui` 的原生 SwiftUI NavigationSplitView、侧边栏 List 和系统 Toolbar，提供全部字体、最近与收藏导航；侧拉及宽度小于 600 点的窗口沿用 iPhone 的原生 TabView、顶部操作区与搜索布局。Menu 和 Button 在 iOS 26 及以上使用系统 Liquid Glass，旧系统使用原生兼容样式。云端、设置与紧凑布局最近页面保持空白。
 - 系统浅色/深色、Safe Area 和列表虚拟化。更新 iOS 开发包后重定位托管字体，保留字体库和收藏。
+- Android 底栏由本地 Expo `FolioNavigation` 模块承载 Compose，保留本地、最近、云端、设置四项。外观与动效采用 Nexio 固定提交的均衡材质，RN 内容通过独立 RenderNode 提供背景；API 33+ 支持胶囊折射、31–32 支持模糊、28–30 使用半透明兼容材质。来源及许可见 [源码记录](modules/folio-native/android/third-party/NOTICE.md)。
 
 ## Setup
 
