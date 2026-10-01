@@ -83,6 +83,42 @@ Android 原生结果界面的完整交互、所有字体的真机预览与再次
 
 用户反馈下拉时短暂收缩回弹、列表底部安全区切断滚动后，将 SafeAreaProvider 移到静止的 Modal 根节点，固定抽屉停靠点引用；列表视口延伸到系统导航区，安全区留白放入列表内容底部。类型检查、相关组件 ESLint、Android Hermes export 与 `git diff --check` 通过；真机确认再次打开、下拉与返回键关闭，以及最后分类展开后的滚动和手势条留白。此次修正仅更新 JS，无需再次编译原生包；短暂闪动的连续帧及浅色外观未单独录制验收。
 
+## Smart Collections and Recent Visits
+
+2026-10-01：第三、四批接通移动端智慧收藏夹和最近访问，保留 RN/Expo、Swift/Kotlin 与共享 Rust 边界；未修改 Rust ABI、数据库 schema、同步协议或依赖版本。
+
+- 手机范围入口与 iPad 常规宽度侧栏共用手动／智慧混排，智慧项附动态标记。编辑器沿用桌面「常规／筛选条件」两页、名称、图标网格、颜色与保存／取消；有条件保存为智慧，无条件保存为手动，互转增加明确确认。Android 范围入口复用现有 Gorhom Drawer 与滚动协调，编辑器为居中 Dialog；iOS 保持系统 Sheet。
+- 新建继承当前搜索和筛选；在智慧范围内合并保存与临时条件，不保存导航范围、分页或滚动位置。草稿只用于预览查询，保存前不写数据库；动态匹配和计数直接复用 Rust `query_smart_folder`。导入、星标、成员与条件变更后刷新快照和当前查询。
+- Android、iPhone 与紧凑 iPad 最近页面复用字体列表、搜索、实时筛选和详情。访问仅由详情打开事件记录，采用卡片代表字款身份；Rust 负责顺序、去重和持久化。返回详情入口保留原页面查询与已加载窗口，手动成员操作使用实际入口收藏夹。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| JS 与依赖 | PASS，`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm lint`、`pnpm i18n:validate`（717 键）和 Expo 依赖兼容检查；未增加依赖。17 项 JS 回归覆盖智慧参数与非法范围、草稿隔离与字段白名单、条件合并、按条件判定类型、互转失败与代表字款访问透传；沿用查询取消、筛选、导入及成员回归。 |
+| Swift ↔ Rust | PASS，`pnpm test:swift`；生产映射器与真实临时数据库覆盖智慧空库创建、导入动态匹配、同组并集／跨组交集与搜索拼接、条件编辑、星标刷新、双向互转、独立手动成员保留、JSON 映射与重新打开、删除边界、访问去重、顺序更新及搜索筛选；原有导入、ZIP、TTC 和变量字体回归通过。 |
+| Kotlin ↔ Rust | PASS，`:folio-native:testDebugUnitTest`，查询映射器 3 项与导入器 8 项通过。新增场景与 Swift 同步，使用主机 Rust/JNA 临时数据库，不代表 Android 真机全部交互验收。 |
+| Android 构建与安装 | PASS，`:app:assembleDebug -PreactNativeArchitectures=arm64-v8a`；保留数据安装至 USB 真机 `23013RK75C`，通过开发客户端打开 Metro，镜像确认现有 10 个字体库、预览和范围入口正常。未启动 Android 模拟器。 |
+| iOS 原生构建 | PASS，`FolioDev.xcworkspace` / `FolioDev` arm64 Simulator Debug 完整编译与链接。首轮运行发现生成的 Pods 缺少项目已有 AsyncStorage，执行 `pnpm pods` 后重建并确认 iPhone 正常启动；未修改依赖版本，没有卸载或清空应用数据。 |
+| Hermes 导出 | PASS，Android/iOS `expo export --platform all`。 |
+| iPhone 界面 | PASS，iOS 27 iPhone 18 Pro 模拟器确认启动、单一收藏夹列表区、新建编辑器的「常规／筛选条件」页签、图标网格与键盘、条件草稿输入和取消返回；取消后没有新增收藏夹。最近页显示「最近访问」与专属空态，搜索及筛选入口可见。空库检查不代表有字体时的完整生命周期验收。 |
+| Android 界面 | 真机随后在使用其他应用，已停止触摸操作；最终混排列表、Gorhom 范围面板、居中编辑器与最近页面的完整真机交互仍待验收。 |
+| iPad 界面 | PARTIAL，iPadOS 27 iPad mini 模拟器保留数据更新后确认正常启动、原生宽屏分栏和最近入口。侧栏行未进入辅助功能树，设备窗口坐标点击返回 `windowNotFoundAtPosition`，本轮未完成最近切页、混排内容与紧凑窗口交互验收。 |
+
+互转、星标与删除回归均使用独立临时数据库；没有通过 UI 改动真机中既有收藏夹或星标。iOS 实机、完整无障碍、旧版系统、分页长列表的位置恢复、压力及性能验收仍待完成，阶段 D 保持 PARTIAL。
+
+## Panel Interaction and Sheet Presentation
+
+2026-10-01：字体库范围移除外层分组卡片，以小标题分区；新建放右上角。编辑页标题居中、左右纯图标按钮，取消和保存使用同一个 44 点原生圆形玻璃容器，禁用状态降低不透明度。手动／智慧项保持混排，卡片侧滑操作提供编辑／删除，并附更多入口与读屏动作。iOS 筛选、字体库、收藏夹和导入结果统一系统 medium／large Sheet；Android 保留 Gorhom 范围面板，使用同尺寸主题胶囊按钮。没有修改 Rust、原生模块或依赖版本。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| JS 回归与导出 | PASS，`pnpm typecheck`、`pnpm lint`、17 项 `pnpm test`、双端 Hermes export 与 `git diff --check`。共享文案校验通过，720 键。此轮改动限 RN／Expo 控件，没有重复原生构建；上节 Swift/Kotlin 回归与双端构建记录保持原有范围。 |
+| iPhone Sheet 与外观 | PASS，iOS 27 iPhone 18 Pro 模拟器确认 medium 半屏系统玻璃、grabber 展开 large、居中标题、单层范围卡片和右上新建。编辑页原生分段轨道可辨识；保存与取消的圆形按钮可见直径一致，均为 44 点。 |
+| 收藏夹交互 | PASS，临时空库中新建手动收藏夹并返回选中范围；更多入口展开侧滑操作区，编辑按钮打开预填名称与图标的编辑页，取消返回列表。删除最终提交由上节真实 Rust 临时数据库回归覆盖，本轮未通过 UI 提交删除。 |
+| 横向手势 | 待验收。ReanimatedSwipeable 已接入，程序展开侧滑操作确认正常；Device Hub 横向拖动注入在 medium／large 两档均触发卡片点击，尚未用实际触摸确认手势。 |
+| Android 与 iPad 外观 | 待验收。本轮未占用正在使用的 USB Android 真机，没有启动 Android 模拟器；iPad、浅色、旧版 iOS、实机材质与完整无障碍验收尚未完成。 |
+
+界面测试只使用 iPhone 开发包的临时收藏夹；结束后恢复测试前数据库，不改变 Android 真机或生产包数据。系统两档呈现参考 [Apple Sheets HIG](https://developer.apple.com/design/human-interface-guidelines/sheets)。
+
 ## Environment
 
 macOS 27.2 arm64、Xcode 27.0（27A266a）、Rust 1.98.1、Node.js 24.14.1、pnpm 11.19.0、JDK 17.0.19、CocoaPods 1.16.2。Rust Android 库使用 NDK 29.0.13846066；Expo 生成工程使用其默认 NDK 27.1.12297006。依赖以本目录 `package.json` 和 `pnpm-lock.yaml` 为准。

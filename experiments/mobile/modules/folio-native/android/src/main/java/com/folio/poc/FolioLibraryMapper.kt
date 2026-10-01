@@ -1,5 +1,9 @@
 package com.folio.poc
 
+import com.folio.poc.ffi.FolioEngine
+import com.folio.poc.ffi.SmartFolderDto
+import com.folio.poc.ffi.SmartFolderIdDto
+import com.folio.poc.ffi.SmartFolderQueryDto
 import com.folio.poc.ffi.CollectionIdDto
 import com.folio.poc.ffi.FacetKindDto
 import com.folio.poc.ffi.FacetSelectionDto
@@ -49,7 +53,29 @@ internal object FolioLibraryMapper {
         "damagedCount" to value.health.damagedFiles.toDouble(), "collections" to value.collections.map { collection ->
             mapOf("id" to collection.id.value, "name" to collection.name, "icon" to collection.icon,
                 "color" to collection.color, "memberCount" to collection.memberCount.toDouble())
+        }, "smartFolders" to value.smartFolders.map { folder ->
+            mapOf("id" to folder.id.value, "name" to folder.name, "icon" to folder.icon,
+                "color" to folder.color, "matchCount" to folder.matchCount.toDouble())
         })
+
+    fun smartFolder(folder: SmartFolderDto): Map<String, Any> = mapOf(
+        "id" to folder.id.value, "name" to folder.name, "icon" to folder.icon, "color" to folder.color,
+        "matchCount" to folder.matchCount.toDouble(), "query" to mapOf("text" to (folder.query.text ?: ""),
+            "facets" to folder.query.facets.map { mapOf("kind" to facetKey(it.kind), "value" to it.value) }))
+
+    // 智慧范围交给 Rust 合并保存条件和临时浏览条件。
+    fun read(engine: FolioEngine, text: String, scope: String, collectionId: String?, smartFolderId: String?,
+        facets: List<Pair<String, String>>, offset: Long, limit: Int): LibraryPageDto {
+        require(if (scope == "smart") !smartFolderId.isNullOrBlank() && collectionId == null else smartFolderId == null)
+        val request = query(text, if (scope == "smart") "all" else scope, collectionId, facets, offset, limit)
+        return if (scope == "smart") engine.querySmartFolder(SmartFolderIdDto(requireNotNull(smartFolderId)),
+            request.text, request.facets, request.offset, request.limit) else engine.queryLibrary(request)
+    }
+
+    fun conditions(text: String, facets: List<Pair<String, String>>): SmartFolderQueryDto {
+        val request = query(text, "all", null, facets, 0, 1)
+        return SmartFolderQueryDto(request.text, request.facets)
+    }
 
     private fun facetKind(key: String): FacetKindDto = when (key) {
         "category" -> FacetKindDto.CATEGORY

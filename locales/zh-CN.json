@@ -5,6 +5,8 @@
     "cancel": "取消",
     "save": "保存",
     "create": "创建",
+    "edit": "编辑",
+    "delete": "删除",
     "remove": "移除",
     "renameEllipsis": "重命名…",
     "done": "完成",
@@ -643,7 +645,7 @@
     "loadingFilters": "正在读取筛选条件",
     "noFonts": "暂无可用字体",
     "noMatch": "没有找到匹配的字体",
-    "noRecent": "还没有最近加入的字体",
+    "noRecent": "还没有最近访问的字体",
     "noFavorites": "还没有收藏字体",
     "errorLibrary": "无法打开字体库，请重试。",
     "errorLibraryRead": "暂时无法读取字体库，请重试。",
@@ -713,7 +715,12 @@
     "reselect": "重新选择",
     "unresolvedMembers": "{{count}} 个成员暂不可用",
     "noFilterOptions": "当前范围暂无可筛选的字体。",
-    "loadingCount": "正在读取数量"
+    "loadingCount": "正在读取数量",
+    "recentHint": "打开字体详情后，访问过的字体会显示在这里。",
+    "errorRecent": "无法记录本次访问，请重试。",
+    "errorCollectionRead": "无法读取收藏夹，请重试。",
+    "smartFolderCount": "{{name}}，{{count}} 个匹配字体",
+    "swipeCollection": "向左侧滑或打开更多操作，可编辑或删除收藏夹"
   },
   "macos": {
     "aboutSubtitle": "跨设备字体资产管理工具",
@@ -764,5 +771,12 @@
     "viewConflicts": "查看冲突",
     "sectionDisplay": "展示",
     "recentVisits": "最近访问"
+  },
+  "smartCollection": {
+    "saveCurrent": "保存当前条件为智慧收藏夹",
+    "convertToSmartTitle": "转为智慧收藏夹？",
+    "convertToSmartMessage": "原有手动成员关系将被替换，字体会按当前设置的条件自动匹配；字体和星标会保留。",
+    "convertToManualTitle": "转为手动收藏夹？",
+    "convertToManualMessage": "按已保存条件匹配的字体将成为手动成员，之后不再自动匹配；字体和星标会保留。"
   }
 }

@@ -6,6 +6,7 @@ struct FolioQuery: Record {
     @Field var text: String = ""
     @Field var scope: String = "all"
     @Field var collectionId: String? = nil
+    @Field var smartFolderId: String? = nil
     @Field var facets: [FolioFacetSelection] = []
     @Field var offset: Int = 0
     @Field var limit: Int = 40
@@ -20,6 +21,18 @@ struct FolioCollectionInput: Record {
     @Field var name: String = ""
     @Field var icon: String = "folder"
     @Field var color: String = "gray"
+}
+
+struct FolioSmartConditions: Record {
+    @Field var text: String = ""
+    @Field var facets: [FolioFacetSelection] = []
+}
+
+struct FolioSmartInput: Record {
+    @Field var name: String = ""
+    @Field var icon: String = "folder"
+    @Field var color: String = "gray"
+    @Field var query: FolioSmartConditions = FolioSmartConditions()
 }
 
 struct FolioImportFile: Record {
@@ -96,10 +109,10 @@ public final class FolioNativeModule: Module {
         }.runOnQueue(queue)
 
         AsyncFunction("query") { (request: FolioQuery) throws -> [String: Any] in
-            let query = try FolioLibraryMapper.query(text: request.text, scope: request.scope,
-                collectionId: request.collectionId, facets: request.facets.map { ($0.kind, $0.value) },
-                offset: request.offset, limit: request.limit)
-            return FolioLibraryMapper.page(try self.requireEngine().queryLibrary(query: query))
+            let page = try FolioLibraryMapper.read(engine: self.requireEngine(), text: request.text, scope: request.scope,
+                collectionId: request.collectionId, smartFolderId: request.smartFolderId,
+                facets: request.facets.map { ($0.kind, $0.value) }, offset: request.offset, limit: request.limit)
+            return FolioLibraryMapper.page(page)
         }.runOnQueue(queue)
 
         AsyncFunction("importFonts") { (files: [FolioImportFile]) throws -> [String: Any] in
@@ -140,6 +153,49 @@ public final class FolioNativeModule: Module {
             let engine = try self.requireEngine()
             try engine.setCollectionMembers(collectionId: CollectionIdDto(value: id),
                 identityIds: identityIds.map { IdentityIdDto(value: $0) }, member: member)
+            return self.snapshot(try engine.loadCachedLibrary())
+        }.runOnQueue(queue)
+
+        AsyncFunction("getSmartFolder") { (id: String) throws -> [String: Any] in
+            FolioLibraryMapper.smartFolder(try self.requireEngine().getSmartFolder(id: SmartFolderIdDto(value: id)))
+        }.runOnQueue(queue)
+
+        AsyncFunction("saveSmartFolder") { (id: String?, input: FolioSmartInput) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            let query = try FolioLibraryMapper.conditions(text: input.query.text, facets: input.query.facets.map { ($0.kind, $0.value) })
+            let savedId: SmartFolderIdDto
+            if let id {
+                savedId = SmartFolderIdDto(value: id)
+                try engine.updateSmartFolderWithStyle(id: savedId, name: input.name, query: query, icon: input.icon, color: input.color)
+            } else {
+                savedId = try engine.createSmartFolderWithStyle(name: input.name, query: query, icon: input.icon, color: input.color)
+            }
+            return ["snapshot": self.snapshot(try engine.loadCachedLibrary()), "target": ["scope": "smart", "smartFolderId": savedId.value]]
+        }.runOnQueue(queue)
+
+        AsyncFunction("deleteSmartFolder") { (id: String) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            try engine.deleteSmartFolder(id: SmartFolderIdDto(value: id))
+            return self.snapshot(try engine.loadCachedLibrary())
+        }.runOnQueue(queue)
+
+        AsyncFunction("convertCollectionToSmart") { (id: String, input: FolioSmartInput) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            let query = try FolioLibraryMapper.conditions(text: input.query.text, facets: input.query.facets.map { ($0.kind, $0.value) })
+            let savedId = try engine.convertCollectionToSmartFolder(id: CollectionIdDto(value: id), name: input.name,
+                query: query, icon: input.icon, color: input.color)
+            return ["snapshot": self.snapshot(try engine.loadCachedLibrary()), "target": ["scope": "smart", "smartFolderId": savedId.value]]
+        }.runOnQueue(queue)
+
+        AsyncFunction("convertSmartToCollection") { (id: String, input: FolioCollectionInput) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            let saved = try engine.convertSmartFolderToCollection(id: SmartFolderIdDto(value: id), name: input.name, icon: input.icon, color: input.color)
+            return ["snapshot": self.snapshot(try engine.loadCachedLibrary()), "target": ["scope": "collection", "collectionId": saved.id.value]]
+        }.runOnQueue(queue)
+
+        AsyncFunction("recordRecent") { (id: String) throws -> [String: Any] in
+            let engine = try self.requireEngine()
+            try engine.recordRecent(identityId: IdentityIdDto(value: id))
             return self.snapshot(try engine.loadCachedLibrary())
         }.runOnQueue(queue)
 

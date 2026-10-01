@@ -50,7 +50,35 @@ enum FolioLibraryMapper {
          "damagedCount": value.health.damagedFiles, "collections": value.collections.map { collection in
             ["id": collection.id.value, "name": collection.name, "icon": collection.icon,
              "color": collection.color, "memberCount": collection.memberCount] as [String: Any]
+         }, "smartFolders": value.smartFolders.map { folder in
+            ["id": folder.id.value, "name": folder.name, "icon": folder.icon,
+             "color": folder.color, "matchCount": folder.matchCount] as [String: Any]
          }]
+    }
+
+    static func smartFolder(_ folder: SmartFolderDto) -> [String: Any] {
+        ["id": folder.id.value, "name": folder.name, "icon": folder.icon, "color": folder.color,
+         "matchCount": folder.matchCount, "query": ["text": folder.query.text ?? "",
+             "facets": folder.query.facets.map { ["kind": facetKey($0.kind), "value": $0.value] }]]
+    }
+
+    // 智慧范围交给 Rust 合并保存条件和临时浏览条件。
+    static func read(engine: FolioEngine, text: String, scope: String, collectionId: String?, smartFolderId: String?,
+                     facets: [(String, String)], offset: Int, limit: Int) throws -> LibraryPageDto {
+        guard scope == "smart" ? smartFolderId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false && collectionId == nil
+            : smartFolderId == nil else { throw invalidQuery() }
+        let request = try query(text: text, scope: scope == "smart" ? "all" : scope,
+            collectionId: collectionId, facets: facets, offset: offset, limit: limit)
+        if scope == "smart", let id = smartFolderId {
+            return try engine.querySmartFolder(id: SmartFolderIdDto(value: id), text: request.text,
+                facets: request.facets, offset: request.offset, limit: request.limit)
+        }
+        return try engine.queryLibrary(query: request)
+    }
+
+    static func conditions(text: String, facets: [(String, String)]) throws -> SmartFolderQueryDto {
+        let request = try query(text: text, scope: "all", collectionId: nil, facets: facets, offset: 0, limit: 1)
+        return SmartFolderQueryDto(text: request.text, facets: request.facets)
     }
 
     private static func invalidQuery() -> NSError {

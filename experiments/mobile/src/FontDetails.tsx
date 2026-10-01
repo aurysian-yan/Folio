@@ -4,16 +4,19 @@ import { useTranslation } from 'react-i18next';
 import { FlatList, PixelRatio, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { FontFace, FontFamily, LibrarySnapshot } from './library';
+import { PanelAction } from './panel-content';
 import { FamilyCollectionsPanel } from './CollectionsPanel';
 import { copyText, NativeFontPreview, type PreviewStatus } from './native';
 import { IconButton, type Theme } from './ui';
 
 // 字体二级页展示家族字款，并承接复制与收藏操作。
-export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotChange, onClose, onFavorite }: {
+export function FontDetails({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite }: {
   family: FontFamily;
   theme: Theme;
   snapshot: LibrarySnapshot | null;
   collectionId?: string;
+  recentError: string | null;
+  onRetryRecent: () => void;
   onSnapshotChange: (snapshot: LibrarySnapshot) => void;
   onClose: () => void;
   onFavorite: () => Promise<void>;
@@ -70,6 +73,8 @@ export function FontDetails({ family, theme, snapshot, collectionId, onSnapshotC
             contentContainerStyle={styles.content} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
             ListHeaderComponent={<View style={styles.summary}>
               <Text style={[styles.detail, { color: theme.secondary }]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
+              {recentError && <View><Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{recentError}</Text>
+                <PanelAction label={t('common.retry')} theme={theme} onPress={onRetryRecent} /></View>}
               {error && <Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{error}</Text>}
             </View>}
             renderItem={({ item }) => <FacePreview key={`${item.id}:${item.revisionId}`} face={item} familyName={family.displayName} theme={theme} />} />

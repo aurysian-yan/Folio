@@ -48,7 +48,7 @@ export function createTheme(dark: boolean, accent: AccentId): Theme {
   return { ...base, accent: accentValue, selection: withAlpha(accentValue, dark ? 0.25 : 0.2) };
 }
 
-export function IconButton({ label, onPress, children, theme, disabled, busy, selected, style, systemImage }: {
+export function IconButton({ label, onPress, children, theme, disabled, busy, selected, style, systemImage, primary = false }: {
   label: string;
   onPress: () => void;
   children: ReactNode;
@@ -58,11 +58,12 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
   selected?: boolean;
   style?: StyleProp<ViewStyle>;
   systemImage?: string;
+  primary?: boolean;
 }) {
   if (usesNativeControls && systemImage) {
     const size = StyleSheet.flatten(style)?.minWidth;
     return <NativeActionButton label={label} systemImage={systemImage} onPress={onPress}
-      disabled={disabled} color={selected ? theme.accent : theme.label} iconOnly
+      disabled={disabled} color={primary || selected ? theme.accent : theme.label} foregroundColor={primary ? theme.onAccent : undefined} prominent={primary} iconOnly
       diameter={typeof size === 'number' ? Math.max(32, size) : 44} />;
   }
   return (
@@ -70,7 +71,7 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
       accessibilityState={{ disabled: !!disabled, selected: !!selected, busy: !!busy }}
       disabled={disabled} onPress={onPress} hitSlop={8}
       style={({ pressed }) => [styles.iconButton, {
-        backgroundColor: theme.tab, borderColor: theme.border,
+        backgroundColor: primary ? theme.accent : theme.tab, borderColor: primary ? theme.accent : theme.border,
         opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
       }, style]}>
       {children}

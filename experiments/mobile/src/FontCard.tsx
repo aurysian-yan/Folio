@@ -1,7 +1,7 @@
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { FontFamily } from './library';
+import { representativeFace, type FontFamily } from './library';
 import { NativeFontPreview, type PreviewStatus } from './native';
 import { usePreferences } from './settings';
 import type { Theme } from './ui';
@@ -16,7 +16,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
   const { t } = useTranslation();
   const { preferences } = usePreferences();
   const [previewStatus, setPreviewStatus] = useState<{ key: string; status: PreviewStatus['status'] } | null>(null);
-  const face = family.faces.find((item) => /^(regular|normal|book|常规)$/i.test(item.styleName)) ?? family.faces[0];
+  const face = representativeFace(family);
   const variable = family.faces.some((item) => item.axes.length > 0);
   const previewKey = `${face?.id}:${face?.revisionId}`;
   const status = previewStatus?.key === previewKey ? previewStatus.status : null;

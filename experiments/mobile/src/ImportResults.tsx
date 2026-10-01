@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { LibraryPanel } from './LibraryPanel';
 import { summarizeImport, type ImportReport } from './library';
-import { NativeActionButton, usesNativeControls } from './native-controls';
 import type { Theme } from './ui';
 
 // 批量导入汇总与文件明细。
@@ -16,16 +15,7 @@ export function ImportResults({ report, visible, theme, onClose }: {
   if (!report) return null;
   const counts = summarizeImport(report.items);
   const labels = { imported: t('mobile.imported'), duplicate: t('mobile.skippedDuplicates'), failed: t('mobile.importFailed') };
-  return <Modal visible={visible} presentationStyle="pageSheet" animationType="none" onRequestClose={onClose}>
-    <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
-      <View accessibilityViewIsModal style={styles.screen}>
-        <View style={styles.header}>
-          <Text accessibilityRole="header" style={[styles.title, { color: theme.label }]}>{t('import.importResults')}</Text>
-          {usesNativeControls ? <NativeActionButton label={t('common.done')} color={theme.accent} onPress={onClose} plain />
-            : <Pressable accessibilityRole="button" onPress={onClose} style={styles.action}>
-              <Text style={{ color: theme.accent }}>{t('common.done')}</Text>
-            </Pressable>}
-        </View>
+  return <LibraryPanel visible={visible} title={t('import.importResults')} theme={theme} onClose={onClose}>
         <FlatList data={report.items} keyExtractor={(_, index) => String(index)}
           contentContainerStyle={styles.content} initialNumToRender={12}
           ListHeaderComponent={<Text style={[styles.summary, { color: theme.secondary }]}>
@@ -39,16 +29,10 @@ export function ImportResults({ report, visible, theme, onClose }: {
               {item.message ?? labels[item.status]}
             </Text>
           </View>} />
-      </View>
-    </SafeAreaView>
-  </Modal>;
+  </LibraryPanel>;
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  header: { paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 18, fontWeight: '600' },
-  action: { minHeight: 44, justifyContent: 'center' },
   content: { paddingHorizontal: 16, paddingBottom: 16 },
   summary: { fontSize: 14, paddingVertical: 12 },
   item: { paddingVertical: 12, gap: 8, borderBottomWidth: StyleSheet.hairlineWidth },

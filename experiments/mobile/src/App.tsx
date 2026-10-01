@@ -22,7 +22,7 @@ import { ImportResults } from './ImportResults';
 import { ViewModeMenu } from './ViewModeMenu';
 import { AndroidHeaderBackdrop, AndroidHeaderControls } from './HeaderControls';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
-import { LibraryError, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
+import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
 import { library } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
@@ -66,6 +66,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const { t } = useTranslation();
   const { scope } = target;
   const collectionId = target.scope === 'collection' ? target.collectionId : undefined;
+  const smartFolderId = target.scope === 'smart' ? target.smartFolderId : undefined;
   const scopeKey = targetKey(target);
   const ready = snapshot !== null;
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +111,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const scrollTopInset = Math.max(nativeInsets.contentTop ?? 0, nativeInsets.top + (sidebar ? 0 : headerHeight * 1.25));
   const androidContentTop = inset.top + headerHeight;
   const reservesWindowControls = usesNativeSidebar && !sidebar && Number(Platform.Version) >= 26;
-  const queryKey = JSON.stringify([scope, collectionId, queryText, selectedFacets, retry]);
+  const queryKey = JSON.stringify([scope, collectionId, smartFolderId, queryText, selectedFacets, retry]);
   const offset = pagination.key === queryKey && loadedQuery.key === queryKey ? pagination.offset : 0;
   const requestKey = JSON.stringify([queryKey, offset, libraryVersion]);
   const optionsKey = JSON.stringify([scopeKey, queryText, libraryVersion, retry]);
@@ -119,7 +120,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const shownError = initialError ?? error;
   const hasConditions = !!queryText || selectedFacets.length > 0;
   const scopeTitle = scope === 'collection' ? snapshot?.collections.find((item) => item.id === collectionId)?.name ?? t('collection.collection')
-    : scope === 'favorites' ? t('mobile.starredCollections') : scope === 'recent' ? t('mobile.recentTitle') : t('mobile.allFonts');
+    : scope === 'smart' ? snapshot?.smartFolders.find((item) => item.id === smartFolderId)?.name ?? t('navigation.smartCollections')
+    : scope === 'favorites' ? t('mobile.starredCollections') : scope === 'recent' ? t('macos.recentVisits') : t('mobile.allFonts');
   const loading = ready && loadedQuery.request !== requestKey;
   const page = loadedQuery.key === queryKey ? loadedQuery.page : emptyPage;
   const waitingForSearch = searchText.trim() !== queryText;
@@ -161,8 +163,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
-    const queryTarget: LibraryTarget = collectionId ? { scope: 'collection', collectionId }
-      : { scope: scope as 'all' | 'favorites' | 'recent' };
+    const queryTarget: LibraryTarget = smartFolderId ? { scope: 'smart', smartFolderId }
+      : collectionId ? { scope: 'collection', collectionId } : { scope: scope as 'all' | 'favorites' | 'recent' };
     library.query({ ...queryTarget, text: queryText, facets: [], offset: 0, limit: 1 }, controller.signal)
       .then((result) => {
         if (!controller.signal.aborted) setFacetOptions({ key: optionsKey, options: result.facets });
@@ -170,13 +172,13 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         if (!controller.signal.aborted) setFacetFailure({ key: optionsKey, message: t('mobile.errorFilters') });
       });
     return () => controller.abort();
-  }, [ready, scope, collectionId, queryText, optionsKey, t]);
+  }, [ready, scope, collectionId, smartFolderId, queryText, optionsKey, t]);
 
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
-    const queryTarget: LibraryTarget = collectionId ? { scope: 'collection', collectionId }
-      : { scope: scope as 'all' | 'favorites' | 'recent' };
+    const queryTarget: LibraryTarget = smartFolderId ? { scope: 'smart', smartFolderId }
+      : collectionId ? { scope: 'collection', collectionId } : { scope: scope as 'all' | 'favorites' | 'recent' };
     const previous = loadedQueryRef.current;
     const reloading = previous.key === queryKey && previous.version !== libraryVersion;
     async function readPage() {
@@ -209,7 +211,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       }
     });
     return () => controller.abort();
-  }, [ready, queryText, scope, collectionId, selectedFacets, offset, queryKey, requestKey, libraryVersion, t]);
+  }, [ready, queryText, scope, collectionId, smartFolderId, selectedFacets, offset, queryKey, requestKey, libraryVersion, t]);
 
   async function importFont() {
     if (!ready || importInFlight.current) return;
@@ -309,7 +311,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
                 {importError ?? (importCounts && t('mobile.importSummary', { imported: importCounts.imported, duplicate: importCounts.duplicate, failed: importCounts.failed }))}
               </Text>
               {usesNativeControls ? <NativeActionButton label={importError ? t('mobile.reselect') : t('mobile.viewDetails')} color={theme.accent}
-                onPress={importError ? importFont : () => setImportDetailsOpen(true)} disabled={importing} plain />
+                onPress={importError ? importFont : () => setImportDetailsOpen(true)} disabled={importing} />
                 : <Pressable accessibilityRole="button" disabled={importing}
                   onPress={importError ? importFont : () => setImportDetailsOpen(true)} style={styles.retry}>
                   <Text style={{ color: theme.accent }}>{importError ? t('mobile.reselect') : t('mobile.viewDetails')}</Text>
@@ -317,7 +319,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
             </View>}
             {shownError && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
               <Text accessibilityRole="alert" style={[styles.noticeText, { color: theme.danger }]}>{shownError}</Text>
-              {usesNativeControls ? <NativeActionButton label={t('common.retry')} color={theme.accent} onPress={retryQuery} plain />
+              {usesNativeControls ? <NativeActionButton label={t('common.retry')} color={theme.accent} onPress={retryQuery} />
                 : <Pressable accessibilityRole="button" onPress={retryQuery} style={styles.retry}>
                 <Text style={{ color: theme.accent }}>{t('common.retry')}</Text>
               </Pressable>}
@@ -328,9 +330,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           !ready || loading || waitingForSearch ? (shownError ? null : <ActivityIndicator style={styles.empty} color={theme.accent} accessibilityLabel={t('mobile.loadingLibrary')} />)
             : shownError ? null : <View style={styles.empty}>
               <Text style={[styles.emptyTitle, { color: theme.label }]}>{hasConditions ? t('mobile.noMatch')
-                : page.unresolvedScopeItems > 0 ? t('mobile.noFonts') : scope === 'favorites' ? t('mobile.noFavorites') : scope === 'collection' ? t('collection.empty') : scope === 'recent' ? t('mobile.noRecent') : t('mobile.startFromFirst')}</Text>
+                : page.unresolvedScopeItems > 0 ? t('mobile.noFonts') : scope === 'favorites' ? t('mobile.noFavorites') : scope === 'collection' || scope === 'smart' ? t('collection.empty') : scope === 'recent' ? t('mobile.noRecent') : t('mobile.startFromFirst')}</Text>
               <Text style={[styles.emptyDetail, { color: theme.secondary }]}>{hasConditions ? t('mobile.adjustSearch')
-                : page.unresolvedScopeItems > 0 ? t('collection.keepMembersNote') : scope === 'favorites' ? t('collection.emptyHint') : scope === 'collection' ? t('collection.favoriteInDetails') : t('mobile.importHint')}</Text>
+                : page.unresolvedScopeItems > 0 ? t('collection.keepMembersNote') : scope === 'favorites' ? t('collection.emptyHint') : scope === 'collection' ? t('collection.favoriteInDetails') : scope === 'smart' ? t('filters.smartHint') : scope === 'recent' ? t('mobile.recentHint') : t('mobile.importHint')}</Text>
               {selectedFacets.length > 0 && <PanelAction label={t('mobile.clearFilters')} theme={theme} onPress={() => updateBrowse({ facets: [] })} />}
               {!hasConditions && scope === 'all' && (usesNativeControls ? <NativeActionButton label={importing ? t('mobile.loadingImport') : t('import.importFonts')}
                 systemImage="plus" color={theme.accent} onPress={importFont} disabled={importing} prominent />
@@ -367,7 +369,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           <Image source={require('../assets/design/folio.svg')} style={styles.logo}
             tintColor={theme.label} contentFit="contain" accessibilityLabel="Folio" />
           <Text numberOfLines={1} style={[styles.libraryCount, { color: theme.muted }]}>
-            {snapshot ? t('mobile.localFamilyCount', { count: snapshot.familyCount }) : t('mobile.localFonts')}
+            {scope === 'recent' ? t('macos.recentVisits') : snapshot ? t('mobile.localFamilyCount', { count: snapshot.familyCount }) : t('mobile.localFonts')}
           </Text>
         </Animated.View>}
         {Platform.OS === 'android' ? <AndroidHeaderControls theme={theme} sourceId={sourceId} active={active}
@@ -413,6 +415,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         totalMatches={page.totalMatches} onChange={(facets) => updateBrowse({ facets })}
         onClose={() => setFilterOpen(false)} onRetry={retryQuery} />
       <CollectionsPanel visible={collectionsOpen && active} theme={theme} target={target} snapshot={snapshot}
+        currentConditions={savedConditions({ text: searchText, facets: selectedFacets })} libraryVersion={libraryVersion}
         onSnapshot={onSnapshotChange} onSelect={onTargetChange} onClose={() => setCollectionsOpen(false)} />
       <ImportResults report={importReport} visible={importDetailsOpen && active} theme={theme}
         onClose={() => setImportDetailsOpen(false)} />
@@ -462,15 +465,19 @@ function MobileApp() {
   const [initialError, setInitialError] = useState<string | null>(null);
   const [libraryTarget, setLibraryTarget] = useState<LibraryTarget>({ scope: 'all' });
   const [fontPage, setFontPage] = useState<FontFamily | null>(null);
+  const recentAttempt = useRef(0);
+  const [recentError, setRecentError] = useState<string | null>(null);
+  const [fontPageCollectionId, setFontPageCollectionId] = useState<string | undefined>();
   const [fontPageVisible, setFontPageVisible] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
   const [settingsPageVisible, setSettingsPageVisible] = useState(false);
   const destination: NativeDestination = sidebar && nativeDestination === 'local'
     ? libraryTarget.scope === 'favorites' ? 'favorites'
-      : libraryTarget.scope === 'collection' ? `collection:${libraryTarget.collectionId}` : 'local'
+      : libraryTarget.scope === 'collection' ? `collection:${libraryTarget.collectionId}`
+        : libraryTarget.scope === 'smart' ? `smart:${libraryTarget.smartFolderId}` : 'local'
     : nativeDestination;
-  const screenTarget: LibraryTarget = sidebar && nativeDestination === 'recent' ? { scope: 'recent' } : libraryTarget;
-  const libraryActive = nativeDestination === 'local' || (sidebar && nativeDestination === 'recent');
+  const screenTarget = libraryTarget;
+  const libraryActive = nativeDestination === 'local';
 
   useEffect(() => {
     let mounted = true;
@@ -483,8 +490,8 @@ function MobileApp() {
   const applySnapshot = useCallback((value: LibrarySnapshot) => {
     setSnapshot(value);
     setLibraryVersion((version) => version + 1);
-    setLibraryTarget((target) => target.scope === 'collection' && !value.collections.some((item) => item.id === target.collectionId)
-      ? { scope: 'all' } : target);
+    setLibraryTarget((target) => (target.scope === 'collection' && !value.collections.some((item) => item.id === target.collectionId))
+      || (target.scope === 'smart' && !value.smartFolders.some((item) => item.id === target.smartFolderId)) ? { scope: 'all' } : target);
   }, []);
 
   function selectTarget(target: LibraryTarget) { setLibraryTarget(target); setNativeDestination('local'); }
@@ -492,12 +499,23 @@ function MobileApp() {
     Keyboard.dismiss();
     if (value === 'favorites') selectTarget({ scope: 'favorites' });
     else if (value.startsWith('collection:')) selectTarget({ scope: 'collection', collectionId: value.slice('collection:'.length) });
+    else if (value.startsWith('smart:')) selectTarget({ scope: 'smart', smartFolderId: value.slice('smart:'.length) });
     else {
       setNativeDestination(value);
       if (value === 'local' && sidebar) setLibraryTarget({ scope: 'all' });
     }
   }
-  function openFamily(family: FontFamily) { setFontPage(family); setFontPageVisible(true); }
+  async function recordVisit(family: FontFamily) {
+    const attempt = ++recentAttempt.current;
+    const face = representativeFace(family);
+    if (!face) return;
+    try { applySnapshot(await library.recordRecent(face.identityId)); if (attempt === recentAttempt.current) setRecentError(null); }
+    catch { if (attempt === recentAttempt.current) setRecentError(t('mobile.errorRecent')); }
+  }
+  function openFamily(family: FontFamily, target: LibraryTarget = libraryTarget) {
+    setFontPageCollectionId(target.scope === 'collection' ? target.collectionId : undefined);
+    setRecentError(null); setFontPage(family); setFontPageVisible(true); void recordVisit(family);
+  }
 
   async function favorite() {
     if (!fontPage) return;
@@ -514,11 +532,18 @@ function MobileApp() {
 
   function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
   const settingsContent = <SettingsScreen theme={theme} onOpenPage={openSettingsPage} />;
+  const recentContent = <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
+    sidebar={sidebar} destination="recent" target={{ scope: 'recent' }} snapshot={snapshot} libraryVersion={libraryVersion}
+    initialError={initialError} defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady}
+    showImportResults={preferences.importShowResults} onSnapshotChange={applySnapshot} onOpenFamily={(family) => openFamily(family, { scope: 'recent' })}
+    onTargetChange={(target) => { selectTarget(target); setTab('local'); }}
+    onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
+    active={usesNativeControls ? nativeDestination === 'recent' : tab === 'recent'} />;
   const content = usesNativeControls ? (
     <View style={[styles.app, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
-        settings={settingsContent} onDestinationChange={navigate}>
+        settings={settingsContent} recent={recentContent} onDestinationChange={navigate}>
         <LibraryScreen theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
           target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
           defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
@@ -540,7 +565,8 @@ function MobileApp() {
             onSnapshotChange={applySnapshot} onTargetChange={setLibraryTarget}
             onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />
         </View>
-        {tab !== 'local' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
+        <View style={[styles.screen, tab !== 'recent' && styles.hidden]}>{recentContent}</View>
+        {tab !== 'local' && tab !== 'recent' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
           style={[styles.screen, { backgroundColor: theme.background }]}>
           {tab === 'settings' ? settingsContent : <View style={styles.screen} />}
         </NavigationBackdrop>}
@@ -553,7 +579,8 @@ function MobileApp() {
 
   const detail = fontPage ? (
     <FontDetails key={fontPage.id} family={fontPage} theme={theme}
-      snapshot={snapshot} collectionId={screenTarget.scope === 'collection' ? screenTarget.collectionId : undefined}
+      recentError={recentError} onRetryRecent={() => { if (fontPage) void recordVisit(fontPage); }}
+      snapshot={snapshot} collectionId={fontPageCollectionId}
       onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />
   ) : settingsPage ? settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false)) : null;
 

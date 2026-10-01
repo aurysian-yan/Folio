@@ -7,7 +7,7 @@ import {
 import {
   accessibilityLabel, animation, Animation, autocorrectionDisabled, background, buttonBorderShape,
   buttonStyle, contentShape, controlSize, disabled, font, foregroundStyle, frame, glassEffect, glassEffectId,
-  labelStyle, listStyle, menuIndicator, menuStyle, navigationSplitViewStyle, navigationTitle, onSubmit, padding, submitLabel,
+  labelStyle, listStyle, menuIndicator, menuStyle, navigationSplitViewStyle, navigationTitle, onSubmit, opacity, padding, submitLabel,
   shapes, tabViewStyle, tag, textFieldStyle, textInputAutocapitalization, tint,
 } from '@expo/ui/swift-ui/modifiers';
 import { requireNativeView } from 'expo';
@@ -28,29 +28,30 @@ export const NativeScrollContainer = requireNativeView<NativeScrollContainerProp
 const NativeTabContent = requireNativeView<{ children: React.ReactNode }>('FolioNative', 'FolioTabContent');
 
 // 原生玻璃尺寸与控件边界保持一致。
-function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = false) {
+function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = false, prominent = false) {
   return [
-    buttonStyle(glass || plain ? 'plain' : 'bordered'),
+    buttonStyle(glass || plain ? 'plain' : prominent ? 'borderedProminent' : 'bordered'),
     controlSize(diameter < toolbarHeight ? 'small' : 'large'),
     buttonBorderShape('circle'), labelStyle('iconOnly'),
     font({ size: diameter < toolbarHeight ? 14 : 20 }), tint(color),
     frame({ width: diameter, height: diameter }),
-    ...(glass && !plain ? [glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'circle' })] : []),
+    ...(glass && !plain ? [glassEffect({ glass: { variant: 'regular', interactive: true, ...(prominent ? { tint: color } : {}) }, shape: 'circle' })] : []),
   ];
 }
 
 // iPad 常规窗口使用原生分栏，紧凑窗口沿用 iPhone 标签栏。
-export function NativeNavigation({ children, settings, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
+export function NativeNavigation({ children, settings, recent, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
   const { t } = useTranslation();
   const [visibility, setVisibility] = useState<NavigationSplitViewVisibility>('all');
   const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
 
   if (sidebar) {
-    const row = (id: NativeDestination, title: string, symbol: ButtonProps['systemImage'], count?: number, color?: string) => (
+    const row = (id: NativeDestination, title: string, symbol: ButtonProps['systemImage'], count?: number, color?: string, smart = false) => (
       <HStack key={id} modifiers={[tag(id)]}>
         {color ? <><Image systemName={symbol!} modifiers={[foregroundStyle(color)]} /><Text>{title}</Text></>
           : <Label title={title} systemImage={symbol} />}
         <Spacer />
+        {smart && <Image systemName="sparkles" modifiers={[foregroundStyle({ type: 'hierarchical', style: 'secondary' })]} />}
         {count !== undefined && <Text modifiers={[foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>{count}</Text>}
       </HStack>
     );
@@ -62,7 +63,7 @@ export function NativeNavigation({ children, settings, theme, sidebar, destinati
           <NavigationSplitView.Sidebar>
             <List selection={[destination]} onSelectionChange={(selection) => {
               const value = selection[0];
-              if (value === 'local' || value === 'recent' || value === 'favorites' || value === 'cloud' || value === 'settings' || (typeof value === 'string' && value.startsWith('collection:'))) {
+              if (value === 'local' || value === 'recent' || value === 'favorites' || value === 'cloud' || value === 'settings' || (typeof value === 'string' && (value.startsWith('collection:') || value.startsWith('smart:')))) {
                 onDestinationChange(value as NativeDestination);
                 setCompactColumn('detail');
               }
@@ -72,15 +73,17 @@ export function NativeNavigation({ children, settings, theme, sidebar, destinati
                 {row('recent', t('navigation.recent'), 'clock', snapshot?.recentCount)}
                 {row('favorites', t('mobile.starredCollections'), 'star')}
               </Section>
-              {!!snapshot?.collections.length && <Section title={t('navigation.collections')}>
-                {snapshot.collections.map((collection) => row(`collection:${collection.id}`, collection.name,
+              {(!!snapshot?.collections.length || !!snapshot?.smartFolders.length) && <Section title={t('navigation.collections')}>
+                {snapshot?.smartFolders.map((folder) => row(`smart:${folder.id}`, folder.name,
+                  collectionSystemImage(folder.icon) as ButtonProps['systemImage'], folder.matchCount, collectionColorValue(folder.color), true))}
+                {snapshot?.collections.map((collection) => row(`collection:${collection.id}`, collection.name,
                   collectionSystemImage(collection.icon) as ButtonProps['systemImage'], collection.memberCount, collectionColorValue(collection.color)))}
               </Section>}
               <Section title={t('navigation.cloud')}>{row('cloud', t('mobile.cloudFonts'), 'cloud')}</Section>
               <Section>{row('settings', t('navigation.settings'), 'gear')}</Section>
             </List>
           </NavigationSplitView.Sidebar>
-          <NavigationSplitView.Detail>{destination === 'settings' ? settings : children}</NavigationSplitView.Detail>
+          <NavigationSplitView.Detail>{destination === 'settings' ? settings : destination === 'recent' ? recent : children}</NavigationSplitView.Detail>
         </NavigationSplitView>
       </Host>
     );
@@ -98,7 +101,7 @@ export function NativeNavigation({ children, settings, theme, sidebar, destinati
           </NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="recent" label={t('navigation.recent')} systemImage="clock">
-          <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
+          <NativeTabContent><RNHostView><View style={styles.fill}>{recent}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="cloud" label={t('navigation.cloud')} systemImage="cloud">
           <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
@@ -251,17 +254,19 @@ export function NativeHeaderControls({ theme, mode, width, searchOpen, searchTex
 }
 
 export function NativeActionButton({ label, systemImage, color, onPress, disabled: unavailable,
-  prominent = false, iconOnly = false, diameter = 44, plain = false }: NativeActionProps) {
+  prominent = false, iconOnly = false, diameter = 44, plain = false, minimumWidth, foregroundColor }: NativeActionProps) {
   return (
     <Host matchContents={!iconOnly} style={iconOnly ? { width: diameter, height: diameter } : undefined}>
       <Button label={iconOnly ? undefined : label} systemImage={systemImage as ButtonProps['systemImage']} onPress={onPress}
-        modifiers={iconOnly ? [...iconButtonModifiers(color, diameter, plain), disabled(!!unavailable), accessibilityLabel(label)] : [
+        modifiers={iconOnly ? [...iconButtonModifiers(color, diameter, plain, prominent), disabled(!!unavailable),
+          opacity(unavailable ? 0.5 : 1), accessibilityLabel(label)] : [
           buttonStyle(plain ? 'plain' : glass ? (prominent ? 'glassProminent' : 'glass') : (prominent ? 'borderedProminent' : 'bordered')),
           labelStyle('titleAndIcon'), disabled(!!unavailable),
-          controlSize('large'), frame({ minHeight: toolbarHeight }), tint(color), accessibilityLabel(label),
+          controlSize('large'), buttonBorderShape('capsule'), font({ size: 16, weight: 'semibold' }),
+          frame({ minHeight: toolbarHeight, minWidth: minimumWidth }), tint(color), accessibilityLabel(label),
         ]}>
         {iconOnly && systemImage ? <Image systemName={systemImage as ButtonProps['systemImage']}
-          size={diameter < toolbarHeight ? 14 : 20} color={color}
+          size={diameter < toolbarHeight ? 14 : 20} color={foregroundColor ?? color}
           modifiers={[frame({ width: diameter, height: diameter }), contentShape(shapes.circle())]} /> : undefined}
       </Button>
     </Host>

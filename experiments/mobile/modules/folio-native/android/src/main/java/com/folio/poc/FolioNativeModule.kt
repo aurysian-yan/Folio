@@ -4,6 +4,7 @@ import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import com.folio.poc.ffi.SmartFolderIdDto
 import com.folio.poc.ffi.CollectionIdDto
 import com.folio.poc.ffi.FolioEngine
 import com.folio.poc.ffi.FolioOnline
@@ -24,6 +25,7 @@ class FolioQuery : Record {
     @Field var text: String = ""
     @Field var scope: String = "all"
     @Field var collectionId: String? = null
+    @Field var smartFolderId: String? = null
     @Field var facets: List<FolioFacetSelection> = emptyList()
     @Field var offset: Long = 0
     @Field var limit: Int = 40
@@ -38,6 +40,18 @@ class FolioCollectionInput : Record {
     @Field var name: String = ""
     @Field var icon: String = "folder"
     @Field var color: String = "gray"
+}
+
+class FolioSmartConditions : Record {
+    @Field var text: String = ""
+    @Field var facets: List<FolioFacetSelection> = emptyList()
+}
+
+class FolioSmartInput : Record {
+    @Field var name: String = ""
+    @Field var icon: String = "folder"
+    @Field var color: String = "gray"
+    @Field var query: FolioSmartConditions = FolioSmartConditions()
 }
 
 class FolioImportFile : Record {
@@ -79,9 +93,8 @@ class FolioNativeModule : Module() {
 
         AsyncFunction("query") { request: FolioQuery, promise: Promise ->
             perform(promise) {
-                val query = FolioLibraryMapper.query(request.text, request.scope, request.collectionId,
-                    request.facets.map { it.kind to it.value }, request.offset, request.limit)
-                FolioLibraryMapper.page(requireEngine().queryLibrary(query))
+                FolioLibraryMapper.page(FolioLibraryMapper.read(requireEngine(), request.text, request.scope, request.collectionId,
+                    request.smartFolderId, request.facets.map { it.kind to it.value }, request.offset, request.limit))
             }
         }
 
@@ -128,6 +141,51 @@ class FolioNativeModule : Module() {
         AsyncFunction("setCollectionMembers") { id: String, identityIds: List<String>, member: Boolean, promise: Promise ->
             perform(promise) {
                 requireEngine().setCollectionMembers(CollectionIdDto(id), identityIds.map { IdentityIdDto(it) }, member)
+                snapshot(requireEngine().loadCachedLibrary())
+            }
+        }
+
+        AsyncFunction("getSmartFolder") { id: String, promise: Promise ->
+            perform(promise) { FolioLibraryMapper.smartFolder(requireEngine().getSmartFolder(SmartFolderIdDto(id))) }
+        }
+
+        AsyncFunction("saveSmartFolder") { id: String?, input: FolioSmartInput, promise: Promise ->
+            perform(promise) {
+                val engine = requireEngine()
+                val query = FolioLibraryMapper.conditions(input.query.text, input.query.facets.map { it.kind to it.value })
+                val savedId = if (id == null) engine.createSmartFolderWithStyle(input.name, query, input.icon, input.color)
+                    else SmartFolderIdDto(id).also { engine.updateSmartFolderWithStyle(it, input.name, query, input.icon, input.color) }
+                mapOf("snapshot" to snapshot(engine.loadCachedLibrary()), "target" to mapOf("scope" to "smart", "smartFolderId" to savedId.value))
+            }
+        }
+
+        AsyncFunction("deleteSmartFolder") { id: String, promise: Promise ->
+            perform(promise) {
+                requireEngine().deleteSmartFolder(SmartFolderIdDto(id))
+                snapshot(requireEngine().loadCachedLibrary())
+            }
+        }
+
+        AsyncFunction("convertCollectionToSmart") { id: String, input: FolioSmartInput, promise: Promise ->
+            perform(promise) {
+                val engine = requireEngine()
+                val query = FolioLibraryMapper.conditions(input.query.text, input.query.facets.map { it.kind to it.value })
+                val savedId = engine.convertCollectionToSmartFolder(CollectionIdDto(id), input.name, query, input.icon, input.color)
+                mapOf("snapshot" to snapshot(engine.loadCachedLibrary()), "target" to mapOf("scope" to "smart", "smartFolderId" to savedId.value))
+            }
+        }
+
+        AsyncFunction("convertSmartToCollection") { id: String, input: FolioCollectionInput, promise: Promise ->
+            perform(promise) {
+                val engine = requireEngine()
+                val saved = engine.convertSmartFolderToCollection(SmartFolderIdDto(id), input.name, input.icon, input.color)
+                mapOf("snapshot" to snapshot(engine.loadCachedLibrary()), "target" to mapOf("scope" to "collection", "collectionId" to saved.id.value))
+            }
+        }
+
+        AsyncFunction("recordRecent") { id: String, promise: Promise ->
+            perform(promise) {
+                requireEngine().recordRecent(IdentityIdDto(id))
                 snapshot(requireEngine().loadCachedLibrary())
             }
         }

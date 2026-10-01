@@ -1,10 +1,9 @@
-import { CaretDownIcon, CaretUpIcon, CheckIcon } from 'phosphor-react-native';
-import { useState } from 'react';
+import { CheckIcon } from 'phosphor-react-native';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { facetTitles, mergeFacetOptions, normalizeFacets, type FacetKind, type FacetOption, type FacetSelection } from './library';
 import { FilterDrawer, FilterList } from './FilterDrawer';
-import { PanelAction, panelStyles } from './panel-content';
+import { PanelAction, PanelSection, panelStyles } from './panel-content';
 import type { Theme } from './ui';
 
 // 筛选直接更新当前查询，候选与计数保持 Rust 语义。
@@ -46,20 +45,13 @@ export function FilterPanel({ visible, theme, options, counts, selected, loading
 }
 
 // 分类卡片沿用桌面折叠与标签流布局，触摸按钮采用移动端标准高度。
-function FilterGroup({ title, options, selected, theme, loading, onToggle }: {
+export function FilterGroup({ title, options, selected, theme, loading, onToggle }: {
   title: string; options: FacetOption[]; selected: FacetSelection[]; theme: Theme;
   loading: boolean; onToggle: (option: FacetSelection) => void;
 }) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-  const Chevron = expanded ? CaretUpIcon : CaretDownIcon;
-  return <View style={[styles.card, { backgroundColor: theme.surface }]}>
-    <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ expanded }}
-      onPress={() => setExpanded((value) => !value)} style={styles.header}>
-      <Text style={[styles.title, { color: theme.label }]}>{title}</Text>
-      <Chevron size={16} color={theme.secondary} />
-    </Pressable>
-    {expanded && <View style={styles.options}>
+  return <PanelSection title={title} theme={theme} initiallyExpanded={false}>
+    <View style={styles.options}>
       {options.map((option) => {
         const checked = selected.some((facet) => facet.kind === option.kind && facet.value === option.value);
         const color = checked ? theme.onAccent : theme.label;
@@ -74,15 +66,12 @@ function FilterGroup({ title, options, selected, theme, loading, onToggle }: {
           <Text style={[styles.count, { color }]}>{loading ? '…' : option.familyCount}</Text>
         </Pressable>;
       })}
-    </View>}
-  </View>;
+    </View>
+  </PanelSection>;
 }
 
 const styles = StyleSheet.create({
-  card: { marginTop: 8, padding: 12, borderRadius: 24 },
-  header: { minHeight: 44, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 16, fontWeight: '600' },
-  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 8 },
+  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { minWidth: 44, minHeight: 40, maxWidth: '100%', paddingHorizontal: 14, paddingVertical: 6,
     borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
   label: { flexShrink: 1, fontSize: 14, lineHeight: 20, fontWeight: '500' },

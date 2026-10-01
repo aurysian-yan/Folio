@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createLibraryClient, LibraryError, mergeFacetOptions, normalizeFacets, summarizeImport, targetKey, type LibraryBridge, type LibraryPage, type LibrarySnapshot } from './library.ts';
+import { createLibraryClient, LibraryError, mergeFacetOptions, normalizeFacets, summarizeImport, targetKey, savedConditions, representativeFace, mergeSmartConditions, hasSmartConditions, type LibraryBridge, type LibraryPage, type LibrarySnapshot } from './library.ts';
 
 const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
-const emptySnapshot: LibrarySnapshot = { familyCount: 0, faceCount: 0, variableFamilyCount: 0, recentCount: 0, damagedCount: 0, collections: [] };
+const emptySnapshot: LibrarySnapshot = { familyCount: 0, faceCount: 0, variableFamilyCount: 0, recentCount: 0, damagedCount: 0, collections: [], smartFolders: [] };
 const query = { text: '衬线', scope: 'all' as const, offset: 40, limit: 40 };
 
 function mockBridge(run: LibraryBridge['query']): LibraryBridge {
@@ -16,6 +16,12 @@ function mockBridge(run: LibraryBridge['query']): LibraryBridge {
     updateCollection: async () => emptySnapshot,
     deleteCollection: async () => emptySnapshot,
     setCollectionMembers: async () => emptySnapshot,
+    getSmartFolder: async () => ({ id: 's', name: '智慧', icon: 'folder', color: 'gray', matchCount: 0, query: { text: '', facets: [] } }),
+    saveSmartFolder: async () => ({ snapshot: emptySnapshot, target: { scope: 'smart', smartFolderId: 's' } }),
+    deleteSmartFolder: async () => emptySnapshot,
+    convertCollectionToSmart: async () => ({ snapshot: emptySnapshot, target: { scope: 'smart', smartFolderId: 's' } }),
+    convertSmartToCollection: async () => ({ snapshot: emptySnapshot, target: { scope: 'collection', collectionId: 'm' } }),
+    recordRecent: async () => emptySnapshot,
     query: run,
   };
 }
@@ -156,4 +162,68 @@ test('成员操作传递完整身份集合，返回后端快照，失败不伪�
   const cause = new Error('写入失败');
   bridge.deleteCollection = async () => { throw cause; };
   await assert.rejects(client.deleteCollection('a'), (error) => error === cause);
+});
+
+
+test('智慧查询透传临时条件，计数与排序由 Rust 返回', async () => {
+  const request = { ...query, scope: 'smart' as const, smartFolderId: 's', facets: [{ kind: 'state' as const, value: 'favorite' }] };
+  const client = createLibraryClient(mockBridge(async (received) => { assert.deepEqual(received, request); return emptyPage; }));
+  assert.equal(await client.query(request), emptyPage);
+  assert.equal(targetKey(request), 'smart:s');
+  for (const invalid of [{ smartFolderId: '' }, { collectionId: 'm' }, { scope: 'all' }]) {
+    assert.throws(() => client.query({ ...request, ...invalid } as typeof request), LibraryError);
+  }
+});
+
+test('保存智慧条件去除范围、分页与滚动，草稿与持久值没有共享引用', async () => {
+  const draft = { text: ' Lato ', facets: [{ kind: 'weight' as const, value: '400' }], scope: 'recent', offset: 80, scrollOffset: 200 };
+  const saved = savedConditions(draft);
+  assert.deepEqual(saved, { text: 'Lato', facets: [{ kind: 'weight', value: '400' }] });
+  draft.facets[0]!.value = '700';
+  assert.equal(saved.facets[0]!.value, '400');
+  const bridge = mockBridge(async () => emptyPage);
+  let received;
+  bridge.saveSmartFolder = async (id, input) => { received = { id, input }; return { snapshot: emptySnapshot, target: { scope: 'smart', smartFolderId: 's' } }; };
+  await createLibraryClient(bridge).saveSmartFolder(null, { name: '常规', icon: 'folder', color: 'blue', query: saved });
+  assert.deepEqual(received, { id: null, input: { name: '常规', icon: 'folder', color: 'blue', query: saved } });
+});
+
+test('互转使用专属原生事务，失败不伪造快照或成员', async () => {
+  const bridge = mockBridge(async () => emptyPage);
+  const input = { name: '字库', icon: 'books', color: 'blue', query: { text: 'Lato', facets: [] } };
+  bridge.convertCollectionToSmart = async (id, received) => {
+    assert.equal(id, 'm'); assert.deepEqual(received, input);
+    return { snapshot: emptySnapshot, target: { scope: 'smart', smartFolderId: 's' } };
+  };
+  const client = createLibraryClient(bridge);
+  assert.deepEqual((await client.convertCollectionToSmart('m', input)).target, { scope: 'smart', smartFolderId: 's' });
+  const cause = new Error('冲突');
+  bridge.convertSmartToCollection = async () => { throw cause; };
+  await assert.rejects(client.convertSmartToCollection('s', input), (error) => error === cause);
+});
+
+test('访问记录使用卡片代表字款身份，最近查询保持 Rust 顺序', async () => {
+  const face = (id: string, styleName: string) => ({ id, identityId: id, styleName, revisionId: '', sourcePath: null, faceIndex: 0, axes: [] });
+  const family = { id: 'f', displayName: 'Lato', identityIds: ['bold', 'regular'], matchedFaceIds: [], isFavorite: false, faces: [face('bold', 'Bold'), face('regular', 'Regular')] };
+  assert.equal(representativeFace(family)?.identityId, 'regular');
+  const bridge = mockBridge(async () => ({ ...emptyPage, families: [family, { ...family, id: 'a' }] }));
+  bridge.recordRecent = async (id) => { assert.equal(id, 'regular'); return emptySnapshot; };
+  const client = createLibraryClient(bridge);
+  assert.equal(await client.recordRecent(representativeFace(family)!.identityId), emptySnapshot);
+  assert.deepEqual((await client.query({ ...query, scope: 'recent' })).families.map((item) => item.id), ['f', 'a']);
+});
+
+
+test('统一编辑器按条件区分手动与智慧，新建继承智慧范围合并条件', () => {
+  assert.equal(hasSmartConditions({ text: '  ', facets: [] }), false);
+  assert.equal(hasSmartConditions({ text: 'Lato', facets: [] }), true);
+  const original = { text: 'Lato', facets: [{ kind: 'weight' as const, value: '400' }] };
+  const merged = mergeSmartConditions(original, { text: 'Regular', facets: [
+    { kind: 'weight', value: '700' }, { kind: 'weight', value: '400' }, { kind: 'state', value: 'favorite' },
+  ] });
+  assert.equal(hasSmartConditions(merged), true);
+  assert.deepEqual(merged, { text: 'Lato Regular', facets: [{ kind: 'state', value: 'favorite' },
+    { kind: 'weight', value: '400' }, { kind: 'weight', value: '700' }] });
+  merged.facets[1]!.value = '900';
+  assert.equal(original.facets[0]!.value, '400');
 });

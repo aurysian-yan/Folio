@@ -5,6 +5,8 @@
     "cancel": "Cancel",
     "save": "Save",
     "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
     "remove": "Remove",
     "renameEllipsis": "Rename…",
     "done": "Done",
@@ -646,7 +648,7 @@
     "loadingFilters": "Loading filters",
     "noFonts": "No fonts available",
     "noMatch": "No matching fonts found",
-    "noRecent": "No recently added fonts yet",
+    "noRecent": "No recently visited fonts yet",
     "noFavorites": "No favorite fonts yet",
     "errorLibrary": "Couldn't open the library. Please try again.",
     "errorLibraryRead": "The library is temporarily unavailable. Please try again.",
@@ -716,7 +718,12 @@
     "reselect": "Choose Again",
     "unresolvedMembers": "{{count}} members unavailable",
     "noFilterOptions": "No filters are available for the current scope.",
-    "loadingCount": "Loading counts"
+    "loadingCount": "Loading counts",
+    "recentHint": "Fonts will appear here after you open their details.",
+    "errorRecent": "Could not record this visit. Try again.",
+    "errorCollectionRead": "Could not read the collection. Try again.",
+    "smartFolderCount": "{{name}}, {{count}} matching fonts",
+    "swipeCollection": "Swipe left or open more actions to edit or delete this collection"
   },
   "macos": {
     "aboutSubtitle": "Cross-device font asset manager",
@@ -767,5 +774,12 @@
     "viewConflicts": "View Conflicts",
     "sectionDisplay": "Display",
     "recentVisits": "Recent"
+  },
+  "smartCollection": {
+    "saveCurrent": "Save current conditions as a smart collection",
+    "convertToSmartTitle": "Convert to a smart collection?",
+    "convertToSmartMessage": "Manual membership will be replaced with dynamic matches for the conditions in this editor. Fonts and favorites will be kept.",
+    "convertToManualTitle": "Convert to a manual collection?",
+    "convertToManualMessage": "Fonts matching the saved conditions will become manual members and stop updating automatically. Fonts and favorites will be kept."
   }
 }

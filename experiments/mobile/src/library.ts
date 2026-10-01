@@ -39,11 +39,19 @@ export interface FacetOption extends FacetSelection { label: string; familyCount
 export interface CollectionInput { name: string; icon: string; color: string }
 export interface FontCollection extends CollectionInput { id: string; memberCount: number }
 
-export type LibraryTarget = { scope: 'all' | 'favorites' | 'recent'; collectionId?: never }
-  | { scope: 'collection'; collectionId: string };
+export interface SmartConditions { text: string; facets: FacetSelection[] }
+export interface SmartFolder extends CollectionInput { id: string; matchCount: number }
+export interface SmartFolderDetails extends SmartFolder { query: SmartConditions }
+export interface SmartFolderInput extends CollectionInput { query: SmartConditions }
+export interface FolderMutation { snapshot: LibrarySnapshot; target: LibraryTarget }
+
+export type LibraryTarget = { scope: 'all' | 'favorites' | 'recent'; collectionId?: never; smartFolderId?: never }
+  | { scope: 'collection'; collectionId: string; smartFolderId?: never }
+  | { scope: 'smart'; smartFolderId: string; collectionId?: never };
 
 export function targetKey(target: LibraryTarget) {
-  return target.scope === 'collection' ? `collection:${target.collectionId}` : target.scope;
+  return target.scope === 'collection' ? `collection:${target.collectionId}`
+    : target.scope === 'smart' ? `smart:${target.smartFolderId}` : target.scope;
 }
 
 export function normalizeFacets(facets: FacetSelection[]): FacetSelection[] {
@@ -69,6 +77,7 @@ export interface LibrarySnapshot {
   recentCount: number;
   damagedCount: number;
   collections: FontCollection[];
+  smartFolders: SmartFolder[];
 }
 
 export type LibraryQuery = LibraryTarget & {
@@ -119,6 +128,12 @@ export interface LibraryBridge {
   updateCollection(id: string, input: CollectionInput): Promise<LibrarySnapshot>;
   deleteCollection(id: string): Promise<LibrarySnapshot>;
   setCollectionMembers(id: string, identityIds: string[], member: boolean): Promise<LibrarySnapshot>;
+  getSmartFolder(id: string): Promise<SmartFolderDetails>;
+  saveSmartFolder(id: string | null, input: SmartFolderInput): Promise<FolderMutation>;
+  deleteSmartFolder(id: string): Promise<LibrarySnapshot>;
+  convertCollectionToSmart(id: string, input: SmartFolderInput): Promise<FolderMutation>;
+  convertSmartToCollection(id: string, input: CollectionInput): Promise<FolderMutation>;
+  recordRecent(identityId: string): Promise<LibrarySnapshot>;
 }
 
 export type LibraryErrorCode = 'invalid-query' | 'cancelled' | 'native';
@@ -134,8 +149,10 @@ export class LibraryError extends Error {
 }
 
 function validateQuery(query: LibraryQuery) {
-  if (!['all', 'favorites', 'recent', 'collection'].includes(query.scope)
+  if (!['all', 'favorites', 'recent', 'collection', 'smart'].includes(query.scope)
     || (query.scope === 'collection' ? !query.collectionId?.trim() : query.collectionId !== undefined)
+    || (query.scope === 'smart' ? !query.smartFolderId?.trim() : query.smartFolderId !== undefined)
+    || typeof query.text !== 'string'
     || (query.facets !== undefined && (!Array.isArray(query.facets) || query.facets.some((facet) =>
       !facet || !Object.hasOwn(facetTitles, facet.kind) || typeof facet.value !== 'string' || !facet.value.trim())))
     || !Number.isSafeInteger(query.offset) || query.offset < 0
@@ -163,6 +180,12 @@ export function createLibraryClient(bridge: LibraryBridge) {
     updateCollection: (id: string, input: CollectionInput) => bridge.updateCollection(id, input),
     deleteCollection: (id: string) => bridge.deleteCollection(id),
     setCollectionMembers: (id: string, identityIds: string[], member: boolean) => bridge.setCollectionMembers(id, identityIds, member),
+    getSmartFolder: (id: string) => bridge.getSmartFolder(id),
+    saveSmartFolder: (id: string | null, input: SmartFolderInput) => bridge.saveSmartFolder(id, { ...input, query: savedConditions(input.query) }),
+    deleteSmartFolder: (id: string) => bridge.deleteSmartFolder(id),
+    convertCollectionToSmart: (id: string, input: SmartFolderInput) => bridge.convertCollectionToSmart(id, { ...input, query: savedConditions(input.query) }),
+    convertSmartToCollection: (id: string, input: CollectionInput) => bridge.convertSmartToCollection(id, input),
+    recordRecent: (identityId: string) => bridge.recordRecent(identityId),
     query(query: LibraryQuery, signal?: AbortSignal): Promise<LibraryPage> {
       validateQuery(query);
       if (signal?.aborted) return Promise.reject(new LibraryError('cancelled', i18n.t('mobile.errorQueryCancelled')));
@@ -182,4 +205,23 @@ export function createLibraryClient(bridge: LibraryBridge) {
       });
     },
   };
+}
+
+// 持久条件只包含搜索与筛选，不携带浏览范围或位置。
+export function savedConditions(query: { text: string; facets?: FacetSelection[] }): SmartConditions {
+  validateQuery({ scope: 'all', text: query.text, facets: query.facets, offset: 0, limit: 1 });
+  return { text: query.text.trim(), facets: normalizeFacets(query.facets ?? []) };
+}
+
+export function representativeFace(family: FontFamily) {
+  return family.faces.find((face) => /^(regular|normal|book|常规)$/i.test(face.styleName)) ?? family.faces[0];
+}
+
+// 桌面新建收藏夹沿用智慧范围的保存条件与临时浏览条件。
+export function mergeSmartConditions(saved: SmartConditions, current: SmartConditions): SmartConditions {
+  return savedConditions({ text: [saved.text.trim(), current.text.trim()].filter(Boolean).join(' '), facets: [...saved.facets, ...current.facets] });
+}
+
+export function hasSmartConditions(query: SmartConditions) {
+  return !!query.text.trim() || query.facets.length > 0;
 }

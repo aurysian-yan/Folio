@@ -6,12 +6,13 @@ import type { Theme } from './ui';
 export const usesNativeControls = false;
 export const usesNativeSidebar = false;
 
-export type NativeDestination = 'local' | 'recent' | 'favorites' | 'cloud' | 'settings' | `collection:${string}`;
+export type NativeDestination = 'local' | 'recent' | 'favorites' | 'cloud' | 'settings' | `collection:${string}` | `smart:${string}`;
 
 export interface NativeNavigationProps {
   children: ReactNode;
   /** 设置页内容，仅原生导航使用；基础实现忽略。 */
   settings?: ReactNode;
+  recent?: ReactNode;
   theme: Theme;
   sidebar: boolean;
   destination: NativeDestination;
@@ -36,6 +37,8 @@ export interface NativeHeaderProps {
 }
 
 export interface NativeActionProps {
+  minimumWidth?: number;
+  foregroundColor?: string;
   label: string;
   systemImage?: string;
   color: string;

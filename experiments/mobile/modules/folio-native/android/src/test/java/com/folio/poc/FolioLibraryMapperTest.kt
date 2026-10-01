@@ -70,6 +70,68 @@ class FolioLibraryMapperTest {
         }
     }
 
+    @Test fun smartFoldersAndRecentVisitsUseRustSemantics() {
+        val root = Files.createTempDirectory("folio-smart-test").toFile()
+        val path = File(root, "folio.sqlite").absolutePath
+        val engine = FolioEngine.open(path)
+        try {
+            val rule = FolioLibraryMapper.conditions("Lato", listOf("weight" to "400"))
+            val folder = engine.createSmartFolderWithStyle("常规字款", rule, "books", "blue")
+            assertEquals(0L, engine.getSmartFolder(folder).matchCount.toLong())
+            for (name in listOf("Lato-Regular.ttf", "Lato-Bold.ttf", "Inter-Variable.ttf")) engine.addFontFile(File(samples, name).absolutePath)
+            engine.refreshLibrary()
+            assertEquals(1L, engine.getSmartFolder(folder).matchCount.toLong())
+            fun read(text: String = "", facets: List<Pair<String, String>> = emptyList()) =
+                FolioLibraryMapper.read(engine, text, "smart", null, folder.value, facets, 0, 100)
+            val regular = read()
+            assertTrue(read(facets = listOf("weight" to "700")).families.single().matchedFaceIds.size > regular.families.single().matchedFaceIds.size)
+            assertEquals(0L, read("missing").totalMatches.toLong())
+            assertEquals(0L, read(facets = listOf("feature" to "variable")).totalMatches.toLong())
+            val all = engine.queryLibrary(query())
+            val lato = all.families.first { it.displayName == "Lato" }
+            val inter = all.families.first { it.displayName == "Inter" }
+            val manual = engine.createCollection("独立成员")
+            engine.setCollectionMembers(manual.id, lato.identityIds, true)
+            val favoriteRule = FolioLibraryMapper.conditions("", listOf("state" to "favorite"))
+            engine.updateSmartFolderWithStyle(folder, "星标字体", favoriteRule, "heart", "purple")
+            assertEquals(0L, read().totalMatches.toLong())
+            engine.setFavorite(lato.identityIds, true)
+            assertEquals(1L, read().totalMatches.toLong())
+            engine.setFavorite(lato.identityIds, false)
+            assertEquals(0L, read().totalMatches.toLong())
+            assertEquals(lato.identityIds.size.toLong(), engine.loadCachedLibrary().collections.first { it.id == manual.id }.memberCount.toLong())
+            engine.updateSmartFolderWithStyle(folder, "常规字款", rule, "books", "blue")
+            val frozen = engine.convertSmartFolderToCollection(folder, "固定成员", "books", "blue")
+            assertEquals(regular.families.single().matchedFaceIds.size.toLong(), frozen.memberCount.toLong())
+            val converted = engine.convertCollectionToSmartFolder(frozen.id, "重新匹配", rule, "heart", "purple")
+            assertEquals(1L, engine.queryLibrary(query(scope = "collection", id = manual.id.value)).totalMatches.toLong())
+            assertEquals(0L, engine.loadCachedLibrary().recentCount.toLong())
+            val latoId = lato.faces.first { it.styleName == "Regular" }.identityId
+            engine.recordRecent(latoId)
+            engine.recordRecent(inter.faces.first().identityId)
+            assertEquals(listOf(inter.id, lato.id), engine.queryLibrary(query(scope = "recent")).families.map { it.id })
+            engine.recordRecent(latoId)
+            assertEquals(listOf(lato.id, inter.id), engine.queryLibrary(query(scope = "recent")).families.map { it.id })
+            assertEquals(2L, engine.loadCachedLibrary().recentCount.toLong())
+            assertEquals(1L, engine.queryLibrary(query("Lato", "recent", facets = listOf("weight" to "400"))).totalMatches.toLong())
+            val reopened = FolioEngine.open(path)
+            try {
+                reopened.loadCachedLibrary()
+                assertEquals(listOf(lato.id, inter.id), reopened.queryLibrary(query(scope = "recent")).families.map { it.id })
+                val saved = reopened.getSmartFolder(converted)
+                assertEquals("Lato", saved.query.text)
+                assertEquals(1, saved.query.facets.size)
+                assertEquals("Lato", (FolioLibraryMapper.smartFolder(saved)["query"] as Map<*, *>)["text"])
+                assertEquals(1, (FolioLibraryMapper.snapshot(reopened.loadCachedLibrary())["smartFolders"] as List<*>).size)
+                reopened.deleteSmartFolder(converted)
+                assertTrue(reopened.loadCachedLibrary().smartFolders.isEmpty())
+                assertEquals(all.totalMatches, reopened.queryLibrary(query()).totalMatches)
+            } finally { reopened.destroy() }
+            try { FolioLibraryMapper.read(engine, "", "smart", null, null, emptyList(), 0, 10); fail("非法智慧范围必须拒绝") }
+            catch (_: IllegalArgumentException) { }
+        } finally { engine.destroy(); root.deleteRecursively() }
+    }
+
     private fun query(text: String = "", scope: String = "all", id: String? = null,
         facets: List<Pair<String, String>> = emptyList(), offset: Long = 0, limit: Int = 100) =
         FolioLibraryMapper.query(text, scope, id, facets, offset, limit)
