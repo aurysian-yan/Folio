@@ -43,7 +43,7 @@ pnpm samples
 
 两者 package 与 bundle identifier 不同，可以同时安装在同一台设备上。
 
-便捷命令会先以对应身份执行一次 `expo prebuild --no-clean`，再运行原生构建：
+便捷命令会先按对应身份生成原生工程，再运行原生构建。生成脚本会比较已生成的应用身份：与目标不一致时用 `--clean` 彻底重建，一致时用 `--no-clean` 增量更新，避免 applicationId/namespace、图标和 URL scheme 残留：
 
 ```sh
 pnpm android          # Debug，可追加 --device
@@ -54,7 +54,7 @@ pnpm ios:release      # Release
 
 Debug 图标位于 `assets/design/dev/`（`icon.png`、`foreground.png`、`background.png`、`monochrome.png`，以及 iOS Icon Composer 的 `AppIcon.icon/`）；某个 Debug 资源缺失时会自动回退到 `assets/design/` 的正式图标。
 
-Android 的 URL scheme 由 Expo 以追加方式写入 manifest，Release 与 Debug 来回切换时旧 scheme 可能残留；官方说明额外 scheme 不影响运行，如需完全干净的清单，执行一次带 `--clean` 的预构建：`APP_VARIANT=development pnpm exec expo prebuild --platform android --no-install --clean`。
+手动执行 `pnpm prebuild`、`pnpm prebuild:dev`、`pnpm prebuild:release` 仍是 `--no-clean`；在 Release 与 Debug 之间切换后，再执行一次对应的 `pnpm android`、`pnpm android:release`、`pnpm ios` 或 `pnpm ios:release`，生成脚本会自动清理残留的原生身份。
 
 ## Android
 
