@@ -143,6 +143,30 @@ public final class FolioNativeModule: Module {
             return self.snapshot(try engine.loadCachedLibrary())
         }.runOnQueue(queue)
 
+        AsyncFunction("storageUsage") { () throws -> [String: Any] in
+            let usage = try self.syncEngine().storageUsage()
+            return ["databaseBytes": usage.databaseBytes, "managedFontBytes": usage.managedFontBytes,
+                    "volumeTotalBytes": usage.volumeTotalBytes, "volumeFreeBytes": usage.volumeFreeBytes,
+                    "catalogCacheEntries": usage.catalogCacheEntries,
+                    "catalogCacheEstimatedBytes": usage.catalogCacheEstimatedBytes]
+        }.runOnQueue(queue)
+
+        AsyncFunction("clearCatalogCache") { () throws -> UInt64 in
+            try self.syncEngine().clearCatalogCache()
+        }.runOnQueue(queue)
+
+        AsyncFunction("rebuildSyncIndexes") { () throws in
+            try self.syncEngine().rebuildSyncIndexes()
+        }.runOnQueue(queue)
+
+        AsyncFunction("previewCacheBytes") { () throws -> UInt64 in
+            try FolioOnline.open(cacheDirectory: self.previewCacheDirectory().path).previewCacheBytes()
+        }.runOnQueue(queue)
+
+        AsyncFunction("clearPreviewCache") { () throws -> UInt64 in
+            try self.syncEngine().clearPreviewCache(cacheDirectory: self.previewCacheDirectory().path)
+        }.runOnQueue(queue)
+
         AsyncFunction("copyText") { (text: String) in
             UIPasteboard.general.string = text
         }.runOnQueue(.main)
@@ -174,6 +198,19 @@ public final class FolioNativeModule: Module {
             throw Exception(name: "FolioNotReady", description: "字体库尚未就绪。", code: "ERR_FOLIO_NOT_READY")
         }
         return engine
+    }
+
+    // 存储统计与缓存清理复用同步引擎，按需打开、用完即释放。
+    private func syncEngine() throws -> FolioSync {
+        let root = try FolioPaths.root()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return try FolioSync.open(databasePath: root.appendingPathComponent("folio.sqlite").path,
+                                  managedDirectory: root.appendingPathComponent("fonts", isDirectory: true).path)
+    }
+
+    private func previewCacheDirectory() -> URL {
+        (try? FolioPaths.root().appendingPathComponent("previews", isDirectory: true))
+            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("folio-previews", isDirectory: true)
     }
 
     private func snapshot(_ value: LibrarySnapshotDto) -> [String: Any] {

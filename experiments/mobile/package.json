@@ -30,8 +30,10 @@
   "dependencies": {
     "@expo/ui": "57.0.21",
     "@gorhom/bottom-sheet": "5.2.14",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "57.0.26",
     "expo-build-properties": "57.0.22",
+    "expo-constants": "57.0.20",
     "expo-dev-client": "57.0.19",
     "expo-document-picker": "57.0.3",
     "expo-image": "57.0.5",

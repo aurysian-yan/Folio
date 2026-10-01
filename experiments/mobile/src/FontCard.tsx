@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FontFamily } from './library';
 import { NativeFontPreview, type PreviewStatus } from './native';
+import { usePreferences } from './settings';
 import type { Theme } from './ui';
 import { StarIcon } from 'phosphor-react-native';
 
@@ -13,6 +14,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
   onOpen: () => void;
 }) {
   const { t } = useTranslation();
+  const { preferences } = usePreferences();
   const [previewStatus, setPreviewStatus] = useState<{ key: string; status: PreviewStatus['status'] } | null>(null);
   const face = family.faces.find((item) => /^(regular|normal|book|常规)$/i.test(item.styleName)) ?? family.faces[0];
   const variable = family.faces.some((item) => item.axes.length > 0);
@@ -32,7 +34,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
             selection={{ sourcePath: face.sourcePath, faceIndex: face.faceIndex,
               revisionId: face.revisionId, axes: Object.fromEntries(face.axes.map((axis) => [axis.tag, axis.defaultValue])),
               text: compact ? 'Preview Text' : 'Preview\nText',
-              fontSize: 24 * PixelRatio.getFontScale(), centered: !compact }}
+              fontSize: preferences.previewScale * PixelRatio.getFontScale(), centered: !compact }}
             onStatus={(event) => setPreviewStatus({ key: previewKey, status: event.nativeEvent.status })} />
         ) : (
           <Text style={[styles.unavailable, { color: theme.secondary }, compact && styles.listUnavailable]}>
@@ -40,17 +42,17 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
           </Text>
         )}
       </View>
-      <View pointerEvents="none" style={[styles.metadata, compact && styles.listMetadata]}>
+      {preferences.showCardMetadata && <View pointerEvents="none" style={[styles.metadata, compact && styles.listMetadata]}>
         <Text numberOfLines={1} style={[styles.name, { color: theme.label }, compact && styles.listName]}>{family.displayName}</Text>
         <View style={styles.details}>
-          {family.isFavorite && <StarIcon size={12} weight="fill" color={theme.accent} />}
+          {family.isFavorite && preferences.showFavoriteBadge && <StarIcon size={12} weight="fill" color={theme.accent} />}
           <Text style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
           {variable && <>
             <View style={[styles.separator, { backgroundColor: compact ? theme.listCardBorder : theme.border }]} />
             <Text accessibilityLabel={t('font.variable')} style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>VF</Text>
           </>}
         </View>
-      </View>
+      </View>}
     </Pressable>
   );
 });

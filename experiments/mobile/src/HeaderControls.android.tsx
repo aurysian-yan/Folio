@@ -1,7 +1,6 @@
 import { requireNativeView } from 'expo';
 import { Keyboard, StyleSheet, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import type { AndroidHeaderBackdropProps, AndroidHeaderProps } from './HeaderControls';
-import { themes } from './ui';
 
 interface NativeAndroidHeaderProps extends ViewProps {
   sourceId: string;
@@ -41,7 +40,7 @@ export function AndroidHeaderBackdrop({ theme, ...props }: AndroidHeaderBackdrop
 export function AndroidHeaderControls({ sourceId, theme, mode, active, width, ready, importing,
   searchOpen, searchText, filterCount, onFilter, onModeChange, onSearch, onImport, onSearchTextChange }: AndroidHeaderProps) {
   const { label, secondary, muted, accent, tab, border, raised } = theme;
-  return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme === themes.dark}
+  return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
     ready={ready} importing={importing} searchOpen={searchOpen} searchText={searchText}
     colors={{ label, secondary, muted, accent, tab, border, raised }} style={[styles.header, { width }]}
     onSearch={onSearch} onImport={onImport} onFilter={onFilter} filterCount={filterCount}

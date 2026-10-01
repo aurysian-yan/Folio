@@ -40,7 +40,7 @@ function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = fa
 }
 
 // iPad 常规窗口使用原生分栏，紧凑窗口沿用 iPhone 标签栏。
-export function NativeNavigation({ children, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
+export function NativeNavigation({ children, settings, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
   const { t } = useTranslation();
   const [visibility, setVisibility] = useState<NavigationSplitViewVisibility>('all');
   const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
@@ -80,7 +80,7 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
               <Section>{row('settings', t('navigation.settings'), 'gear')}</Section>
             </List>
           </NavigationSplitView.Sidebar>
-          <NavigationSplitView.Detail>{children}</NavigationSplitView.Detail>
+          <NavigationSplitView.Detail>{destination === 'settings' ? settings : children}</NavigationSplitView.Detail>
         </NavigationSplitView>
       </Host>
     );
@@ -104,7 +104,7 @@ export function NativeNavigation({ children, theme, sidebar, destination, snapsh
           <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
         </TabView.Tab>
         <TabView.Tab value="settings" label={t('navigation.settings')} systemImage="gear">
-          <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
+          <NativeTabContent><RNHostView><View style={styles.fill}>{settings}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
       </TabView>
     </Host>

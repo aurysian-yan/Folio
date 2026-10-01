@@ -13,7 +13,7 @@
 - 导入是复制到实验应用的托管目录，验证通过后以文件根加入 Rust 库；无系统字体安装、全盘存储权限或 iCloud capability。
 - 系统文件选择器支持多选字体与 ZIP；原生逐项读取、校验和按内容去重，完成后显示汇总及文件明细。ZIP 遍历子目录中的 TTF/OTF/TTC/OTC，支持 Stored/Deflate，忽略说明文件和嵌套压缩包，不支持加密、分卷或文件夹导入。单字体上限 64 MiB、单 ZIP 上限 256 MiB、每包 10,000 条目，每批最多 1,000 个字体且总读取字体内容不超过 512 MiB；失败继续处理其他文件，刷新失败仅回滚本批新增来源。
 - 预览按文件、TTC index、revision 和 axes 定位；不通过全局注册字体。iOS 使用 CoreText，Android 使用原生 Font/字形塑形与绘制。
-- iPadOS 常规宽度使用 `@expo/ui` 的原生 SwiftUI NavigationSplitView、侧边栏 List 和系统 Toolbar，提供全部字体、最近、星标与收藏夹导航；侧拉及宽度小于 600 点的窗口沿用 iPhone 的原生 TabView、顶部操作区与搜索布局。iPhone/Android 从字体库范围入口访问收藏夹，iOS 筛选和收藏夹使用系统 Sheet。Menu 和 Button 在 iOS 26 及以上使用系统 Liquid Glass，旧系统使用原生兼容样式。云端、设置与紧凑布局最近页面保持空白，智能收藏夹及云同步尚未接入。
+- iPadOS 常规宽度使用 `@expo/ui` 的原生 SwiftUI NavigationSplitView、侧边栏 List 和系统 Toolbar，提供全部字体、最近、星标与收藏夹导航；侧拉及宽度小于 600 点的窗口沿用 iPhone 的原生 TabView、顶部操作区与搜索布局。iPhone/Android 从字体库范围入口访问收藏夹，iOS 筛选和收藏夹使用系统 Sheet。Menu 和 Button 在 iOS 26 及以上使用系统 Liquid Glass，旧系统使用原生兼容样式。设置页提供存储管理、字体卡片、外观、导入与关于五个二级页，经现有原生详情导航进入；存储用量与清理复用 `folio-ffi` 的 `FolioSync`，偏好通过 `@react-native-async-storage/async-storage` 保存在设备本地。云端与紧凑布局最近页面保持空白，智能收藏夹及云同步尚未接入。
 - 系统浅色/深色、Safe Area 和列表虚拟化。更新 iOS 开发包后重定位托管字体，保留字体库和收藏。
 - Android 底栏由本地 Expo `FolioNavigation` 模块承载 Compose，保留本地、最近、云端、设置四项。外观与动效采用 Nexio 固定提交的均衡材质，RN 内容通过独立 RenderNode 提供背景；API 33+ 支持胶囊折射、31–32 支持模糊、28–30 使用半透明兼容材质。来源及许可见 [源码记录](modules/folio-native/android/third-party/NOTICE.md)。
 

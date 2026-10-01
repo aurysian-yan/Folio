@@ -5,7 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import {
   CaretDownIcon, FunnelSimpleIcon, MagnifyingGlassIcon, PlusIcon, XIcon,
 } from 'phosphor-react-native';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AccessibilityInfo, ActivityIndicator, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
@@ -28,7 +28,14 @@ import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
   usesNativeControls, usesNativeSidebar, type NativeDestination,
 } from './native-controls';
-import { IconButton, themes, type Theme } from './ui';
+import { PreferencesProvider, usePreferences } from './settings';
+import { SettingsAboutPage } from './SettingsAboutPage';
+import { SettingsAppearancePage } from './SettingsAppearancePage';
+import { SettingsCardsPage } from './SettingsCardsPage';
+import { SettingsImportPage } from './SettingsImportPage';
+import { SettingsScreen, type SettingsPageId } from './SettingsScreen';
+import { SettingsStoragePage } from './SettingsStoragePage';
+import { createTheme, IconButton, type Theme } from './ui';
 
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
@@ -36,7 +43,8 @@ const emptyBrowse = { searchText: '', searchOpen: false, facets: [] as FacetSele
 const LibraryList = Platform.OS === 'android' ? Animated.FlatList<FontFamily> : FlatList<FontFamily>;
 
 function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, target, destination = 'local',
-  snapshot, libraryVersion, initialError, onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily }: {
+  snapshot, libraryVersion, initialError, defaultMode, preferencesReady, showImportResults,
+  onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily }: {
   theme: Theme;
   bottomInset: number;
   active: boolean;
@@ -47,6 +55,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   snapshot: LibrarySnapshot | null;
   libraryVersion: number;
   initialError: string | null;
+  defaultMode: 'grid' | 'list';
+  preferencesReady: boolean;
+  showImportResults: boolean;
   onSnapshotChange: (snapshot: LibrarySnapshot) => void;
   onRetryInitialize: () => void;
   onTargetChange: (target: LibraryTarget) => void;
@@ -84,7 +95,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const [importError, setImportError] = useState<string | null>(null);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [importDetailsOpen, setImportDetailsOpen] = useState(false);
-  const [mode, setMode] = useState<'grid' | 'list'>('grid');
+  const [mode, setMode] = useState<'grid' | 'list'>(defaultMode);
+  const modeInitialized = useRef(false);
   const searchInput = useRef<TextInput>(null);
   const list = useRef<FlatList<FontFamily>>(null);
   const inset = useSafeAreaInsets();
@@ -138,6 +150,13 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   useEffect(() => {
     list.current?.scrollToOffset({ offset: 0, animated: false });
   }, [queryKey]);
+
+  // 本地偏好读取完成后应用一次默认视图，之后不再覆盖用户的手动切换。
+  useEffect(() => {
+    if (modeInitialized.current || !preferencesReady) return;
+    modeInitialized.current = true;
+    setMode(defaultMode);
+  }, [defaultMode, preferencesReady]);
 
   useEffect(() => {
     if (!ready) return;
@@ -203,6 +222,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       setImportReport(null);
       const report = await library.importFonts(result.assets.map(({ uri, name }) => ({ uri, name })));
       setImportReport(report);
+      if (showImportResults) setImportDetailsOpen(true);
       onSnapshotChange(report.snapshot);
       setPagination({ key: queryKey, offset: 0 });
       list.current?.scrollToOffset({ offset: 0, animated: false });
@@ -411,10 +431,23 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   return content;
 }
 
+// 设置二级页按入口类型分流，统一由原生详情导航承载。
+function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => void) {
+  switch (page) {
+    case 'storage': return <SettingsStoragePage theme={theme} onClose={onClose} />;
+    case 'cards': return <SettingsCardsPage theme={theme} onClose={onClose} />;
+    case 'appearance': return <SettingsAppearancePage theme={theme} onClose={onClose} />;
+    case 'import': return <SettingsImportPage theme={theme} onClose={onClose} />;
+    case 'about': return <SettingsAboutPage theme={theme} onClose={onClose} />;
+  }
+}
+
 function MobileApp() {
   const { t } = useTranslation();
-  const dark = useColorScheme() === 'dark';
-  const theme = dark ? themes.dark : themes.light;
+  const { preferences, ready: preferencesReady } = usePreferences();
+  const systemDark = useColorScheme() === 'dark';
+  const dark = preferences.appearance === 'system' ? systemDark : preferences.appearance === 'dark';
+  const theme = useMemo(() => createTheme(dark, preferences.accent), [dark, preferences.accent]);
   const sourceId = useId();
   const inset = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -430,6 +463,8 @@ function MobileApp() {
   const [libraryTarget, setLibraryTarget] = useState<LibraryTarget>({ scope: 'all' });
   const [fontPage, setFontPage] = useState<FontFamily | null>(null);
   const [fontPageVisible, setFontPageVisible] = useState(false);
+  const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
+  const [settingsPageVisible, setSettingsPageVisible] = useState(false);
   const destination: NativeDestination = sidebar && nativeDestination === 'local'
     ? libraryTarget.scope === 'favorites' ? 'favorites'
       : libraryTarget.scope === 'collection' ? `collection:${libraryTarget.collectionId}` : 'local'
@@ -477,13 +512,16 @@ function MobileApp() {
     return () => { show.remove(); hide.remove(); };
   }, []);
 
+  function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
+  const settingsContent = <SettingsScreen theme={theme} onOpenPage={openSettingsPage} />;
   const content = usesNativeControls ? (
     <View style={[styles.app, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
-        onDestinationChange={navigate}>
+        settings={settingsContent} onDestinationChange={navigate}>
         <LibraryScreen theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
           target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
+          defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
           onTargetChange={selectTarget} onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
           active={libraryActive}
           onOpenFamily={openFamily} />
@@ -498,11 +536,14 @@ function MobileApp() {
         <View style={[styles.screen, tab !== 'local' && styles.hidden]}>
           <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
             target={libraryTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
+            defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
             onSnapshotChange={applySnapshot} onTargetChange={setLibraryTarget}
             onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />
         </View>
         {tab !== 'local' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
-          style={[styles.screen, { backgroundColor: theme.background }]}><View style={styles.screen} /></NavigationBackdrop>}
+          style={[styles.screen, { backgroundColor: theme.background }]}>
+          {tab === 'settings' ? settingsContent : <View style={styles.screen} />}
+        </NavigationBackdrop>}
       </View>
       {!keyboardVisible && <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
@@ -510,11 +551,15 @@ function MobileApp() {
     </KeyboardAvoidingView>
   );
 
-  return <FontNavigation visible={fontPageVisible} theme={theme}
-    onDismissed={() => { setFontPageVisible(false); setFontPage(null); }}
-    detail={fontPage && <FontDetails key={fontPage.id} family={fontPage} theme={theme}
+  const detail = fontPage ? (
+    <FontDetails key={fontPage.id} family={fontPage} theme={theme}
       snapshot={snapshot} collectionId={screenTarget.scope === 'collection' ? screenTarget.collectionId : undefined}
-      onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />}>
+      onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />
+  ) : settingsPage ? settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false)) : null;
+
+  return <FontNavigation visible={fontPageVisible || settingsPageVisible} theme={theme}
+    onDismissed={() => { setFontPageVisible(false); setFontPage(null); setSettingsPageVisible(false); setSettingsPage(null); }}
+    detail={detail}>
     {content}
   </FontNavigation>;
 }
@@ -522,7 +567,7 @@ function MobileApp() {
 export default function App() {
   // 原生导航完成挂载后移除启动画面。
   useEffect(() => { SplashScreen.hide(); }, []);
-  return <SafeAreaProvider><MobileApp /></SafeAreaProvider>;
+  return <SafeAreaProvider><PreferencesProvider><MobileApp /></PreferencesProvider></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({

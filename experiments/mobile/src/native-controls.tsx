@@ -10,6 +10,8 @@ export type NativeDestination = 'local' | 'recent' | 'favorites' | 'cloud' | 'se
 
 export interface NativeNavigationProps {
   children: ReactNode;
+  /** 设置页内容，仅原生导航使用；基础实现忽略。 */
+  settings?: ReactNode;
   theme: Theme;
   sidebar: boolean;
   destination: NativeDestination;

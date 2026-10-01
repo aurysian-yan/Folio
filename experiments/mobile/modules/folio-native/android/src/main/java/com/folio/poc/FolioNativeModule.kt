@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import com.folio.poc.ffi.CollectionIdDto
 import com.folio.poc.ffi.FolioEngine
+import com.folio.poc.ffi.FolioOnline
+import com.folio.poc.ffi.FolioSync
 import com.folio.poc.ffi.IdentityIdDto
 import com.folio.poc.ffi.LibrarySnapshotDto
 import expo.modules.kotlin.Promise
@@ -130,6 +132,36 @@ class FolioNativeModule : Module() {
             }
         }
 
+        AsyncFunction("storageUsage") { promise: Promise ->
+            perform(promise) {
+                val usage = syncEngine().storageUsage()
+                mapOf(
+                    "databaseBytes" to usage.databaseBytes.toDouble(),
+                    "managedFontBytes" to usage.managedFontBytes.toDouble(),
+                    "volumeTotalBytes" to usage.volumeTotalBytes.toDouble(),
+                    "volumeFreeBytes" to usage.volumeFreeBytes.toDouble(),
+                    "catalogCacheEntries" to usage.catalogCacheEntries.toDouble(),
+                    "catalogCacheEstimatedBytes" to usage.catalogCacheEstimatedBytes.toDouble(),
+                )
+            }
+        }
+
+        AsyncFunction("clearCatalogCache") { promise: Promise ->
+            perform(promise) { syncEngine().clearCatalogCache().toDouble() }
+        }
+
+        AsyncFunction("rebuildSyncIndexes") { promise: Promise ->
+            perform(promise) { syncEngine().rebuildSyncIndexes() }
+        }
+
+        AsyncFunction("previewCacheBytes") { promise: Promise ->
+            perform(promise) { FolioOnline.open(previewCacheDirectory().absolutePath).previewCacheBytes().toDouble() }
+        }
+
+        AsyncFunction("clearPreviewCache") { promise: Promise ->
+            perform(promise) { syncEngine().clearPreviewCache(previewCacheDirectory().absolutePath).toDouble() }
+        }
+
         AsyncFunction("copyText") { text: String ->
             val clipboard = context().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("字体名称", text))
@@ -157,6 +189,20 @@ class FolioNativeModule : Module() {
 
     private fun requireEngine() = engine
         ?: throw CodedException("ERR_FOLIO_NOT_READY", "字体库尚未就绪。", null)
+
+    // 存储统计与缓存清理复用同步引擎，按需打开、用完即释放。
+    private fun rootDirectory(): File {
+        val root = File(context().filesDir, "FolioMobilePoC")
+        check(root.isDirectory || root.mkdirs())
+        return root
+    }
+
+    private fun syncEngine() = FolioSync.open(
+        File(rootDirectory(), "folio.sqlite").absolutePath,
+        File(rootDirectory(), "fonts").absolutePath,
+    )
+
+    private fun previewCacheDirectory() = File(rootDirectory(), "previews")
 
     private fun snapshot(value: LibrarySnapshotDto) = FolioLibraryMapper.snapshot(value)
 
