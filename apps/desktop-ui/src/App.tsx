@@ -25,7 +25,6 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
-  Checkbox,
   Input,
   Label,
   ListBox,
@@ -43,6 +42,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createPortal } from "react-dom";
 import { SegmentedTabs } from "./components/SegmentedTabs";
+import { FacetGroup } from "./components/FacetGroup";
 import { ClaralightSlider } from "./components/ClaralightSlider";
 import { PreviewColorPicker } from "./components/PreviewColorPicker";
 import { PreviewPresetMenu } from "./components/PreviewPresetMenu";
@@ -2760,41 +2760,18 @@ export default function App() {
                     {page?.facets.length ? (
                       <div className="facet-groups">
                         {facetGroups(page.facets).map(([kind, options]) => (
-                          <details
-                            className="facet-group"
+                          <FacetGroup
                             key={kind}
-                            open={kind === "categories" || kind === "features"}
-                          >
-                            <summary>
-                              {facetGroupTitle(kind)}
-                              <span>{selectedFacets[kind]?.length ?? 0}</span>
-                            </summary>
-                            <div className="facet-options">
-                              {options.slice(0, 24).map((option) => (
-                                <Checkbox
-                                  key={`${kind}:${option.value}`}
-                                  isSelected={
-                                    selectedFacets[kind]?.includes(
-                                      option.value,
-                                    ) ?? false
-                                  }
-                                  onChange={() =>
-                                    setSelectedFacets((current) =>
-                                      toggleFacet(current, kind, option.value),
-                                    )
-                                  }
-                                >
-                                  <Checkbox.Content>
-                                    <Checkbox.Control>
-                                      <Checkbox.Indicator />
-                                    </Checkbox.Control>
-                                    <span>{option.label}</span>
-                                    <small>{option.familyCount}</small>
-                                  </Checkbox.Content>
-                                </Checkbox>
-                              ))}
-                            </div>
-                          </details>
+                            title={facetGroupTitle(kind)}
+                            options={options}
+                            selected={selectedFacets[kind] ?? []}
+                            defaultOpen={kind === "categories" || kind === "scripts"}
+                            onToggle={(value) =>
+                              setSelectedFacets((current) =>
+                                toggleFacet(current, kind, value),
+                              )
+                            }
+                          />
                         ))}
                       </div>
                     ) : (
@@ -3248,39 +3225,18 @@ function FavoriteFolderEditor({
                   {groups.length ? (
                     <div className="facet-groups">
                       {groups.map(([kind, options]) => (
-                        <details
-                          className="facet-group"
+                        <FacetGroup
                           key={kind}
-                          open={kind === "categories" || kind === "features"}
-                        >
-                          <summary>
-                            {facetGroupTitle(kind)}
-                            <span>{facets[kind]?.length ?? 0}</span>
-                          </summary>
-                          <div className="facet-options">
-                            {options.slice(0, 24).map((option) => (
-                              <Checkbox
-                                key={`${kind}:${option.value}`}
-                                isSelected={
-                                  facets[kind]?.includes(option.value) ?? false
-                                }
-                                onChange={() =>
-                                  setFacets((current) =>
-                                    toggleFacet(current, kind, option.value),
-                                  )
-                                }
-                              >
-                                <Checkbox.Content>
-                                  <Checkbox.Control>
-                                    <Checkbox.Indicator />
-                                  </Checkbox.Control>
-                                  <span>{option.label}</span>
-                                  <small>{option.familyCount}</small>
-                                </Checkbox.Content>
-                              </Checkbox>
-                            ))}
-                          </div>
-                        </details>
+                          title={facetGroupTitle(kind)}
+                          options={options}
+                          selected={facets[kind] ?? []}
+                          defaultOpen={kind === "categories" || kind === "scripts"}
+                          onToggle={(value) =>
+                            setFacets((current) =>
+                              toggleFacet(current, kind, value),
+                            )
+                          }
+                        />
                       ))}
                     </div>
                   ) : (

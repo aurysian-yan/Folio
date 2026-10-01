@@ -2255,59 +2255,100 @@ body {
     margin-top: 0;
 }
 .facet-groups {
+    display: flex;
     min-height: 0;
-    overflow: auto;
+    flex-direction: column;
+    gap: 8px;
     padding: 0 2px 12px;
+    overflow: auto;
 }
+/* 分组卡片对应 macOS 的 FacetDisclosureGroupView，使用主文字色微透明衬底。 */
 .facet-group {
-    border-bottom: 1px solid var(--line);
+    padding: 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
 }
-.facet-group > summary {
+.facet-group-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 34px;
-    padding: 0 8px;
-    color: var(--text);
-    cursor: pointer;
-    list-style: none;
-    font-size: 11px;
-}
-.facet-group > summary::-webkit-details-marker {
-    display: none;
-}
-.facet-group > summary span {
-    color: var(--text-muted);
-}
-.facet-options {
-    display: grid;
-    gap: 1px;
-    padding: 0 3px 7px;
-}
-.facet-options .checkbox__content {
-    display: grid;
+    gap: 8px;
     width: 100%;
-    grid-template-columns: 15px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 7px;
-    min-height: 27px;
-    padding: 0 5px;
-    border-radius: 5px;
-    color: var(--text-muted);
+    padding: 0;
+    border: 0;
+    color: var(--text);
+    background: transparent;
     cursor: pointer;
-    font-size: 10px;
+    text-align: left;
 }
-.facet-options .checkbox__content:hover {
-    background: var(--surface-hover);
+.facet-group-title {
+    font-size: 12px;
+    font-weight: 600;
 }
-.facet-options .checkbox__content > span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.facet-options .checkbox__content small {
+.facet-group-chevron {
+    display: inline-flex;
+    flex: none;
     color: var(--text-muted);
-    font-size: 9px;
+}
+.facet-group-chevron svg {
+    width: 12px;
+    height: 12px;
+}
+.facet-group-header:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.facet-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.facet-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    min-height: 26px;
+    padding: 0 7px;
+    border: 0;
+    border-radius: 7px;
+    color: var(--text);
+    background: color-mix(in srgb, var(--text) 9%, transparent);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: background 140ms ease;
+}
+.facet-chip:hover {
+    background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+.facet-chip.selected {
+    color: #ffffff;
+    background: var(--accent);
+}
+.facet-chip-check {
+    display: inline-flex;
+    flex: none;
+}
+.facet-chip-check svg {
+    width: 10px;
+    height: 10px;
+}
+.facet-chip-label {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.facet-chip-count {
+    color: color-mix(in srgb, currentColor 75%, transparent);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+.facet-chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 .hero-select {
     min-width: 0;
