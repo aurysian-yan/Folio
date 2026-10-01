@@ -9,6 +9,11 @@ struct FolioQuery: Record {
     @Field var limit: Int = 40
 }
 
+struct FolioImportFile: Record {
+    @Field var uri: String = ""
+    @Field var name: String = ""
+}
+
 struct FolioPreviewSelection: Record {
     @Field var sourcePath: String = ""
     @Field var faceIndex: Int = 0
@@ -102,27 +107,13 @@ public final class FolioNativeModule: Module {
             }]
         }.runOnQueue(queue)
 
-        AsyncFunction("importFont") { (uri: String) throws -> [String: Any] in
-            let engine = try self.requireEngine()
-            guard let source = URL(string: uri), source.isFileURL else {
-                throw Exception(name: "FolioImport", description: "请选择本地字体文件。", code: "ERR_FOLIO_IMPORT")
-            }
-            let directory = try FolioPaths.root().appendingPathComponent("fonts", isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let destination = directory.appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension(source.pathExtension)
-            let scoped = source.startAccessingSecurityScopedResource()
-            defer { if scoped { source.stopAccessingSecurityScopedResource() } }
-            try FileManager.default.copyItem(at: source, to: destination)
-            var rootID: RootIdDto?
+        AsyncFunction("importFonts") { (files: [FolioImportFile]) throws -> [String: Any] in
             do {
-                try engine.validateFontFile(path: destination.path)
-                rootID = try engine.addFontFile(path: destination.path).id
-                return self.snapshot(try engine.refreshLibrary().snapshot)
-            } catch {
-                if let rootID { try? engine.removeLibraryRoot(id: rootID) }
-                try? FileManager.default.removeItem(at: destination)
-                throw error
+                let importer = FolioFontImporter(engine: try self.requireEngine(), root: try FolioPaths.root())
+                let report = try importer.importFiles(files.map { SelectedImportFile(uri: $0.uri, name: $0.name) })
+                return ["snapshot": self.snapshot(report.snapshot), "items": report.items.map(\.dictionary)]
+            } catch let failure as FontImportFailure {
+                throw Exception(name: "FolioImport", description: failure.detail, code: "ERR_FOLIO_IMPORT")
             }
         }.runOnQueue(queue)
 

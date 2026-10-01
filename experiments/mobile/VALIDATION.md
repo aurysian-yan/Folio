@@ -31,6 +31,25 @@ ADB 在已加载界面连续执行三次横向拖动（300ms、120ms、120ms）�
 2026-10-01：拖动位置改为同步状态更新，移除拖动过程中的位移弹簧；点击及松手后继续使用原有吸附弹簧，按压形变和折射保留。
 Android `:app:assembleDebug` 通过，已更新 API 36 真机开发包。ADB 注入持续按下的触摸，依次移动到 x=310 和 x=540，截图确认滑块停留在菜单项之间，页面在松手前保持本地；松手后吸附到最近项。完整测试套件仍按用户要求留待后续。
 
+## Batch Font Import
+
+2026-10-01：修复显式文件来源的扩展名过滤，双端导入桥接改为 `importFonts(files)`，支持系统多选、ZIP、流式 SHA-256 去重及逐项报告。继续使用托管副本、既有 Rust 校验和数据库接口；未改变 Rust ABI 或数据库结构。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| Rust 回归 | PASS，`cargo test -p folio-storage -p folio-ffi --locked`；新增 `.font`、无扩展名、错误扩展名的显式来源与重新打开回归，目录过滤保持原规则。`cargo fmt --all -- --check` 通过。 |
+| JS 验证 | PASS，`pnpm install --frozen-lockfile`、`pnpm typecheck`、`pnpm lint`、`pnpm test`；8 项测试覆盖查询边界、批量参数与计数、导入错误与回滚提示。 |
+| Android 原生导入 | PASS，`:folio-native:testDebugUnitTest` 的 8 项测试使用生产 Kotlin 导入器与主机 Rust/JNA 临时数据库；覆盖部分失败、同名不同内容、同批与跨批去重、收藏持久化、旧 `.font` 恢复、TTC 非零成员、可变轴、Stored/Deflate、中文子目录、说明文件、嵌套包忽略、空包、CRC、加密标记、不安全路径、实际流大小与数量限制、刷新失败回滚及临时文件清理。 |
+| Swift 原生导入 | PASS，`pnpm test:swift`；原有 Swift ↔ Rust 冒烟及新增 6 组生产导入器场景通过，覆盖批量、ZIP、内容去重、逐项失败、资源限制、收藏保留、刷新回滚与临时文件清理。ZIPFoundation 固定为 0.9.20。主机验证不等于 iOS 实机验收。 |
+| Rust 库与开发包 | PASS，`pnpm bindings`、`pnpm pods`、`pnpm rust:android`、`pnpm rust:ios`、Android `:app:assembleDebug` 和 iOS arm64 Simulator Debug `xcodebuild`；已更新 Android 真机及 iPhone/iPad 模拟器开发包。 |
+| Android 已有来源恢复 | PASS，USB 真机 `23013RK75C`（Android 16 / API 36）保留应用数据更新、重启初始化后，沙盒数据库原有三个 `.font` 来源均为 `parsed`，无需重新导入或重建数据库；核对时 39 个来源全部已解析。 |
+| iPhone Files | PASS，iOS 27 iPhone 18 Pro 模拟器的一批 63 项结果显示成功 42、重复 7、失败 14；结果明细可打开，刷新查询后汇总仍可见。 |
+| iPad Files 与 ZIP | PASS，iPadOS 27 iPad mini 模拟器的工具栏入口：含中文子目录字体、损坏字体和说明文件的 ZIP 返回成功 1、失败 1；同时多选原字体和该 ZIP，返回成功 0、重复 2、失败 1，明细展示压缩包名与条目路径；字体库仍为 2 个托管文件、1 个字体家族，临时目录为空。取消选择不产生错误并保留原报告。 |
+
+默认边界保持单字体 64 MiB、单 ZIP 256 MiB、每包 10,000 条目、每批 1,000 字体、字体读取与解压总量 512 MiB。资源限制测试使用缩小的内部测试额度，验证实际字节检查与清理逻辑；没有在设备上生成全部上限体积的压力样本。
+
+Android 原生结果界面的完整交互、所有字体的真机预览与再次冷启动、iOS 实机 Files/iCloud 文件读取和性能压力测试仍待验收。本轮 iOS 设备 slice 已构建，未进行实机签名、安装或运行；阶段 D 仍为 PARTIAL。
+
 ## Environment
 
 macOS 27.2 arm64、Xcode 27.0（27A266a）、Rust 1.98.1、Node.js 24.14.1、pnpm 11.19.0、JDK 17.0.19、CocoaPods 1.16.2。Rust Android 库使用 NDK 29.0.13846066；Expo 生成工程使用其默认 NDK 27.1.12297006。依赖以本目录 `package.json` 和 `pnpm-lock.yaml` 为准。

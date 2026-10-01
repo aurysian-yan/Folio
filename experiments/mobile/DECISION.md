@@ -8,7 +8,9 @@
 
 在 `experiments/mobile` 建立独立 Expo development build，复用现有 UniFFI Swift/Kotlin bindings。RN 只负责输入、分页和页面状态，原生模块负责沙盒文件与后台调用，Rust 保持身份、解析、持久化和查询的唯一实现。iOS 原生库以 XCFramework 静态链接；Android 以 ABI 独立的 `.so` 加 JNA AAR 接入。
 
-本实验只暴露 `initialize`、`query`、`importFont` 和原生预览视图，不为 PoC 新建 C ABI、不修改 `folio-ffi` 或生产 SQLite schema。Swift 串行后台队列和 Kotlin 单线程执行器持有各自的引擎；模块销毁后按顺序释放，JS 不持有 Rust 指针。
+本实验暴露 `initialize`、`query`、`importFonts`、`setFavorite`、`copyText` 和原生视图，不为 PoC 新建 C ABI、不修改 `folio-ffi` 或生产 SQLite schema。Swift 串行后台队列和 Kotlin 单线程执行器持有各自的引擎；模块销毁后按顺序释放，JS 不持有 Rust 指针。
+
+批量导入的复制、SHA-256 去重和 ZIP 解压留在原生文件边界，Rust 继续负责字体内容校验、来源、身份与目录。Android 使用系统 `ZipFile`，iOS 本地模块固定使用 MIT 许可的 ZIPFoundation 0.9.20；依赖不进入桌面端或 Rust 核心。显式单文件来源按内容解析，扩展名筛选只用于目录发现，兼容已有安卓 `.font` 副本。
 
 UniFFI 0.32.1 使用全局配置的 `crates.folio_ffi` 节点。Kotlin 的错误字段 `Operation.message` 通过官方 rename 配置映射为 `detail`，避免与 `Throwable.message` 冲突；该配置仅改变生成 Kotlin 的字段名，保持 Rust ABI 与校验检查。
 

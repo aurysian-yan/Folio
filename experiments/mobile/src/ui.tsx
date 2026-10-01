@@ -11,12 +11,14 @@ export const themes = {
     background: systemBackground ?? '#FFFFFF', onAccent: '#FFFFFF', surface: '#EFEFEF', raised: '#FFFFFF', label: '#1A1A1A',
     secondary: '#727272', muted: '#999999', border: '#E4E4E4', accent: '#0088FF',
     selection: '#C9E6FF', tab: '#F7F7F7', activeTab: '#E6E6E6',
+    listCardSurface: '#D8D8D8', listCardBorder: 'rgba(0, 0, 0, 0.1)',
     scrim: 'rgba(0, 0, 0, 0.16)', danger: '#C62828',
   },
   dark: {
     background: systemBackground ?? '#121212', onAccent: '#121212', surface: '#242424', raised: '#2C2C2E', label: '#F2F2F2',
     secondary: '#AEAEAE', muted: '#8E8E93', border: '#38383A', accent: '#64B5FF',
     selection: '#173F60', tab: '#202020', activeTab: '#38383A',
+    listCardSurface: '#242424', listCardBorder: 'rgba(255, 255, 255, 0.1)',
     scrim: 'rgba(0, 0, 0, 0.48)', danger: '#FF8A80',
   },
 };

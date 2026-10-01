@@ -12,8 +12,11 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontCard } from './FontCard';
+import { FontDetails } from './FontDetails';
+import { FontNavigation } from './FontNavigation';
+import { ImportResults } from './ImportResults';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
-import { LibraryError, type FontFamily, type LibraryPage, type LibraryQuery, type LibrarySnapshot } from './library';
+import { LibraryError, summarizeImport, type FontFamily, type ImportReport, type LibraryPage, type LibraryQuery, type LibrarySnapshot } from './library';
 import { library } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
@@ -24,7 +27,7 @@ import { IconButton, themes, type Theme } from './ui';
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [] };
 
-function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'all', destination = 'local', onSnapshotChange }: {
+function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'all', destination = 'local', onSnapshotChange, onOpenFamily }: {
   theme: Theme;
   bottomInset: number;
   active: boolean;
@@ -32,6 +35,7 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   scope?: LibraryQuery['scope'];
   destination?: NativeDestination;
   onSnapshotChange?: (snapshot: LibrarySnapshot) => void;
+  onOpenFamily: (family: FontFamily, onFavorite: (family: FontFamily) => Promise<void>) => void;
 }) {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
   const [ready, setReady] = useState(false);
@@ -44,8 +48,11 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   const offset = pagination.scope === scope ? pagination.offset : 0;
   const [loadedQuery, setLoadedQuery] = useState({ key: '', request: '', page: emptyPage });
   const [importing, setImporting] = useState(false);
+  const importInFlight = useRef(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const [importDetailsOpen, setImportDetailsOpen] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [selectedFamily, setSelectedFamily] = useState<string | null>(null);
   const [mode, setMode] = useState<'grid' | 'list'>('grid');
   const [menuOpen, setMenuOpen] = useState(false);
   const searchInput = useRef<TextInput>(null);
@@ -65,6 +72,7 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   const loading = ready && loadedQuery.request !== requestKey;
   const page = loadedQuery.key === queryKey ? loadedQuery.page : emptyPage;
   const waitingForSearch = searchText.trim() !== queryText;
+  const importCounts = importReport ? summarizeImport(importReport.items) : null;
 
   useEffect(() => {
     let mounted = true;
@@ -82,7 +90,6 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
     const timer = setTimeout(() => {
       setQueryText(searchText.trim());
       setPagination({ scope, offset: 0 });
-      setSelectedFamily(null);
       list.current?.scrollToOffset({ offset: 0, animated: false });
     }, 180);
     return () => clearTimeout(timer);
@@ -113,32 +120,33 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
   }, [ready, queryText, scope, offset, queryKey, requestKey]);
 
   async function importFont() {
+    if (!ready || importInFlight.current) return;
+    importInFlight.current = true;
     setMenuOpen(false);
     setImporting(true);
-    setError(null);
+    setImportError(null);
     try {
-      const result = await getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
-      const asset = result.assets?.[0];
-      if (result.canceled || !asset) return;
-      setSnapshot(await library.importFont(asset.uri));
+      const result = await getDocumentAsync({ type: '*/*', copyToCacheDirectory: false, multiple: true });
+      if (result.canceled || result.assets.length === 0) return;
+      setImportReport(null);
+      const report = await library.importFonts(result.assets.map(({ uri, name }) => ({ uri, name })));
+      setImportReport(report);
+      setSnapshot(report.snapshot);
       setPagination({ scope, offset: 0 });
-      setSelectedFamily(null);
       setRevision((value) => value + 1);
-    } catch {
-      setError('无法导入此文件，请选择可读取的 TTF、OTF、TTC 或 OTC 字体。');
-    } finally { setImporting(false); }
+    } catch (cause: unknown) {
+      setImportError(cause instanceof LibraryError ? cause.message : '无法完成导入，请确认文件可用、空间充足后重试。');
+    } finally { importInFlight.current = false; setImporting(false); }
   }
 
   async function favorite(family: FontFamily) {
-    try {
-      await library.setFavorite([...new Set(family.faces.map((face) => face.identityId))], !family.isFavorite);
-      setLoadedQuery((previous) => ({ ...previous, page: { ...previous.page,
-        families: previous.page.families.map((item) => item.id === family.id ? { ...item, isFavorite: !family.isFavorite } : item) } }));
-      if (scope === 'favorites') {
-        setPagination({ scope, offset: 0 });
-        setRevision((value) => value + 1);
-      }
-    } catch { setError('无法更新收藏，请重试。'); }
+    await library.setFavorite([...new Set(family.faces.map((face) => face.identityId))], !family.isFavorite);
+    setLoadedQuery((previous) => ({ ...previous, page: { ...previous.page,
+      families: previous.page.families.map((item) => item.id === family.id ? { ...item, isFavorite: !family.isFavorite } : item) } }));
+    if (scope === 'favorites') {
+      setPagination({ scope, offset: 0 });
+      setRevision((value) => value + 1);
+    }
   }
 
   function closeSearch() {
@@ -222,9 +230,8 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
         onEndReached={loadMore} onEndReachedThreshold={0.4}
         renderItem={({ item }) => (
           <View style={mode === 'grid' ? { width: (width - 32) / 2 } : styles.listItem}>
-            <FontCard family={item} selected={selectedFamily === item.id} mode={mode} theme={theme}
-              onSelect={() => setSelectedFamily((current) => current === item.id ? null : item.id)}
-              onFavorite={() => favorite(item)} />
+            <FontCard family={item} mode={mode} theme={theme}
+              onOpen={() => { Keyboard.dismiss(); onOpenFamily(item, favorite); }} />
           </View>
         )}
         ListHeaderComponent={
@@ -243,6 +250,17 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
             {(queryText !== '' || scope !== 'all') && <Text accessibilityRole="header" style={[styles.searchSummary, { color: theme.secondary }]}>
               {loading && page.families.length === 0 ? '正在读取…' : `${page.totalMatches} 个${queryText ? '搜索结果' : '字体'}`}
             </Text>}
+            {(importReport || importError) && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
+              <Text accessibilityRole="alert" style={[styles.noticeText, { color: importError ? theme.danger : theme.secondary }]}>
+                {importError ?? (importCounts && `成功 ${importCounts.imported} · 重复 ${importCounts.duplicate} · 失败 ${importCounts.failed}`)}
+              </Text>
+              {usesNativeControls ? <NativeActionButton label={importError ? '重新选择' : '查看详情'} color={theme.accent}
+                onPress={importError ? importFont : () => setImportDetailsOpen(true)} disabled={importing} plain />
+                : <Pressable accessibilityRole="button" disabled={importing}
+                  onPress={importError ? importFont : () => setImportDetailsOpen(true)} style={styles.retry}>
+                  <Text style={{ color: theme.accent }}>{importError ? '重新选择' : '查看详情'}</Text>
+                </Pressable>}
+            </View>}
             {error && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
               <Text accessibilityRole="alert" style={[styles.noticeText, { color: theme.danger }]}>{error}</Text>
               {usesNativeControls ? <NativeActionButton label="重试" color={theme.accent} onPress={retryQuery} plain />
@@ -258,7 +276,7 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
               <Text style={[styles.emptyTitle, { color: theme.label }]}>{queryText ? '没有找到匹配的字体'
                 : scope === 'favorites' ? '还没有收藏字体' : scope === 'recent' ? '还没有最近加入的字体' : '从第一个字体开始'}</Text>
               <Text style={[styles.emptyDetail, { color: theme.secondary }]}>{queryText ? '试试其他名称或样式。'
-                : scope === 'favorites' ? '收藏的字体会显示在这里。' : '导入 TTF、OTF、TTC 或 OTC 字体。'}</Text>
+                : scope === 'favorites' ? '收藏的字体会显示在这里。' : '多选 TTF、OTF、TTC、OTC 字体，或导入 ZIP 字体包。'}</Text>
               {!queryText && scope !== 'favorites' && (usesNativeControls ? <NativeActionButton label={importing ? '正在导入…' : '导入字体'}
                 systemImage="plus" color={theme.accent} onPress={importFont} disabled={importing} prominent />
                 : <Pressable accessibilityRole="button" disabled={importing} onPress={importFont}
@@ -271,6 +289,8 @@ function LibraryScreen({ theme, bottomInset, active, sidebar = false, scope = 'a
         ListFooterComponent={loading && page.families.length > 0
           ? <ActivityIndicator style={styles.loadingMore} color={theme.accent} accessibilityLabel="正在读取更多字体" /> : null}
       />
+      <ImportResults report={importReport} visible={importDetailsOpen && active} theme={theme}
+        onClose={() => setImportDetailsOpen(false)} />
       <Modal transparent visible={!usesNativeControls && menuOpen && active} animationType="none" onRequestClose={() => setMenuOpen(false)}>
         <View style={styles.menuOverlay}>
           <Pressable accessibilityLabel="关闭视图选项" onPress={() => setMenuOpen(false)}
@@ -319,7 +339,25 @@ function MobileApp() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [nativeDestination, setNativeDestination] = useState<NativeDestination>('local');
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
+  const [fontPage, setFontPage] = useState<{
+    family: FontFamily;
+    onFavorite: (family: FontFamily) => Promise<void>;
+  } | null>(null);
+  const [fontPageVisible, setFontPageVisible] = useState(false);
   const destination = !sidebar && nativeDestination === 'favorites' ? 'local' : nativeDestination;
+
+  function openFamily(family: FontFamily, onFavorite: (family: FontFamily) => Promise<void>) {
+    setFontPage({ family, onFavorite });
+    setFontPageVisible(true);
+  }
+
+  async function favorite() {
+    if (!fontPage) return;
+    const { family, onFavorite } = fontPage;
+    await onFavorite(family);
+    setFontPage((current) => current?.family.id === family.id
+      ? { ...current, family: { ...current.family, isFavorite: !family.isFavorite } } : current);
+  }
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -327,27 +365,26 @@ function MobileApp() {
     return () => { show.remove(); hide.remove(); };
   }, []);
 
-  if (usesNativeControls) {
-    return <View style={[styles.app, { backgroundColor: theme.background }]}>
+  const content = usesNativeControls ? (
+    <View style={[styles.app, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
         onDestinationChange={(value) => { Keyboard.dismiss(); setNativeDestination(value); }}>
         <LibraryScreen theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={setSnapshot}
           scope={sidebar && destination === 'favorites' ? 'favorites'
             : sidebar && destination === 'recent' ? 'recent' : 'all'}
-          active={destination === 'local' || (sidebar && (destination === 'recent' || destination === 'favorites'))} />
+          active={destination === 'local' || (sidebar && (destination === 'recent' || destination === 'favorites'))}
+          onOpenFamily={openFamily} />
       </NativeNavigation>
-    </View>;
-  }
-
-  return (
+    </View>
+  ) : (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={[styles.app, { backgroundColor: theme.background, paddingTop: inset.top,
       paddingLeft: inset.left, paddingRight: inset.right }]}>
       <StatusBar style="auto" />
       <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible} style={styles.screen}>
         <View style={[styles.screen, tab !== 'local' && styles.hidden]}>
-          <LibraryScreen theme={theme} bottomInset={inset.bottom} active={tab === 'local'} />
+          <LibraryScreen theme={theme} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily} />
         </View>
         {tab !== 'local' && <View style={[styles.screen, { backgroundColor: theme.background }]} />}
       </NavigationBackdrop>
@@ -356,6 +393,13 @@ function MobileApp() {
         onSelectionChange={(id) => { Keyboard.dismiss(); setTab(id); }} />}
     </KeyboardAvoidingView>
   );
+
+  return <FontNavigation visible={fontPageVisible} theme={theme}
+    onDismissed={() => { setFontPageVisible(false); setFontPage(null); }}
+    detail={fontPage && <FontDetails key={fontPage.family.id} family={fontPage.family} theme={theme}
+      onClose={() => setFontPageVisible(false)} onFavorite={favorite} />}>
+    {content}
+  </FontNavigation>;
 }
 
 export default function App() {

@@ -9,7 +9,6 @@ import com.folio.poc.ffi.IdentityIdDto
 import com.folio.poc.ffi.LibraryQueryDto
 import com.folio.poc.ffi.LibrarySnapshotDto
 import com.folio.poc.ffi.QueryScopeDto
-import com.folio.poc.ffi.RootIdDto
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -17,7 +16,6 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
 import java.io.File
-import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
@@ -26,6 +24,11 @@ class FolioQuery : Record {
     @Field var scope: String = "all"
     @Field var offset: Long = 0
     @Field var limit: Int = 40
+}
+
+class FolioImportFile : Record {
+    @Field var uri: String = ""
+    @Field var name: String = ""
 }
 
 class FolioPreviewSelection : Record {
@@ -52,7 +55,7 @@ class FolioNativeModule : Module() {
                     check(root.isDirectory || root.mkdirs())
                     engine = FolioEngine.open(File(root, "folio.sqlite").absolutePath)
                 }
-                snapshot(requireEngine().loadCachedLibrary())
+                snapshot(requireEngine().refreshLibrary().snapshot)
             }
         }
 
@@ -87,30 +90,15 @@ class FolioNativeModule : Module() {
             }
         }
 
-        AsyncFunction("importFont") { uri: String, promise: Promise ->
+        AsyncFunction("importFonts") { files: List<FolioImportFile>, promise: Promise ->
             perform(promise) {
-                val library = requireEngine()
-                val source = Uri.parse(uri)
-                if (source.scheme !in listOf("file", "content")) {
-                    throw CodedException("ERR_FOLIO_IMPORT", "请选择本地字体文件。", null)
-                }
-                val directory = File(context().filesDir, "FolioMobilePoC/fonts")
-                check(directory.isDirectory || directory.mkdirs())
-                val destination = File(directory, UUID.randomUUID().toString() + ".font")
-                var rootID: RootIdDto? = null
-                try {
-                    context().contentResolver.openInputStream(source).use { input ->
-                        requireNotNull(input) { "字体文件不可用。" }
-                        destination.outputStream().use { output -> input.copyTo(output) }
-                    }
-                    library.validateFontFile(destination.absolutePath)
-                    rootID = library.addFontFile(destination.absolutePath).id
-                    snapshot(library.refreshLibrary().snapshot)
-                } catch (error: Exception) {
-                    rootID?.let { runCatching { library.removeLibraryRoot(it) } }
-                    destination.delete()
-                    throw error
-                }
+                val importer = FolioFontImporter(requireEngine(), File(context().filesDir, "FolioMobilePoC"), { uri ->
+                    val source = Uri.parse(uri)
+                    if (source.scheme !in listOf("file", "content")) throw FontImportFailure("请选择可读取的字体文件。")
+                    context().contentResolver.openInputStream(source) ?: throw FontImportFailure("无法读取文件，请确认文件可用。")
+                })
+                val report = importer.importFiles(files.map { SelectedImportFile(it.uri, it.name) })
+                mapOf("snapshot" to snapshot(report.snapshot), "items" to report.items.map { it.dictionary() })
             }
         }
 
@@ -160,7 +148,8 @@ class FolioNativeModule : Module() {
                 try {
                     promise.resolve(action())
                 } catch (error: Exception) {
-                    if (error is CodedException) promise.reject(error)
+                    if (error is FontImportFailure) promise.reject("ERR_FOLIO_IMPORT", error.detail, error)
+                    else if (error is CodedException) promise.reject(error)
                     else promise.reject("ERR_FOLIO_OPERATION", "暂时无法完成字体操作，请重试。", error)
                 }
             }

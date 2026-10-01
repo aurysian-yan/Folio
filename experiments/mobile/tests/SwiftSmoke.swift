@@ -46,6 +46,7 @@ struct SwiftSmoke {
         let bold = CTFontCreateWithFontDescriptor(descriptors[1], 32, nil)
         precondition((CTFontCopyPostScriptName(bold) as String).contains("Bold"))
         print("PASS：Swift ↔ Rust 真实导入、分页、TTC 成员、变量轴、收藏持久化和损坏文件错误；主机 CoreText 非零 TTC 成员")
+        try SwiftImportSmoke.run(samples: samples)
     }
 
     static func query(offset: UInt64, limit: UInt64, scope: QueryScopeDto = .all) -> LibraryQueryDto {

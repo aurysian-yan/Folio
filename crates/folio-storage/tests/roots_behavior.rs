@@ -6,6 +6,52 @@ use common::{add_root, copy_fixture, open_db, refresh};
 use folio_storage::{RefreshIssueKind, RefreshMode};
 
 #[test]
+fn explicit_file_roots_parse_content_without_a_font_extension() {
+    let library = tempfile::tempdir().expect("library");
+    let db_dir = tempfile::tempdir().expect("db");
+    let mut db = open_db(db_dir.path());
+    for name in ["managed.font", "extensionless", "misnamed.png"] {
+        let path = copy_fixture(library.path(), "Lato-Regular.ttf", name);
+        db.add_file_root(path).expect("file root");
+    }
+    let first = refresh(&mut db);
+    assert_eq!(first.stats.candidate_files, 3);
+    assert_eq!(first.stats.files_added, 3);
+    assert_eq!(first.catalog.face_count(), 1);
+    let cached = refresh(&mut db);
+    assert_eq!(cached.stats.metadata_cache_hits, 3);
+    assert_eq!(cached.catalog, first.catalog);
+    drop(db);
+    let mut reopened = open_db(db_dir.path());
+    assert_eq!(
+        reopened.load_cached_catalog().expect("cached"),
+        first.catalog
+    );
+    assert_eq!(refresh(&mut reopened).catalog, first.catalog);
+
+    // 目录发现仍忽略非字体扩展名。
+    let isolated = tempfile::tempdir().expect("directory db");
+    let mut directory_db = open_db(isolated.path());
+    add_root(&mut directory_db, library.path());
+    assert_eq!(refresh(&mut directory_db).stats.candidate_files, 0);
+}
+
+#[test]
+fn explicit_non_font_content_is_reported_as_malformed() {
+    let library = tempfile::tempdir().expect("library");
+    let path = library.path().join("invalid.font");
+    std::fs::write(&path, b"not a font").expect("write");
+    let mut db = open_db(library.path());
+    db.add_file_root(path).expect("file root");
+    let result = refresh(&mut db);
+    assert_eq!(result.catalog.face_count(), 0);
+    assert!(result
+        .issues
+        .iter()
+        .any(|issue| issue.kind == RefreshIssueKind::MalformedFont));
+}
+
+#[test]
 fn unavailable_root_keeps_cached_catalog() {
     let library = tempfile::tempdir().expect("library");
     let fonts = library.path().join("fonts");

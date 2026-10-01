@@ -807,15 +807,12 @@ fn enumerate_root_with(
             ));
         }
         let path = canonicalize(&root.path)?;
-        let files = if is_candidate_path(&path) {
-            vec![CandidateFile {
-                path,
-                size: metadata.len(),
-                mtime_ns: metadata.modified().ok().and_then(system_time_to_nanos),
-            }]
-        } else {
-            Vec::new()
-        };
+        // 显式文件来源按内容解析，扩展名仅用于目录发现。
+        let files = vec![CandidateFile {
+            path,
+            size: metadata.len(),
+            mtime_ns: metadata.modified().ok().and_then(system_time_to_nanos),
+        }];
         return Ok(Enumeration {
             files,
             incomplete: false,

@@ -11,6 +11,7 @@ Pod::Spec.new do |s|
   s.swift_version = '5.9'
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
+  s.dependency 'ZIPFoundation', '0.9.20'
   s.source_files = 'src/**/*.swift', 'generated/*.swift'
   s.vendored_frameworks = 'Frameworks/FolioFFI.xcframework'
   s.frameworks = 'CoreText', 'Security', 'SystemConfiguration'

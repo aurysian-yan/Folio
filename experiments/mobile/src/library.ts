@@ -43,10 +43,34 @@ export interface LibraryPage {
   families: FontFamily[];
 }
 
+export interface ImportFile {
+  uri: string;
+  name: string;
+}
+
+export interface ImportItem {
+  name: string;
+  archiveName: string | null;
+  status: 'imported' | 'duplicate' | 'failed';
+  message: string | null;
+}
+
+export interface ImportReport {
+  snapshot: LibrarySnapshot;
+  items: ImportItem[];
+}
+
+export function summarizeImport(items: ImportItem[]) {
+  return items.reduce((counts, item) => {
+    counts[item.status] += 1;
+    return counts;
+  }, { imported: 0, duplicate: 0, failed: 0 });
+}
+
 export interface LibraryBridge {
   initialize(): Promise<LibrarySnapshot>;
   query(request: LibraryQuery): Promise<LibraryPage>;
-  importFont(uri: string): Promise<LibrarySnapshot>;
+  importFonts(files: ImportFile[]): Promise<ImportReport>;
   setFavorite(identityIds: string[], favorite: boolean): Promise<void>;
 }
 
@@ -73,7 +97,16 @@ function validateQuery(query: LibraryQuery) {
 export function createLibraryClient(bridge: LibraryBridge) {
   return {
     initialize: () => bridge.initialize(),
-    importFont: (uri: string) => bridge.importFont(uri),
+    async importFonts(files: ImportFile[]): Promise<ImportReport> {
+      try { return await bridge.importFonts(files); }
+      catch (cause: unknown) {
+        const rolledBack = typeof cause === 'object' && cause !== null
+          && 'code' in cause && cause.code === 'ERR_FOLIO_IMPORT';
+        throw new LibraryError('native', rolledBack
+          ? '无法更新字体库，本次新增字体未保留，请重试。'
+          : '无法完成导入，请确认文件可用、空间充足后重试。', { cause });
+      }
+    },
     setFavorite: (identityIds: string[], favorite: boolean) => bridge.setFavorite(identityIds, favorite),
     query(query: LibraryQuery, signal?: AbortSignal): Promise<LibraryPage> {
       validateQuery(query);

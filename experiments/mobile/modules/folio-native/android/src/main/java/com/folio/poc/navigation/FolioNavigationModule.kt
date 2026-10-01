@@ -16,6 +16,11 @@ class FolioNavigationModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("FolioNavigation")
 
+        View(FolioFontStackView::class) {
+            Events("onDismissed")
+            Prop("visible") { view: FolioFontStackView, value: Boolean -> view.visible = value }
+        }
+
         View(FolioBackdropSourceView::class) {
             Prop("sourceId") { view: FolioBackdropSourceView, value: String -> view.sourceId = value }
             Prop("active") { view: FolioBackdropSourceView, value: Boolean -> view.active = value }

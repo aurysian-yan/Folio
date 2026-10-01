@@ -12,14 +12,45 @@
     },
     "android": {
       "package": "com.folio.mobile.poc",
-      "permissions": []
+      "predictiveBackGestureEnabled": true,
+      "permissions": [],
+
+      "icon": "./assets/design/icon.png",
+
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/design/foreground.png",
+        "backgroundImage": "./assets/design/background.png",
+        "monochromeImage": "./assets/design/monochrome.png"
+      }
     },
     "plugins": [
       "expo-document-picker",
-      ["expo-build-properties", {
-        "ios": { "deploymentTarget": "16.4", "enableSceneSupport": true },
-        "android": { "minSdkVersion": 28, "buildArchs": ["arm64-v8a", "x86_64"] }
-      }]
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4",
+            "enableSceneSupport": true
+          },
+          "android": {
+            "minSdkVersion": 28,
+            "buildArchs": ["arm64-v8a", "x86_64"]
+          }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/splash-light.png",
+          "imageWidth": 128,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#000000",
+            "image": "./assets/splash-dark.png"
+          }
+        }
+      ]
     ]
   }
 }
