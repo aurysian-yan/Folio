@@ -5,7 +5,7 @@ import { Keyboard, Modal, Pressable, StyleSheet, Text, View } from 'react-native
 import { matchingWebdavPreset, webdavPresets } from './sync';
 import type { Theme } from './ui';
 
-export interface WebDAVPresetMenuProps { theme: Theme; serverUrl: string; disabled: boolean; onChange: (url: string) => void }
+export interface WebDAVPresetMenuProps { theme: Theme; serverUrl: string; disabled: boolean; sourceId?: string; onChange: (url: string) => void }
 
 // 地址右侧菜单沿用移动端菜单的主题与行尺寸。
 export function WebDAVPresetMenu({ theme, serverUrl, disabled, onChange }: WebDAVPresetMenuProps) {

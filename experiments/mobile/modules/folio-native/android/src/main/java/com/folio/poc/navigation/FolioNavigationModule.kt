@@ -50,14 +50,43 @@ class FolioNavigationModule : Module() {
             Prop("labels") { view: FolioHeaderControlsView, value: FolioHeaderLabels -> view.labels = value }
         }
 
+        View(FolioPresetMenuView::class) {
+            Events("onSelectionChange", "onExpandedChange")
+            Prop("sourceId") { view: FolioPresetMenuView, value: String -> view.sourceId = value }
+            Prop("selectedId") { view: FolioPresetMenuView, value: String -> view.selectedId = value }
+            Prop("disabled") { view: FolioPresetMenuView, value: Boolean -> view.disabled = value }
+            Prop("dark") { view: FolioPresetMenuView, value: Boolean -> view.dark = value }
+            Prop("colors") { view: FolioPresetMenuView, value: FolioViewMenuColors -> view.colors = value }
+            Prop("labels") { view: FolioPresetMenuView, value: FolioPresetMenuLabels -> view.labels = value }
+            Prop("items") { view: FolioPresetMenuView, value: List<FolioNavigationItem> -> view.items = value }
+        }
+
+        View(FolioGlassSwitchView::class) {
+            Events("onValueChange")
+            Prop("label") { view: FolioGlassSwitchView, value: String -> view.label = value }
+            Prop("checked") { view: FolioGlassSwitchView, value: Boolean -> view.checked = value }
+            Prop("enabled") { view: FolioGlassSwitchView, value: Boolean -> view.controlEnabled = value }
+            Prop("dark") { view: FolioGlassSwitchView, value: Boolean -> view.dark = value }
+            Prop("accentColor") { view: FolioGlassSwitchView, value: String -> view.accentColor = value }
+            Prop("trackColor") { view: FolioGlassSwitchView, value: String -> view.trackColor = value }
+            Prop("thumbColor") { view: FolioGlassSwitchView, value: String -> view.thumbColor = value }
+            Prop("surfaceColor") { view: FolioGlassSwitchView, value: String -> view.surfaceColor = value }
+        }
+
         View(FolioLiquidTabsView::class) {
             Events("onSelectionChange")
             Prop("sourceId") { view: FolioLiquidTabsView, value: String -> view.sourceId = value }
             Prop("selectedId") { view: FolioLiquidTabsView, value: String -> view.selectedId = value }
             Prop("dark") { view: FolioLiquidTabsView, value: Boolean -> view.dark = value }
             Prop("accentColor") { view: FolioLiquidTabsView, value: String -> view.accentColor = value }
+            Prop("segmented") { view: FolioLiquidTabsView, value: Boolean -> view.segmented = value }
+            Prop("enabled") { view: FolioLiquidTabsView, value: Boolean -> view.controlEnabled = value }
+            Prop("labelColor") { view: FolioLiquidTabsView, value: String -> view.labelColor = value }
+            Prop("surfaceColor") { view: FolioLiquidTabsView, value: String -> view.surfaceColor = value }
             Prop("items") { view: FolioLiquidTabsView, value: List<FolioNavigationItem> ->
-                if (value.size == 4 && value.map { it.id }.toSet() == setOf("local", "search", "cloud", "settings")) {
+                val ids = value.map { it.id }.toSet()
+                if ((value.size == 4 && ids == setOf("local", "search", "cloud", "settings"))
+                    || (value.size == 2 && ids == setOf("fonts", "deleted"))) {
                     view.items = value
                 }
             }

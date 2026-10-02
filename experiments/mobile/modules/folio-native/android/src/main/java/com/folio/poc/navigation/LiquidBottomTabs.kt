@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +53,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -86,18 +89,19 @@ fun RowScope.LiquidBottomTab(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scale = LocalLiquidBottomTabScale.current
     Column(
         modifier
             .clip(ContinuousCapsule())
-            .selectable(selected, remember { MutableInteractionSource() }, null, role = Role.Tab, onClick = onClick)
+            .selectable(selected, remember { MutableInteractionSource() }, null, enabled = enabled, role = Role.Tab, onClick = onClick)
             .clearAndSetSemantics {
                 role = Role.Tab
                 this.selected = selected
                 contentDescription = label
-                onClick { onClick(); true }
+                if (enabled) onClick { onClick(); true } else disabled()
             }
             .fillMaxHeight()
             .weight(1f)
@@ -124,11 +128,14 @@ fun LiquidBottomTabs(
     containerHeight: Dp = 56.dp,
     highlightHeight: Dp = 48.dp,
     selectorHeight: Dp = 48.dp,
+    enabled: Boolean = true,
+    containerTint: Color? = null,
+    preserveCapsuleOnPress: Boolean = false,
     content: @Composable RowScope.() -> Unit
 ) {
     val isLightTheme = !dark
     val containerColor =
-        if (isLightTheme) Color(0xFFFFFFFF).copy(0.6f)
+        containerTint ?: if (isLightTheme) Color(0xFFFFFFFF).copy(0.6f)
         else Color(0xFF121212).copy(0.54f)
     val defaultEdgeLight = remember(dark) {
         com.folio.poc.navigation.edgelight.EdgeLight.Uniform(
@@ -144,7 +151,8 @@ fun LiquidBottomTabs(
     ) {
         val density = LocalDensity.current
         val viewConfiguration = LocalViewConfiguration.current
-        val padPx = with(density) { 4f.dp.toPx() }
+        val trackInset = if (preserveCapsuleOnPress) 2.dp else 4.dp
+        val padPx = with(density) { trackInset.toPx() }
         val tabWidth = (constraints.maxWidth.toFloat() - padPx * 2f) / tabsCount
         val maxIndex = (tabsCount - 1).toFloat()
 
@@ -164,14 +172,14 @@ fun LiquidBottomTabs(
         val motionEnabled = (animationScope.coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f) > 0f
 
         var currentIndex by remember { mutableIntStateOf(selectedTabIndex()) }
-        val dampedDragAnimation = remember(animationScope) {
+        val dampedDragAnimation = remember(animationScope, tabsCount, preserveCapsuleOnPress) {
             DampedDragAnimation(
                 animationScope = animationScope,
                 initialValue = selectedTabIndex().toFloat(),
                 valueRange = 0f..maxIndex,
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
-                pressedScale = 78f / 56f,
+                pressedScale = if (preserveCapsuleOnPress) 1.22f else 78f / 56f,
             )
         }
         val latestSelectedTabIndex by rememberUpdatedState(selectedTabIndex)
@@ -220,7 +228,7 @@ fun LiquidBottomTabs(
                     highlight = null,
                     layerBlock = {
                         val progress = if (motionEnabled) dampedDragAnimation.pressProgress else 0f
-                        val scale = lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)
+                        val scale = if (preserveCapsuleOnPress) 1f else lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)
                         scaleX = scale
                         scaleY = scale
                     },
@@ -230,7 +238,7 @@ fun LiquidBottomTabs(
                 .then(if (motionEnabled) interactiveHighlight.modifier else Modifier)
                 .height(containerHeight)
                 .fillMaxWidth()
-                .padding(4f.dp),
+                .padding(trackInset),
             verticalAlignment = Alignment.CenterVertically,
             content = content
         )
@@ -267,20 +275,28 @@ fun LiquidBottomTabs(
                     .then(if (motionEnabled) interactiveHighlight.modifier else Modifier)
                     .height(highlightHeight)
                     .fillMaxWidth()
-                    .padding(horizontal = 4f.dp)
+                    .padding(horizontal = trackInset)
                     .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
                 verticalAlignment = Alignment.CenterVertically,
                 content = content
             )
         }
 
+        val selectorPress = if (preserveCapsuleOnPress && motionEnabled) dampedDragAnimation.pressProgress.coerceIn(0f, 1f) else 0f
+        val selectorStretch = if (preserveCapsuleOnPress && motionEnabled) dampedDragAnimation.dragStretch * selectorPress else 0f
+        val idleSelectorInset = if (preserveCapsuleOnPress) 2.dp * (1f - selectorPress) else 0.dp
+        val selectorWidth = with(density) { tabWidth.toDp() } - idleSelectorInset * 2 + 26.dp * selectorPress + 24.dp * selectorStretch
         Box(
-            Modifier
-                .padding(horizontal = 4f.dp)
+            (if (preserveCapsuleOnPress) Modifier.width(selectorWidth).requiredHeight(selectorHeight + 18.dp * selectorPress - 4.dp * selectorStretch)
+                else Modifier.padding(horizontal = trackInset))
                 .graphicsLayer {
-                    translationX =
-                        if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
-                        else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset
+                    val inset = if (preserveCapsuleOnPress) padPx + (tabWidth - size.width) / 2f else 0f
+                    val position = if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset + inset
+                        else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset - inset
+                    // 端点拉伸向轨道内展开，避免胶囊端部超出屏幕。
+                    val overhang = 13.dp.toPx() - padPx
+                    translationX = if (preserveCapsuleOnPress) position.coerceIn(-overhang, constraints.maxWidth - size.width + overhang)
+                        else position
                 }
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
@@ -310,11 +326,14 @@ fun LiquidBottomTabs(
                         )
                     },
                     layerBlock = {
-                        scaleX = if (motionEnabled) dampedDragAnimation.scaleX else 1f
-                        scaleY = if (motionEnabled) dampedDragAnimation.scaleY else 1f
+                        // 长胶囊以实际尺寸生成轮廓，端部不参与非等比缩放。
+                        scaleX = if (motionEnabled && !preserveCapsuleOnPress) dampedDragAnimation.scaleX else 1f
+                        scaleY = if (motionEnabled && !preserveCapsuleOnPress) dampedDragAnimation.scaleY else 1f
                         val velocity = if (motionEnabled) dampedDragAnimation.velocity / 10f else 0f
-                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
-                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                        if (!preserveCapsuleOnPress) {
+                            scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                            scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                        }
                     },
                     onDrawSurface = {
                         val progress = if (motionEnabled) dampedDragAnimation.pressProgress else 0f
@@ -327,16 +346,16 @@ fun LiquidBottomTabs(
                     }
                 )
                 .then(if (motionEnabled) interactiveHighlight.gestureModifier else Modifier)
-                .height(selectorHeight)
-                .fillMaxWidth(1f / tabsCount)
+                .then(if (preserveCapsuleOnPress) Modifier else Modifier.height(selectorHeight))
+                .then(if (preserveCapsuleOnPress) Modifier else Modifier.fillMaxWidth(1f / tabsCount))
         )
 
         Box(
             Modifier
                 .fillMaxSize()
                 .clearAndSetSemantics {}
-                .pointerInput(tabsCount, tabWidth, isLtr, padPx) {
-                    if (tabWidth <= 0f) return@pointerInput
+                .pointerInput(tabsCount, tabWidth, isLtr, padPx, enabled) {
+                    if (!enabled || tabWidth <= 0f) return@pointerInput
                     val touchSlop = viewConfiguration.touchSlop
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -358,7 +377,7 @@ fun LiquidBottomTabs(
                         val dragStartValue = if (dragging) dampedDragAnimation.value.fastCoerceIn(0f, maxIndex)
                             else pressedTab.toFloat()
                         var dragValue = dragStartValue
-                        if (dragging) dampedDragAnimation.press()
+                        if (dragging) dampedDragAnimation.press(down.uptimeMillis)
                         else dampedDragAnimation.animateToValueKeepingPress(pressedTab.toFloat())
                         var lastX = downX
                         try {
@@ -382,7 +401,7 @@ fun LiquidBottomTabs(
                                 }
                                 val dx = change.position.x - lastX
                                 if (dragging && abs(dx) > 0.01f) {
-                                    dampedDragAnimation.updateValue(dragValue)
+                                    dampedDragAnimation.updateValue(dragStartValue + displacement / tabWidth * ltrSign, change.uptimeMillis)
                                     animationScope.launch { offsetAnimation.snapTo(displacement) }
                                 }
                                 lastX = change.position.x

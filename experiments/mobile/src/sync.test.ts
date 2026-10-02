@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSyncClient, matchingWebdavPreset, syncErrorKey, validateProfile, webdavPresets, type SyncBridge, type SyncState } from './sync.ts';
+import { createSyncClient, maskedSyncAccount, matchingWebdavPreset, syncErrorKey, validateProfile, webdavPresets, webdavSourceName, type SyncBridge, type SyncState } from './sync.ts';
 
 const profile = { serverUrl: 'https://dav.example.test/', remoteDirectory: 'Fonts', username: 'user', automatic: true };
 test('服务商预设使用桌面 WebDAV 地址，识别尾斜线并保留自定义地址', () => {
@@ -9,6 +9,20 @@ test('服务商预设使用桌面 WebDAV 地址，识别尾斜线并保留自定
   assert.equal(matchingWebdavPreset('https://dav.jianguoyun.com/dav/'), 'jianguoyun');
   assert.equal(matchingWebdavPreset(profile.serverUrl), 'none');
   assert.equal(profile.serverUrl, 'https://dav.example.test/');
+});
+test('来源按准确域名识别，不受路径影响，也不把仿冒子域名识别为预设', () => {
+  assert.equal(matchingWebdavPreset('https://WEBDAV.123PAN.CN/custom/fonts'), 'pan123');
+  assert.equal(webdavSourceName('https://dav.jianguoyun.com/custom/', (key) => key), 'macos.providerJianguoyun');
+  assert.equal(matchingWebdavPreset('https://dav.jianguoyun.com.example.test/dav'), 'none');
+  assert.equal(webdavSourceName('https://custom.example.test/fonts/', (key) => key), 'custom.example.test');
+  assert.equal(webdavSourceName('', (key) => key), '');
+});
+test('概览账号打码覆盖空账号、短账号、邮箱与 Unicode 字符', () => {
+  assert.equal(maskedSyncAccount(''), '');
+  assert.equal(maskedSyncAccount('ab'), '••••');
+  assert.equal(maskedSyncAccount('用户账号'), '••••');
+  assert.equal(maskedSyncAccount('user@example.com'), 'us••••m');
+  assert.equal(maskedSyncAccount('😀abcdef'), '😀a••••f');
 });
 const state: SyncState = { profile, credentialAvailable: true, credentialError: false,
   status: { phase: '待同步', stage: '待同步', percent: 0, stageCompleted: 0, stageTotal: 0, isRunning: false,

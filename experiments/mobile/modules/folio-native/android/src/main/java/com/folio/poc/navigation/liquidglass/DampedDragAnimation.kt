@@ -6,11 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -40,7 +39,7 @@ class DampedDragAnimation(
     private val valueAnimation =
         Animatable(initialValue, visibilityThreshold)
     private val velocityAnimation =
-        Animatable(0f, 5f)
+        Animatable(0f, visibilityThreshold * 10f)
     private val pressProgressAnimation =
         Animatable(0f, 0.001f)
     private val scaleXAnimation =
@@ -48,7 +47,8 @@ class DampedDragAnimation(
     private val scaleYAnimation =
         Animatable(initialScale, 0.001f)
 
-    private val velocityTracker = VelocityTracker()
+    private var pointerValue = initialValue
+    private var pointerTimeMillis = 0L
     private var dragValue by mutableStateOf<Float?>(null)
 
     val value: Float get() = dragValue ?: valueAnimation.value
@@ -59,18 +59,21 @@ class DampedDragAnimation(
     val scaleX: Float get() = scaleXAnimation.value
     val scaleY: Float get() = scaleYAnimation.value
     val velocity: Float get() = velocityAnimation.value
+    val dragStretch: Float get() = (abs(velocity) / 4f).coerceIn(0f, 1f)
 
     private var valueJob: Job? = null
     private var releaseJob: Job? = null
+    private var velocityJob: Job? = null
 
-    fun press() {
+    fun press(timeMillis: Long = SystemClock.uptimeMillis()) {
         val currentValue = value
         releaseJob?.cancel()
         valueJob?.cancel()
         dragValue = currentValue
         targetValue = currentValue
-        velocityTracker.resetTracking()
-        velocityTracker.addPosition(SystemClock.uptimeMillis(), Offset(currentValue, 0f))
+        pointerValue = currentValue
+        pointerTimeMillis = timeMillis
+        settleVelocity()
         animationScope.launch {
             launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
             launch { scaleXAnimation.animateTo(pressedScale, scaleXAnimationSpec) }
@@ -94,14 +97,14 @@ class DampedDragAnimation(
         }
     }
 
-    fun updateValue(value: Float) {
+    fun updateValue(value: Float, timeMillis: Long = SystemClock.uptimeMillis()) {
         val target = value.coerceIn(valueRange)
         valueJob?.cancel()
         valueJob = null
         // 拖动位置同步更新，弹簧只负责点击和松手后的吸附。
         dragValue = target
         targetValue = target
-        updateVelocity()
+        updateVelocity(value, timeMillis)
     }
 
     fun animateToValue(value: Float) {
@@ -120,17 +123,26 @@ class DampedDragAnimation(
             dragValue = null
             valueAnimation.animateTo(target, valueAnimationSpec, initialVelocity)
         }
-        if (velocity != 0f) {
-            animationScope.launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
+    }
+
+    private fun updateVelocity(nextPointerValue: Float, timeMillis: Long) {
+        // 原始位移按触摸时间采样，合并事件和端点外拖动仍保留形变反馈。
+        val elapsedMillis = (timeMillis - pointerTimeMillis).coerceAtLeast(1L)
+        val targetVelocity = (nextPointerValue - pointerValue) * 1000f / elapsedMillis / (valueRange.endInclusive - valueRange.start)
+        pointerValue = nextPointerValue
+        pointerTimeMillis = timeMillis
+        val filteredVelocity = velocity + (targetVelocity.coerceIn(-8f, 8f) - velocity) * 0.4f
+        velocityJob?.cancel()
+        velocityJob = animationScope.launch {
+            // 手势速度同步滤波，停止输入后由弹簧恢复。
+            velocityAnimation.snapTo(filteredVelocity)
+            delay(64)
+            velocityAnimation.animateTo(0f, velocityAnimationSpec)
         }
     }
 
-    private fun updateVelocity() {
-        velocityTracker.addPosition(
-            SystemClock.uptimeMillis(),
-            Offset(value, 0f)
-        )
-        val targetVelocity = velocityTracker.calculateVelocity().x / (valueRange.endInclusive - valueRange.start)
-        animationScope.launch { velocityAnimation.animateTo(targetVelocity, velocityAnimationSpec) }
+    private fun settleVelocity() {
+        velocityJob?.cancel()
+        velocityJob = animationScope.launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
     }
 }

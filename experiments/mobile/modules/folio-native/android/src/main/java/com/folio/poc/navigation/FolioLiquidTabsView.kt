@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,6 +20,9 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistryOwner
@@ -36,6 +40,10 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
     var dark by mutableStateOf(false)
     var accentColor by mutableStateOf("")
     var items by mutableStateOf(emptyList<FolioNavigationItem>())
+    var segmented by mutableStateOf(false)
+    var controlEnabled by mutableStateOf(true)
+    var labelColor by mutableStateOf("")
+    var surfaceColor by mutableStateOf("")
     private val onSelectionChange by EventDispatcher()
     private val compose = ComposeView(context)
 
@@ -45,14 +53,15 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
         compose.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
         addView(compose, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         compose.setContent {
-            val backdrop = FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] ?: EmptyNavigationBackdrop
+            val backdrop = if (segmented) EmptyNavigationBackdrop
+                else FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] ?: EmptyNavigationBackdrop
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 if (items.isNotEmpty() && accentColor.isNotEmpty()) {
                     LiquidBottomTabs(
                         selectedTabIndex = { items.indexOfFirst { it.id == selectedId }.coerceAtLeast(0) },
                         onTabSelected = { index ->
                             items.getOrNull(index)?.let { item ->
-                                if (item.id != selectedId) {
+                                if (controlEnabled && item.id != selectedId) {
                                     selectedId = item.id
                                     onSelectionChange(mapOf("id" to item.id))
                                 }
@@ -62,20 +71,29 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
                         tabsCount = items.size,
                         dark = dark,
                         accentColor = Color(android.graphics.Color.parseColor(accentColor)),
-                        modifier = Modifier.fillMaxWidth().height(56.dp).drawWithContent {
+                        enabled = controlEnabled,
+                        preserveCapsuleOnPress = segmented,
+                        containerTint = if (segmented && surfaceColor.isNotEmpty()) Color(android.graphics.Color.parseColor(surfaceColor)) else null,
+                        containerHeight = if (segmented) 48.dp else 56.dp,
+                        highlightHeight = if (segmented) 44.dp else 48.dp,
+                        selectorHeight = if (segmented) 40.dp else 48.dp,
+                        modifier = Modifier.fillMaxWidth().height(if (segmented) 48.dp else 56.dp).drawWithContent {
                             backdrop.contentVersion
                             drawContent()
                         }
                     ) {
                         items.forEach { item ->
                             LiquidBottomTab(selected = selectedId == item.id,
-                                label = item.label, onClick = {
-                                    if (item.id != selectedId) {
+                                label = item.label, enabled = controlEnabled, onClick = {
+                                    if (controlEnabled && item.id != selectedId) {
                                         selectedId = item.id
                                         onSelectionChange(mapOf("id" to item.id))
                                     }
                                 }) {
-                                FolioTabContent(item.icon, item.label, dark)
+                                if (segmented && labelColor.isNotEmpty()) BasicText(item.label, maxLines = 1,
+                                    style = TextStyle(color = Color(android.graphics.Color.parseColor(labelColor)),
+                                        fontSize = 16.sp, fontWeight = FontWeight.Medium))
+                                else FolioTabContent(item.icon, item.label, dark)
                             }
                         }
                     }

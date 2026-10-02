@@ -1,7 +1,9 @@
 import { CaretLeftIcon, CaretRightIcon } from './icons';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { GlassSwitch } from './GlassSwitch';
+import { NavigationBackdrop } from './bottom-navigation';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { IconButton, type Theme } from './ui';
 
@@ -17,10 +19,14 @@ export function formatBytes(bytes: number) {
 }
 
 // 二级设置页统一使用返回工具栏、大标题与分组卡片。
-export function SettingsPage({ title, theme, onClose, children }: {
-  title: string; theme: Theme; onClose: () => void; children: ReactNode;
+export function SettingsPage({ title, theme, onClose, children, backdropSourceId }: {
+  title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string;
 }) {
   const { t } = useTranslation();
+  const content = <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <Text accessibilityRole="header" style={[settingsLayout.title, { color: theme.label }]}>{title}</Text>
+    {children}
+  </ScrollView>;
   return <SafeAreaProvider>
     <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
       <View accessibilityViewIsModal style={styles.screen}>
@@ -29,10 +35,7 @@ export function SettingsPage({ title, theme, onClose, children }: {
             <CaretLeftIcon size={20} color={theme.label} />
           </IconButton>
         </View>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text accessibilityRole="header" style={[settingsLayout.title, { color: theme.label }]}>{title}</Text>
-          {children}
-        </ScrollView>
+        {backdropSourceId ? <NavigationBackdrop sourceId={backdropSourceId} active style={styles.screen}>{content}</NavigationBackdrop> : content}
       </View>
     </SafeAreaView>
   </SafeAreaProvider>;
@@ -84,8 +87,7 @@ export function SettingsSwitchRow({ icon, title, detail, value, theme, onChange,
       <Text style={[styles.rowTitle, { color: theme.label }]}>{title}</Text>
       {!!detail && <Text numberOfLines={2} style={[styles.rowDetail, { color: theme.secondary }]}>{detail}</Text>}
     </View>
-    <Switch accessibilityLabel={title} value={value} disabled={disabled} onValueChange={onChange}
-      trackColor={{ false: theme.border, true: theme.accent }} ios_backgroundColor={theme.border} />
+    <GlassSwitch label={title} value={value} disabled={disabled} theme={theme} onChange={onChange} />
   </RowShell>;
 }
 

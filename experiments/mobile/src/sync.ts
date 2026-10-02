@@ -7,8 +7,25 @@ export const webdavPresets = [
 ] as const;
 export type WebDAVPresetId = typeof webdavPresets[number]['id'];
 export function matchingWebdavPreset(serverUrl: string): WebDAVPresetId {
-  const normalized = serverUrl.trim().replace(/\/+$/, '').toLowerCase();
-  return webdavPresets.find((preset) => preset.url.toLowerCase() === normalized)?.id ?? 'none';
+  try {
+    const hostname = new URL(serverUrl.trim()).hostname;
+    return webdavPresets.find((preset) => preset.url && new URL(preset.url).hostname === hostname)?.id ?? 'none';
+  } catch { return 'none'; }
+}
+
+// 展示来源名称时不修改连接地址，自定义来源仅显示域名。
+export function webdavSourceName(serverUrl: string, translate: (key: string) => string): string {
+  const preset = webdavPresets.find((item) => item.id === matchingWebdavPreset(serverUrl));
+  if (preset?.url) return translate(preset.label);
+  try { return new URL(serverUrl.trim()).hostname; } catch { return serverUrl.trim(); }
+}
+
+// 概览隐藏账号主体，短账号全部打码。
+export function maskedSyncAccount(username: string): string {
+  const characters = Array.from(username.trim());
+  if (!characters.length) return '';
+  if (characters.length <= 4) return '••••';
+  return `${characters.slice(0, 2).join('')}••••${characters.at(-1)}`;
 }
 export interface CloudFont {
   fingerprint: string; displayName: string; filename: string; fileSize: number;

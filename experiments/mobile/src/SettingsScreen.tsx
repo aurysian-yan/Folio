@@ -7,6 +7,7 @@ import { storage } from './native';
 import { SettingsGroup, SettingsIcon, SettingsNavRow, formatBytes, settingsLayout, settingsTypography } from './settings-ui';
 import { accentPresets, type Theme } from './ui';
 import type { CloudSyncController } from './useCloudSync';
+import { maskedSyncAccount, webdavSourceName } from './sync';
 
 export type SettingsPageId = 'sync' | 'storage' | 'cards' | 'appearance' | 'import' | 'about';
 
@@ -38,13 +39,9 @@ export function SettingsScreen({ theme, active, controller, onOpenPage }: {
     return () => { mounted = false; subscription.remove(); };
   }, [active]);
   const { state, readError } = controller;
-  const fontCount = state?.fonts.filter((font) => !font.deleted).length ?? 0;
   const mode = theme.dark ? 'dark' : 'light';
-  const cloudDetail = readError ? t(readError) : !state ? t('mobile.sync.reading')
-    : !state.profile ? t('cloud.notConnected') : state.credentialError ? t('mobile.sync.credentialsError')
-      : !state.credentialAvailable ? t('cloud.passwordUnavailable')
-        : state.status.isRunning ? t('cloud.syncingPercent', { percent: state.status.percent })
-          : t('cloud.fileCount', { count: fontCount });
+  const profile = readError ? null : state?.profile;
+  const cloudDetail = readError ? t(readError) : !state ? t('mobile.sync.reading') : t('cloud.notConnected');
   const entries = [
     { id: 'cards', Icon: CardsIcon, color: accentPresets.purple[mode], title: t('settings.cards'), description: t('mobile.settings.cardsSummary') },
     { id: 'appearance', Icon: PaintBrushIcon, color: theme.accent, title: t('settings.appearance'), description: t('mobile.settings.appearanceSummary') },
@@ -65,14 +62,17 @@ export function SettingsScreen({ theme, active, controller, onOpenPage }: {
           <SettingsIcon><CloudIcon size={22} color={accentPresets.blue[mode]} /></SettingsIcon>
           <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.cloud')}</Text>
         </View>
-        <View style={styles.cardMetricBlock}>
-          <Text style={[styles.cloudMetric, { color: readError ? theme.danger : theme.label },
-            (!!readError || !!state?.credentialError || (!!state?.profile && !state.credentialAvailable)) && styles.cardDetail]}>{cloudDetail}</Text>
-        </View>
-        <Text style={[styles.cardDetail, { color: theme.secondary }]}>{state?.profile && !readError
-          ? t(state.status.isRunning ? 'cloud.syncing' : state.status.phase === '已同步' ? 'mobile.sync.synced'
-            : state.status.phase === '同步失败' ? 'cloud.syncIncomplete' : state.status.phase === '已取消' ? 'cloud.syncCancelled' : 'mobile.sync.pending')
-          : t('mobile.settings.cloudSummary')}</Text>
+        {profile ? <>
+          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.secondary }]}>{t('inspector.source')}</Text>
+          <Text numberOfLines={1} style={[styles.cloudMetric, { color: theme.label }]}>{webdavSourceName(profile.serverUrl, t)}</Text>
+          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.secondary }]}>{t('cloud.remoteDirectory')}</Text>
+          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.label }]}>{profile.remoteDirectory || '/'}</Text>
+          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.secondary }]}>{t('cloud.username')}</Text>
+          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.label }]}>{maskedSyncAccount(profile.username) || '—'}</Text>
+        </> : <>
+          <Text style={[styles.cloudMetric, { color: readError ? theme.danger : theme.label }]}>{cloudDetail}</Text>
+          <Text style={[styles.cardDetail, { color: theme.secondary }]}>{t('mobile.settings.cloudSummary')}</Text>
+        </>}
       </Pressable>
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('storage')}
         style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
@@ -80,6 +80,7 @@ export function SettingsScreen({ theme, active, controller, onOpenPage }: {
           <SettingsIcon><DatabaseIcon size={22} color={theme.accent} /></SettingsIcon>
           <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.storage')}</Text>
         </View>
+        <Text style={[styles.cardDetail, { color: theme.secondary }]}>{t('storage.used')}</Text>
         <View style={styles.cardMetricBlock}>
           <Text style={[styles.cardMetric, { color: storageError ? theme.danger : theme.label }, !usage && styles.cardDetail]}>
             {storageError ? t('mobile.settings.storageError') : usage ? formatBytes(usage.total) : t('storage.measuring')}

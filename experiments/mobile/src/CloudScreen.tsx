@@ -5,10 +5,11 @@ import { ActivityIndicator, Alert, FlatList, Platform, Pressable, StyleSheet, Te
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PanelTabs } from './PanelTabs';
+import { CloudPanelTabs } from './CloudPanelTabs';
 import { CloudFontCard } from './CloudFontCard';
 import type { LibrarySnapshot } from './library';
 import type { CloudAction, CloudFont, SyncConflict, SyncResolution } from './sync';
+import { matchingWebdavPreset, webdavPresets } from './sync';
 import { cloudSync } from './native';
 import { SettingsActionRow, SettingsGroup, SettingsIcon, SettingsNote, SettingsValueRow, settingsLayout, settingsTypography } from './settings-ui';
 import type { CloudSyncController } from './useCloudSync';
@@ -20,6 +21,8 @@ export function CloudScreen({ theme, controller, snapshot, onConfigure }: { them
   const inset = useSafeAreaInsets();
   const { state, readError, actionError, busy, run } = controller;
   const status = state?.status;
+  const provider = !readError && state?.profile
+    ? webdavPresets.find((preset) => preset.id === matchingWebdavPreset(state.profile!.serverUrl)) : undefined;
   const [section, setSection] = useState('fonts');
   const openSwipe = useRef<SwipeableMethods | null>(null);
   const disabled = busy || controller.blocked || !!readError || !state?.profile || !state.credentialAvailable;
@@ -59,10 +62,7 @@ export function CloudScreen({ theme, controller, snapshot, onConfigure }: { them
           style={({ pressed }) => [styles.connection, { opacity: pressed ? 0.7 : 1 }]}>
           <SettingsIcon><CloudIcon size={22} color={theme.accent} /></SettingsIcon>
           <View style={styles.connectionBody}>
-            <Text style={[styles.connectionTitle, { color: theme.label }]}>{t('settings.cloud')}</Text>
-            {!!state?.profile && !readError && <Text numberOfLines={1} style={[styles.connectionDetail, { color: theme.secondary }]}>
-              {state.profile.serverUrl}
-            </Text>}
+            <Text numberOfLines={1} style={[styles.connectionTitle, { color: theme.label }]}>{t(provider?.url ? provider.label : 'settings.cloud')}</Text>
           </View>
           <CaretRightIcon size={18} color={theme.muted} />
         </Pressable>
@@ -111,7 +111,7 @@ export function CloudScreen({ theme, controller, snapshot, onConfigure }: { them
             onPress={() => resolve(conflict, resolution)} last={resolution === 'useRemote'} />)}
         </View>)}
       </SettingsGroup>}
-      <PanelTabs label={t('mobile.cloudFonts')} value={section} theme={theme} disabled={false}
+      <CloudPanelTabs label={t('mobile.cloudFonts')} value={section} theme={theme} disabled={false}
         options={[{ value: 'fonts', label: t('cloud.cloudFiles'), systemImage: 'cloud' },
           { value: 'deleted', label: t('cloud.recentlyDeleted'), systemImage: 'trash' }]} onChange={(value) => {
             openSwipe.current?.close(); setSection(value);
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   syncOverview: { paddingHorizontal: 20, paddingBottom: 16, gap: 8 },
   syncTitle: { fontSize: 22, lineHeight: 30, fontWeight: '500' },
   progress: { height: 8, borderRadius: 4, overflow: 'hidden' },
-  syncButton: { ...settingsLayout.insetControl, minHeight: 44,
+  syncButton: { ...settingsLayout.insetControl, marginHorizontal: 16, marginBottom: 16, borderRadius: 8, minHeight: 44,
     paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   syncButtonLabel: { fontSize: 14, lineHeight: 20, fontWeight: '600', textAlign: 'center' },
 });

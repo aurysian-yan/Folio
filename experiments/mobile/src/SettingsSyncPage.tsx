@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { cloudSync } from './native';
@@ -11,6 +11,7 @@ import { WebDAVPresetMenu } from './WebDAVPresetMenu';
 // 云同步配置沿用现有二级设置导航与分组样式。
 export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme; onClose: () => void; controller: CloudSyncController }) {
   const { t } = useTranslation();
+  const sourceId = useId();
   const { state, readError, actionError, busy, run } = controller;
   const [draft, setProfile] = useState<SyncProfile | null>(null);
   const profile = draft ?? state?.profile ?? { serverUrl: '', remoteDirectory: '', username: '', automatic: false };
@@ -26,7 +27,7 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
       placeholder={key === 'password' && state?.credentialAvailable ? t('cloud.passwordStored') : undefined}
       placeholderTextColor={theme.muted} selectionColor={theme.selection}
       style={[styles.input, { color: theme.label }]} />
-      {key === 'serverUrl' && <WebDAVPresetMenu theme={theme} serverUrl={profile.serverUrl} disabled={disabled}
+      {key === 'serverUrl' && <WebDAVPresetMenu sourceId={sourceId} theme={theme} serverUrl={profile.serverUrl} disabled={disabled}
         onChange={(serverUrl) => { setMessage(null); setProfile((previous) => ({ ...(previous ?? profile), serverUrl })); }} />}
     </View>
   </View>;
@@ -40,7 +41,7 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
       setMessage(kind === 'test' ? 'cloud.connectSuccess' : kind === 'save' ? 'cloud.connectionSaved' : 'cloud.disconnected');
     }
   }
-  return <SettingsPage title={t('settings.cloud')} theme={theme} onClose={onClose}>
+  return <SettingsPage title={t('settings.cloud')} theme={theme} onClose={onClose} backdropSourceId={sourceId}>
     <SettingsGroup theme={theme} title={t('cloud.connection')}>
       {field('serverUrl', t('cloud.serverURL'))}{field('remoteDirectory', t('cloud.remoteDirectory'))}
       {field('username', t('cloud.username'))}{field('password', t('cloud.password'))}

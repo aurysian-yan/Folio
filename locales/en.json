@@ -529,6 +529,7 @@
     "devanagari": "Devanagari"
   },
   "storage": {
+    "used": "Used",
     "space": "Storage Space",
     "overview": "Storage Overview",
     "usageDetails": "Usage Details",

@@ -17,7 +17,8 @@ fun BackdropEffectScope.lens(
     @FloatRange(from = 0.0) refractionHeight: Float,
     @FloatRange(from = 0.0) refractionAmount: Float,
     depthEffect: Boolean = false,
-    chromaticAberration: Boolean = false
+    chromaticAberration: Boolean = false,
+    inverseRefraction: Boolean = false
 ) {
     if (!isRuntimeShaderSupported()) return
     if (refractionHeight <= 0f || refractionAmount <= 0f) return
@@ -54,7 +55,7 @@ fun BackdropEffectScope.lens(
                     cornerRadii[3] * scale
                 )
                 setFloatUniform("refractionHeight", refractionHeight * scale)
-                setFloatUniform("refractionAmount", -refractionAmount * scale)
+                setFloatUniform("refractionAmount", (if (inverseRefraction) refractionAmount else -refractionAmount) * scale)
                 setFloatUniform("depthEffect", if (depthEffect) 1f else 0f)
                 if (chromaticAberration) {
                     setFloatUniform("chromaticAberration", 1f)

@@ -526,6 +526,7 @@
     "devanagari": "天城文"
   },
   "storage": {
+    "used": "已用",
     "space": "存储空间",
     "overview": "存储空间概览",
     "usageDetails": "占用明细",

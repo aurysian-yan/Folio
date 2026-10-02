@@ -130,6 +130,12 @@ class FolioHeaderLabels : Record {
     @Field var filter: String = ""
     @Field var importFonts: String = ""
     @Field var loadingImport: String = ""
+    @Field var viewOptions: String = ""
+    @Field var viewMode: String = ""
+    @Field var gridView: String = ""
+    @Field var listView: String = ""
+    @Field var expanded: String = ""
+    @Field var collapsed: String = ""
 }
 
 // 安卓顶部操作区复用现有描边与背景采样。
@@ -323,7 +329,7 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                FolioViewModeMenu(mode, expanded, active && !importing, dark, colors, backdrop,
+                FolioViewModeMenu(mode, expanded, active && !importing, dark, colors, labels, backdrop,
                     onExpandedChange, onSelect, Modifier.size(if (availableWidth < HeaderButtonHeight * 7) HeaderButtonHeight else 64.dp, HeaderButtonHeight))
                 HeaderAction("filter", labels.filter, active && ready, false, dark, colors, backdrop, onFilter, selected = filterCount > 0)
                 HeaderAction("plus", if (importing) labels.loadingImport else labels.importFonts,
@@ -347,16 +353,40 @@ private fun HeaderAction(icon: String, label: String, enabled: Boolean, loading:
 }
 
 @Composable
-private fun FolioViewModeMenu(
-    mode: String,
+private fun FolioViewModeMenu(mode: String, expanded: Boolean, active: Boolean, dark: Boolean,
+    colors: FolioViewMenuColors, labels: FolioHeaderLabels, backdrop: Backdrop,
+    onExpandedChange: (Boolean) -> Unit, onSelect: (String) -> Unit, modifier: Modifier) {
+    val options = remember(labels.gridView, labels.listView) {
+        listOf(FolioNavigationItem().apply { id = "grid"; label = labels.gridView; icon = "grid" },
+            FolioNavigationItem().apply { id = "list"; label = labels.listView; icon = "list" })
+    }
+    FolioGlassMenu(mode, expanded, active, dark, colors, backdrop, options, labels.viewOptions,
+        labels.viewMode, labels.expanded, labels.collapsed, onExpandedChange, onSelect, modifier) { progress ->
+        ViewMenuIcon(mode, colors.label.menuColor(), 20.dp)
+        ViewMenuIcon("caret", colors.secondary.menuColor(), 10.dp,
+            Modifier.graphicsLayer { rotationZ = 180f * progress })
+    }
+}
+
+// 地址预设与主页视图菜单共用材质、弹簧、定位和拖动回弹。
+@Composable
+internal fun FolioGlassMenu(
+    selectedValue: String,
     expanded: Boolean,
     active: Boolean,
     dark: Boolean,
     colors: FolioViewMenuColors,
     backdrop: Backdrop,
+    options: List<FolioNavigationItem>,
+    label: String,
+    title: String,
+    expandedLabel: String,
+    collapsedLabel: String,
     onExpandedChange: (Boolean) -> Unit,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    triggerBackdrop: Backdrop = backdrop,
+    triggerContent: @Composable (Float) -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
     val opacity = remember { Animatable(0f) }
@@ -387,16 +417,14 @@ private fun FolioViewModeMenu(
 
     Box(modifier) {
         Row(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - opacity.value.coerceIn(0f, 1f) }
-            .headerButtonSurface(active, dark, colors, backdrop) { onExpandedChange(!expanded) }
+            .headerButtonSurface(active, dark, colors, triggerBackdrop) { onExpandedChange(!expanded) }
             .semantics {
-                contentDescription = "视图选项"
-                stateDescription = if (expanded) "已展开" else "已收起"
+                contentDescription = label
+                stateDescription = if (expanded) expandedLabel else collapsedLabel
             },
             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically) {
-            ViewMenuIcon(mode, colors.label.menuColor(), 20.dp)
-            ViewMenuIcon("caret", colors.secondary.menuColor(), 10.dp,
-                Modifier.graphicsLayer { rotationZ = 180f * progress.value.coerceIn(0f, 1f) })
+            triggerContent(progress.value.coerceIn(0f, 1f))
         }
 
         if (popupAlive) {
@@ -460,14 +488,14 @@ private fun FolioViewModeMenu(
                         .then(if (expanded && motionEnabled) drag.gestureModifier else Modifier)
                         .glassOutline(shape, colors)
                         .selectableGroup()
-                        .semantics { paneTitle = "视图" }
+                        .semantics { paneTitle = title }
                         .then(if (expanded) Modifier else Modifier.clearAndSetSemantics {})
                         .padding(vertical = 6.dp)) {
-                        BasicText("视图", Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        BasicText(title, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             style = TextStyle(color = colors.secondary.menuColor(), fontSize = 12.sp))
-                        listOf("grid" to "网格视图", "list" to "列表视图").forEach { (value, label) ->
-                            ViewMenuRow(value, label, mode == value, expanded, colors) {
-                                if (!motionEnabled || drag.offset.getDistance() <= touchSlop) onSelect(value)
+                        options.forEach { option ->
+                            ViewMenuRow(option.icon, option.label, selectedValue == option.id, expanded, colors) {
+                                if (!motionEnabled || drag.offset.getDistance() <= touchSlop) onSelect(option.id)
                             }
                         }
                     }
@@ -484,7 +512,7 @@ private fun ViewMenuRow(value: String, label: String, selected: Boolean, enabled
         .selectable(selected, interactionSource = remember { MutableInteractionSource() }, indication = null, enabled = enabled, role = Role.RadioButton, onClick = onClick)
         .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        ViewMenuIcon(value, colors.label.menuColor(), 20.dp)
+        if (value.isNotEmpty()) ViewMenuIcon(value, colors.label.menuColor(), 20.dp)
         BasicText(label, Modifier.weight(1f), style = TextStyle(color = colors.label.menuColor(), fontSize = 16.sp))
         if (selected) ViewMenuIcon("check", colors.accent.menuColor(), 18.dp)
     }
@@ -512,7 +540,7 @@ private class ViewMenuPositionProvider(
 
 // 菜单图标沿用 Phosphor 常规字重。
 @Composable
-private fun ViewMenuIcon(name: String, tint: Color, size: Dp, modifier: Modifier = Modifier) {
+internal fun ViewMenuIcon(name: String, tint: Color, size: Dp, modifier: Modifier = Modifier) {
     val vector = remember(name) {
         val path = when (name) {
             "grid" -> "M104 40H56a16 16 0 0 0-16 16v48a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16V56a16 16 0 0 0-16-16m0 64H56V56h48zm96-64h-48a16 16 0 0 0-16 16v48a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16V56a16 16 0 0 0-16-16m0 64h-48V56h48zm-96 32H56a16 16 0 0 0-16 16v48a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16v-48a16 16 0 0 0-16-16m0 64H56v-48h48zm96-64h-48a16 16 0 0 0-16 16v48a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16v-48a16 16 0 0 0-16-16m0 64h-48v-48h48z"
