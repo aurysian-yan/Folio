@@ -23,7 +23,7 @@ import { ViewModeMenu } from './ViewModeMenu';
 import { AndroidHeaderBackdrop, AndroidHeaderControls } from './HeaderControls';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
-import { library } from './native';
+import { library, syncSession } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
   usesNativeControls, usesNativeSidebar, type NativeDestination,
@@ -46,7 +46,7 @@ const emptyBrowse = { searchText: '', facets: [] as FacetSelection[] };
 const LibraryList = Platform.OS === 'android' ? Animated.FlatList<FontFamily> : FlatList<FontFamily>;
 
 function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, searchPage = false, target, destination = 'local',
-  snapshot, libraryVersion, initialError, defaultMode, preferencesReady, showImportResults,
+  snapshot, libraryVersion, initialError, defaultMode, preferencesReady, showImportResults, syncBlocked,
   onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily }: {
   theme: Theme;
   bottomInset: number;
@@ -62,6 +62,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   defaultMode: 'grid' | 'list';
   preferencesReady: boolean;
   showImportResults: boolean;
+  syncBlocked: boolean;
   onSnapshotChange: (snapshot: LibrarySnapshot) => void;
   onRetryInitialize: () => void;
   onTargetChange: (target: LibraryTarget) => void;
@@ -210,7 +211,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   }, [ready, queryText, scope, collectionId, smartFolderId, selectedFacets, offset, queryKey, requestKey, libraryVersion, t]);
 
   async function importFont() {
-    if (!ready || importInFlight.current) return;
+    if (!ready || syncBlocked || importInFlight.current) return;
+    const releaseImport = syncSession.reserveImport();
+    if (!releaseImport) return;
     importInFlight.current = true;
     setImporting(true);
     setImportError(null);
@@ -226,7 +229,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       list.current?.scrollToOffset({ offset: 0, animated: false });
     } catch (cause: unknown) {
       setImportError(cause instanceof LibraryError ? cause.message : t('mobile.errorImport'));
-    } finally { importInFlight.current = false; setImporting(false); }
+    } finally { releaseImport(); importInFlight.current = false; setImporting(false); }
   }
 
   function retryQuery() {
@@ -300,8 +303,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
                 {importError ?? (importCounts && t('mobile.importSummary', { imported: importCounts.imported, duplicate: importCounts.duplicate, failed: importCounts.failed }))}
               </Text>
               {usesNativeControls ? <NativeActionButton label={importError ? t('mobile.reselect') : t('mobile.viewDetails')} color={theme.accent}
-                onPress={importError ? importFont : () => setImportDetailsOpen(true)} disabled={importing} />
-                : <Pressable accessibilityRole="button" disabled={importing}
+                onPress={importError ? importFont : () => setImportDetailsOpen(true)} disabled={importing || (syncBlocked && !!importError)} />
+                : <Pressable accessibilityRole="button" disabled={importing || (syncBlocked && !!importError)}
                   onPress={importError ? importFont : () => setImportDetailsOpen(true)} style={styles.retry}>
                   <Text style={{ color: theme.accent }}>{importError ? t('mobile.reselect') : t('mobile.viewDetails')}</Text>
                 </Pressable>}
@@ -324,8 +327,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
                 : page.unresolvedScopeItems > 0 ? t('collection.keepMembersNote') : scope === 'favorites' ? t('collection.emptyHint') : scope === 'collection' ? t('collection.favoriteInDetails') : scope === 'smart' ? t('filters.smartHint') : scope === 'recent' ? t('mobile.recentHint') : t('mobile.importHint')}</Text>
               {selectedFacets.length > 0 && <PanelAction label={t('mobile.clearFilters')} theme={theme} onPress={() => updateBrowse({ facets: [] })} />}
               {!searchPage && !hasConditions && scope === 'all' && (usesNativeControls ? <NativeActionButton label={importing ? t('mobile.loadingImport') : t('import.importFonts')}
-                systemImage="plus" color={theme.accent} onPress={importFont} disabled={importing} prominent />
-                : <Pressable accessibilityRole="button" disabled={importing} onPress={importFont}
+                systemImage="plus" color={theme.accent} onPress={importFont} disabled={importing || syncBlocked} prominent />
+                : <Pressable accessibilityRole="button" disabled={importing || syncBlocked} onPress={importFont}
                 style={({ pressed }) => [styles.importButton, { backgroundColor: theme.accent, opacity: pressed || importing ? 0.6 : 1 }]}>
                 {importing ? <ActivityIndicator color={theme.onAccent} /> : <PlusIcon size={18} color={theme.onAccent} />}
                 <Text style={[styles.importLabel, { color: theme.onAccent }]}>{importing ? t('mobile.loadingImport') : t('import.importFonts')}</Text>
@@ -362,10 +365,10 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         </View>}
         {Platform.OS === 'android' ? <AndroidHeaderControls theme={theme} sourceId={sourceId} active={active}
           mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
-          ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
+          ready={ready} importing={importing} importBlocked={syncBlocked} onModeChange={setMode} onImport={importFont}
           onSearchTextChange={setSearchText} onFilter={openFilter} filterCount={selectedFacets.length} /> : usesNativeControls ? <NativeHeaderControls theme={theme} active={active} mode={mode} searchOpen={searchOpen}
           width={width - 52} searchText={searchText} onSearchTextChange={setSearchText}
-          ready={ready} importing={importing} onModeChange={setMode} onImport={importFont}
+          ready={ready} importing={importing} importBlocked={syncBlocked} onModeChange={setMode} onImport={importFont}
           onFilter={openFilter} filterCount={selectedFacets.length} /> : searchOpen ? (
           <View style={[styles.search, { backgroundColor: theme.surface }]}>
             <MagnifyingGlassIcon size={20} color={theme.secondary} />
@@ -387,7 +390,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
             <FunnelSimpleIcon size={20} color={selectedFacets.length > 0 ? theme.accent : theme.label} />
           </IconButton>
           <ViewModeMenu sourceId={sourceId} theme={theme} mode={mode} active={active && !importing} onModeChange={setMode} />
-          <IconButton theme={theme} label={importing ? t('mobile.loadingImport') : t('import.importFonts')} disabled={!ready || importing} busy={importing} onPress={importFont}>
+          <IconButton theme={theme} label={importing ? t('mobile.loadingImport') : t('import.importFonts')} disabled={!ready || importing || syncBlocked} busy={importing} onPress={importFont}>
             {importing ? <ActivityIndicator size="small" color={theme.label} /> : <PlusIcon size={20} color={theme.label} />}
           </IconButton>
         </View>}
@@ -411,7 +414,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
     return <NativeLibraryContent theme={theme} title={title} active={active}
       subtitle={snapshot ? t('mobile.familyCount', { count: scope === 'all' ? snapshot.familyCount : page.totalMatches }) : t('library.title')}
       mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
-      ready={ready} importing={importing} onModeChange={setMode}
+      ready={ready} importing={importing} importBlocked={syncBlocked} onModeChange={setMode}
       onSearchTextChange={setSearchText} onImport={importFont} onFilter={openFilter} filterCount={selectedFacets.length}>
       {active ? content : <View style={[styles.screen, { backgroundColor: theme.background }]} />}
     </NativeLibraryContent>;
@@ -485,6 +488,24 @@ function MobileApp() {
 
   const syncController = useCloudSync(snapshot !== null, applySnapshot);
 
+  const displayedFamilyId = fontPage?.id;
+  const displayedFamilyName = fontPage?.displayName;
+  useEffect(() => {
+    if (!fontPageVisible || !displayedFamilyId || !displayedFamilyName) return;
+    const abort = new AbortController();
+    void (async () => {
+      let offset = 0;
+      while (!abort.signal.aborted) {
+        const page = await library.query({ scope: 'all', text: displayedFamilyName, offset, limit: 100 }, abort.signal);
+        const family = page.families.find((item) => item.id === displayedFamilyId);
+        if (family) { setFontPage(family); return; }
+        offset += page.families.length;
+        if (!page.families.length || offset >= page.totalMatches) { setFontPageVisible(false); return; }
+      }
+    })().catch(() => { /* 查询错误不使用旧路径重新创建预览。 */ });
+    return () => abort.abort();
+  }, [libraryVersion, displayedFamilyId, displayedFamilyName, fontPageVisible]);
+
   function selectTarget(target: LibraryTarget) { setLibraryTarget(target); setNativeDestination('local'); }
   function navigate(value: NativeDestination) {
     Keyboard.dismiss();
@@ -522,9 +543,9 @@ function MobileApp() {
   }, []);
 
   function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
-  const cloudContent = <CloudScreen theme={theme} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
+  const cloudContent = <CloudScreen theme={theme} snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
   const settingsContent = <SettingsScreen theme={theme} onOpenPage={openSettingsPage} />;
-  const searchContent = <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
+  const searchContent = <LibraryScreen syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
     sidebar={sidebar} searchPage destination="search" target={searchTarget} snapshot={snapshot} libraryVersion={libraryVersion}
     initialError={initialError} defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady}
     showImportResults={preferences.importShowResults} onSnapshotChange={applySnapshot} onOpenFamily={(family) => openFamily(family, searchTarget)}
@@ -535,7 +556,7 @@ function MobileApp() {
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
         settings={settingsContent} search={searchContent} cloud={cloudContent} onDestinationChange={navigate}>
-        <LibraryScreen theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
+        <LibraryScreen syncBlocked={syncController.blocked} theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
           target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
           defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
           onTargetChange={selectTarget} onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
@@ -550,7 +571,7 @@ function MobileApp() {
       <StatusBar style="auto" />
       <View style={styles.screen}>
         <View style={[styles.screen, tab !== 'local' && styles.hidden]}>
-          <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
+          <LibraryScreen syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
             target={libraryTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
             defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
             onSnapshotChange={applySnapshot} onTargetChange={setLibraryTarget}

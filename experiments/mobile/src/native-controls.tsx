@@ -29,6 +29,7 @@ export interface NativeHeaderProps {
   searchOpen: boolean;
   searchText: string;
   importing: boolean;
+  importBlocked?: boolean;
   ready: boolean;
   onModeChange: (mode: 'grid' | 'list') => void;
   onSearchTextChange: (text: string) => void;

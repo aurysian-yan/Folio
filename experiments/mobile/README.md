@@ -130,7 +130,7 @@ iOS 使用设备 Keychain，Android 使用 Keystore AES-256-GCM 密钥和 `noBac
 
 初始化与同步前恢复 `FolioMobilePoC/fonts`：按内容将旧 `.font` 规范化为 TTF／OTF／TTC，校验新副本、写入目录解析缓存后移除旧来源与副本，归并同目录文件根和路径别名，并恢复 iOS 沙盒变更后的来源与同步资产路径。字体身份、星标、手动收藏夹、智慧条件和最近访问保持不变。导入去重读取实际托管文件，包含同步下载文件。
 
-首次发现字体的自动下载沿用桌面逻辑；未下载或不可读取的云端文件明确显示“仅在云端”，不提供预览，也不进入本地筛选与智慧匹配。自动同步开关目前只保存偏好，调度及完整删除／恢复／冲突操作留给第六批。
+首次发现字体的自动下载沿用桌面逻辑；未下载或不可读取的云端文件明确显示“仅在云端”，不提供预览，也不进入本地筛选与智慧匹配。第五批只保存自动同步偏好；第六批调度与操作范围见下节。
 
 可执行验证（本目录）：
 
@@ -151,3 +151,25 @@ adb -s <真机序列号> shell am instrument -w com.folio.poc.test/com.folio.poc
 真机更新前核对构建变体与 APK 的 applicationId：开发包必须是 `com.folio.mobile.poc.dev`，与前台 Folio Dev 一致；生产包 `com.folio.mobile.poc` 不能代替开发包验收。保留数据安装，页面验收须另外确认四个导航 Tab、输入退出和详情返回，不能由 instrumentation PASS 推断。
 
 测试 APK 使用自己的私有目录和随机测试凭据，不接触 Folio Dev 字体库。回环 WebDAV 使用测试注入客户端；生产连接仍强制 HTTPS，不放宽 TLS 或地址检查。独立服务商 WebDAV 的移动／桌面实网验收尚待配置，不能用回环测试代替；完整范围见 [VALIDATION.md](VALIDATION.md#cloud-sync-foundation-batch-5)。
+
+## Cloud Sync Cycle (Batch 6)
+
+云端页沿用原生分段控件，提供「云端字体／最近删除」，可仅保留云端、重新下载、从所有设备删除及恢复。移除本地副本同步清理所有对应来源缓存和显式文件根；目录根、字体身份及收藏、收藏夹成员和最近访问保留。仅保留云端要求字体已发布；全设备删除使用共享可恢复删除事件。破坏性操作与采用单一冲突版本均由产品确认框提交。
+
+冲突决策直接调用桌面 Rust 的保留两版、采用本地或采用云端。字体版本以本轮下载前的本地记录定位，避免把刚收到的云端版误认为本地版。成功、取消及部分失败后重新扫描真实文件来源并刷新本地、星标、收藏夹、最近及云端状态；已打开的详情重新查询，不保留已失效预览。
+
+自动同步只在前台运行。单实例调度器合并本地变更，回到前台补同步，进入后台由 JS 与原生生命周期共同取消；失败限频重试，认证失效等待连接变更或恢复前台。手动取消不立即自动重启。同步期间暂停导入、连接编辑与冲突操作；星标、成员与最近访问等意图按顺序等待本轮结束再提交并补下一轮。任务门、读取代次和写入版本防止重复启动及过期回写。没有后台常驻、系统字体安装、DocumentsProvider 或 File Provider。
+
+Android HTTPS 使用 Cargo 锁定的 rustls 系统证书校验器，第一次网络调用前初始化 JVM 与应用上下文，配套 AAR 与 Cargo 版本一致。没有改用宽松证书策略。
+
+实网回归必须使用专用测试连接。在手机 Folio Dev 保存后，可构建带相同开发签名的原生测试 APK；测试只在设备内部读取该连接的安全凭据，在随机 `validation-*` 子目录和两个临时库执行，不输出密码、不修改已有字体库。需要先移除上一份**测试 APK**以切换签名，不能卸载 Folio Dev：
+
+```sh
+cd android
+./gradlew :folio-native:assembleDebugAndroidTest -PfolioSyncTarget=com.folio.mobile.poc.dev
+adb uninstall com.folio.poc.test
+adb install ../modules/folio-native/android/build/outputs/apk/androidTest/debug/folio-native-debug-androidTest.apk
+adb shell am instrument -w com.folio.poc.test/com.folio.poc.FolioLiveSyncInstrumentation
+```
+
+测试子目录保留可恢复事件及字体对象以供核对，临时本地库和字体在结束后清理。此测试的两个副本都在 Android 真机，不能代替独立服务商或桌面应用的实网验收。实际结果及待验收范围见 [VALIDATION.md](VALIDATION.md#cloud-sync-cycle-batch-6)。

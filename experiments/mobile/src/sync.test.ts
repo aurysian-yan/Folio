@@ -13,11 +13,11 @@ test('服务商预设使用桌面 WebDAV 地址，识别尾斜线并保留自定
 const state: SyncState = { profile, credentialAvailable: true, credentialError: false,
   status: { phase: '待同步', stage: '待同步', percent: 0, stageCompleted: 0, stageTotal: 0, isRunning: false,
     uploadedFiles: 0, downloadedFiles: 0, uploadedBytes: 0, downloadedBytes: 0, completionGeneration: 0,
-    lastSyncedAtMs: null, errorMessage: null, items: [] }, fonts: [] };
+    lastSyncedAtMs: null, errorMessage: null, items: [] }, fonts: [], conflicts: [] };
 function bridge(): SyncBridge {
   return { syncState: async () => state, testSyncConnection: async () => undefined,
     saveSyncConnection: async () => undefined, disconnectSync: async () => undefined,
-    startSync: async () => true, cancelSync: async () => undefined };
+    startSync: async () => true, cancelSync: async () => undefined, cloudFontAction: async () => undefined, resolveSyncConflict: async () => undefined };
 }
 test('连接验证拒绝 HTTP、内嵌凭据与目录穿越，不向原生发送密码', () => {
   for (const serverUrl of ['http://dav.example.test', 'https://user:secret@dav.example.test', 'invalid', 'https://dav.example.test/?password=secret']) {

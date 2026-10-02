@@ -18,15 +18,39 @@ android {
     versionCode 1
     versionName '0.1.0'
     minSdkVersion 28
-    testInstrumentationRunner 'com.folio.poc.FolioSyncInstrumentation'
+    testInstrumentationRunner project.findProperty('folioSyncTarget') ? 'com.folio.poc.FolioLiveSyncInstrumentation' : 'com.folio.poc.FolioSyncInstrumentation'
     consumerProguardFiles 'consumer-rules.pro'
   }
   sourceSets.main.java.srcDirs += 'generated'
   sourceSets.main.resources.srcDirs += 'third-party'
+  sourceSets.androidTest.assets.srcDirs += '../../../samples'
   buildFeatures { compose true }
+  if (project.findProperty('folioSyncTarget')) {
+    signingConfigs.debug {
+      storeFile rootProject.file('app/debug.keystore')
+      storePassword 'android'
+      keyAlias 'androiddebugkey'
+      keyPassword 'android'
+    }
+  }
 }
 
+rootProject.allprojects {
+  repositories {
+    maven {
+      url "https://raw.githubusercontent.com/rustls/rustls-platform-verifier/maven-archive/android-release-support/maven/"
+      content { includeGroup 'org.rustls' }
+    }
+  }
+}
+
+// 安卓校验器版本必须与 Cargo 锁文件一致。
+def folioCargoLock = file('../../../../../Cargo.lock').text
+def folioVerifierVersion = (folioCargoLock =~ /name = "rustls-platform-verifier-android"\s+version = "([^"]+)"/)
+if (!folioVerifierVersion.find()) throw new GradleException('Cargo.lock 缺少安卓证书校验器')
+
 dependencies {
+  implementation "org.rustls:rustls-platform-verifier:${folioVerifierVersion.group(1)}"
   implementation 'androidx.activity:activity:1.10.1'
   implementation 'net.java.dev.jna:jna:5.19.1@aar'
   implementation 'androidx.compose.foundation:foundation-android:1.10.6'
@@ -40,4 +64,16 @@ dependencies {
 android.testOptions.unitTests.all {
   systemProperty 'jna.library.path', rootProject.file('../../../target/debug').absolutePath
   systemProperty 'folio.samples', rootProject.file('../samples').absolutePath
+}
+
+// 仅显式实网测试构建读取目标开发包的私有配置与 Keystore。
+tasks.withType(com.android.build.gradle.tasks.ProcessTestManifest).configureEach {
+  if (project.findProperty('folioSyncTarget')) {
+    inputs.property('folioSyncTarget', project.property('folioSyncTarget').toString())
+    doLast {
+      def manifest = new File(packagedManifestOutputDirectory.get().asFile, 'AndroidManifest.xml')
+      manifest.text = manifest.text.replaceAll(/android:targetPackage="[^"]+"/,
+        "android:targetPackage=\"${project.property('folioSyncTarget')}\"")
+    }
+  }
 }

@@ -1,2 +1,4 @@
 -keep class com.sun.jna.** { *; }
 -keep class com.folio.poc.ffi.** { *; }
+-keep class com.folio.poc.FolioTls { *; }
+-keep, includedescriptorclasses class org.rustls.platformverifier.** { *; }

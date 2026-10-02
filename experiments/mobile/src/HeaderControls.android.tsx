@@ -10,6 +10,7 @@ interface NativeAndroidHeaderProps extends ViewProps {
   dark: boolean;
   ready: boolean;
   importing: boolean;
+  importBlocked: boolean;
   searchOpen: boolean;
   searchText: string;
   filterCount: number;
@@ -38,12 +39,12 @@ export function AndroidHeaderBackdrop({ theme, ...props }: AndroidHeaderBackdrop
 }
 
 // 安卓操作区使用原生控件与共享语言目录。
-export function AndroidHeaderControls({ sourceId, theme, mode, active, width, ready, importing,
+export function AndroidHeaderControls({ sourceId, theme, mode, active, width, ready, importing, importBlocked = false,
   searchOpen, searchText, filterCount, onFilter, onModeChange, onImport, onSearchTextChange }: AndroidHeaderProps) {
   const { t } = useTranslation();
   const { label, secondary, muted, accent, tab, border, raised } = theme;
   return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
-    ready={ready} importing={importing} searchOpen={searchOpen} searchText={searchText}
+    ready={ready} importing={importing} importBlocked={importBlocked} searchOpen={searchOpen} searchText={searchText}
     labels={{ search: t('mobile.searchFonts'), searchPlaceholder: t('mobile.searchPlaceholder'), clearSearch: t('mobile.clearSearch'),
       filter: filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'),
       importFonts: t('import.importFonts'), loadingImport: t('mobile.loadingImport') }}

@@ -92,6 +92,33 @@ impl FolioDatabase {
         Ok(ids)
     }
 
+    /// 移除指定文件的所有缓存归属，保留身份关联的用户状态。
+    pub fn remove_source_file(&self, path: impl AsRef<Path>) -> Result<u64, StorageError> {
+        let canonical = path
+            .as_ref()
+            .canonicalize()
+            .or_else(
+                |error| match (path.as_ref().parent(), path.as_ref().file_name()) {
+                    (Some(parent), Some(name)) => {
+                        parent.canonicalize().map(|parent| parent.join(name))
+                    }
+                    _ => Err(error),
+                },
+            )
+            .unwrap_or_else(|_| path.as_ref().to_path_buf());
+        let encoded = crate::path_codec::encode_path(&canonical);
+        let removed = self.conn.execute(
+            "DELETE FROM source_files WHERE path_platform = ?1 AND path_bytes = ?2",
+            rusqlite::params![encoded.platform.as_str(), encoded.bytes],
+        )?;
+        for root in self.list_roots()? {
+            if root.kind == crate::root::LibraryRootKind::File && root.path == canonical {
+                self.remove_root(root.id)?;
+            }
+        }
+        Ok(removed as u64)
+    }
+
     /// 列出全部库根目录。
     pub fn list_roots(&self) -> Result<Vec<LibraryRoot>, StorageError> {
         root::list_roots(&self.conn)

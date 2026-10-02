@@ -540,6 +540,8 @@ dependencies = [
  "folio-query",
  "folio-storage",
  "folio-sync",
+ "jni",
+ "rustls-platform-verifier",
  "serde_json",
  "tempfile",
  "thiserror",

@@ -60,3 +60,15 @@ UniFFI 0.32.1 使用全局配置的 `crates.folio_ffi` 节点。Kotlin 的错误
 安全存储依据：[Apple Keychain 可访问性](https://developer.apple.com/documentation/security/ksecattraccessibleafterfirstunlockthisdeviceonly)、[Android Keystore AES-GCM](https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec)。运行验证和实网缺口见 [VALIDATION.md](VALIDATION.md#cloud-sync-foundation-batch-5)。
 
 2026-10-02，Android 真机复测发现 Expo 延迟测量可能在 Compose 宿主离开窗口后执行，搜索键盘退出可触发窗口 recomposer 异常。顶栏、背景与底栏宿主在离窗时只记录测量尺寸，不测量或布局 Compose 子视图；重新附窗后请求正常布局。键盘避让保持底栏宿主挂载，隐藏期间关闭触摸与读屏；保留现有界面，补充独立测试 APK 的离窗测量回归。设备验收先确认 APK applicationId 与前台应用变体一致，原生后台测试与实际页面结果分别登记。
+
+## Cloud Sync Cycle (Batch 6)
+
+2026-10-02：第六批沿用现有导航、主题、分类卡片与成熟组件。新增云端字体操作、最近删除分段和三种冲突决策；不新增同步协议、数据库 schema 或 JS 依赖。云端保留与全设备删除使用明确确认，采用单一冲突版本再次确认。所有实际决策调用共享 Rust，不在 RN 重写合并规则。
+
+共享来源删除接口按规范路径清理各根中对应的 `source_files` 及显式文件根，保留目录根与用户状态。仅保留云端必须已有发布记录；本地删除先移入已有恢复目录。远端删除也清理来源；接收阶段通过统一收尾刷新目录，即使取消或部分失败也保留真实已落地状态。字体冲突以下载前的本地资产集合确定本地版，复用既有稳定冲突记录及解决事件。
+
+RN 使用单实例前台调度器；本地写入与同步共用任务门。导入在同步中拒绝，系统文件选择器打开至导入结束持续占用任务门，前台补同步不会抢先丢弃文件选择；连接和冲突操作暂停；收藏、成员和最近访问等意图串行排队，Rust 本轮结束后执行，再合并为下一轮。后台取消同时由原生生命周期兜底，原生开始与前后台状态切换共用锁；前台恢复读取实际状态。读取携带生命周期代次与写入版本，过期结果丢弃；完成代次变化后重新扫描并刷新所有库范围和当前详情。失败限频退避，认证错误停止定时重试，手动取消不立即重启。
+
+Android 的 reqwest/rustls 系统 TLS 必须在首次连接前初始化 JVM 与应用上下文，并打包 Cargo.lock 中匹配的系统校验器 AAR。新增依赖仅为现有传输栈的 Android 平台支持；不改变 TLS 校验、服务商协议或应用权限边界。参照 [rustls-platform-verifier Android 接入](https://github.com/rustls/rustls-platform-verifier#android)；实际 HTTPS 与安全存储回归单独记录。
+
+实网 instrumentation 仅在显式指定 Folio Dev 时以开发签名构建，保持应用自身数据和凭据作用域，原生读取凭据而不导出。在专用连接中建立随机测试子目录和两个临时库；不启动 Expo/Metro，不借用真实库作为测试副本。AGP 库测试默认自我 instrumentation，实网测试仅替换测试产物的 targetPackage；不改变应用 Manifest。Android 两个副本不等于实际桌面客户端，独立 WebDAV 与 123PAN 的验收范围分别登记。没有后台常驻同步、系统字体安装、DocumentsProvider 或 File Provider。

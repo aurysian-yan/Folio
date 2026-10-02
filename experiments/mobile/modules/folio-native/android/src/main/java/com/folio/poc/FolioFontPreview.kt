@@ -40,36 +40,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
         }
         worker.execute {
             val result = runCatching {
-                val source = File(value.sourcePath).canonicalFile
-                val directory = File(context.filesDir, "FolioMobilePoC/fonts").canonicalFile
-                require(source.path.startsWith(directory.path + File.separator) && source.canRead())
-                require(value.faceIndex >= 0)
-                require(value.fontSize.isFinite() && value.fontSize in 8.0..160.0)
-                require(value.axes.all { (tag, number) ->
-                    tag.matches(Regex("[A-Za-z0-9 ]{4}")) && number.isFinite()
-                })
-                val settings = value.axes.toSortedMap().map { (tag, number) -> "'$tag' $number" }.joinToString(",")
-                val builder = Font.Builder(source).setTtcIndex(value.faceIndex)
-                if (settings.isNotEmpty()) builder.setFontVariationSettings(settings)
-                val font = builder.build()
-                val typeface = Typeface.CustomFallbackBuilder(FontFamily.Builder(font).build()).build()
-                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    this.typeface = typeface
-                    textSize = value.fontSize.toFloat() * resources.displayMetrics.density
-                }
-                val shaped = value.text.split('\n').map { paragraph ->
-                    TextRunShaper.shapeTextRun(paragraph, 0, paragraph.length,
-                        0, paragraph.length, 0f, 0f, false, textPaint)
-                }
-                // 只绘制来自所选文件及成员的字形，拒绝系统回退。
-                val supported = shaped.all { line ->
-                    (0 until line.glyphCount()).all { index ->
-                        val used = line.getFont(index)
-                        line.getGlyphId(index) != 0 && used.file?.canonicalFile == source
-                            && used.ttcIndex == value.faceIndex
-                    }
-                }
-                Pair(shaped, supported)
+                shapeSelection(context, value)
             }
             post {
                 if (generation.get() != token) return@post
@@ -122,6 +93,38 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
     }
 
     companion object {
+        internal fun shapeSelection(context: Context, value: FolioPreviewSelection): Pair<List<PositionedGlyphs>, Boolean> {
+            val source = File(value.sourcePath).canonicalFile
+            val directory = File(context.filesDir, "FolioMobilePoC/fonts").canonicalFile
+            require(source.path.startsWith(directory.path + File.separator) && source.canRead())
+            require(value.faceIndex >= 0)
+            require(value.fontSize.isFinite() && value.fontSize in 8.0..160.0)
+            require(value.axes.all { (tag, number) ->
+                tag.matches(Regex("[A-Za-z0-9 ]{4}")) && number.isFinite()
+            })
+            val settings = value.axes.toSortedMap().map { (tag, number) -> "'$tag' $number" }.joinToString(",")
+            val builder = Font.Builder(source).setTtcIndex(value.faceIndex)
+            if (settings.isNotEmpty()) builder.setFontVariationSettings(settings)
+            val font = builder.build()
+            val typeface = Typeface.CustomFallbackBuilder(FontFamily.Builder(font).build()).build()
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.typeface = typeface
+                textSize = value.fontSize.toFloat() * context.resources.displayMetrics.density
+            }
+            val shaped = value.text.split('\n').map { paragraph ->
+                TextRunShaper.shapeTextRun(paragraph, 0, paragraph.length,
+                    0, paragraph.length, 0f, 0f, false, textPaint)
+            }
+            // 只绘制来自所选文件及成员的字形，拒绝系统回退。
+            val supported = shaped.all { line ->
+                (0 until line.glyphCount()).all { index ->
+                    val used = line.getFont(index)
+                    line.getGlyphId(index) != 0 && used.file?.canonicalFile == source
+                        && used.ttcIndex == value.faceIndex
+                }
+            }
+            return Pair(shaped, supported)
+        }
         private val worker = Executors.newSingleThreadExecutor()
     }
 }

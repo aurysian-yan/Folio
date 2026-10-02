@@ -83,7 +83,8 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
               <Section>{row('settings', t('navigation.settings'), 'gear')}</Section>
             </List>
           </NavigationSplitView.Sidebar>
-          <NavigationSplitView.Detail>{destination === 'settings' ? settings : destination === 'search' ? search : destination === 'cloud' ? cloud : children}</NavigationSplitView.Detail>
+          <NavigationSplitView.Detail>{destination === 'settings' ? settings : destination === 'search' ? search
+            : destination === 'cloud' ? <RNHostView><View style={styles.fill}>{cloud}</View></RNHostView> : children}</NavigationSplitView.Detail>
         </NavigationSplitView>
       </Host>
     );
@@ -116,7 +117,7 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
 
 // 分栏详情只保留系统工具栏，React Native 内容不再绘制顶部操作区。
 export function NativeLibraryContent({ children, title, subtitle, active, theme, mode, width,
-  searchOpen, searchText, ready, importing, onModeChange, onSearchTextChange, onImport, onFilter, filterCount }: NativeLibraryContentProps) {
+  searchOpen, searchText, ready, importing, importBlocked = false, onModeChange, onSearchTextChange, onImport, onFilter, filterCount }: NativeLibraryContentProps) {
   const { t } = useTranslation();
   const text = useNativeState(searchText);
   const searchInput = useRef<TextFieldRef>(null);
@@ -167,7 +168,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
               <Button label={filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts')} systemImage="line.3.horizontal.decrease"
                 onPress={onFilter} modifiers={[...actionModifiers, tint(filterCount ? theme.accent : theme.label), disabled(!ready)]} />
               <Button label={importing ? t('mobile.loadingImport') : t('import.importFonts')} systemImage="plus" onPress={onImport}
-                modifiers={[...actionModifiers, disabled(!ready || importing)]} />
+                modifiers={[...actionModifiers, disabled(!ready || importing || importBlocked)]} />
             </>}
           </HStack>
         </ToolbarItem>}
@@ -177,7 +178,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
 }
 
 // 系统 Menu 保留原生展开、收起与菜单项选择行为。
-export function NativeHeaderControls({ theme, active, mode, width, searchOpen, searchText, ready, importing,
+export function NativeHeaderControls({ theme, active, mode, width, searchOpen, searchText, ready, importing, importBlocked = false,
   onModeChange, onSearchTextChange, onImport, onFilter, filterCount }: NativeHeaderProps) {
   const { t } = useTranslation();
   const menuWidth = width < toolbarHeight * 7 ? toolbarHeight : 64;
@@ -235,7 +236,7 @@ export function NativeHeaderControls({ theme, active, mode, width, searchOpen, s
                 modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
             </Button>
             <Button onPress={onImport}
-              modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel(importing ? t('mobile.loadingImport') : t('import.importFonts')), disabled(!ready || importing)]}>
+              modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel(importing ? t('mobile.loadingImport') : t('import.importFonts')), disabled(!ready || importing || importBlocked)]}>
               <Image systemName="plus" size={20} color={theme.label}
                 modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
             </Button>

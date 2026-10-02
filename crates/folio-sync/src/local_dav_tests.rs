@@ -300,3 +300,288 @@ fn nested_legacy_font_is_normalized_into_the_upload_directory() {
     stage_managed_fonts(&mut db, &fonts).unwrap();
     assert_eq!(db.list_sync_assets().unwrap().len(), 1);
 }
+
+fn collection_bytes() -> Vec<u8> {
+    let mut bytes = b"ttcf\0\x01\0\0\0\0\0\x02\0\0\0\0\0\0\0\0".to_vec();
+    for (index, name) in ["Lato-Regular.ttf", "Lato-Bold.ttf"].iter().enumerate() {
+        let base = bytes.len() as u32;
+        bytes[12 + index * 4..16 + index * 4].copy_from_slice(&base.to_be_bytes());
+        let mut font = std::fs::read(sample(name)).unwrap();
+        let count = u16::from_be_bytes(font[4..6].try_into().unwrap());
+        for table in 0..count as usize {
+            let record = 12 + table * 16;
+            let offset = u32::from_be_bytes(font[record + 8..record + 12].try_into().unwrap());
+            font[record + 8..record + 12].copy_from_slice(&(offset + base).to_be_bytes());
+        }
+        bytes.extend(font);
+        while !bytes.len().is_multiple_of(4) {
+            bytes.push(0);
+        }
+    }
+    bytes
+}
+
+#[tokio::test]
+async fn cloud_eviction_download_delete_and_recovery_preserve_sources_and_user_state() {
+    let server = DavServer::start();
+    let remote = server.client("p");
+    let temporary = tempfile::tempdir().unwrap();
+    let first = temporary.path().join("mobile/fonts");
+    let second = temporary.path().join("desktop/fonts");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    std::fs::write(first.join("Lato.ttc"), collection_bytes()).unwrap();
+    std::fs::copy(sample("Inter-Variable.ttf"), first.join("Inter.ttf")).unwrap();
+    let mut a = FolioDatabase::open(temporary.path().join("mobile.sqlite")).unwrap();
+    let mut b = FolioDatabase::open(temporary.path().join("desktop.sqlite")).unwrap();
+    a.add_file_root(first.join("Lato.ttc")).unwrap();
+    a.add_root(&first, true).unwrap();
+    a.refresh(RefreshMode::Incremental).unwrap();
+    let parsed = parse_font_file(first.join("Lato.ttc")).unwrap();
+    let ids = parsed
+        .faces
+        .iter()
+        .map(|face| face.identity.id)
+        .collect::<Vec<_>>();
+    let fingerprint = parsed.fingerprint.to_hex();
+    a.set_favorite(ids[1], true).unwrap();
+    let collection = a.create_collection("测试收藏").unwrap();
+    a.add_collection_members(collection.id, &ids).unwrap();
+    a.record_recent(ids[1]).unwrap();
+    exchange(&mut a, &first, &remote).await;
+    exchange(&mut b, &second, &remote).await;
+    set_cloud_only(a.path(), &fingerprint).unwrap();
+    // 显式文件根与目录的重叠缓存都必须立即清除。
+    assert_eq!(a.load_cached_catalog().unwrap().face_count(), 1);
+    assert!(a
+        .source_root_ids(first.join("Lato.ttc"))
+        .unwrap()
+        .is_empty());
+    exchange(&mut a, &first, &remote).await;
+    assert!(
+        list_cloud_fonts(a.path())
+            .unwrap()
+            .iter()
+            .find(|font| font.fingerprint == fingerprint)
+            .unwrap()
+            .cloud_only
+    );
+    assert_eq!(b.load_cached_catalog().unwrap().face_count(), 3);
+    request_restore(a.path(), &fingerprint).unwrap();
+    let result = exchange(&mut a, &first, &remote).await;
+    assert_eq!(result.downloaded_files, 1);
+    let asset = a
+        .list_sync_assets()
+        .unwrap()
+        .into_iter()
+        .find(|asset| asset.fingerprint == fingerprint)
+        .unwrap();
+    let restored = parse_font_file(asset.local_path.unwrap()).unwrap();
+    assert_eq!(restored.fingerprint, parsed.fingerprint);
+    assert_eq!(restored.faces[1].face_index, 1);
+    delete_everywhere(a.path(), &fingerprint).unwrap();
+    assert_eq!(a.load_cached_catalog().unwrap().face_count(), 1);
+    exchange(&mut a, &first, &remote).await;
+    exchange(&mut b, &second, &remote).await;
+    assert_eq!(b.load_cached_catalog().unwrap().face_count(), 1);
+    assert!(
+        list_cloud_fonts(b.path())
+            .unwrap()
+            .iter()
+            .find(|font| font.fingerprint == fingerprint)
+            .unwrap()
+            .deleted
+    );
+    restore_deleted_font(b.path(), &fingerprint).unwrap();
+    exchange(&mut b, &second, &remote).await;
+    exchange(&mut a, &first, &remote).await;
+    for db in [&a, &b] {
+        assert_eq!(db.load_cached_catalog().unwrap().face_count(), 3);
+        assert_eq!(db.list_favorites().unwrap(), vec![ids[1]]);
+        assert_eq!(db.list_collection_members(collection.id).unwrap().len(), 2);
+        assert_eq!(db.list_recent(100).unwrap()[0].identity_id, ids[1]);
+        let variable = db
+            .list_sync_assets()
+            .unwrap()
+            .into_iter()
+            .find(|asset| asset.extension == "ttf")
+            .unwrap();
+        assert!(
+            !parse_font_file(variable.local_path.unwrap()).unwrap().faces[0]
+                .metadata
+                .variable_axes
+                .is_empty()
+        );
+    }
+}
+
+#[tokio::test]
+async fn cancellation_after_a_download_keeps_real_catalog_and_retry_completes() {
+    let server = DavServer::start();
+    let remote = server.client("p");
+    let temporary = tempfile::tempdir().unwrap();
+    let first = temporary.path().join("first");
+    let second = temporary.path().join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    for name in ["Lato-Regular.ttf", "Inter-Variable.ttf"] {
+        std::fs::copy(sample(name), first.join(name)).unwrap();
+    }
+    let mut a = FolioDatabase::open(temporary.path().join("a.sqlite")).unwrap();
+    let mut b = FolioDatabase::open(temporary.path().join("b.sqlite")).unwrap();
+    exchange(&mut a, &first, &remote).await;
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let signal = cancelled.clone();
+    let report: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(move |progress| {
+        if progress.downloaded_files == 1 {
+            signal.store(true, Ordering::Relaxed);
+        }
+    });
+    let result =
+        synchronize_with_client(&mut b, &second, &profile(), &remote, &cancelled, &report).await;
+    assert!(matches!(result, Err(SyncError::Cancelled)));
+    assert_eq!(b.load_cached_catalog().unwrap().face_count(), 1);
+    assert_eq!(exchange(&mut b, &second, &remote).await.downloaded_files, 1);
+    assert_eq!(b.load_cached_catalog().unwrap().face_count(), 2);
+    let report: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(|_| {});
+    let result = synchronize_with_client(
+        &mut b,
+        &second,
+        &profile(),
+        &server.client("wrong"),
+        &AtomicBool::new(false),
+        &report,
+    )
+    .await;
+    assert!(matches!(result, Err(SyncError::Authentication)));
+    assert_eq!(b.load_cached_catalog().unwrap().face_count(), 2);
+}
+
+#[tokio::test]
+async fn all_collection_conflict_resolutions_converge_across_mobile_and_desktop() {
+    for resolution in [
+        ConflictResolution::KeepBoth,
+        ConflictResolution::UseLocal,
+        ConflictResolution::UseRemote,
+    ] {
+        let server = DavServer::start();
+        let remote = server.client("p");
+        let temporary = tempfile::tempdir().unwrap();
+        let mut a = FolioDatabase::open(temporary.path().join("a.sqlite")).unwrap();
+        let mut b = FolioDatabase::open(temporary.path().join("b.sqlite")).unwrap();
+        let first = temporary.path().join("a");
+        let second = temporary.path().join("b");
+        let original = a.create_collection("原名称").unwrap();
+        exchange(&mut a, &first, &remote).await;
+        exchange(&mut b, &second, &remote).await;
+        a.update_collection(
+            original.id,
+            "桌面版",
+            CollectionIcon::Heart,
+            CollectionColor::Blue,
+        )
+        .unwrap();
+        b.update_collection(
+            original.id,
+            "移动版",
+            CollectionIcon::Books,
+            CollectionColor::Purple,
+        )
+        .unwrap();
+        exchange(&mut a, &first, &remote).await;
+        exchange(&mut b, &second, &remote).await;
+        let conflict = list_conflicts(b.path()).unwrap().remove(0);
+        resolve_conflict(b.path(), &conflict.id, resolution).unwrap();
+        exchange(&mut b, &second, &remote).await;
+        exchange(&mut a, &first, &remote).await;
+        let names = a
+            .list_collections()
+            .unwrap()
+            .into_iter()
+            .map(|c| c.name)
+            .collect::<BTreeSet<_>>();
+        match resolution {
+            ConflictResolution::KeepBoth => assert_eq!(names.len(), 2),
+            ConflictResolution::UseLocal => {
+                assert_eq!(names, ["移动版".to_owned()].into_iter().collect())
+            }
+            ConflictResolution::UseRemote => {
+                assert_eq!(names, ["桌面版".to_owned()].into_iter().collect())
+            }
+        }
+        assert!(list_conflicts(b.path()).unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
+async fn font_revision_decisions_keep_both_or_remove_the_selected_other_version() {
+    for resolution in [
+        ConflictResolution::KeepBoth,
+        ConflictResolution::UseLocal,
+        ConflictResolution::UseRemote,
+    ] {
+        let server = DavServer::start();
+        let remote = server.client("p");
+        let temporary = tempfile::tempdir().unwrap();
+        let first = temporary.path().join("desktop");
+        let second = temporary.path().join("mobile");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::copy(sample("Lato-Regular.ttf"), first.join("original.ttf")).unwrap();
+        let original = parse_font_file(first.join("original.ttf")).unwrap();
+        let mut a = FolioDatabase::open(temporary.path().join("desktop.sqlite")).unwrap();
+        let mut b = FolioDatabase::open(temporary.path().join("mobile.sqlite")).unwrap();
+        exchange(&mut a, &first, &remote).await;
+        exchange(&mut b, &second, &remote).await;
+        let mut variant = std::fs::read(sample("Lato-Regular.ttf")).unwrap();
+        let tables = u16::from_be_bytes(variant[4..6].try_into().unwrap());
+        for table in 0..tables as usize {
+            let record = 12 + table * 16;
+            if &variant[record..record + 4] == b"head" {
+                let offset =
+                    u32::from_be_bytes(variant[record + 8..record + 12].try_into().unwrap())
+                        as usize;
+                for salt in 1..=255 {
+                    variant[offset + 8] = salt;
+                    if ContentFingerprint::from_bytes(&variant).to_hex()
+                        < original.fingerprint.to_hex()
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        std::fs::write(first.join("variant.ttf"), variant).unwrap();
+        let variant = parse_font_file(first.join("variant.ttf")).unwrap();
+        assert_eq!(original.faces[0].identity.id, variant.faces[0].identity.id);
+        exchange(&mut a, &first, &remote).await;
+        exchange(&mut b, &second, &remote).await;
+        let conflict = list_conflicts(b.path()).unwrap().remove(0);
+        assert_eq!(
+            conflict.local_fingerprint.as_ref(),
+            Some(&original.fingerprint.to_hex())
+        );
+        assert_eq!(
+            conflict.remote_fingerprint.as_ref(),
+            Some(&variant.fingerprint.to_hex())
+        );
+        resolve_conflict(b.path(), &conflict.id, resolution).unwrap();
+        exchange(&mut b, &second, &remote).await;
+        exchange(&mut a, &first, &remote).await;
+        let active = list_cloud_fonts(a.path())
+            .unwrap()
+            .into_iter()
+            .filter(|font| !font.deleted)
+            .map(|font| font.fingerprint)
+            .collect::<BTreeSet<_>>();
+        match resolution {
+            ConflictResolution::KeepBoth => assert_eq!(active.len(), 2),
+            ConflictResolution::UseLocal => assert_eq!(
+                active,
+                [original.fingerprint.to_hex()].into_iter().collect()
+            ),
+            ConflictResolution::UseRemote => {
+                assert_eq!(active, [variant.fingerprint.to_hex()].into_iter().collect())
+            }
+        }
+        assert!(list_conflicts(b.path()).unwrap().is_empty());
+    }
+}

@@ -161,31 +161,32 @@ function validateQuery(query: LibraryQuery) {
   }
 }
 
-export function createLibraryClient(bridge: LibraryBridge) {
+export function createLibraryClient(bridge: LibraryBridge,
+  mutate: <T>(action: () => Promise<T>, kind?: 'import' | 'state') => Promise<T> = (action) => action()) {
   return {
     initialize: () => bridge.initialize(),
     snapshot: () => bridge.snapshot(),
     async importFonts(files: ImportFile[]): Promise<ImportReport> {
-      try { return await bridge.importFonts(files); }
+      try { return await mutate(() => bridge.importFonts(files), 'import'); }
       catch (cause: unknown) {
         const rolledBack = typeof cause === 'object' && cause !== null
           && 'code' in cause && cause.code === 'ERR_FOLIO_IMPORT';
-        throw new LibraryError('native', rolledBack
+        throw new LibraryError('native', cause instanceof Error && cause.message.includes('ERR_FOLIO_BUSY') ? i18n.t('mobile.sync.busyHint') : rolledBack
           ? i18n.t('mobile.errorUpdate')
           : i18n.t('mobile.errorImport'), { cause });
       }
     },
-    setFavorite: (identityIds: string[], favorite: boolean) => bridge.setFavorite(identityIds, favorite),
-    createCollection: (input: CollectionInput) => bridge.createCollection(input),
-    updateCollection: (id: string, input: CollectionInput) => bridge.updateCollection(id, input),
-    deleteCollection: (id: string) => bridge.deleteCollection(id),
-    setCollectionMembers: (id: string, identityIds: string[], member: boolean) => bridge.setCollectionMembers(id, identityIds, member),
+    setFavorite: (identityIds: string[], favorite: boolean) => mutate(() => bridge.setFavorite(identityIds, favorite)),
+    createCollection: (input: CollectionInput) => mutate(() => bridge.createCollection(input)),
+    updateCollection: (id: string, input: CollectionInput) => mutate(() => bridge.updateCollection(id, input)),
+    deleteCollection: (id: string) => mutate(() => bridge.deleteCollection(id)),
+    setCollectionMembers: (id: string, identityIds: string[], member: boolean) => mutate(() => bridge.setCollectionMembers(id, identityIds, member)),
     getSmartFolder: (id: string) => bridge.getSmartFolder(id),
-    saveSmartFolder: (id: string | null, input: SmartFolderInput) => bridge.saveSmartFolder(id, { ...input, query: savedConditions(input.query) }),
-    deleteSmartFolder: (id: string) => bridge.deleteSmartFolder(id),
-    convertCollectionToSmart: (id: string, input: SmartFolderInput) => bridge.convertCollectionToSmart(id, { ...input, query: savedConditions(input.query) }),
-    convertSmartToCollection: (id: string, input: CollectionInput) => bridge.convertSmartToCollection(id, input),
-    recordRecent: (identityId: string) => bridge.recordRecent(identityId),
+    saveSmartFolder: (id: string | null, input: SmartFolderInput) => mutate(() => bridge.saveSmartFolder(id, { ...input, query: savedConditions(input.query) })),
+    deleteSmartFolder: (id: string) => mutate(() => bridge.deleteSmartFolder(id)),
+    convertCollectionToSmart: (id: string, input: SmartFolderInput) => mutate(() => bridge.convertCollectionToSmart(id, { ...input, query: savedConditions(input.query) })),
+    convertSmartToCollection: (id: string, input: CollectionInput) => mutate(() => bridge.convertSmartToCollection(id, input)),
+    recordRecent: (identityId: string) => mutate(() => bridge.recordRecent(identityId)),
     query(query: LibraryQuery, signal?: AbortSignal): Promise<LibraryPage> {
       validateQuery(query);
       if (signal?.aborted) return Promise.reject(new LibraryError('cancelled', i18n.t('mobile.errorQueryCancelled')));

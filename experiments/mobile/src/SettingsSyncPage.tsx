@@ -16,7 +16,7 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
   const profile = draft ?? state?.profile ?? { serverUrl: '', remoteDirectory: '', username: '', automatic: false };
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
-  const disabled = busy || !!state?.status.isRunning || !state || !!readError;
+  const disabled = controller.blocked || busy || !!state?.status.isRunning || !state || !!readError;
   const field = (key: 'serverUrl' | 'remoteDirectory' | 'username' | 'password', title: string) => <View key={key} style={styles.field}>
     <Text style={[styles.label, { color: theme.label }]}>{title}</Text>
     <View style={styles.inputRow}><TextInput accessibilityLabel={title} value={key === 'password' ? password : profile[key]}
@@ -32,7 +32,7 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
   async function action(kind: 'test' | 'save' | 'disconnect') {
     setMessage(null);
     const success = await run(() => kind === 'test' ? cloudSync.test(profile, password)
-      : kind === 'save' ? cloudSync.save(profile, password) : cloudSync.disconnect());
+      : kind === 'save' ? cloudSync.save(profile, password) : cloudSync.disconnect(), kind !== 'test');
     if (success) {
       if (kind !== 'test') setPassword('');
       if (kind === 'disconnect') setProfile({ serverUrl: '', remoteDirectory: '', username: '', automatic: false });

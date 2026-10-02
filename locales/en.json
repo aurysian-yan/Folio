@@ -496,7 +496,19 @@
     "closeStatus": "Close sync status",
     "deleteConfirmTitle": "Delete the font from all devices?",
     "deleteConfirmMessage": "The delete record can be restored, but the font will be removed from every connected device.",
-    "cancelDownload": "Cancel Download"
+    "cancelDownload": "Cancel Download",
+    "downloadAgain": "Download again",
+    "deletedEmpty": "No recently deleted fonts.",
+    "cloudOnlyConfirmMessage": "Remove this device’s copy. The cloud file, favorites and recent history remain available. You can download it again.",
+    "conflictConfirmTitle": "Use the selected version?",
+    "conflictConfirmMessage": "The other version will be removed and this decision will sync to all connected devices. Cancel and choose “Keep both” to preserve both versions.",
+    "conflictKinds": {
+      "font_revision": "Font version conflict",
+      "collection": "Collection conflict",
+      "collection_name": "Duplicate collection name",
+      "smart_folder": "Smart collection conflict",
+      "smart_folder_name": "Duplicate smart collection name"
+    }
   },
   "online": {
     "title": "Online Fonts",
@@ -725,7 +737,7 @@
     "smartFolderCount": "{{name}}, {{count}} matching fonts",
     "swipeCollection": "Swipe left or open more actions to edit or delete this collection",
     "sync": {
-      "automaticHint": "Only manual sync is currently available.",
+      "automaticHint": "Sync runs in the foreground, resumes when you return, and cancels in the background.",
       "secureStorage": "Passwords are stored using device secure storage, outside the font library and regular preferences.",
       "invalidProfile": "Enter a valid HTTPS address and remote directory. The address must not contain credentials.",
       "operationError": "Cloud sync failed. Check the connection and network, then try again.",
@@ -739,7 +751,8 @@
       "downloading": "Downloading cloud fonts",
       "finishing": "Finishing sync",
       "authenticationError": "WebDAV authentication failed. Check your username and password.",
-      "credentialsError": "Unable to read secure storage. Unlock the device and retry, or enter the password again."
+      "credentialsError": "Unable to read secure storage. Unlock the device and retry, or enter the password again.",
+      "busyHint": "Wait for sync to finish before importing fonts or changing the connection."
     }
   },
   "macos": {

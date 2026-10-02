@@ -81,6 +81,8 @@ class FolioNativeModule : Module() {
     private val executor = Executors.newSingleThreadExecutor()
     private var engine: FolioEngine? = null
     private var sync: FolioSync? = null
+    private val lifecycleLock = Any()
+    private var foreground = true
 
     override fun definition() = ModuleDefinition {
         Name("FolioNative")
@@ -98,7 +100,7 @@ class FolioNativeModule : Module() {
         }
 
         AsyncFunction("snapshot") { promise: Promise ->
-            perform(promise) { snapshot(requireEngine().loadCachedLibrary()) }
+            perform(promise) { snapshot(if (syncEngine().status().isRunning) requireEngine().loadCachedLibrary() else requireEngine().refreshLibrary().snapshot) }
         }
 
         AsyncFunction("query") { request: FolioQuery, promise: Promise ->
@@ -110,6 +112,7 @@ class FolioNativeModule : Module() {
 
         AsyncFunction("importFonts") { files: List<FolioImportFile>, promise: Promise ->
             perform(promise) {
+                requireSyncIdle()
                 val importer = FolioFontImporter(requireEngine(), File(context().filesDir, "FolioMobilePoC"), { uri ->
                     val source = Uri.parse(uri)
                     if (source.scheme !in listOf("file", "content")) throw FontImportFailure("请选择可读取的字体文件。")
@@ -203,12 +206,15 @@ class FolioNativeModule : Module() {
         AsyncFunction("syncState") { promise: Promise -> performSync(promise) { syncState() } }
 
         AsyncFunction("testSyncConnection") { profile: FolioSyncProfile, password: String?, promise: Promise ->
-            performSync(promise) { syncEngine().testConnection(profile.dto(), password(password, profile.dto())) }
+            performSync(promise) {
+                requireSyncIdle()
+                syncEngine().testConnection(profile.dto(), password(password, profile.dto()))
+            }
         }
         AsyncFunction("saveSyncConnection") { profile: FolioSyncProfile, password: String?, promise: Promise ->
             performSync(promise) {
                 val sync = syncEngine()
-                check(!sync.status().isRunning)
+                requireSyncIdle()
                 val dto = profile.dto()
                 val secret = password(password, dto)
                 sync.testConnection(dto, secret)
@@ -222,7 +228,7 @@ class FolioNativeModule : Module() {
         AsyncFunction("disconnectSync") { promise: Promise ->
             performSync(promise) {
                 val sync = syncEngine()
-                check(!sync.status().isRunning)
+                requireSyncIdle()
                 sync.profile()?.let { profile ->
                     val credentials = FolioSyncCredentials(context())
                     val previous = runCatching { credentials.read(profile) }.getOrNull()
@@ -235,15 +241,46 @@ class FolioNativeModule : Module() {
         AsyncFunction("startSync") { promise: Promise ->
             performSync(promise) {
                 val sync = syncEngine()
-                if (sync.status().isRunning) false else {
-                    val profile = checkNotNull(sync.profile())
-                    val secret = password(null, profile)
-                    sync.prepareManagedSources()
-                    sync.startSync(secret)
+                synchronized(lifecycleLock) {
+                    if (!foreground) throw CodedException("ERR_FOLIO_BUSY", "ERR_FOLIO_BUSY", null)
+                    if (sync.status().isRunning) false else {
+                        val profile = checkNotNull(sync.profile())
+                        val secret = password(null, profile)
+                        sync.prepareManagedSources()
+                        sync.startSync(secret)
+                    }
                 }
             }
         }
         AsyncFunction("cancelSync") { promise: Promise -> performSync(promise) { syncEngine().cancel() } }
+
+        AsyncFunction("cloudFontAction") { fingerprint: String, action: String, promise: Promise ->
+            performSync(promise) {
+                when (action) {
+                    "cloudOnly" -> syncEngine().setCloudOnly(fingerprint)
+                    "download" -> syncEngine().restoreCloudFont(fingerprint)
+                    "delete" -> syncEngine().deleteEverywhere(fingerprint)
+                    "restore" -> syncEngine().restoreDeletedFont(fingerprint)
+                    else -> throw IllegalArgumentException()
+                }
+            }
+        }
+        AsyncFunction("resolveSyncConflict") { id: String, resolution: String, promise: Promise ->
+            performSync(promise) {
+                val value = when (resolution) {
+                    "keepBoth" -> com.folio.poc.ffi.SyncResolutionDto.KEEP_BOTH
+                    "useLocal" -> com.folio.poc.ffi.SyncResolutionDto.USE_LOCAL
+                    "useRemote" -> com.folio.poc.ffi.SyncResolutionDto.USE_REMOTE
+                    else -> throw IllegalArgumentException()
+                }
+                syncEngine().resolveConflict(id, value)
+            }
+        }
+        OnActivityEntersForeground { synchronized(lifecycleLock) { foreground = true } }
+        OnActivityEntersBackground {
+            synchronized(lifecycleLock) { foreground = false }
+            executor.execute { sync?.cancel() }
+        }
 
         AsyncFunction("storageUsage") { promise: Promise ->
             perform(promise) {
@@ -315,8 +352,13 @@ class FolioNativeModule : Module() {
 
     private fun syncEngine(): FolioSync {
         sync?.let { return it }
+        FolioTls.initialize(context().applicationContext)
         return FolioSync.open(File(rootDirectory(), "folio.sqlite").absolutePath,
             File(rootDirectory(), "fonts").absolutePath).also { sync = it }
+    }
+
+    private fun requireSyncIdle() {
+        if (syncEngine().status().isRunning) throw CodedException("ERR_FOLIO_BUSY", "ERR_FOLIO_BUSY", null)
     }
 
     private fun password(supplied: String?, profile: com.folio.poc.ffi.SyncProfileDto): String {
@@ -342,6 +384,7 @@ class FolioNativeModule : Module() {
                 "downloadedBytes" to status.downloadedBytes.toDouble(), "completionGeneration" to status.completionGeneration.toDouble(),
                 "lastSyncedAtMs" to status.lastSyncedAtMs?.toDouble(), "errorMessage" to status.errorMessage,
                 "items" to status.items.map { mapOf("fingerprint" to it.fingerprint, "action" to it.action, "status" to it.status) }),
+            "conflicts" to sync.conflicts().map { mapOf("id" to it.id, "kind" to it.kind, "title" to it.title, "detail" to it.detail, "localFingerprint" to it.localFingerprint, "remoteFingerprint" to it.remoteFingerprint) },
             "fonts" to sync.cloudFonts().map { mapOf("fingerprint" to it.fingerprint, "displayName" to it.displayName,
                 "filename" to it.filename, "fileSize" to it.fileSize.toDouble(), "cloudOnly" to it.cloudOnly,
                 "deleted" to it.deleted, "localPath" to it.localPath, "identityIds" to it.identityIds,

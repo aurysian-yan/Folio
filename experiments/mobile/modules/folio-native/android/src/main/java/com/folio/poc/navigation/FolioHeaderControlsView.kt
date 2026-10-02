@@ -141,6 +141,7 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
     var dark by mutableStateOf(false)
     var ready by mutableStateOf(false)
     var importing by mutableStateOf(false)
+    var importBlocked by mutableStateOf(false)
     var searchOpen by mutableStateOf(false)
     var searchText by mutableStateOf("")
     var filterCount by mutableStateOf(0)
@@ -166,10 +167,10 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
             LaunchedEffect(active, importing, searchOpen) {
                 if (!active || importing || searchOpen) updateExpanded(false)
             }
-            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, searchOpen, searchText, filterCount, palette, text, backdrop,
+            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, importBlocked, searchOpen, searchText, filterCount, palette, text, backdrop,
                 onExpandedChange = ::updateExpanded,
                 onFilter = { if (ready) onFilter(emptyMap<String, Any>()) },
-                onImport = { if (ready && !importing) onImport(emptyMap<String, Any>()) },
+                onImport = { if (ready && !importing && !importBlocked) onImport(emptyMap<String, Any>()) },
                 onSearchTextChange = { text ->
                     searchText = text
                     onSearchTextChange(mapOf("text" to text))
@@ -274,7 +275,7 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
 
 @Composable
 private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean, dark: Boolean,
-    ready: Boolean, importing: Boolean, searchOpen: Boolean, searchText: String, filterCount: Int,
+    ready: Boolean, importing: Boolean, importBlocked: Boolean, searchOpen: Boolean, searchText: String, filterCount: Int,
     colors: FolioViewMenuColors, labels: FolioHeaderLabels, backdrop: Backdrop, onExpandedChange: (Boolean) -> Unit,
     onSelect: (String) -> Unit, onImport: () -> Unit, onFilter: () -> Unit, onSearchTextChange: (String) -> Unit) {
     val focus = remember { FocusRequester() }
@@ -326,7 +327,7 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
                     onExpandedChange, onSelect, Modifier.size(if (availableWidth < HeaderButtonHeight * 7) HeaderButtonHeight else 64.dp, HeaderButtonHeight))
                 HeaderAction("filter", labels.filter, active && ready, false, dark, colors, backdrop, onFilter, selected = filterCount > 0)
                 HeaderAction("plus", if (importing) labels.loadingImport else labels.importFonts,
-                    active && ready && !importing, importing, dark, colors, backdrop, onImport)
+                    active && ready && !importing && !importBlocked, importing, dark, colors, backdrop, onImport)
             }
         }
     }

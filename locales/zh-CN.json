@@ -493,7 +493,19 @@
     "closeStatus": "关闭同步状态",
     "deleteConfirmTitle": "从所有设备删除字体？",
     "deleteConfirmMessage": "删除记录可恢复，但该字体将从所有已连接设备移除。",
-    "cancelDownload": "取消下载"
+    "cancelDownload": "取消下载",
+    "downloadAgain": "重新下载",
+    "deletedEmpty": "没有最近删除的字体。",
+    "cloudOnlyConfirmMessage": "移除本机字体副本，云端文件、收藏和最近访问记录会保留，可随时重新下载。",
+    "conflictConfirmTitle": "采用所选版本？",
+    "conflictConfirmMessage": "另一版本将被移除，处理结果会同步到所有已连接设备。需要保留两版时，请取消并选择“保留两版”。",
+    "conflictKinds": {
+      "font_revision": "字体版本冲突",
+      "collection": "收藏夹内容冲突",
+      "collection_name": "收藏夹名称重复",
+      "smart_folder": "智慧收藏夹内容冲突",
+      "smart_folder_name": "智慧收藏夹名称重复"
+    }
   },
   "online": {
     "title": "在线字体",
@@ -722,7 +734,7 @@
     "smartFolderCount": "{{name}}，{{count}} 个匹配字体",
     "swipeCollection": "向左侧滑或打开更多操作，可编辑或删除收藏夹",
     "sync": {
-      "automaticHint": "当前仅支持手动同步。",
+      "automaticHint": "仅在应用前台同步；回到前台时补同步，进入后台时取消。",
       "secureStorage": "密码通过设备安全存储保存，不写入字体库或普通偏好。",
       "invalidProfile": "请输入有效的 HTTPS 地址和远端目录，地址不可包含账号或密码。",
       "operationError": "云同步操作失败，请检查连接和网络后重试。",
@@ -736,7 +748,8 @@
       "downloading": "下载云端字体",
       "finishing": "完成同步",
       "authenticationError": "WebDAV 认证失败，请检查账号和密码。",
-      "credentialsError": "无法读取设备安全存储，请解锁设备后重试或重新输入密码。"
+      "credentialsError": "无法读取设备安全存储，请解锁设备后重试或重新输入密码。",
+      "busyHint": "同步期间暂时无法导入字体或修改连接，请在同步结束后重试。"
     }
   },
   "macos": {

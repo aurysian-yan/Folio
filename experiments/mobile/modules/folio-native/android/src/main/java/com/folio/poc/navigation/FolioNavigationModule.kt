@@ -42,6 +42,7 @@ class FolioNavigationModule : Module() {
             Prop("dark") { view: FolioHeaderControlsView, value: Boolean -> view.dark = value }
             Prop("ready") { view: FolioHeaderControlsView, value: Boolean -> view.ready = value }
             Prop("importing") { view: FolioHeaderControlsView, value: Boolean -> view.importing = value }
+            Prop("importBlocked") { view: FolioHeaderControlsView, value: Boolean -> view.importBlocked = value }
             Prop("searchOpen") { view: FolioHeaderControlsView, value: Boolean -> view.searchOpen = value }
             Prop("searchText") { view: FolioHeaderControlsView, value: String -> view.searchText = value }
             Prop("filterCount") { view: FolioHeaderControlsView, value: Int -> view.filterCount = value.coerceAtLeast(0) }

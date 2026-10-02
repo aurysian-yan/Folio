@@ -2943,3 +2943,15 @@ mod tests {
         assert!(error.to_string().contains("invalid identifier length"));
     }
 }
+
+// 安卓系统证书校验器必须在第一次网络请求前取得 JVM 与应用上下文。
+#[cfg(target_os = "android")]
+#[jni::jni_mangle("com.folio.poc.FolioTls")]
+pub fn initialize<'caller>(
+    mut env: jni::EnvUnowned<'caller>,
+    _class: jni::objects::JClass<'caller>,
+    context: jni::objects::JObject<'caller>,
+) {
+    env.with_env(|env| rustls_platform_verifier::android::init_with_env(env, context))
+        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
+}

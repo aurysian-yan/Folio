@@ -89,6 +89,8 @@ public final class FolioNativeModule: Module {
     private let queue = DispatchQueue(label: "com.folio.mobile.poc.library", qos: .userInitiated)
     private var engine: FolioEngine?
     private var sync: FolioSync?
+    private let lifecycleLock = NSLock()
+    private var foreground = true
 
     public func definition() -> ModuleDefinition {
         Name("FolioNative")
@@ -105,7 +107,7 @@ public final class FolioNativeModule: Module {
         }.runOnQueue(queue)
 
         AsyncFunction("snapshot") { () throws -> [String: Any] in
-            self.snapshot(try self.requireEngine().loadCachedLibrary())
+            self.snapshot(try self.syncEngine().status().isRunning ? self.requireEngine().loadCachedLibrary() : self.requireEngine().refreshLibrary().snapshot)
         }.runOnQueue(queue)
 
         AsyncFunction("query") { (request: FolioQuery) throws -> [String: Any] in
@@ -116,6 +118,7 @@ public final class FolioNativeModule: Module {
         }.runOnQueue(queue)
 
         AsyncFunction("importFonts") { (files: [FolioImportFile]) throws -> [String: Any] in
+            guard try !self.syncEngine().status().isRunning else { throw self.syncBusy() }
             do {
                 let importer = FolioFontImporter(engine: try self.requireEngine(), root: try FolioPaths.root())
                 let report = try importer.importFiles(files.map { SelectedImportFile(uri: $0.uri, name: $0.name) })
@@ -204,6 +207,7 @@ public final class FolioNativeModule: Module {
         }.runOnQueue(queue)
 
         AsyncFunction("testSyncConnection") { (profile: FolioSyncProfile, password: String?) throws in
+            guard try !self.syncEngine().status().isRunning else { throw self.syncBusy() }
             let dto = profile.dto
             try self.syncOperation { try self.syncEngine().testConnection(profile: dto, password: self.password(password, profile: dto)) }
         }.runOnQueue(queue)
@@ -235,6 +239,9 @@ public final class FolioNativeModule: Module {
         }.runOnQueue(queue)
 
         AsyncFunction("startSync") { () throws -> Bool in
+            self.lifecycleLock.lock()
+            defer { self.lifecycleLock.unlock() }
+            guard self.foreground else { throw self.syncBusy() }
             let sync = try self.syncEngine()
             guard let profile = try sync.profile() else { throw self.syncBusy() }
             if try sync.status().isRunning { return false }
@@ -246,6 +253,38 @@ public final class FolioNativeModule: Module {
         AsyncFunction("cancelSync") { () throws in
             try self.syncEngine().cancel()
         }.runOnQueue(queue)
+
+        AsyncFunction("cloudFontAction") { (fingerprint: String, action: String) throws in
+            let sync = try self.syncEngine()
+            try self.syncOperation {
+                switch action {
+                case "cloudOnly": try sync.setCloudOnly(fingerprint: fingerprint)
+                case "download": try sync.restoreCloudFont(fingerprint: fingerprint)
+                case "delete": try sync.deleteEverywhere(fingerprint: fingerprint)
+                case "restore": try sync.restoreDeletedFont(fingerprint: fingerprint)
+                default: throw self.syncBusy()
+                }
+            }
+        }.runOnQueue(queue)
+
+        AsyncFunction("resolveSyncConflict") { (id: String, resolution: String) throws in
+            let value: SyncResolutionDto
+            switch resolution {
+            case "keepBoth": value = .keepBoth
+            case "useLocal": value = .useLocal
+            case "useRemote": value = .useRemote
+            default: throw self.syncBusy()
+            }
+            try self.syncOperation { try self.syncEngine().resolveConflict(id: id, resolution: value) }
+        }.runOnQueue(queue)
+
+        OnAppBecomesActive {
+            self.lifecycleLock.lock(); self.foreground = true; self.lifecycleLock.unlock()
+        }
+        OnAppEntersBackground {
+            self.lifecycleLock.lock(); self.foreground = false; self.lifecycleLock.unlock()
+            self.queue.async { self.sync?.cancel() }
+        }
 
         AsyncFunction("storageUsage") { () throws -> [String: Any] in
             let usage = try self.syncEngine().storageUsage()
@@ -323,7 +362,7 @@ public final class FolioNativeModule: Module {
     }
 
     private func syncBusy() -> NSError {
-        NSError(domain: "FolioSync", code: 1, userInfo: [NSLocalizedDescriptionKey: "ERR_FOLIO_SYNC"])
+        NSError(domain: "FolioSync", code: 1, userInfo: [NSLocalizedDescriptionKey: "ERR_FOLIO_BUSY"])
     }
 
     private func password(_ supplied: String?, profile: SyncProfileDto) throws -> String {
@@ -354,6 +393,7 @@ public final class FolioNativeModule: Module {
                 "completionGeneration": status.completionGeneration, "lastSyncedAtMs": status.lastSyncedAtMs as Any? ?? NSNull(),
                 "errorMessage": status.errorMessage as Any? ?? NSNull(),
                 "items": status.items.map { ["fingerprint": $0.fingerprint, "action": $0.action, "status": $0.status] }],
+            "conflicts": try sync.conflicts().map { ["id": $0.id, "kind": $0.kind, "title": $0.title, "detail": $0.detail, "localFingerprint": $0.localFingerprint as Any? ?? NSNull(), "remoteFingerprint": $0.remoteFingerprint as Any? ?? NSNull()] as [String: Any] },
             "fonts": try sync.cloudFonts().map { ["fingerprint": $0.fingerprint, "displayName": $0.displayName,
                 "filename": $0.filename, "fileSize": $0.fileSize, "cloudOnly": $0.cloudOnly, "deleted": $0.deleted,
                 "localPath": $0.localPath as Any? ?? NSNull(), "identityIds": $0.identityIds,

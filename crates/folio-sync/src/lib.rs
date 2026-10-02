@@ -937,9 +937,20 @@ pub fn set_cloud_only(database_path: impl AsRef<Path>, fingerprint: &str) -> Res
         .into_iter()
         .find(|asset| asset.fingerprint == fingerprint)
         .ok_or(SyncError::InvalidId)?;
+    if asset.deleted
+        || !list_cloud_fonts(db.path())?
+            .iter()
+            .any(|font| font.fingerprint == fingerprint)
+    {
+        return Err(SyncError::InvalidId);
+    }
     if let Some(path) = &asset.local_path {
         if Path::new(path).is_file() {
+            let canonical = Path::new(path).canonicalize()?;
             std::fs::remove_file(path)?;
+            db.remove_source_file(canonical)?;
+        } else {
+            db.remove_source_file(path)?;
         }
     }
     asset.local_path = None;
@@ -1024,6 +1035,18 @@ pub fn delete_everywhere(
         .into_iter()
         .find(|asset| asset.fingerprint == fingerprint)
     {
+        let directory = asset
+            .local_path
+            .as_ref()
+            .and_then(|path| Path::new(path).parent())
+            .map(Path::to_path_buf);
+        if let Some(directory) = directory {
+            move_to_recovery(&directory, &asset)?;
+        }
+        if let Some(path) = &asset.local_path {
+            db.remove_source_file(path)?;
+        }
+        asset.local_path = None;
         asset.deleted = true;
         db.upsert_sync_asset(&asset)?;
     }
@@ -1890,6 +1913,31 @@ async fn apply_remote_events(
     report: &Arc<dyn Fn(SyncProgress) + Send + Sync>,
     progress: &mut SyncProgress,
 ) -> Result<u64, SyncError> {
+    let result =
+        apply_remote_events_inner(db, directory, remote, cancelled, report, progress).await;
+    let refreshed = db
+        .add_root(directory, true)
+        .and_then(|_| db.refresh(RefreshMode::Incremental));
+    match result {
+        Ok(count) => {
+            refreshed?;
+            Ok(count)
+        }
+        Err(error) => {
+            refreshed?;
+            Err(error)
+        }
+    }
+}
+
+async fn apply_remote_events_inner(
+    db: &mut FolioDatabase,
+    directory: &Path,
+    remote: &WebDavClient,
+    cancelled: &AtomicBool,
+    report: &Arc<dyn Fn(SyncProgress) + Send + Sync>,
+    progress: &mut SyncProgress,
+) -> Result<u64, SyncError> {
     let events = decoded_events(db)?;
     let mut collection_ids = BTreeSet::new();
     let mut smart_folder_ids = BTreeSet::new();
@@ -2089,6 +2137,12 @@ async fn apply_remote_events(
         .into_iter()
         .map(|asset| (asset.fingerprint.clone(), asset))
         .collect::<BTreeMap<_, _>>();
+    // 本地版以接收本轮下载前的记录定位，不能把刚下载的云端版误认成本地版。
+    let local_fingerprints = existing_assets
+        .values()
+        .filter(|asset| !asset.deleted && asset.local_path.is_some())
+        .map(|asset| asset.fingerprint.clone())
+        .collect::<BTreeSet<_>>();
     let mut download_targets = Vec::new();
     for (fingerprint, remote_asset) in &font_assets {
         if asset_add_tags(&events, fingerprint).is_empty() {
@@ -2112,7 +2166,6 @@ async fn apply_remote_events(
         })
         .collect();
     emit_progress(progress, report);
-    let mut catalog_changed = false;
     // 与事件接收一致：单条字体命中断断续续的下载节点时先跳过，避免整轮失败。
     let mut deferred = 0u64;
     for (fingerprint, remote_asset) in &font_assets {
@@ -2125,7 +2178,9 @@ async fn apply_remote_events(
             if let Some(mut asset) = record {
                 if !asset.deleted {
                     move_to_recovery(directory, &asset)?;
-                    catalog_changed = true;
+                    if let Some(path) = &asset.local_path {
+                        db.remove_source_file(path)?;
+                    }
                 }
                 asset.local_path = None;
                 asset.deleted = true;
@@ -2155,7 +2210,6 @@ async fn apply_remote_events(
                     progress.advance();
                     progress.set_item_status(fingerprint, SyncItemStatus::Done);
                     emit_progress(progress, report);
-                    catalog_changed = true;
                 }
                 Err(error) if is_deferrable_download(&error) => {
                     deferred += 1;
@@ -2169,11 +2223,7 @@ async fn apply_remote_events(
         db.upsert_sync_asset(&asset)?;
     }
 
-    if catalog_changed {
-        db.add_root(directory, true)?;
-        db.refresh(RefreshMode::Incremental)?;
-    }
-    detect_font_conflicts(db, &font_assets, &events)?;
+    detect_font_conflicts(db, &font_assets, &events, &local_fingerprints)?;
     Ok(deferred)
 }
 
@@ -2289,6 +2339,7 @@ fn detect_font_conflicts(
     db: &FolioDatabase,
     assets: &BTreeMap<String, RemoteAsset>,
     events: &[(StoredSyncEvent, Change)],
+    local_fingerprints: &BTreeSet<String>,
 ) -> Result<(), SyncError> {
     let mut by_identity = BTreeMap::<String, Vec<(&str, &RemoteFace)>>::new();
     for (fingerprint, asset) in assets {
@@ -2302,11 +2353,6 @@ fn detect_font_conflicts(
                 .push((fingerprint, face));
         }
     }
-    let local = db
-        .list_sync_assets()?
-        .into_iter()
-        .map(|asset| (asset.fingerprint.clone(), asset))
-        .collect::<BTreeMap<_, _>>();
     for (identity, faces) in by_identity {
         for first in 0..faces.len() {
             for second in first + 1..faces.len() {
@@ -2315,10 +2361,7 @@ fn detect_font_conflicts(
                 if a_face.revision_id == b_face.revision_id {
                     continue;
                 }
-                let (local_hash, remote_hash) = if local
-                    .get(a_hash)
-                    .is_some_and(|asset| asset.local_path.is_some())
-                {
+                let (local_hash, remote_hash) = if local_fingerprints.contains(a_hash) {
                     (a_hash, b_hash)
                 } else {
                     (b_hash, a_hash)

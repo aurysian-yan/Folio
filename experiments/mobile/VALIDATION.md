@@ -247,3 +247,42 @@ pnpm android --device "23013RK75C" --no-bundler
 | iOS Files/Share / File Provider 需求判定 | 文件选择接入；分享导出与 Provider 需求判定尚未完成。 |
 
 阶段 D 保持 PARTIAL，生产采用结论仍待 go/no-go。真实设备、目标 ROM、许可和性能阈值需在后续实验记录中明确；不能从本次构建结果推断。
+
+## Cloud Sync Cycle (Batch 6)
+
+2026-10-02：先核对第三至五批代码及记录，继续沿用 RN／Expo、Swift／Kotlin、共享 Rust 和既有导航、主题与组件。保留现有字体库、收藏夹及设备数据；没有后台常驻同步、字体安装、DocumentsProvider 或 File Provider。本节的实现完成不代表全部实网和实机验收通过。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| 第三至五批核对 | PASS，智慧查询与手动／智慧互转、详情事件最近记录、平台安全存储、手动同步、实际取消、进度、托管来源恢复和本地查询已有实现；第五批自动开关原先只保存偏好，本批接通前台调度，没有重做已完成界面。 |
+| JS 与语言目录 | PASS，类型检查、Lint、33 项 JS 回归及 746 键共享 i18n 校验；未引入 JS 依赖。新测试覆盖前台补同步、重复启动、后台取消、迟到读数、本地写入使旧快照失效、收藏意图排序、导入暂停、系统选择器返回时保留导入任务门、合并下一轮、取消不立即重启、失败限频、认证失效和部分写入后真实刷新。 |
+| Rust 回归 | PASS，`cargo test -p folio-sync -p folio-ffi -p folio-storage -p folio-query`，其中同步 27 项、FFI 9 项；storage／query 单元、集成与文档回归通过。`cargo fmt --all -- --check` 与 `git diff --check` 通过。严格 Clippy 被原有 `path_codec` 的 `manual_is_multiple_of`、`chunks_exact_to_as_chunks` 和同步代码 `needless_borrow` 阻挡；仅允许既有相应告警后的相关 crate Clippy 通过，未扩大修改范围。 |
+| 独立受控 WebDAV 与桌面语义 | PASS，独立回环 DAV 服务和移动／桌面两份 Rust 数据库，真实仓库字体文件；覆盖双向字体、收藏、成员、智慧条件及最近访问，断开 GET 后重试、下载取消后保留已落地目录并续传、错误凭据、部分下载失败、并发集合和字体版本、三种冲突决策、仅保留云端、重新下载及删除恢复。不是实际桌面 UI 或独立服务商 HTTPS 实网结果。 |
+| 来源与预览闭环 | PASS（Rust），真实 TTC 两成员及 Inter 变量字体完成上传、云端保留、重下、全设备删除及恢复；立即移除重叠文件／目录来源缓存和显式文件根，缓存库不再暴露旧预览。恢复后 fingerprint、TTC index 1、变量轴、星标、成员与最近身份保留。修复字体冲突把新下载版按 fingerprint 排序当成本地版的问题，三种决策分别验证。 |
+| Swift ↔ Rust | PASS，最新绑定／主机库的 `pnpm test:swift`：Keychain 作用域与重开、真实字体导入、TTC 非零成员 CoreText、变量轴、批量与 ZIP、星标、手动／智慧互转和最近记录；仅主机验证。 |
+| Kotlin ↔ Rust | PASS，`:folio-native:testDebugUnitTest` 的生产导入器 8 项、映射器 3 项；使用主机 JNA 与临时库，继续覆盖前几批用户状态和导入边界。 |
+| 双端原生构建 | PASS，最新 Android arm64-v8a／x86_64 Rust 库、iOS arm64 device／Simulator XCFramework、Android arm64 Debug 连接修复包与正式身份双 ABI Release APK、iOS arm64 Simulator `FolioDev` Debug 编译链接。没有 Android 模拟器。 |
+| Android 真机原生验证 | PASS，USB `23013RK75C`（设备当前报告 Android 17／API 37）的独立测试 APK：Keystore AES-GCM、密文与配置不含密码、重开、损坏、取消、断开、三种 Compose 宿主离窗测量，以及 Android 系统 TLS 对 123PAN 的错误凭据认证拒绝。生产塑形器读取 TTC index 1 与 Inter wght=700，校验实际源文件／成员并经 Canvas 绘制，删除文件后拒绝旧来源。未用这项结果代替下载字体验证。 |
+| Android 保存连接修复 | PASS，补全现有 rustls Android 系统校验器 AAR／JNI 初始化和网络权限；保留数据更新 Folio Dev 后，用户确认专用 123PAN 连接保存成功。开发库有非秘密 profile，正式包库仍无连接；没有导出密码。 |
+| iPhone | PASS（限定范围），iOS 27 iPhone 18 Pro 模拟器保留数据更新后启动、云端未连接状态、原生「云端字体／最近删除」控件与最近删除空态、配置页前台自动同步说明。当前开发库为空，不代表三种冲突及破坏性确认的全流程 UI 通过。 |
+| iPad | PASS（限定范围），iPadOS 27 iPad mini 模拟器启动、原生分栏、云端导航和最近删除空态。修复云端 React 内容直接进入 SwiftUI 分栏导致右侧裁切：复用 RNHostView，两个分段和状态值完整显示。当前开发库为空，没有进行真实云端往返。 |
+| 桌面前端回归 | PASS，既有桌面类型检查、Lint、71 项测试；共享 Rust 语义由上述 DAV 集成覆盖。本批没有实际桌面应用实网连接配置。 |
+
+### 123PAN Live Network
+
+使用用户明确授权的手机专用测试连接，安全凭据只在设备原生边界读取。新增实网 instrumentation 在配置目录下建立随机 `validation-*` 子目录和两份临时库，覆盖上传／下载、下载文件原生绘制、云端保留与重新下载、全设备删除与恢复、集合冲突三种决策、认证失效和取消恢复；临时本地数据先清理再报告结果，不更改用户原有字体库。
+
+目前为 PARTIAL：连接保存已确认成功；完整往返在原生测试启动后遭遇 USB 再次断开，尚未收到完整测试结果，不能登记上传、下载及删除恢复 PASS。已请求重新连接并保持 USB 调试。USB 恢复后需先清理早期 instrumentation 中断遗留的自建测试目录及其中样本（只涉及本轮 `validation-5510b028-36e4-44b9-8585-a2dd86caf864` 和 `validation-e9cfed91-8899-48c3-864c-2ecdfd74d844`，位置为 `FolioMobilePoC/` 及其 `fonts/` 下），再重新执行；改进后的测试临时库位于用户库目录之外，即使中断也不会进入用户库扫描。该项有配置，待完成真机往返；独立服务商配置和桌面客户端实网配置另列缺口，不能由 123PAN 替代。
+
+### Remaining Acceptance
+
+- 独立服务商 HTTPS WebDAV 的 Android／桌面应用实网往返：无配置，待验收；受控回环故障测试已通过。
+- 123PAN 完整真机往返和下载后原生预览：专用配置已保存，USB 中断后待完成；实际桌面客户端／123PAN 双端配置缺失，待验收。
+- iPhone／iPad 的带字体、冲突确认、删除恢复、下载后 CoreText 和前后台切换实网矩阵：无设备连接配置，待验收；已有模拟器入口及主机原生回归不能代替。
+- iOS 实机、Android 旧版系统、完整无障碍、长列表和持续前后台切换压力、性能与大文件：待验收。阶段 D 保持 PARTIAL。
+
+### Release Artifact
+
+用户追加要求：构建 `APP_VARIANT=production`、`com.folio.mobile.poc` 的 Android Release 包。PASS，正式包标签 `Folio`，applicationId `com.folio.mobile.poc`，versionName `0.1.0`／versionCode `1`，Release 构建且 Manifest 无 debuggable 开关，包含 arm64-v8a／x86_64 的 Rust 库和 8,412,820 字节内嵌 Hermes；字体测试样本未进入正式 APK。`apksigner verify` 的 v2 签名校验通过。沿用工程既有 Expo Android Debug keystore 签名，这不是商店发布密钥。
+
+产物：[Folio-0.1.0-batch6-release.apk](.build/releases/Folio-0.1.0-batch6-release.apk)，147,387,803 字节（约 140.6 MiB）；SHA-256 `a496022294695c732b2201e834415ed1b39f2fb8c5db65858c4fc4d14d9d03c9`，同目录提供 `.apk.sha256` 与 `.json` 元数据。已按正式身份生成 Android 工程；iOS 工程仍保留开发身份。USB 未连接，未安装该正式包，也未覆盖手机正式包数据；离线启动及 Release 真机运行待验收。

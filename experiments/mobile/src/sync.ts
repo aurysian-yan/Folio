@@ -20,7 +20,10 @@ export interface SyncStatus {
   completionGeneration: number; lastSyncedAtMs: number | null; errorMessage: string | null;
   items: { fingerprint: string; action: string; status: string }[];
 }
-export interface SyncState { profile: SyncProfile | null; credentialAvailable: boolean; credentialError: boolean; status: SyncStatus; fonts: CloudFont[] }
+export type SyncResolution = 'keepBoth' | 'useLocal' | 'useRemote';
+export type CloudAction = 'cloudOnly' | 'download' | 'delete' | 'restore';
+export interface SyncConflict { id: string; kind: string; title: string; detail: string; localFingerprint: string | null; remoteFingerprint: string | null }
+export interface SyncState { profile: SyncProfile | null; credentialAvailable: boolean; credentialError: boolean; status: SyncStatus; fonts: CloudFont[]; conflicts: SyncConflict[] }
 export interface SyncBridge {
   syncState(): Promise<SyncState>;
   testSyncConnection(profile: SyncProfile, password: string | null): Promise<void>;
@@ -28,6 +31,8 @@ export interface SyncBridge {
   disconnectSync(): Promise<void>;
   startSync(): Promise<boolean>;
   cancelSync(): Promise<void>;
+  cloudFontAction(fingerprint: string, action: CloudAction): Promise<void>;
+  resolveSyncConflict(id: string, resolution: SyncResolution): Promise<void>;
 }
 
 // 只接受无内嵌凭据的 HTTPS 地址，空密码交由平台安全存储恢复。
@@ -49,12 +54,15 @@ export function createSyncClient(bridge: SyncBridge) {
     disconnect: () => bridge.disconnectSync(),
     start: () => bridge.startSync(),
     cancel: () => bridge.cancelSync(),
+    fontAction: (fingerprint: string, action: CloudAction) => bridge.cloudFontAction(fingerprint, action),
+    resolve: (id: string, resolution: SyncResolution) => bridge.resolveSyncConflict(id, resolution),
   };
 }
 
 export function syncErrorKey(error: unknown): string {
   const value = error instanceof Error ? error.message : '';
   if (value.includes('认证失败')) return 'mobile.sync.authenticationError';
+  if (value.includes('ERR_FOLIO_BUSY')) return 'mobile.sync.busyHint';
   if (value.includes('ERR_FOLIO_PROFILE')) return 'mobile.sync.invalidProfile';
   if (value.includes('ERR_FOLIO_CREDENTIALS')) return 'cloud.passwordUnavailable';
   return 'mobile.sync.operationError';
