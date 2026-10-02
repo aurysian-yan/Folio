@@ -74,6 +74,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     // 把 rustls-platform-verifier 的 Maven 仓库写入根工程，见 plugins/with-rustls-verifier-repo.ts。
     './plugins/with-rustls-verifier-repo',
+    './plugins/with-android-dev-network-security',
     'expo-document-picker',
     [
       'expo-build-properties',

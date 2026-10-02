@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { MagnifyingGlassIcon, CloudIcon, GearIcon, TextAaIcon } from 'phosphor-react-native';
+import { MagnifyingGlassIcon, CloudIcon, GearIcon, TextAaIcon } from './icons';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle, type ViewProps } from 'react-native';
 import i18n from './i18n/instance';
 import type { Theme } from './ui';

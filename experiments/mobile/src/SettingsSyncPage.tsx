@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { cloudSync } from './native';
-import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, SettingsSwitchRow } from './settings-ui';
+import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, SettingsSwitchRow, settingsLayout, settingsTypography } from './settings-ui';
 import type { SyncProfile } from './sync';
 import type { CloudSyncController } from './useCloudSync';
 import type { Theme } from './ui';
@@ -19,12 +19,13 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
   const disabled = controller.blocked || busy || !!state?.status.isRunning || !state || !!readError;
   const field = (key: 'serverUrl' | 'remoteDirectory' | 'username' | 'password', title: string) => <View key={key} style={styles.field}>
     <Text style={[styles.label, { color: theme.label }]}>{title}</Text>
-    <View style={styles.inputRow}><TextInput accessibilityLabel={title} value={key === 'password' ? password : profile[key]}
+    <View style={[styles.inputRow, { backgroundColor: theme.raised }]}><TextInput accessibilityLabel={title} value={key === 'password' ? password : profile[key]}
       onChangeText={(value) => { setMessage(null); if (key === 'password') setPassword(value); else setProfile((previous) => ({ ...(previous ?? profile), [key]: value })); }}
       editable={!disabled} autoCapitalize="none" autoCorrect={false} secureTextEntry={key === 'password'}
       keyboardType={key === 'serverUrl' ? 'url' : 'default'}
       placeholder={key === 'password' && state?.credentialAvailable ? t('cloud.passwordStored') : undefined}
-      placeholderTextColor={theme.muted} style={[styles.input, { color: theme.label, borderColor: theme.border }]} />
+      placeholderTextColor={theme.muted} selectionColor={theme.selection}
+      style={[styles.input, { color: theme.label }]} />
       {key === 'serverUrl' && <WebDAVPresetMenu theme={theme} serverUrl={profile.serverUrl} disabled={disabled}
         onChange={(serverUrl) => { setMessage(null); setProfile((previous) => ({ ...(previous ?? profile), serverUrl })); }} />}
     </View>
@@ -43,6 +44,8 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
     <SettingsGroup theme={theme} title={t('cloud.connection')}>
       {field('serverUrl', t('cloud.serverURL'))}{field('remoteDirectory', t('cloud.remoteDirectory'))}
       {field('username', t('cloud.username'))}{field('password', t('cloud.password'))}
+    </SettingsGroup>
+    <SettingsGroup theme={theme}>
       <SettingsSwitchRow title={t('cloud.autoSync')} detail={t('mobile.sync.automaticHint')} theme={theme}
         value={profile.automatic} disabled={disabled} onChange={(automatic) => setProfile((previous) => ({ ...(previous ?? profile), automatic }))} last />
     </SettingsGroup>
@@ -50,7 +53,9 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
     <SettingsNote theme={theme}>{t('mobile.sync.secureStorage')}</SettingsNote>
     <SettingsGroup theme={theme}>
       <SettingsActionRow title={t('cloud.testConnection')} theme={theme} disabled={disabled} busy={busy} onPress={() => { void action('test'); }} />
-      <SettingsActionRow title={t('common.save')} theme={theme} disabled={disabled} onPress={() => { void action('save'); }} />
+      <SettingsActionRow title={t('common.save')} theme={theme} disabled={disabled} onPress={() => { void action('save'); }} last />
+    </SettingsGroup>
+    <SettingsGroup theme={theme}>
       <SettingsActionRow title={t('cloud.disconnect')} theme={theme} destructive disabled={disabled || !state?.profile}
         onPress={() => { void action('disconnect'); }} last />
     </SettingsGroup>
@@ -59,8 +64,8 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
   </SettingsPage>;
 }
 const styles = StyleSheet.create({
-  field: { paddingHorizontal: 14, paddingVertical: 10, gap: 4 },
-  label: { fontSize: 16, lineHeight: 22 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  input: { flex: 1, minWidth: 0, minHeight: 44, fontSize: 16, borderBottomWidth: StyleSheet.hairlineWidth },
+  field: { ...settingsLayout.controls, gap: 8 },
+  label: { ...settingsTypography.detail, paddingHorizontal: 12 },
+  inputRow: { ...settingsLayout.control, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
+  input: { flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: 12, paddingVertical: 12, fontSize: 16, lineHeight: 22 },
 });

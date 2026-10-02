@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { storage } from './native';
 import type { StorageUsage } from './storage';
-import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, SettingsValueRow, formatBytes } from './settings-ui';
+import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, SettingsValueRow, formatBytes, settingsTypography } from './settings-ui';
 import type { Theme } from './ui';
 
 // 存储管理：真实用量统计与可重建缓存清理。
@@ -52,39 +52,42 @@ export function SettingsStoragePage({ theme, onClose }: { theme: Theme; onClose:
     {!usage ? <SettingsGroup theme={theme}>
       <View style={styles.measuring}>
         {loading && <ActivityIndicator color={theme.accent} />}
-        <Text style={[styles.measuringText, { color: theme.secondary }]}>{t('storage.measuring')}</Text>
+        <Text style={[styles.measuringText, { color: theme.secondary }]}>{t(loading ? 'storage.measuring' : 'mobile.settings.storageError')}</Text>
       </View>
     </SettingsGroup> : <>
-      <SettingsGroup theme={theme} title={t('storage.space')} footer={t('storage.totalNote')}>
+      <SettingsGroup theme={theme} footer={t('storage.totalNote')}>
         <View style={styles.overview}>
           <View style={styles.overviewHeader}>
             <Text style={[styles.overviewLabel, { color: theme.label }]}>{t('storage.folioUsage')}</Text>
             <Text style={[styles.overviewValue, { color: theme.label }]}>{formatBytes(total)}</Text>
           </View>
-          <View style={[styles.bar, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            {total > 0 && <View style={{ flex: otherUsed, backgroundColor: theme.secondary }} />}
-            <View style={{ flex: usage.managedFontBytes, backgroundColor: theme.accent }} />
-            <View style={{ flex: usage.databaseBytes, backgroundColor: theme.label }} />
-            <View style={{ flex: previewBytes, backgroundColor: theme.muted }} />
-            <View style={{ flex: usage.volumeFreeBytes, backgroundColor: 'transparent' }} />
+          <View accessible accessibilityRole="image" accessibilityLabel={t('storage.accessibilityUsage', {
+            total: formatBytes(total), percent: percent > 0 && percent < 0.1 ? '<0.1%' : `${percent.toFixed(1)}%`, other: formatBytes(otherUsed), free: formatBytes(usage.volumeFreeBytes),
+          })} style={[styles.bar, { backgroundColor: theme.raised }]}>
+            <View style={{ flex: total, backgroundColor: theme.accent }} />
+            <View style={{ flex: otherUsed, backgroundColor: theme.secondary }} />
+            <View style={{ flex: usage.volumeFreeBytes }} />
           </View>
           <Text style={[styles.overviewDisk, { color: theme.secondary }]}>
             {t('storage.diskOf', { used: formatBytes(total), total: formatBytes(usage.volumeTotalBytes) })}
           </Text>
-          <View style={styles.legend}>
-            <View style={[styles.legendDot, { backgroundColor: theme.accent }]} />
-            <Text style={[styles.legendText, { color: theme.secondary }]}>{t('storage.folioUsage')} {percent < 0.1 ? '<0.1%' : `${percent.toFixed(1)}%`}</Text>
-            <View style={[styles.legendDot, { backgroundColor: theme.secondary }]} />
-            <Text style={[styles.legendText, { color: theme.secondary }]}>{t('storage.otherApps')} {formatBytes(otherUsed)}</Text>
-            <View style={[styles.legendDot, { backgroundColor: theme.surface, borderColor: theme.border }]} />
-            <Text style={[styles.legendText, { color: theme.secondary }]}>{t('storage.freeSpace', { size: formatBytes(usage.volumeFreeBytes) })}</Text>
-          </View>
+          {[
+            { label: t('storage.folioUsage'), value: formatBytes(total), color: theme.accent },
+            { label: t('storage.otherApps'), value: formatBytes(otherUsed), color: theme.secondary },
+            { label: t('desktop.availableSpace'), value: formatBytes(usage.volumeFreeBytes), color: theme.raised },
+          ].map(({ label, value, color }) => <View key={label} style={styles.legend}>
+            <View style={[styles.legendDot, { backgroundColor: color, borderColor: theme.border }]} />
+            <Text style={[styles.legendText, { color: theme.secondary }]}>{label}</Text>
+            <Text style={[styles.legendValue, { color: theme.label }]}>{value}</Text>
+          </View>)}
         </View>
       </SettingsGroup>
 
-      <SettingsGroup theme={theme} title={t('storage.usageDetails')} footer={t('storage.cleanHint')}>
+      <SettingsGroup theme={theme} title={t('storage.usageDetails')}>
         <SettingsValueRow theme={theme} title={t('storage.managedFonts')} detail={t('storage.managedFontsDetail')} value={formatBytes(usage.managedFontBytes)} />
-        <SettingsValueRow theme={theme} title={t('storage.libraryDatabase')} detail={t('storage.libraryDatabaseDetail')} value={formatBytes(usage.databaseBytes)} />
+        <SettingsValueRow theme={theme} title={t('storage.libraryDatabase')} detail={t('storage.libraryDatabaseDetail')} value={formatBytes(usage.databaseBytes)} last />
+      </SettingsGroup>
+      <SettingsGroup theme={theme} title={t('storage.clean')} footer={t('storage.cleanHint')}>
         <SettingsValueRow theme={theme} title={t('storage.catalogCache')}
           detail={t('storage.catalogCacheDetail', { count: usage.catalogCacheEntries })}
           value={formatBytes(usage.catalogCacheEstimatedBytes)} />
@@ -109,13 +112,14 @@ export function SettingsStoragePage({ theme, onClose }: { theme: Theme; onClose:
 const styles = StyleSheet.create({
   measuring: { minHeight: 96, alignItems: 'center', justifyContent: 'center', gap: 8 },
   measuringText: { fontSize: 14 },
-  overview: { padding: 14, gap: 10 },
-  overviewHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  overviewLabel: { fontSize: 15 },
-  overviewValue: { fontSize: 22, fontWeight: '600' },
-  bar: { height: 18, borderRadius: 9, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', flexDirection: 'row' },
-  overviewDisk: { fontSize: 13 },
-  legend: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
-  legendDot: { width: 9, height: 9, borderRadius: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
-  legendText: { fontSize: 12, marginRight: 8 },
+  overview: { padding: 20, gap: 16 },
+  overviewHeader: { gap: 4 },
+  overviewLabel: { ...settingsTypography.detail },
+  overviewValue: { fontSize: 36, lineHeight: 44, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  bar: { height: 16, borderRadius: 8, overflow: 'hidden', flexDirection: 'row' },
+  overviewDisk: { ...settingsTypography.detail },
+  legend: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  legendDot: { width: 8, height: 8, borderRadius: 4, borderWidth: StyleSheet.hairlineWidth },
+  legendText: { ...settingsTypography.detail, flex: 1 },
+  legendValue: { fontSize: 14, lineHeight: 20, fontWeight: '500', fontVariant: ['tabular-nums'] },
 });

@@ -1,55 +1,112 @@
-import { CloudIcon, CardsIcon, CaretRightIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from 'phosphor-react-native';
+import { CloudIcon, CardsIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from './icons';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Theme } from './ui';
+import { storage } from './native';
+import { SettingsGroup, SettingsIcon, SettingsNavRow, formatBytes, settingsLayout, settingsTypography } from './settings-ui';
+import { accentPresets, type Theme } from './ui';
+import type { CloudSyncController } from './useCloudSync';
 
 export type SettingsPageId = 'sync' | 'storage' | 'cards' | 'appearance' | 'import' | 'about';
 
-// 设置主页：分组入口，点击进入对应二级页。
-export function SettingsScreen({ theme, onOpenPage }: { theme: Theme; onOpenPage: (page: SettingsPageId) => void }) {
+// 设置主页显示真实概览；进入页面和回到前台时刷新存储用量。
+export function SettingsScreen({ theme, active, controller, onOpenPage }: {
+  theme: Theme; active: boolean; controller: CloudSyncController; onOpenPage: (page: SettingsPageId) => void;
+}) {
   const { t } = useTranslation();
   const inset = useSafeAreaInsets();
+  const [usage, setUsage] = useState<{ total: number; free: number } | null>(null);
+  const [storageError, setStorageError] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    let mounted = true;
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const [next, preview] = await Promise.all([storage.usage(), storage.previewBytes()]);
+        if (!mounted || current !== request) return;
+        setUsage({ total: next.databaseBytes + next.managedFontBytes + preview, free: next.volumeFreeBytes });
+        setStorageError(false);
+      } catch {
+        if (mounted && current === request) { setUsage(null); setStorageError(true); }
+      }
+    };
+    void refresh();
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void refresh(); });
+    return () => { mounted = false; subscription.remove(); };
+  }, [active]);
+  const { state, readError } = controller;
+  const fontCount = state?.fonts.filter((font) => !font.deleted).length ?? 0;
+  const mode = theme.dark ? 'dark' : 'light';
+  const cloudDetail = readError ? t(readError) : !state ? t('mobile.sync.reading')
+    : !state.profile ? t('cloud.notConnected') : state.credentialError ? t('mobile.sync.credentialsError')
+      : !state.credentialAvailable ? t('cloud.passwordUnavailable')
+        : state.status.isRunning ? t('cloud.syncingPercent', { percent: state.status.percent })
+          : t('cloud.fileCount', { count: fontCount });
   const entries = [
-    { id: 'sync', Icon: CloudIcon, title: t('settings.cloud'), description: t('settings.cloudDescription') },
-    { id: 'storage', Icon: DatabaseIcon, title: t('settings.storage'), description: t('settings.storageDescription') },
-    { id: 'cards', Icon: CardsIcon, title: t('settings.cards'), description: t('settings.cardsDescription') },
-    { id: 'appearance', Icon: PaintBrushIcon, title: t('settings.appearance'), description: t('settings.appearanceDescription') },
-    { id: 'import', Icon: DownloadSimpleIcon, title: t('settings.importing'), description: t('settings.importDescription') },
-    { id: 'about', Icon: InfoIcon, title: t('settings.about'), description: t('mobile.settings.aboutDescription') },
+    { id: 'cards', Icon: CardsIcon, color: accentPresets.purple[mode], title: t('settings.cards'), description: t('mobile.settings.cardsSummary') },
+    { id: 'appearance', Icon: PaintBrushIcon, color: theme.accent, title: t('settings.appearance'), description: t('mobile.settings.appearanceSummary') },
+    { id: 'import', Icon: DownloadSimpleIcon, color: accentPresets.green[mode], title: t('settings.importing'), description: t('mobile.settings.importSummary') },
+    { id: 'about', Icon: InfoIcon, color: accentPresets.blue[mode], title: t('settings.about'), description: t('mobile.settings.aboutDescription') },
   ] as const;
 
   return <ScrollView style={[styles.screen, { backgroundColor: theme.background }]}
-    contentContainerStyle={[styles.content, {
-      paddingTop: Platform.OS === 'android' ? inset.top + 16 : 16,
+    contentContainerStyle={[settingsLayout.content, {
+      paddingTop: inset.top + 16,
       paddingBottom: Platform.OS === 'android' ? inset.bottom + 96 : 32,
     }]}>
-    <Text accessibilityRole="header" style={[styles.title, { color: theme.label }]}>{t('navigation.settings')}</Text>
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      {entries.map(({ id, Icon, title, description }, index) => (
-        <Pressable key={id} accessibilityRole="button" accessibilityLabel={title} onPress={() => onOpenPage(id)}
-          style={({ pressed }) => [styles.row, index < entries.length - 1 && {
-            borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border,
-          }, pressed && { backgroundColor: theme.raised }]}>
-          <Icon size={22} color={theme.accent} />
-          <View style={styles.rowBody}>
-            <Text style={[styles.rowTitle, { color: theme.label }]}>{title}</Text>
-            <Text style={[styles.rowDetail, { color: theme.secondary }]}>{description}</Text>
-          </View>
-          <CaretRightIcon size={16} color={theme.muted} />
-        </Pressable>
-      ))}
+    <Text accessibilityRole="header" style={[settingsLayout.title, { color: theme.label }]}>{t('navigation.settings')}</Text>
+    <View style={styles.overviewCards}>
+      <Pressable accessibilityRole="button" onPress={() => onOpenPage('sync')}
+        style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
+        <View style={styles.cardHeader}>
+          <SettingsIcon><CloudIcon size={22} color={accentPresets.blue[mode]} /></SettingsIcon>
+          <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.cloud')}</Text>
+        </View>
+        <View style={styles.cardMetricBlock}>
+          <Text style={[styles.cloudMetric, { color: readError ? theme.danger : theme.label },
+            (!!readError || !!state?.credentialError || (!!state?.profile && !state.credentialAvailable)) && styles.cardDetail]}>{cloudDetail}</Text>
+        </View>
+        <Text style={[styles.cardDetail, { color: theme.secondary }]}>{state?.profile && !readError
+          ? t(state.status.isRunning ? 'cloud.syncing' : state.status.phase === '已同步' ? 'mobile.sync.synced'
+            : state.status.phase === '同步失败' ? 'cloud.syncIncomplete' : state.status.phase === '已取消' ? 'cloud.syncCancelled' : 'mobile.sync.pending')
+          : t('mobile.settings.cloudSummary')}</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={() => onOpenPage('storage')}
+        style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
+        <View style={styles.cardHeader}>
+          <SettingsIcon><DatabaseIcon size={22} color={theme.accent} /></SettingsIcon>
+          <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.storage')}</Text>
+        </View>
+        <View style={styles.cardMetricBlock}>
+          <Text style={[styles.cardMetric, { color: storageError ? theme.danger : theme.label }, !usage && styles.cardDetail]}>
+            {storageError ? t('mobile.settings.storageError') : usage ? formatBytes(usage.total) : t('storage.measuring')}
+          </Text>
+        </View>
+        <Text style={[styles.cardDetail, { color: theme.secondary }]}>
+          {usage ? t('storage.freeSpace', { size: formatBytes(usage.free) }) : t('mobile.settings.storageSummary')}
+        </Text>
+      </Pressable>
     </View>
+    {[entries.slice(0, 2), entries.slice(2)].map((group, index) => <SettingsGroup key={index} theme={theme}
+      title={index === 0 ? t('settings.display') : undefined}>
+      {group.map(({ id, Icon, color, title, description }, row) => <SettingsNavRow key={id} theme={theme}
+        icon={<SettingsIcon><Icon size={22} color={color} /></SettingsIcon>}
+        title={title} detail={description} onPress={() => onOpenPage(id)} last={row === group.length - 1} />)}
+    </SettingsGroup>)}
   </ScrollView>;
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { paddingHorizontal: 16, gap: 16 },
-  title: { fontSize: 32, fontWeight: '700', paddingHorizontal: 4 },
-  card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
-  row: { minHeight: 64, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  rowBody: { flex: 1, gap: 2 },
-  rowTitle: { fontSize: 16, lineHeight: 22 },
-  rowDetail: { fontSize: 13, lineHeight: 18 },
+  overviewCards: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  overviewCard: { flex: 1, minWidth: 144, borderRadius: 24, padding: 16, gap: 8 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 8 },
+  cardTitle: { ...settingsTypography.body, flexShrink: 1 },
+  cardMetricBlock: { minHeight: 40, justifyContent: 'flex-end' },
+  cardMetric: { ...settingsTypography.metric },
+  cloudMetric: { fontSize: 18, lineHeight: 26, fontWeight: '500' },
+  cardDetail: { ...settingsTypography.detail },
 });

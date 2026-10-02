@@ -715,7 +715,15 @@
       "scaleLarge": "大",
       "accentBlue": "蓝色",
       "accentGreen": "绿色",
-      "accentPurple": "紫色"
+      "accentPurple": "紫色",
+      "cardPreview": "卡片预览",
+      "previewSample": "字之美\nAa Bb Cc",
+      "systemFont": "系统字体",
+      "cardsSummary": "字体信息、收藏标记与浏览视图",
+      "appearanceSummary": "主题色与预览字号",
+      "importSummary": "导入结果与字体文件",
+      "cloudSummary": "同步字体与收藏",
+      "storageSummary": "本机用量与缓存"
     },
     "closeReturnsLibrary": "关闭后返回字体库",
     "startFromFirst": "从第一个字体开始",
@@ -750,7 +758,9 @@
       "authenticationError": "WebDAV 认证失败，请检查账号和密码。",
       "credentialsError": "无法读取设备安全存储，请解锁设备后重试或重新输入密码。",
       "busyHint": "同步期间暂时无法导入字体或修改连接，请在同步结束后重试。"
-    }
+    },
+    "swipeCloudFont": "向左侧滑或打开更多操作，管理云端字体",
+    "cloudFontActions": "{{name}} 的云端操作"
   },
   "macos": {
     "aboutSubtitle": "跨设备字体资产管理工具",

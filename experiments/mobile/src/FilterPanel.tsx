@@ -1,4 +1,4 @@
-import { CheckIcon } from 'phosphor-react-native';
+import { CheckIcon } from './icons';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { facetTitles, mergeFacetOptions, normalizeFacets, type FacetKind, type FacetOption, type FacetSelection } from './library';

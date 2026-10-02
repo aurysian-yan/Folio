@@ -9,7 +9,7 @@ import {
   NumberSquareZeroIcon, NumberSquareOneIcon, NumberSquareTwoIcon, NumberSquareThreeIcon,
   NumberSquareFourIcon, NumberSquareFiveIcon, NumberSquareSixIcon, NumberSquareSevenIcon,
   NumberSquareEightIcon, NumberSquareNineIcon
-} from 'phosphor-react-native';
+} from './icons';
 import i18n from './i18n/instance';
 
 // 收藏夹图标与颜色键沿用桌面契约。

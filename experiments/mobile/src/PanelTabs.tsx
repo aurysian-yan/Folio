@@ -20,6 +20,6 @@ export function PanelTabs({ label, value, options, theme, disabled, onChange }: 
 
 const styles = StyleSheet.create({
   track: { flexDirection: 'row', borderRadius: 24, padding: 4 },
-  segment: { flex: 1, minHeight: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  segment: { flex: 1, minHeight: 44, borderRadius: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   label: { fontSize: 16, fontWeight: '600' },
 });

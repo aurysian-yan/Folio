@@ -1,19 +1,14 @@
-import { CheckIcon } from 'phosphor-react-native';
+import { CheckIcon, CircleHalfIcon } from './icons';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { previewScaleOptions, usePreferences, type AccentId, type AppearanceMode } from './settings';
-import { SettingsChoiceRow, SettingsGroup, SettingsPage } from './settings-ui';
+import { previewScaleOptions, usePreferences, type AccentId } from './settings';
+import { SettingsChoiceRow, SettingsGroup, SettingsIcon, SettingsPage, settingsTypography } from './settings-ui';
 import { accentPresets, type Theme } from './ui';
 
-// 外观：深浅色、主题色与字体预览字号。
+// 外观跟随系统，仅提供主题色与预览字号偏好。
 export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClose: () => void }) {
   const { t } = useTranslation();
   const { preferences, update } = usePreferences();
-  const appearanceOptions: { value: AppearanceMode; label: string }[] = [
-    { value: 'system', label: t('mobile.settings.appearanceSystem') },
-    { value: 'light', label: t('mobile.settings.appearanceLight') },
-    { value: 'dark', label: t('mobile.settings.appearanceDark') },
-  ];
   const scaleOptions = previewScaleOptions.map((scale) => ({
     value: String(scale),
     label: scale === 18 ? t('mobile.settings.scaleSmall') : scale === 24 ? t('mobile.settings.scaleMedium') : t('mobile.settings.scaleLarge'),
@@ -26,34 +21,55 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
   ];
 
   return <SettingsPage title={t('settings.appearance')} theme={theme} onClose={onClose}>
-    <SettingsGroup theme={theme} title={t('settings.appearance')} footer={t('settings.appearanceDescription')}>
-      <SettingsChoiceRow theme={theme} title={t('mobile.settings.appearanceMode')} options={appearanceOptions}
-        value={preferences.appearance} onChange={(value) => update({ appearance: value })} />
-      <View style={[styles.accentRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border }]}>
-        <Text style={[styles.accentTitle, { color: theme.label }]}>{t('theme.default')}</Text>
-        <View style={styles.swatches}>
-          {accents.map(({ id, label }) => {
-            const selected = preferences.accent === id;
-            return <Pressable key={id} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ selected }}
-              onPress={() => update({ accent: id })}
-              style={({ pressed }) => [styles.swatch, { backgroundColor: accentPresets[id].light, opacity: pressed ? 0.7 : 1,
-                borderColor: selected ? theme.label : 'transparent' }]}>
-              {selected && <CheckIcon size={16} color="#FFFFFF" />}
-            </Pressable>;
-          })}
+    <SettingsGroup theme={theme}>
+      <View style={styles.systemTheme}>
+        <SettingsIcon><CircleHalfIcon size={22} color={theme.accent} /></SettingsIcon>
+        <View style={styles.systemBody}>
+          <Text style={[styles.title, { color: theme.label }]}>{t('mobile.settings.appearanceMode')}</Text>
+          <Text style={[styles.detail, { color: theme.secondary }]}>{t('mobile.settings.appearanceSystem')}</Text>
         </View>
+        <Text style={[styles.modeValue, { color: theme.secondary }]}>{t(theme.dark ? 'mobile.settings.appearanceDark' : 'mobile.settings.appearanceLight')}</Text>
+      </View>
+    </SettingsGroup>
+    <SettingsGroup theme={theme} title={t('settings.theme')}>
+      <View accessibilityRole="radiogroup" accessibilityLabel={t('settings.theme')} style={styles.swatches}>
+        {accents.map(({ id, label }) => {
+          const selected = preferences.accent === id;
+          const color = accentPresets[id][theme.dark ? 'dark' : 'light'];
+          return <Pressable key={id} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ selected }}
+            onPress={() => update({ accent: id })}
+            style={({ pressed }) => [styles.swatchOption, { opacity: pressed ? 0.7 : 1 }]}>
+            <View style={[styles.swatchOutline, { borderColor: selected ? color : 'transparent' }]}>
+              <View style={[styles.swatch, { backgroundColor: color }]}>
+                {selected && <CheckIcon size={20} color={theme.onAccent} weight="bold" />}
+              </View>
+            </View>
+            <Text style={[styles.swatchLabel, { color: selected ? theme.label : theme.secondary }]}>{id === 'folio' ? t('color.orange') : label}</Text>
+          </Pressable>;
+        })}
       </View>
     </SettingsGroup>
     <SettingsGroup theme={theme} title={t('preview.size')}>
+      <View style={styles.preview}>
+        <Text style={[styles.sample, { fontSize: preferences.previewScale, lineHeight: Math.round(preferences.previewScale * 1.5), color: theme.label }]}>{t('mobile.settings.previewSample')}</Text>
+      </View>
       <SettingsChoiceRow theme={theme} title={t('preview.size')} options={scaleOptions}
-        value={String(preferences.previewScale)} onChange={(value) => update({ previewScale: Number(value) })} last />
+        value={String(preferences.previewScale)} onChange={(value) => update({ previewScale: Number(value) })} hideTitle last />
     </SettingsGroup>
   </SettingsPage>;
 }
 
 const styles = StyleSheet.create({
-  accentRow: { paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
-  accentTitle: { fontSize: 16, lineHeight: 22 },
-  swatches: { flexDirection: 'row', gap: 12 },
-  swatch: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  systemTheme: { paddingHorizontal: 20, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  systemBody: { flex: 1, gap: 4 },
+  title: { ...settingsTypography.body },
+  detail: { ...settingsTypography.detail },
+  modeValue: { fontSize: 14, lineHeight: 20 },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, paddingVertical: 20, gap: 12 },
+  swatchOption: { flex: 1, minWidth: 56, alignItems: 'center', gap: 8 },
+  swatchOutline: { padding: 4, borderRadius: 26, borderWidth: 2 },
+  swatch: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  swatchLabel: { ...settingsTypography.detail, textAlign: 'center' },
+  preview: { minHeight: 144, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 8, justifyContent: 'center', alignItems: 'center' },
+  sample: { textAlign: 'center' },
 });

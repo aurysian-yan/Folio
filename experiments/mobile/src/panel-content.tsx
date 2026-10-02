@@ -1,4 +1,4 @@
-import { CaretDownIcon, CaretUpIcon, CheckIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, TrashIcon, XIcon } from 'phosphor-react-native';
+import { CaretDownIcon, CaretUpIcon, CheckIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, TrashIcon, XIcon } from './icons';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';

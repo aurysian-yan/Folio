@@ -1,4 +1,4 @@
-import { CheckIcon, ClockIcon, DotsThreeIcon, PlusIcon, SparkleIcon, StarIcon, TextAaIcon } from 'phosphor-react-native';
+import { CheckIcon, ClockIcon, DotsThreeIcon, PlusIcon, SparkleIcon, StarIcon, TextAaIcon } from './icons';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';

@@ -1,4 +1,4 @@
-import { CaretDownIcon, CheckIcon, ListIcon, SquaresFourIcon } from 'phosphor-react-native';
+import { CaretDownIcon, CheckIcon, ListIcon, SquaresFourIcon } from './icons';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, Modal, Pressable, StyleSheet, Text, View } from 'react-native';

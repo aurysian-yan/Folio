@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   CaretDownIcon, FunnelSimpleIcon, MagnifyingGlassIcon, PlusIcon, XIcon,
-} from 'phosphor-react-native';
+} from './icons';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -437,8 +437,7 @@ function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => voi
 function MobileApp() {
   const { t } = useTranslation();
   const { preferences, ready: preferencesReady } = usePreferences();
-  const systemDark = useColorScheme() === 'dark';
-  const dark = preferences.appearance === 'system' ? systemDark : preferences.appearance === 'dark';
+  const dark = useColorScheme() === 'dark';
   const theme = useMemo(() => createTheme(dark, preferences.accent), [dark, preferences.accent]);
   const sourceId = useId();
   const inset = useSafeAreaInsets();
@@ -544,7 +543,9 @@ function MobileApp() {
 
   function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
   const cloudContent = <CloudScreen theme={theme} snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
-  const settingsContent = <SettingsScreen theme={theme} onOpenPage={openSettingsPage} />;
+  const settingsContent = <SettingsScreen theme={theme} controller={syncController}
+    active={(usesNativeControls ? nativeDestination === 'settings' : tab === 'settings') && !settingsPageVisible}
+    onOpenPage={openSettingsPage} />;
   const searchContent = <LibraryScreen syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
     sidebar={sidebar} searchPage destination="search" target={searchTarget} snapshot={snapshot} libraryVersion={libraryVersion}
     initialError={initialError} defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady}

@@ -5,13 +5,14 @@ import { representativeFace, type FontFamily } from './library';
 import { NativeFontPreview, type PreviewStatus } from './native';
 import { usePreferences } from './settings';
 import type { Theme } from './ui';
-import { StarIcon } from 'phosphor-react-native';
+import { StarIcon } from './icons';
 
-export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: {
+export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sampleText }: {
   family: FontFamily;
   mode: 'grid' | 'list';
   theme: Theme;
-  onOpen: () => void;
+  onOpen?: () => void;
+  sampleText?: string;
 }) {
   const { t } = useTranslation();
   const { preferences } = usePreferences();
@@ -23,12 +24,18 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
   const compact = mode === 'list';
 
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={family.isFavorite ? t('mobile.viewDetailsFavorite', { name: family.displayName }) : t('mobile.viewDetails')}
-      onPress={onOpen} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border },
-        compact && [styles.listCard, { backgroundColor: theme.listCardSurface }]]}>
+    <Pressable accessibilityRole={onOpen ? 'button' : undefined} accessible={!!onOpen}
+      accessibilityLabel={onOpen ? family.isFavorite ? t('mobile.viewDetailsFavorite', { name: family.displayName }) : t('mobile.viewDetails') : undefined}
+      disabled={!onOpen} onPress={onOpen} style={[styles.card, compact ? styles.listCard : styles.gridCard,
+        { backgroundColor: compact ? theme.listCardSurface : theme.surface, borderColor: theme.border }]}>
       {compact && <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.outline, { borderColor: theme.listCardBorder }]} />}
       <View pointerEvents="none" style={[styles.preview, compact && styles.listPreview]}>
-        {face?.sourcePath && status !== 'error' && status !== 'missing-glyph' ? (
+        {sampleText !== undefined ? (
+          <Text adjustsFontSizeToFit={!compact} style={[styles.sample, {
+            color: theme.label, fontSize: preferences.previewScale, lineHeight: preferences.previewScale * 1.05,
+            textAlign: compact ? 'left' : 'center',
+          }]}>{compact ? sampleText.replaceAll('\n', ' ') : sampleText}</Text>
+        ) : face?.sourcePath && status !== 'error' && status !== 'missing-glyph' ? (
           <NativeFontPreview key={previewKey} style={styles.nativePreview}
             accessibilityLabel={t('mobile.previewLabel', { name: family.displayName, style: face.styleName })}
             selection={{ sourcePath: face.sourcePath, faceIndex: face.faceIndex,
@@ -58,12 +65,14 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen }: 
 });
 
 const styles = StyleSheet.create({
-  card: { flex: 1, aspectRatio: 1, borderRadius: 16, borderWidth: 1, padding: 10, overflow: 'hidden' },
-  listCard: { aspectRatio: undefined, minHeight: 84, borderWidth: 0 },
+  card: { borderRadius: 16, borderWidth: 1, padding: 10, overflow: 'hidden' },
+  gridCard: { flex: 1, aspectRatio: 1 },
+  listCard: { minHeight: 84, borderWidth: 0 },
   outline: { borderWidth: 1, borderRadius: 16 },
   preview: { flex: 1, minHeight: 48, justifyContent: 'center', marginBottom: 4 },
   listPreview: { flex: 0, minHeight: 42, height: 42, marginBottom: 0, marginHorizontal: 4 },
   nativePreview: { width: '100%', flex: 1 },
+  sample: { width: '100%' },
   unavailable: { fontSize: 12, textAlign: 'center' },
   listUnavailable: { textAlign: 'left' },
   metadata: { gap: 2, alignItems: 'center' },

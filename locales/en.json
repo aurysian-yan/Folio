@@ -718,7 +718,15 @@
       "scaleLarge": "Large",
       "accentBlue": "Blue",
       "accentGreen": "Green",
-      "accentPurple": "Purple"
+      "accentPurple": "Purple",
+      "cardPreview": "Card preview",
+      "previewSample": "The art of type\nAa Bb Cc",
+      "systemFont": "System font",
+      "cardsSummary": "Font information, favorites and browsing view",
+      "appearanceSummary": "Accent color and preview size",
+      "importSummary": "Import results and font files",
+      "cloudSummary": "Sync fonts and favorites",
+      "storageSummary": "Local usage and caches"
     },
     "closeReturnsLibrary": "Close to return to the library",
     "startFromFirst": "Start from the first font",
@@ -753,7 +761,9 @@
       "authenticationError": "WebDAV authentication failed. Check your username and password.",
       "credentialsError": "Unable to read secure storage. Unlock the device and retry, or enter the password again.",
       "busyHint": "Wait for sync to finish before importing fonts or changing the connection."
-    }
+    },
+    "swipeCloudFont": "Swipe left or open more actions to manage this cloud font",
+    "cloudFontActions": "Cloud actions for {{name}}"
   },
   "macos": {
     "aboutSubtitle": "Cross-device font asset manager",

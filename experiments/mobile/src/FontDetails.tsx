@@ -1,4 +1,4 @@
-import { CaretLeftIcon, CheckIcon, CopyIcon, FolderPlusIcon, StarIcon } from 'phosphor-react-native';
+import { CaretLeftIcon, CheckIcon, CopyIcon, FolderPlusIcon, StarIcon } from './icons';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList, PixelRatio, StyleSheet, Text, View } from 'react-native';
