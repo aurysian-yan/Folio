@@ -35,14 +35,10 @@ android {
   }
 }
 
-rootProject.allprojects {
-  repositories {
-    maven {
-      url "https://raw.githubusercontent.com/rustls/rustls-platform-verifier/maven-archive/android-release-support/maven/"
-      content { includeGroup 'org.rustls' }
-    }
-  }
-}
+// rustls-platform-verifier 的 Maven 仓库由 app.config.ts 的
+// ./plugins/with-rustls-verifier-repo 写入根工程 allprojects.repositories。
+// 不能在这里用 rootProject.allprojects 追加：expo run:android 固定带
+// --configure-on-demand，:app 会在子模块注册仓库前解析 debugRuntimeClasspath。
 
 // 安卓校验器版本必须与 Cargo 锁文件一致。
 def folioCargoLock = file('../../../../../Cargo.lock').text
