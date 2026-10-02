@@ -1,6 +1,6 @@
 # Folio Mobile PoC
 
-对应 [路线图阶段 D](../../FOLIO_ROADMAP.md#d-移动架构-poc-与决策) 的隔离基础工程。RN + Expo 仍是候选方案，正式移动客户端和架构采用结论尚未交付。这里不连接桌面数据库，不修改生产 UniFFI ABI 或 schema。
+对应 [路线图阶段 D](../../FOLIO_ROADMAP.md#d-移动架构-poc-与决策) 的隔离基础工程。RN + Expo 仍是候选方案，正式移动客户端和架构采用结论尚未交付。这里使用独立设备数据库，不直接连接桌面数据库；第五批为既有 UniFFI 追加托管来源恢复与本地查询入口，不修改 SQLite schema 或 WebDAV 协议。
 
 ## Scope
 
@@ -14,9 +14,9 @@
 - 系统文件选择器支持多选字体与 ZIP；原生逐项读取、校验和按内容去重，完成后显示汇总及文件明细。ZIP 遍历子目录中的 TTF/OTF/TTC/OTC，支持 Stored/Deflate，忽略说明文件和嵌套压缩包，不支持加密、分卷或文件夹导入。单字体上限 64 MiB、单 ZIP 上限 256 MiB、每包 10,000 条目，每批最多 1,000 个字体且总读取字体内容不超过 512 MiB；失败继续处理其他文件，刷新失败仅回滚本批新增来源。
 - 预览按文件、TTC index、revision 和 axes 定位；不通过全局注册字体。iOS 使用 CoreText，Android 使用原生 Font/字形塑形与绘制。
 - 面板统一使用居中的标题、左侧关闭图标和右侧主操作图标，圆形按钮为 44 点。字体库以「本地／收藏夹」小标题分区，范围和收藏夹各保留一层卡片；手动与智慧收藏夹混排，侧滑卡片提供编辑与删除，并保留更多入口和读屏动作。iOS 面板使用系统 medium／large 两档 Sheet，半屏材质交给系统 Liquid Glass；编辑页使用原生分段控件，按钮使用原生玻璃，旧系统回退兼容样式。Android 范围继续复用 Gorhom Drawer，操作按钮沿用相同尺寸、主题色和胶囊形态。
-- iPadOS 常规宽度使用 `@expo/ui` 的原生 SwiftUI NavigationSplitView、侧边栏 List 和系统 Toolbar，提供全部字体、最近、星标与收藏夹导航；侧拉及宽度小于 600 点的窗口沿用 iPhone 的原生 TabView、顶部操作区与搜索布局。iPhone/Android 从字体库范围入口访问收藏夹，iOS 筛选和收藏夹使用系统 Sheet。Menu 和 Button 在 iOS 26 及以上使用系统 Liquid Glass，旧系统使用原生兼容样式。设置页提供存储管理、字体卡片、外观、导入与关于五个二级页，经现有原生详情导航进入；存储用量与清理复用 `folio-ffi` 的 `FolioSync`，偏好通过 `@react-native-async-storage/async-storage` 保存在设备本地。Android、iPhone 和紧凑 iPad 的最近页面复用字体列表、搜索、实时筛选和详情，按 Rust 最近访问顺序显示。仅打开详情时记录卡片代表字款身份，重复访问更新顺序，不因渲染、滚动或导入记录；详情返回保留原查询和浏览位置。最近访问与最近加入分别表达。云端页面保持空白，云同步尚未接入。
+- iPadOS 常规宽度使用 `@expo/ui` 的原生 SwiftUI NavigationSplitView、侧边栏 List 和系统 Toolbar，提供全部字体、最近、星标与收藏夹导航；侧拉及宽度小于 600 点的窗口沿用 iPhone 的原生 TabView、顶部操作区与搜索布局。iPhone/Android 从字体库范围入口访问收藏夹，iOS 筛选和收藏夹使用系统 Sheet。Menu 和 Button 在 iOS 26 及以上使用系统 Liquid Glass，旧系统使用原生兼容样式。设置页提供云同步、存储管理、字体卡片、外观、导入与关于六个二级页，经现有原生详情导航进入；存储用量与清理复用 `folio-ffi` 的 `FolioSync`，偏好通过 `@react-native-async-storage/async-storage` 保存在设备本地。Android、iPhone 和紧凑 iPad 的最近页面复用字体列表、搜索、实时筛选和详情，按 Rust 最近访问顺序显示。仅打开详情时记录卡片代表字款身份，重复访问更新顺序，不因渲染、滚动或导入记录；详情返回保留原查询和浏览位置。最近访问与最近加入分别表达。云端页面显示共享同步引擎的字体记录及实际下载状态，云同步配置见下文。
 - 系统浅色/深色、Safe Area 和列表虚拟化。更新 iOS 开发包后重定位托管字体，保留字体库和收藏。
-- Android 底栏由本地 Expo `FolioNavigation` 模块承载 Compose，保留本地、最近、云端、设置四项。外观与动效采用 Nexio 固定提交的均衡材质，RN 内容通过独立 RenderNode 提供背景；API 33+ 支持胶囊折射、31–32 支持模糊、28–30 使用半透明兼容材质。来源及许可见 [源码记录](modules/folio-native/android/third-party/NOTICE.md)。
+- Android 底栏由本地 Expo `FolioNavigation` 模块承载 Compose，保留本地、搜索、云端、设置四项；最近记录从字体库范围入口访问。外观与动效采用 Nexio 固定提交的均衡材质，RN 内容通过独立 RenderNode 提供背景；API 33+ 支持胶囊折射、31–32 支持模糊、28–30 使用半透明兼容材质。来源及许可见 [源码记录](modules/folio-native/android/third-party/NOTICE.md)。
 
 ## Setup
 
@@ -119,3 +119,35 @@ pnpm exec expo export --platform all --output-dir .build/bundle
 `test:swift` 需要先生成 bindings/samples 并执行 `pnpm pods`，验证 macOS 主机上的真实 Swift ↔ Rust 调用、查询映射、手动／智慧收藏夹持久化、条件合并与互转、最近访问顺序及 Swift 原生批量/ZIP 导入器，不能代表移动运行验收。Android 导入器与查询映射回归测试在生成 bindings/samples 后从 `android` 目录执行 `./gradlew :folio-native:testDebugUnitTest`，使用 `pnpm bindings` 构建的主机 Rust 库，不代表 Android 设备预览验收。查询的 `AbortSignal` 立即取消 JS 等待并丢弃迟到结果；现有同步 Rust 调用会继续执行，没有原生查询中断承诺。
 
 当前结果、实验边界和后续验收项见 [VALIDATION.md](VALIDATION.md)，架构决策见 [DECISION.md](DECISION.md)。
+
+## Cloud Sync Foundation (Batch 5)
+
+第五批接入现有设置详情导航：HTTPS WebDAV 地址及桌面同款服务商下拉预设、远端目录、账号、密码、自动同步偏好、测试连接、保存与断开。123PAN 使用同一个 WebDAV 入口。保存前测试连接，失败保留原连接；空密码只从相同地址／目录／账号的安全存储恢复，不在 JS 偏好中保存或返回密码。
+
+Swift/Kotlin 持有一个 `FolioSync` 实例，复用桌面 `folio-sync` 的事件与字体对象协议。云端页面支持手动同步与 Rust 实际取消，轮询真实阶段、百分比、阶段计数和逐文件状态；同步结束后重新读取本地快照，包括部分失败和取消后已落地的变更。应用回到前台重新读取状态；状态读取失败明确显示错误并提供重试，不改成“未连接”或“已同步”。
+
+iOS 使用设备 Keychain，Android 使用 Keystore AES-256-GCM 密钥和 `noBackupFilesDir` 中的原子密文文件；密文损坏或密钥不可用显示安全存储错误。重启时从 Rust 数据库恢复非秘密配置，密码只在原生操作中读取。断开只移除当前连接凭据和配置，保留字体与用户状态。
+
+初始化与同步前恢复 `FolioMobilePoC/fonts`：按内容将旧 `.font` 规范化为 TTF／OTF／TTC，校验新副本、写入目录解析缓存后移除旧来源与副本，归并同目录文件根和路径别名，并恢复 iOS 沙盒变更后的来源与同步资产路径。字体身份、星标、手动收藏夹、智慧条件和最近访问保持不变。导入去重读取实际托管文件，包含同步下载文件。
+
+首次发现字体的自动下载沿用桌面逻辑；未下载或不可读取的云端文件明确显示“仅在云端”，不提供预览，也不进入本地筛选与智慧匹配。自动同步开关目前只保存偏好，调度及完整删除／恢复／冲突操作留给第六批。
+
+可执行验证（本目录）：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm test:swift
+cargo test --manifest-path ../../Cargo.toml -p folio-sync -p folio-ffi
+APP_VARIANT=development node scripts/prebuild-variant.mjs android
+cd android
+./gradlew :folio-native:testDebugUnitTest :folio-native:assembleDebugAndroidTest :app:assembleDebug -PreactNativeArchitectures=arm64-v8a
+adb -s <真机序列号> install -r ../modules/folio-native/android/build/outputs/apk/androidTest/debug/folio-native-debug-androidTest.apk
+adb -s <真机序列号> shell am instrument -w com.folio.poc.test/com.folio.poc.FolioSyncInstrumentation
+```
+
+真机更新前核对构建变体与 APK 的 applicationId：开发包必须是 `com.folio.mobile.poc.dev`，与前台 Folio Dev 一致；生产包 `com.folio.mobile.poc` 不能代替开发包验收。保留数据安装，页面验收须另外确认四个导航 Tab、输入退出和详情返回，不能由 instrumentation PASS 推断。
+
+测试 APK 使用自己的私有目录和随机测试凭据，不接触 Folio Dev 字体库。回环 WebDAV 使用测试注入客户端；生产连接仍强制 HTTPS，不放宽 TLS 或地址检查。独立服务商 WebDAV 的移动／桌面实网验收尚待配置，不能用回环测试代替；完整范围见 [VALIDATION.md](VALIDATION.md#cloud-sync-foundation-batch-5)。

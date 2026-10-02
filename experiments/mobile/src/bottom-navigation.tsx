@@ -22,6 +22,7 @@ export interface NavigationBackdropProps extends ViewProps {
 
 export interface BottomNavigationProps {
   sourceId: string;
+  hidden?: boolean;
   selectedId: MobileTab;
   dark: boolean;
   theme: Theme;
@@ -39,8 +40,10 @@ export function NavigationBackdrop({ children, style }: NavigationBackdropProps)
 
 const icons = { local: TextAaIcon, search: MagnifyingGlassIcon, cloud: CloudIcon, settings: GearIcon };
 
-export function BottomNavigation({ selectedId, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
-  return <View style={[styles.dock, { bottom: bottomInset + 8, left: leftInset + 20, right: rightInset + 20 }]}>
+export function BottomNavigation({ hidden = false, selectedId, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
+  return <View pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden}
+    importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
+    style={[styles.dock, { opacity: hidden ? 0 : 1, bottom: bottomInset + 8, left: leftInset + 20, right: rightInset + 20 }]}>
     <View accessibilityRole="tablist" style={[styles.bar, { backgroundColor: theme.tab, borderColor: theme.border }]}>
       {navigationItems.map(({ id, label }) => {
         const Icon = icons[id];

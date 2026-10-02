@@ -1,10 +1,12 @@
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
 import type { NativeSyntheticEvent, ViewProps } from 'react-native';
 import { createLibraryClient, type LibraryBridge } from './library';
+import { createSyncClient, type SyncBridge } from './sync';
 import { createStorageClient, type StorageBridge } from './storage';
 
-const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & { copyText(text: string): Promise<void> }>('FolioNative');
+const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & { copyText(text: string): Promise<void> }>('FolioNative');
 export const library = createLibraryClient(nativeModule);
+export const cloudSync = createSyncClient(nativeModule);
 export const storage = createStorageClient(nativeModule);
 export const copyText = (text: string) => nativeModule.copyText(text);
 

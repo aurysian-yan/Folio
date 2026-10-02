@@ -4,6 +4,7 @@ import Foundation
 @main
 struct SwiftSmoke {
     static func main() throws {
+        try runSwiftSyncSmoke(URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true))
         let manager = FileManager.default
         let samples = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         let temporary = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)

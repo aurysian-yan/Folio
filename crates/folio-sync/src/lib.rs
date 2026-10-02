@@ -3,8 +3,12 @@
 #![forbid(unsafe_code)]
 
 #[cfg(test)]
+mod local_dav_tests;
+mod managed;
+#[cfg(test)]
 mod tests;
 mod webdav;
+pub use managed::prepare_managed_sources;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};

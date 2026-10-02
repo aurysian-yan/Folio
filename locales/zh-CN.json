@@ -720,7 +720,24 @@
     "errorRecent": "无法记录本次访问，请重试。",
     "errorCollectionRead": "无法读取收藏夹，请重试。",
     "smartFolderCount": "{{name}}，{{count}} 个匹配字体",
-    "swipeCollection": "向左侧滑或打开更多操作，可编辑或删除收藏夹"
+    "swipeCollection": "向左侧滑或打开更多操作，可编辑或删除收藏夹",
+    "sync": {
+      "automaticHint": "当前仅支持手动同步。",
+      "secureStorage": "密码通过设备安全存储保存，不写入字体库或普通偏好。",
+      "invalidProfile": "请输入有效的 HTTPS 地址和远端目录，地址不可包含账号或密码。",
+      "operationError": "云同步操作失败，请检查连接和网络后重试。",
+      "reading": "正在读取…",
+      "pending": "待同步",
+      "synced": "已同步",
+      "connecting": "正在连接",
+      "scanning": "扫描本地字体",
+      "uploading": "上传字体与变更",
+      "receiving": "接收云端变更",
+      "downloading": "下载云端字体",
+      "finishing": "完成同步",
+      "authenticationError": "WebDAV 认证失败，请检查账号和密码。",
+      "credentialsError": "无法读取设备安全存储，请解锁设备后重试或重新输入密码。"
+    }
   },
   "macos": {
     "aboutSubtitle": "跨设备字体资产管理工具",

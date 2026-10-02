@@ -13,6 +13,7 @@ export interface NativeNavigationProps {
   /** 设置页内容，仅原生导航使用；基础实现忽略。 */
   settings?: ReactNode;
   search?: ReactNode;
+  cloud?: ReactNode;
   theme: Theme;
   sidebar: boolean;
   destination: NativeDestination;

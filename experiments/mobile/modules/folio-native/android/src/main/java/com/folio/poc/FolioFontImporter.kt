@@ -81,11 +81,9 @@ internal class FolioFontImporter(
     }
 
     private fun indexExistingFiles() {
-        val managed = directory.canonicalPath + File.separator
-        for (source in engine.loadCachedLibrary().roots.filter { it.kind == "file" }) {
-            runCatching {
-                val file = File(source.displayPath).canonicalFile
-                if (file.path.startsWith(managed) && file.isFile) digests.add(fingerprint(file))
+        for (file in directory.listFiles().orEmpty()) {
+            if (file.isFile && (file.extension.lowercase() in fontExtensions || file.extension.lowercase() == "font")) {
+                digests.add(fingerprint(file))
             }
         }
     }

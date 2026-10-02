@@ -647,6 +647,8 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
 
     func queryLibrary(query: LibraryQueryDto) throws  -> LibraryPageDto
 
+    func queryLocalLibrary(query: LibraryQueryDto) throws  -> LibraryPageDto
+
     func querySmartFolder(id: SmartFolderIdDto, text: String?, facets: [FacetSelectionDto], offset: UInt64, limit: UInt64) throws  -> LibraryPageDto
 
     func recordRecent(identityId: IdentityIdDto) throws
@@ -885,6 +887,16 @@ open func queryLibrary(query: LibraryQueryDto)throws  -> LibraryPageDto  {
     return try  FfiConverterTypeLibraryPageDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_folioengine_query_library(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeLibraryQueryDto_lower(query),uniffiCallStatus
+    )
+})
+}
+
+open func queryLocalLibrary(query: LibraryQueryDto)throws  -> LibraryPageDto  {
+    return try  FfiConverterTypeLibraryPageDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_query_local_library(
             self.uniffiCloneHandle(),
         FfiConverterTypeLibraryQueryDto_lower(query),uniffiCallStatus
     )
@@ -1324,6 +1336,8 @@ public protocol FolioSyncProtocol: AnyObject, Sendable {
 
     func markCloudOnlyForPath(path: String) throws  -> Bool
 
+    func prepareManagedSources() throws
+
     func profile() throws  -> SyncProfileDto?
 
     func rebuildSyncIndexes() throws
@@ -1480,6 +1494,14 @@ open func markCloudOnlyForPath(path: String)throws  -> Bool  {
         FfiConverterString.lower(path),uniffiCallStatus
     )
 })
+}
+
+open func prepareManagedSources()throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_prepare_managed_sources(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
 }
 
 open func profile()throws  -> SyncProfileDto?  {
@@ -4960,6 +4982,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_query_library() != 13886) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_query_local_library() != 30661) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_query_smart_folder() != 46254) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5048,6 +5073,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_mark_cloud_only_for_path() != 59230) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_prepare_managed_sources() != 48675) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_profile() != 22800) {

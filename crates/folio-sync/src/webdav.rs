@@ -26,6 +26,7 @@ impl WebDavClient {
         if server.scheme() != "https"
             || server.host_str().is_none()
             || !server.username().is_empty()
+            || server.password().is_some()
         {
             return Err(SyncError::InvalidServerUrl);
         }
@@ -413,7 +414,7 @@ fn status_error(status: StatusCode) -> SyncError {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
@@ -439,7 +440,7 @@ mod tests {
         forbidden_gets: u32,
     }
 
-    struct DavServer {
+    pub(crate) struct DavServer {
         url: String,
         state: Arc<Mutex<DavState>>,
         stopped: Arc<AtomicBool>,
@@ -447,7 +448,7 @@ mod tests {
     }
 
     impl DavServer {
-        fn start() -> Self {
+        pub(crate) fn start() -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             listener.set_nonblocking(true).unwrap();
             let url = format!("http://{}/dav", listener.local_addr().unwrap());
@@ -477,7 +478,7 @@ mod tests {
             }
         }
 
-        fn client(&self, password: &str) -> WebDavClient {
+        pub(crate) fn client(&self, password: &str) -> WebDavClient {
             let server = Url::parse(&self.url).unwrap();
             WebDavClient {
                 http: reqwest::Client::builder()

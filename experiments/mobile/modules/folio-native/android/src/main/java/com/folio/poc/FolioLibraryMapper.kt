@@ -69,7 +69,7 @@ internal object FolioLibraryMapper {
         require(if (scope == "smart") !smartFolderId.isNullOrBlank() && collectionId == null else smartFolderId == null)
         val request = query(text, if (scope == "smart") "all" else scope, collectionId, facets, offset, limit)
         return if (scope == "smart") engine.querySmartFolder(SmartFolderIdDto(requireNotNull(smartFolderId)),
-            request.text, request.facets, request.offset, request.limit) else engine.queryLibrary(request)
+            request.text, request.facets, request.offset, request.limit) else engine.queryLocalLibrary(request)
     }
 
     fun conditions(text: String, facets: List<Pair<String, String>>): SmartFolderQueryDto {

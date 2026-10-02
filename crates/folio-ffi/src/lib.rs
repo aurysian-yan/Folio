@@ -666,6 +666,19 @@ impl FolioSync {
         }))
     }
 
+    // 移动端托管目录恢复与来源归并。
+    pub fn prepare_managed_sources(&self) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        let _refresh = library_refresh_lock()
+            .lock()
+            .map_err(FolioFfiError::operation)?;
+        folio_sync::prepare_managed_sources(
+            Path::new(&self.database_path),
+            Path::new(&self.managed_directory),
+        )
+        .map_err(FolioFfiError::operation)
+    }
+
     pub fn profile(&self) -> Result<Option<SyncProfileDto>, FolioFfiError> {
         folio_sync::load_profile(&self.database_path)
             .map(|profile| {
@@ -751,14 +764,26 @@ impl FolioSync {
             },
         )
         .map_err(FolioFfiError::operation)?;
-        self.state.lock().map_err(FolioFfiError::operation)?.phase = "待同步".to_owned();
+        let db = FolioDatabase::open(&self.database_path).map_err(FolioFfiError::operation)?;
+        let last_synced_at_ms = db
+            .sync_metadata("last_successful_sync_ms")
+            .map_err(FolioFfiError::operation)?
+            .and_then(|value| value.parse().ok());
+        let mut state = self.state.lock().map_err(FolioFfiError::operation)?;
+        state.phase = "待同步".to_owned();
+        state.progress = SyncProgress::default();
+        state.error_message = None;
+        state.last_synced_at_ms = last_synced_at_ms;
         Ok(())
     }
 
     pub fn disconnect(&self) -> Result<(), FolioFfiError> {
         self.require_idle()?;
         folio_sync::disconnect(&self.database_path).map_err(FolioFfiError::operation)?;
-        self.state.lock().map_err(FolioFfiError::operation)?.phase = "未连接".to_owned();
+        let mut state = self.state.lock().map_err(FolioFfiError::operation)?;
+        state.phase = "未连接".to_owned();
+        state.progress = SyncProgress::default();
+        state.error_message = None;
         Ok(())
     }
 
@@ -1102,6 +1127,27 @@ impl FolioEngine {
             .remove_root(id)
             .map_err(FolioFfiError::operation)?;
         Ok(())
+    }
+
+    // 移动本地范围只查询可读取来源，云端记录使用独立列表。
+    pub fn query_local_library(
+        &self,
+        mut query: LibraryQueryDto,
+    ) -> Result<LibraryPageDto, FolioFfiError> {
+        query.allowed_source_paths = Some(
+            self.lock()?
+                .catalog
+                .faces()
+                .flat_map(|face| {
+                    face.sources
+                        .iter()
+                        .map(|source| source.path().to_path_buf())
+                })
+                .filter(|path| path.is_file())
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+        );
+        self.query_library(query)
     }
 
     pub fn query_library(&self, query: LibraryQueryDto) -> Result<LibraryPageDto, FolioFfiError> {
@@ -2396,6 +2442,42 @@ mod tests {
     }
 
     #[test]
+    fn saving_connection_clears_previous_failure_and_transfer_counts() {
+        let directory = tempfile::tempdir().unwrap();
+        let sync = FolioSync::open(
+            directory
+                .path()
+                .join("folio.sqlite")
+                .to_string_lossy()
+                .into_owned(),
+            directory
+                .path()
+                .join("fonts")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .unwrap();
+        {
+            let mut state = sync.state.lock().unwrap();
+            state.error_message = Some("旧连接失败".to_owned());
+            state.progress.uploaded_files = 5;
+        }
+        sync.save_profile(SyncProfileDto {
+            server_url: "https://independent.example.test/".to_owned(),
+            remote_directory: "Fonts".to_owned(),
+            username: "test".to_owned(),
+            automatic: true,
+        })
+        .unwrap();
+        let status = sync.status().unwrap();
+        assert_eq!(status.phase, "待同步");
+        assert!(status.error_message.is_none());
+        assert_eq!(status.uploaded_files, 0);
+        sync.disconnect().unwrap();
+        assert_eq!(sync.status().unwrap().phase, "未连接");
+    }
+
+    #[test]
     fn typed_identifier_round_trip() {
         let bytes = [0xabu8; 16];
         let dto = identity_dto(FontIdentityId::from_bytes(bytes));
@@ -2484,6 +2566,23 @@ mod tests {
             .query_library(query(QueryScopeDto::Favorites))
             .unwrap();
         assert_eq!(favorite.cloud_only_fonts.len(), 1);
+        let local = engine
+            .query_local_library(query(QueryScopeDto::All))
+            .unwrap();
+        assert!(local.cloud_only_fonts.is_empty());
+        assert_eq!(local.total_matches, 0);
+        assert!(local.families.is_empty());
+        assert!(local.facets.is_empty());
+        let smart = engine
+            .create_smart_folder(
+                "云端智慧".to_owned(),
+                SmartFolderQueryDto {
+                    text: Some("云端".to_owned()),
+                    facets: vec![],
+                },
+            )
+            .unwrap();
+        assert_eq!(engine.get_smart_folder(smart).unwrap().match_count, 0);
     }
 
     #[test]

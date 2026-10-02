@@ -723,7 +723,24 @@
     "errorRecent": "Could not record this visit. Try again.",
     "errorCollectionRead": "Could not read the collection. Try again.",
     "smartFolderCount": "{{name}}, {{count}} matching fonts",
-    "swipeCollection": "Swipe left or open more actions to edit or delete this collection"
+    "swipeCollection": "Swipe left or open more actions to edit or delete this collection",
+    "sync": {
+      "automaticHint": "Only manual sync is currently available.",
+      "secureStorage": "Passwords are stored using device secure storage, outside the font library and regular preferences.",
+      "invalidProfile": "Enter a valid HTTPS address and remote directory. The address must not contain credentials.",
+      "operationError": "Cloud sync failed. Check the connection and network, then try again.",
+      "reading": "Reading…",
+      "pending": "Pending sync",
+      "synced": "Synced",
+      "connecting": "Connecting",
+      "scanning": "Scanning local fonts",
+      "uploading": "Uploading fonts and changes",
+      "receiving": "Receiving cloud changes",
+      "downloading": "Downloading cloud fonts",
+      "finishing": "Finishing sync",
+      "authenticationError": "WebDAV authentication failed. Check your username and password.",
+      "credentialsError": "Unable to read secure storage. Unlock the device and retry, or enter the password again."
+    }
   },
   "macos": {
     "aboutSubtitle": "Cross-device font asset manager",

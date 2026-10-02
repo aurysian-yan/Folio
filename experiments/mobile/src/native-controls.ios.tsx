@@ -40,7 +40,7 @@ function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = fa
 }
 
 // iPad 常规窗口使用原生分栏，紧凑窗口沿用 iPhone 标签栏。
-export function NativeNavigation({ children, settings, search, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
+export function NativeNavigation({ children, settings, search, cloud, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
   const { t } = useTranslation();
   const [visibility, setVisibility] = useState<NavigationSplitViewVisibility>('all');
   const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
@@ -83,7 +83,7 @@ export function NativeNavigation({ children, settings, search, theme, sidebar, d
               <Section>{row('settings', t('navigation.settings'), 'gear')}</Section>
             </List>
           </NavigationSplitView.Sidebar>
-          <NavigationSplitView.Detail>{destination === 'settings' ? settings : destination === 'search' ? search : children}</NavigationSplitView.Detail>
+          <NavigationSplitView.Detail>{destination === 'settings' ? settings : destination === 'search' ? search : destination === 'cloud' ? cloud : children}</NavigationSplitView.Detail>
         </NavigationSplitView>
       </Host>
     );
@@ -104,7 +104,7 @@ export function NativeNavigation({ children, settings, search, theme, sidebar, d
           <NativeTabContent><RNHostView><View style={styles.fill}>{search}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="cloud" label={t('navigation.cloud')} systemImage="cloud">
-          <RNHostView><View style={[styles.fill, { backgroundColor: theme.background }]} /></RNHostView>
+          <NativeTabContent><RNHostView><View style={styles.fill}>{cloud}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="settings" label={t('navigation.settings')} systemImage="gear">
           <NativeTabContent><RNHostView><View style={styles.fill}>{settings}</View></RNHostView></NativeTabContent>

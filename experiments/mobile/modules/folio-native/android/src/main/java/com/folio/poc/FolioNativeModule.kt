@@ -21,6 +21,14 @@ import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
+class FolioSyncProfile : Record {
+    @Field var serverUrl: String = ""
+    @Field var remoteDirectory: String = ""
+    @Field var username: String = ""
+    @Field var automatic: Boolean = false
+    fun dto() = com.folio.poc.ffi.SyncProfileDto(serverUrl, remoteDirectory, username, automatic)
+}
+
 class FolioQuery : Record {
     @Field var text: String = ""
     @Field var scope: String = "all"
@@ -72,6 +80,7 @@ class FolioPreviewSelection : Record {
 class FolioNativeModule : Module() {
     private val executor = Executors.newSingleThreadExecutor()
     private var engine: FolioEngine? = null
+    private var sync: FolioSync? = null
 
     override fun definition() = ModuleDefinition {
         Name("FolioNative")
@@ -83,6 +92,7 @@ class FolioNativeModule : Module() {
                     check(root.isDirectory || root.mkdirs())
                     engine = FolioEngine.open(File(root, "folio.sqlite").absolutePath)
                 }
+                syncEngine().prepareManagedSources()
                 snapshot(requireEngine().refreshLibrary().snapshot)
             }
         }
@@ -190,6 +200,51 @@ class FolioNativeModule : Module() {
             }
         }
 
+        AsyncFunction("syncState") { promise: Promise -> performSync(promise) { syncState() } }
+
+        AsyncFunction("testSyncConnection") { profile: FolioSyncProfile, password: String?, promise: Promise ->
+            performSync(promise) { syncEngine().testConnection(profile.dto(), password(password, profile.dto())) }
+        }
+        AsyncFunction("saveSyncConnection") { profile: FolioSyncProfile, password: String?, promise: Promise ->
+            performSync(promise) {
+                val sync = syncEngine()
+                check(!sync.status().isRunning)
+                val dto = profile.dto()
+                val secret = password(password, dto)
+                sync.testConnection(dto, secret)
+                val credentials = FolioSyncCredentials(context())
+                val previous = runCatching { credentials.read(dto) }.getOrNull()
+                credentials.write(secret, dto)
+                try { sync.saveProfile(dto) }
+                catch (error: Exception) { credentials.write(previous, dto); throw error }
+            }
+        }
+        AsyncFunction("disconnectSync") { promise: Promise ->
+            performSync(promise) {
+                val sync = syncEngine()
+                check(!sync.status().isRunning)
+                sync.profile()?.let { profile ->
+                    val credentials = FolioSyncCredentials(context())
+                    val previous = runCatching { credentials.read(profile) }.getOrNull()
+                    credentials.write(null, profile)
+                    try { sync.disconnect() }
+                    catch (error: Exception) { credentials.write(previous, profile); throw error }
+                }
+            }
+        }
+        AsyncFunction("startSync") { promise: Promise ->
+            performSync(promise) {
+                val sync = syncEngine()
+                if (sync.status().isRunning) false else {
+                    val profile = checkNotNull(sync.profile())
+                    val secret = password(null, profile)
+                    sync.prepareManagedSources()
+                    sync.startSync(secret)
+                }
+            }
+        }
+        AsyncFunction("cancelSync") { promise: Promise -> performSync(promise) { syncEngine().cancel() } }
+
         AsyncFunction("storageUsage") { promise: Promise ->
             perform(promise) {
                 val usage = syncEngine().storageUsage()
@@ -227,6 +282,9 @@ class FolioNativeModule : Module() {
 
         OnDestroy {
             executor.execute {
+                sync?.cancel()
+                sync?.destroy()
+                sync = null
                 engine?.destroy()
                 engine = null
             }
@@ -248,17 +306,61 @@ class FolioNativeModule : Module() {
     private fun requireEngine() = engine
         ?: throw CodedException("ERR_FOLIO_NOT_READY", "字体库尚未就绪。", null)
 
-    // 存储统计与缓存清理复用同步引擎，按需打开、用完即释放。
+    // 存储维护与同步共用同一实例及运行状态。
     private fun rootDirectory(): File {
         val root = File(context().filesDir, "FolioMobilePoC")
         check(root.isDirectory || root.mkdirs())
         return root
     }
 
-    private fun syncEngine() = FolioSync.open(
-        File(rootDirectory(), "folio.sqlite").absolutePath,
-        File(rootDirectory(), "fonts").absolutePath,
-    )
+    private fun syncEngine(): FolioSync {
+        sync?.let { return it }
+        return FolioSync.open(File(rootDirectory(), "folio.sqlite").absolutePath,
+            File(rootDirectory(), "fonts").absolutePath).also { sync = it }
+    }
+
+    private fun password(supplied: String?, profile: com.folio.poc.ffi.SyncProfileDto): String {
+        if (!supplied.isNullOrEmpty()) return supplied
+        return try { FolioSyncCredentials(context()).read(profile)?.takeIf { it.isNotEmpty() }
+            ?: throw IllegalStateException() }
+        catch (_: Exception) { throw CodedException("ERR_FOLIO_CREDENTIALS", "ERR_FOLIO_CREDENTIALS", null) }
+    }
+
+    private fun syncState(): Map<String, Any?> {
+        val sync = syncEngine()
+        val status = sync.status()
+        val profile = sync.profile()
+        var credentialError = false
+        val available = try { profile?.let { FolioSyncCredentials(context()).read(it) != null } ?: false }
+            catch (_: Exception) { credentialError = true; false }
+        return mapOf("profile" to profile?.let { mapOf("serverUrl" to it.serverUrl, "remoteDirectory" to it.remoteDirectory,
+            "username" to it.username, "automatic" to it.automatic) }, "credentialAvailable" to available, "credentialError" to credentialError,
+            "status" to mapOf("phase" to status.phase, "stage" to status.stage, "percent" to status.percent.toInt(),
+                "stageCompleted" to status.stageCompleted.toDouble(), "stageTotal" to status.stageTotal.toDouble(),
+                "isRunning" to status.isRunning, "uploadedFiles" to status.uploadedFiles.toDouble(),
+                "downloadedFiles" to status.downloadedFiles.toDouble(), "uploadedBytes" to status.uploadedBytes.toDouble(),
+                "downloadedBytes" to status.downloadedBytes.toDouble(), "completionGeneration" to status.completionGeneration.toDouble(),
+                "lastSyncedAtMs" to status.lastSyncedAtMs?.toDouble(), "errorMessage" to status.errorMessage,
+                "items" to status.items.map { mapOf("fingerprint" to it.fingerprint, "action" to it.action, "status" to it.status) }),
+            "fonts" to sync.cloudFonts().map { mapOf("fingerprint" to it.fingerprint, "displayName" to it.displayName,
+                "filename" to it.filename, "fileSize" to it.fileSize.toDouble(), "cloudOnly" to it.cloudOnly,
+                "deleted" to it.deleted, "localPath" to it.localPath, "identityIds" to it.identityIds,
+                "localAvailable" to (!it.cloudOnly && !it.deleted && it.localPath?.let { path -> File(path).canRead() } == true)) })
+    }
+
+    // 同步错误不附带凭据或原生异常对象。
+    private fun performSync(promise: Promise, action: () -> Any?) {
+        try {
+            executor.execute {
+                try { promise.resolve(action()) }
+                catch (error: Exception) {
+                    val code = if (error is CodedException) error.code else "ERR_FOLIO_SYNC"
+                    val detail = if (error is com.folio.poc.ffi.FolioFfiException.Operation) error.detail else code
+                    promise.reject(code, detail, null)
+                }
+            }
+        } catch (_: RejectedExecutionException) { promise.reject("ERR_FOLIO_NOT_READY", "ERR_FOLIO_NOT_READY", null) }
+    }
 
     private fun previewCacheDirectory() = File(rootDirectory(), "previews")
 

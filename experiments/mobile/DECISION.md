@@ -8,9 +8,9 @@
 
 在 `experiments/mobile` 建立独立 Expo development build，复用现有 UniFFI Swift/Kotlin bindings。RN 只负责输入、分页和页面状态，原生模块负责沙盒文件与后台调用，Rust 保持身份、解析、持久化和查询的唯一实现。iOS 原生库以 XCFramework 静态链接；Android 以 ABI 独立的 `.so` 加 JNA AAR 接入。
 
-本实验暴露 `initialize`、`snapshot`、`query`、`importFonts`、`setFavorite`、收藏夹创建/更新/删除/成员操作、智慧收藏夹读取/保存/删除/互转、`recordRecent`、`copyText` 和原生视图，不为 PoC 新建 C ABI、不修改 `folio-ffi` 或生产 SQLite schema。Swift 串行后台队列和 Kotlin 单线程执行器持有各自的引擎；模块销毁后按顺序释放，JS 不持有 Rust 指针。
+本实验暴露 `initialize`、`snapshot`、`query`、`importFonts`、`setFavorite`、收藏夹创建/更新/删除/成员操作、智慧收藏夹读取/保存/删除/互转、`recordRecent`、`copyText` 和原生视图，不为 PoC 新建 C ABI，不修改生产 SQLite schema；第五批只向既有 UniFFI 追加 `prepare_managed_sources` 与 `query_local_library`，两端及 macOS 绑定与原生库同步生成。Swift 串行后台队列和 Kotlin 单线程执行器持有各自的引擎；模块销毁后按顺序释放，JS 不持有 Rust 指针。
 
-筛选及手动收藏夹复用现有 Rust DTO。查询返回完整字族身份、命中字款、实时 facet 计数与不可用成员数；星标和成员操作使用完整身份集合。变更成功后返回缓存快照并刷新当前查询，失败时保留原状态。筛选选择直接提交查询，各范围独立保存搜索与条件；云同步仍未接入。
+筛选及手动收藏夹复用现有 Rust DTO。查询返回完整字族身份、命中字款、实时 facet 计数与不可用成员数；星标和成员操作使用完整身份集合。变更成功后返回缓存快照并刷新当前查询，失败时保留原状态。筛选选择直接提交查询，各范围独立保存搜索与条件；第五批云同步沿用下述共享边界。
 
 2026-10-01，第三、四批接入既有 UniFFI 智慧收藏夹与最近访问。智慧查询直接调用 `query_smart_folder`：同组条件并集、跨组交集，保存与临时搜索拼接；RN 只在新建草稿时按桌面语义合并条件，不实现匹配或计数。统一编辑器采用「常规／筛选条件」两页；有条件保存为智慧，无条件保存为手动，互转明确确认后调用 Rust 事务接口，不在 JS 中复制或删除成员。创建时只保存搜索与筛选；智慧范围内新建继承保存条件与临时条件，手动编辑从空条件开始，智慧编辑读取保存条件。草稿变更仅发预览查询，点击保存后才写入数据库。
 
@@ -30,7 +30,7 @@ UniFFI 0.32.1 使用全局配置的 `crates.folio_ffi` 节点。Kotlin 的错误
 
 桌面客户端和数据库保持原有边界。实验可独立删除；独立锁文件防止把移动依赖加入桌面 workspace。生成绑定必须与正在打包的 `folio-ffi` 来自同一源码与 Cargo.lock；变更 Rust 后重新生成两端绑定及原生库。
 
-同步 Rust 查询尚不可抢占；JS 取消只防止过期结果回写。当前预览没有多字体缓存、复杂双向文本分段或两轴连续拖动界面；Android API 28–30 的准确字形绘制另验。安卓 Compose 玻璃底栏已通过本地 Expo 模块接入，来源和兼容策略见模块内的 `third-party/NOTICE.md`，运行与性能验收另行记录。当前库不接 WebDAV、不保存凭据，也不承诺 Provider、Files/Share 导出、MIUIX 或移动导航完整验收已经通过。
+普通 Rust 查询尚不可抢占，JS 查询取消只防止过期结果回写；云同步调用 Rust 原子取消标记，中断网络等待并等待真实结束状态。当前预览没有多字体缓存、复杂双向文本分段或两轴连续拖动界面；Android API 28–30 的准确字形绘制另验。安卓 Compose 玻璃底栏已通过本地 Expo 模块接入，来源和兼容策略见模块内的 `third-party/NOTICE.md`，运行与性能验收另行记录。第五批已接入 WebDAV 和平台安全凭据；仍不承诺 Provider、Files/Share 导出、MIUIX 或移动导航完整验收已经通过。
 
 ## Adoption Gate
 
@@ -44,3 +44,19 @@ UniFFI 0.32.1 使用全局配置的 `crates.folio_ffi` 节点。Kotlin 的错误
 - [UniFFI Kotlin/JNA](https://mozilla.github.io/uniffi-rs/latest/kotlin/gradle.html)
 - [Android TextRunShaper](https://developer.android.com/reference/android/graphics/text/TextRunShaper)
 - [Android Canvas.drawGlyphs](https://developer.android.com/reference/android/graphics/Canvas#drawGlyphs(int[],int,float[],int,int,android.graphics.fonts.Font,android.graphics.Paint))
+
+## Cloud Sync Foundation (Batch 5)
+
+2026-10-02：保留第一至四批 RN／Expo 页面、Swift／Kotlin 封装、存储管理和共享 Rust。云同步增加现有设置的一个二级页，不改变已完成导航与字体界面。123PAN 完全通过 WebDAV 连接，不增加服务商协议、数据库 schema、JS 依赖或后台调度。
+
+每个原生模块只持有一个 `FolioSync`，存储维护和同步共用实例与运行锁；配置、状态、开始和取消在已有串行队列执行，传输由 Rust 工作线程负责。RN 不计算同步百分比或合并事件。只在 Rust completion generation 改变后刷新字体库，后台暂停状态轮询，前台恢复读取；失败保留最后快照但明确标记状态不可读。
+
+服务器地址右侧使用下拉预设，地址与桌面端「无／123 云盘／坚果云」一致，仍支持直接输入自定义地址。配置不包含密码。安全存储按地址／目录／用户名建立作用域；空密码不能沿用另一个连接的凭据。保存前测试真实连接，先安全写入再保存非秘密配置，失败回滚；断开保留本地库。iOS Keychain 使用设备限定的 `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`，Android Keystore 管理 AES-GCM 密钥，带认证标签和作用域关联数据的密文通过 AtomicFile 保存至不参与备份的应用私有目录。缺少密码与安全存储读取失败分别返回可辨识状态，允许解锁重试或重新输入，不输出原生凭据。
+
+来源恢复下沉 `folio-sync::prepare_managed_sources`，通过既有 UniFFI 暴露。新副本必须通过 Rust 解析、内容校验与目录缓存确认，旧缓存的字款身份也必须与新来源一致；之后才移除旧副本。保留当前托管目录，归并文件根、目录根和规范路径别名，更新移动沙盒重定位后的同步资产路径。导入器从托管目录建立内容去重索引，因此同步字体不会再次导入。共享协议、源语言目录与桌面首次自动下载行为保持一致。
+
+移动本地范围调用 `query_local_library`，关闭桌面查询对云端占位记录的追加；智慧匹配继续使用真实 Rust 本地索引。云端列表以原生可读路径确认本机可用状态，未下载字体不进入预览、筛选或智慧计数。第六批负责自动调度与完整删除／恢复／冲突交互。
+
+安全存储依据：[Apple Keychain 可访问性](https://developer.apple.com/documentation/security/ksecattraccessibleafterfirstunlockthisdeviceonly)、[Android Keystore AES-GCM](https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec)。运行验证和实网缺口见 [VALIDATION.md](VALIDATION.md#cloud-sync-foundation-batch-5)。
+
+2026-10-02，Android 真机复测发现 Expo 延迟测量可能在 Compose 宿主离开窗口后执行，搜索键盘退出可触发窗口 recomposer 异常。顶栏、背景与底栏宿主在离窗时只记录测量尺寸，不测量或布局 Compose 子视图；重新附窗后请求正常布局。键盘避让保持底栏宿主挂载，隐藏期间关闭触摸与读屏；保留现有界面，补充独立测试 APK 的离窗测量回归。设备验收先确认 APK applicationId 与前台应用变体一致，原生后台测试与实际页面结果分别登记。

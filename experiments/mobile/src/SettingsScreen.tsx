@@ -1,16 +1,17 @@
-import { CardsIcon, CaretRightIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from 'phosphor-react-native';
+import { CloudIcon, CardsIcon, CaretRightIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from 'phosphor-react-native';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Theme } from './ui';
 
-export type SettingsPageId = 'storage' | 'cards' | 'appearance' | 'import' | 'about';
+export type SettingsPageId = 'sync' | 'storage' | 'cards' | 'appearance' | 'import' | 'about';
 
 // 设置主页：分组入口，点击进入对应二级页。
 export function SettingsScreen({ theme, onOpenPage }: { theme: Theme; onOpenPage: (page: SettingsPageId) => void }) {
   const { t } = useTranslation();
   const inset = useSafeAreaInsets();
   const entries = [
+    { id: 'sync', Icon: CloudIcon, title: t('settings.cloud'), description: t('settings.cloudDescription') },
     { id: 'storage', Icon: DatabaseIcon, title: t('settings.storage'), description: t('settings.storageDescription') },
     { id: 'cards', Icon: CardsIcon, title: t('settings.cards'), description: t('settings.cardsDescription') },
     { id: 'appearance', Icon: PaintBrushIcon, title: t('settings.appearance'), description: t('settings.appearanceDescription') },

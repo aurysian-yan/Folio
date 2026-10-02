@@ -73,7 +73,7 @@ enum FolioLibraryMapper {
             return try engine.querySmartFolder(id: SmartFolderIdDto(value: id), text: request.text,
                 facets: request.facets, offset: request.offset, limit: request.limit)
         }
-        return try engine.queryLibrary(query: request)
+        return try engine.queryLocalLibrary(query: request)
     }
 
     static func conditions(text: String, facets: [(String, String)]) throws -> SmartFolderQueryDto {

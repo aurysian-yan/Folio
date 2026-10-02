@@ -2,6 +2,14 @@ import ExpoModulesCore
 import Foundation
 import UIKit
 
+struct FolioSyncProfile: Record {
+    @Field var serverUrl: String = ""
+    @Field var remoteDirectory: String = ""
+    @Field var username: String = ""
+    @Field var automatic: Bool = false
+    var dto: SyncProfileDto { SyncProfileDto(serverUrl: serverUrl, remoteDirectory: remoteDirectory, username: username, automatic: automatic) }
+}
+
 struct FolioQuery: Record {
     @Field var text: String = ""
     @Field var scope: String = "all"
@@ -80,6 +88,7 @@ enum FolioPaths {
 public final class FolioNativeModule: Module {
     private let queue = DispatchQueue(label: "com.folio.mobile.poc.library", qos: .userInitiated)
     private var engine: FolioEngine?
+    private var sync: FolioSync?
 
     public func definition() -> ModuleDefinition {
         Name("FolioNative")
@@ -91,17 +100,8 @@ public final class FolioNativeModule: Module {
                 self.engine = try FolioEngine.open(databasePath: root.appendingPathComponent("folio.sqlite").path)
             }
             let engine = try self.requireEngine()
-            let cached = try engine.loadCachedLibrary()
-            var relocated = false
-            for root in cached.roots where root.kind == "file" {
-                if let source = try FolioPaths.relocatedFont(root.displayPath) {
-                    try engine.validateFontFile(path: source.path)
-                    _ = try engine.addFontFile(path: source.path)
-                    try engine.removeLibraryRoot(id: root.id)
-                    relocated = true
-                }
-            }
-            return self.snapshot(relocated ? try engine.refreshLibrary().snapshot : cached)
+            try self.syncEngine().prepareManagedSources()
+            return self.snapshot(try engine.refreshLibrary().snapshot)
         }.runOnQueue(queue)
 
         AsyncFunction("snapshot") { () throws -> [String: Any] in
@@ -199,6 +199,54 @@ public final class FolioNativeModule: Module {
             return self.snapshot(try engine.loadCachedLibrary())
         }.runOnQueue(queue)
 
+        AsyncFunction("syncState") { () throws -> [String: Any] in
+            try self.syncState()
+        }.runOnQueue(queue)
+
+        AsyncFunction("testSyncConnection") { (profile: FolioSyncProfile, password: String?) throws in
+            let dto = profile.dto
+            try self.syncOperation { try self.syncEngine().testConnection(profile: dto, password: self.password(password, profile: dto)) }
+        }.runOnQueue(queue)
+
+        AsyncFunction("saveSyncConnection") { (profile: FolioSyncProfile, password: String?) throws in
+            let sync = try self.syncEngine()
+            guard try !sync.status().isRunning else { throw self.syncBusy() }
+            let dto = profile.dto
+            let secret = try self.password(password, profile: dto)
+            try self.syncOperation { try sync.testConnection(profile: dto, password: secret) }
+            let previous = try? FolioSyncCredentials.read(dto)
+            try FolioSyncCredentials.write(secret, profile: dto)
+            do { try self.syncOperation { try sync.saveProfile(profile: dto) } }
+            catch {
+                try FolioSyncCredentials.write(previous, profile: dto)
+                throw error
+            }
+        }.runOnQueue(queue)
+
+        AsyncFunction("disconnectSync") { () throws in
+            let sync = try self.syncEngine()
+            guard try !sync.status().isRunning else { throw self.syncBusy() }
+            if let profile = try sync.profile() {
+                let previous = try? FolioSyncCredentials.read(profile)
+                try FolioSyncCredentials.write(nil, profile: profile)
+                do { try self.syncOperation { try sync.disconnect() } }
+                catch { try FolioSyncCredentials.write(previous, profile: profile); throw error }
+            }
+        }.runOnQueue(queue)
+
+        AsyncFunction("startSync") { () throws -> Bool in
+            let sync = try self.syncEngine()
+            guard let profile = try sync.profile() else { throw self.syncBusy() }
+            if try sync.status().isRunning { return false }
+            let password = try self.password(nil, profile: profile)
+            try self.syncOperation { try sync.prepareManagedSources() }
+            return try self.syncOperation { try sync.startSync(password: password) }
+        }.runOnQueue(queue)
+
+        AsyncFunction("cancelSync") { () throws in
+            try self.syncEngine().cancel()
+        }.runOnQueue(queue)
+
         AsyncFunction("storageUsage") { () throws -> [String: Any] in
             let usage = try self.syncEngine().storageUsage()
             return ["databaseBytes": usage.databaseBytes, "managedFontBytes": usage.managedFontBytes,
@@ -228,7 +276,7 @@ public final class FolioNativeModule: Module {
         }.runOnQueue(.main)
 
         OnDestroy {
-            self.queue.async { self.engine = nil }
+            self.queue.async { self.sync?.cancel(); self.sync = nil; self.engine = nil }
         }
 
         View(FolioFontPreview.self) {
@@ -256,12 +304,60 @@ public final class FolioNativeModule: Module {
         return engine
     }
 
-    // 存储统计与缓存清理复用同步引擎，按需打开、用完即释放。
+    // 存储维护与同步共用同一实例及运行状态。
     private func syncEngine() throws -> FolioSync {
+        if let sync { return sync }
         let root = try FolioPaths.root()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        return try FolioSync.open(databasePath: root.appendingPathComponent("folio.sqlite").path,
+        let opened = try FolioSync.open(databasePath: root.appendingPathComponent("folio.sqlite").path,
                                   managedDirectory: root.appendingPathComponent("fonts", isDirectory: true).path)
+        self.sync = opened
+        return opened
+    }
+
+    private func syncOperation<T>(_ action: () throws -> T) throws -> T {
+        do { return try action() }
+        catch FolioFfiError.Operation(let message) {
+            throw Exception(name: "FolioSync", description: message, code: "ERR_FOLIO_SYNC")
+        }
+    }
+
+    private func syncBusy() -> NSError {
+        NSError(domain: "FolioSync", code: 1, userInfo: [NSLocalizedDescriptionKey: "ERR_FOLIO_SYNC"])
+    }
+
+    private func password(_ supplied: String?, profile: SyncProfileDto) throws -> String {
+        if let supplied, !supplied.isEmpty { return supplied }
+        guard let stored = try FolioSyncCredentials.read(profile), !stored.isEmpty else {
+            throw NSError(domain: "FolioCredentials", code: 2, userInfo: [NSLocalizedDescriptionKey: "ERR_FOLIO_CREDENTIALS"])
+        }
+        return stored
+    }
+
+    private func syncState() throws -> [String: Any] {
+        let sync = try syncEngine()
+        let status = try sync.status()
+        let profile = try sync.profile()
+        var credentialError = false
+        var credentialAvailable = false
+        if let profile {
+            do { credentialAvailable = try FolioSyncCredentials.read(profile) != nil }
+            catch { credentialError = true }
+        }
+        return ["profile": profile.map { ["serverUrl": $0.serverUrl, "remoteDirectory": $0.remoteDirectory,
+            "username": $0.username, "automatic": $0.automatic] as [String: Any] } as Any? ?? NSNull(),
+            "credentialAvailable": credentialAvailable, "credentialError": credentialError,
+            "status": ["phase": status.phase, "stage": status.stage, "percent": status.percent,
+                "stageCompleted": status.stageCompleted, "stageTotal": status.stageTotal,
+                "isRunning": status.isRunning, "uploadedFiles": status.uploadedFiles, "downloadedFiles": status.downloadedFiles,
+                "uploadedBytes": status.uploadedBytes, "downloadedBytes": status.downloadedBytes,
+                "completionGeneration": status.completionGeneration, "lastSyncedAtMs": status.lastSyncedAtMs as Any? ?? NSNull(),
+                "errorMessage": status.errorMessage as Any? ?? NSNull(),
+                "items": status.items.map { ["fingerprint": $0.fingerprint, "action": $0.action, "status": $0.status] }],
+            "fonts": try sync.cloudFonts().map { ["fingerprint": $0.fingerprint, "displayName": $0.displayName,
+                "filename": $0.filename, "fileSize": $0.fileSize, "cloudOnly": $0.cloudOnly, "deleted": $0.deleted,
+                "localPath": $0.localPath as Any? ?? NSNull(), "identityIds": $0.identityIds,
+                "localAvailable": !$0.cloudOnly && !$0.deleted && ($0.localPath.map { FileManager.default.isReadableFile(atPath: $0) } ?? false)] as [String: Any] }]
     }
 
     private func previewCacheDirectory() -> URL {

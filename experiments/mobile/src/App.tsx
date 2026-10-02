@@ -34,6 +34,9 @@ import { SettingsAppearancePage } from './SettingsAppearancePage';
 import { SettingsCardsPage } from './SettingsCardsPage';
 import { SettingsImportPage } from './SettingsImportPage';
 import { SettingsScreen, type SettingsPageId } from './SettingsScreen';
+import { SettingsSyncPage } from './SettingsSyncPage';
+import { CloudScreen } from './CloudScreen';
+import { useCloudSync, type CloudSyncController } from './useCloudSync';
 import { SettingsStoragePage } from './SettingsStoragePage';
 import { createTheme, IconButton, type Theme } from './ui';
 
@@ -417,8 +420,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
 }
 
 // 设置二级页按入口类型分流，统一由原生详情导航承载。
-function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => void) {
+function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => void, controller: CloudSyncController) {
   switch (page) {
+    case 'sync': return <SettingsSyncPage theme={theme} onClose={onClose} controller={controller} />;
     case 'storage': return <SettingsStoragePage theme={theme} onClose={onClose} />;
     case 'cards': return <SettingsCardsPage theme={theme} onClose={onClose} />;
     case 'appearance': return <SettingsAppearancePage theme={theme} onClose={onClose} />;
@@ -479,6 +483,8 @@ function MobileApp() {
       || (target.scope === 'smart' && !value.smartFolders.some((item) => item.id === target.smartFolderId)) ? { scope: 'all' } : target);
   }, []);
 
+  const syncController = useCloudSync(snapshot !== null, applySnapshot);
+
   function selectTarget(target: LibraryTarget) { setLibraryTarget(target); setNativeDestination('local'); }
   function navigate(value: NativeDestination) {
     Keyboard.dismiss();
@@ -516,6 +522,7 @@ function MobileApp() {
   }, []);
 
   function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
+  const cloudContent = <CloudScreen theme={theme} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
   const settingsContent = <SettingsScreen theme={theme} onOpenPage={openSettingsPage} />;
   const searchContent = <LibraryScreen theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
     sidebar={sidebar} searchPage destination="search" target={searchTarget} snapshot={snapshot} libraryVersion={libraryVersion}
@@ -527,7 +534,7 @@ function MobileApp() {
     <View style={[styles.app, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
-        settings={settingsContent} search={searchContent} onDestinationChange={navigate}>
+        settings={settingsContent} search={searchContent} cloud={cloudContent} onDestinationChange={navigate}>
         <LibraryScreen theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
           target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
           defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
@@ -552,12 +559,12 @@ function MobileApp() {
         <View style={[styles.screen, tab !== 'search' && styles.hidden]}>{searchContent}</View>
         {tab !== 'local' && tab !== 'search' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
           style={[styles.screen, { backgroundColor: theme.background }]}>
-          {tab === 'settings' ? settingsContent : <View style={styles.screen} />}
+          {tab === 'settings' ? settingsContent : cloudContent}
         </NavigationBackdrop>}
       </View>
-      {!keyboardVisible && <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme}
+      <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme} hidden={keyboardVisible}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
-        onSelectionChange={(id) => { Keyboard.dismiss(); setTab(id); }} />}
+        onSelectionChange={(id) => { Keyboard.dismiss(); setTab(id); }} />
     </KeyboardAvoidingView>
   );
 
@@ -566,7 +573,7 @@ function MobileApp() {
       recentError={recentError} onRetryRecent={() => { if (fontPage) void recordVisit(fontPage); }}
       snapshot={snapshot} collectionId={fontPageCollectionId}
       onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />
-  ) : settingsPage ? settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false)) : null;
+  ) : settingsPage ? settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false), syncController) : null;
 
   return <FontNavigation visible={fontPageVisible || settingsPageVisible} theme={theme}
     onDismissed={() => { setFontPageVisible(false); setFontPage(null); setSettingsPageVisible(false); setSettingsPage(null); }}

@@ -119,6 +119,54 @@ Android 原生结果界面的完整交互、所有字体的真机预览与再次
 
 界面测试只使用 iPhone 开发包的临时收藏夹；结束后恢复测试前数据库，不改变 Android 真机或生产包数据。系统两档呈现参考 [Apple Sheets HIG](https://developer.apple.com/design/human-interface-guidelines/sheets)。
 
+## Cloud Sync Foundation (Batch 5)
+
+2026-10-02：第五批接入既有设置与云端导航，继续使用 RN/Expo、Swift/Kotlin 和共享 Rust；没有重做字体主页、收藏夹编辑器或存储管理。开始时工作区干净；核对前四批的实际实现与既有验证记录后继续开发。
+
+| 前四批核对 | 实际情况 |
+| --- | --- |
+| 第一批导入 | 已实现双端多选、ZIP、内容去重、TTC 成员及逐项失败；本轮 Swift/Kotlin 原生导入回归继续通过。原有完整设备预览和压力验收边界保留。 |
+| 第二批筛选、星标与手动收藏夹 | 已实现九组实时 facet、完整身份星标、成员与样式持久化；本轮移动映射器和共享查询回归通过。 |
+| 第三批智慧收藏夹 | 已实现动态条件、编辑、手动／智慧互转；本轮验证实际条件 JSON 的双向同步，未把云端未下载字体加入智慧匹配。 |
+| 第四批最近记录 | 已实现详情访问记录、去重与顺序；本轮验证两端事件合并、重新打开和来源恢复后身份状态保留。 |
+| 来源恢复与存储 | 原有导入器已能读取旧 `.font` 显式来源，iOS 初始化已有路径恢复；本轮补齐共享目录递归归并、扩展名规范化、资产路径更新及缓存验证后移除旧来源，保留存储页。 |
+
+| 本轮检查 | 结果与实际范围 |
+| --- | --- |
+| 移动 JS | PASS，`pnpm typecheck`、`pnpm lint`、22 项 `pnpm test`；预设地址、参数校验、安全存储空密码恢复、原生取消、状态读取失败和错误分类。没有引入 JS 依赖。 |
+| 文案与格式 | PASS，`pnpm i18n:validate`，735 字段；`cargo fmt --all --check`、`git diff --check`。UI 使用共享语言键；服务器地址右侧直接选「无／123 云盘／坚果云」，复用桌面地址，删除额外 123PAN 说明。 |
+| 共享同步与 FFI | PASS，`cargo test -p folio-sync -p folio-ffi`，23 + 9 项；共享 `folio-storage`、`folio-query` 回归通过。UniFFI 新增托管来源恢复与本地范围查询方法，macOS 绑定同步生成；SQLite schema 与 WebDAV 协议保持原样。 |
+| 本地双向 WebDAV | PASS，独立回环 HTTP WebDAV 服务与两个临时数据库，实际请求上传／下载字体与事件。移动端旧 `.font` 上传、桌面首次发现自动下载、桌面新增字体回传、星标、手动收藏夹名称／样式／成员、智慧条件和最近顺序均验证；再次同步没有重复导入、文件传输或事件新增。测试注入仅用于回环服务，生产地址仍强制 HTTPS。 |
+| 来源迁移 | PASS，旧 `.font` TTF／OTF／TTC（包括非零成员）、嵌套目录、重复目录来源与旧沙盒移动；验证指纹和字体身份后才移除旧副本／来源，保留星标、手动成员和最近记录。坏字体或不被目录扫描支持的来源保留旧副本／来源，不伪造迁移成功。 |
+| Swift 原生 | PASS，`pnpm test:swift`；原有真实 Rust 导入、筛选、收藏夹、智慧及最近回归，新增 Keychain 写入／读取／删除、连接重开、密码未进入数据库和来源恢复。安全存储测试在 macOS 主机运行，不等于 iOS 实机 Keychain 验收。 |
+| Kotlin 原生 | PASS，`:folio-native:testDebugUnitTest`，11 项生产导入器与映射器回归；主机 Rust/JNA 和临时数据库。 |
+| Android 真机安全存储／取消 | PASS，USB `23013RK75C`，Android 16 / API 36 / arm64；独立测试 APK instrumentation 验证 Keystore AES-GCM、私有密文无明文密码、重新打开连接、安全存储损坏错误、替换／删除、Rust 实际取消与断开。测试使用自己的私有数据和随机测试凭据，不操作开发包字体库；保留数据更新开发 APK。没有启动 Android 模拟器。 |
+| 交叉库与构建 | PASS，`pnpm bindings`、`pnpm rust:android`（arm64-v8a／x86_64）、`pnpm rust:ios`（arm64 设备／模拟器 XCFramework）、Android Debug App／测试 APK、iOS arm64 Simulator Debug、macOS Debug，以及双端 Hermes export。iOS 设备 slice 构建不代表签名、安装或运行通过。 |
+| 桌面回归 | PASS，桌面 React 类型检查、Lint 与 71 项测试；macOS 使用新增共享绑定完整编译。没有更改桌面界面。 |
+| Rust Clippy | 严格 `-D warnings` 被既有 `folio-storage/path_codec.rs` 的 `manual_is_multiple_of`／`chunks_exact_to_as_chunks` 和既有同步代码的 `needless_borrow` 阻断。仅允许这三类已有告警后，对 `folio-sync`／`folio-ffi` 全目标检查通过；没有回退或混入无关修复。 |
+| iPhone 界面 | PASS，iOS 27 iPhone 18 Pro 模拟器检查云端空态、真实未连接状态、禁用手动同步、设置导航、安全密码字段、地址预设菜单及正确填入 123 云盘地址；未填写凭据或保存测试连接。无效地址测试显示连接错误；已移除 123PAN 说明。 |
+
+原生安全存储真机检查可以从 `experiments/mobile` 执行（设备需已通过 USB 授权）：
+
+```sh
+cd android
+./gradlew :folio-native:assembleDebugAndroidTest
+adb -s 7a287bb6 install -r ../modules/folio-native/android/build/outputs/apk/androidTest/debug/folio-native-debug-androidTest.apk
+adb -s 7a287bb6 shell am instrument -w com.folio.poc.test/com.folio.poc.FolioSyncInstrumentation
+```
+
+测试 APK 的最终输出为 `PASS: Keystore AES-GCM, private ciphertext, reopen, corruption, cancellation, disconnect, detached Compose measurement`。取消测试针对预留测试地址并立即中断，只验证真实 Rust 取消边界，不代表服务商连通。
+
+实网验收为 **PENDING**：当前没有独立测试 WebDAV 地址和凭据。尚未完成移动应用与桌面应用连接同一真实 HTTPS 服务的完整往返、网络中断及冷启动后实际连接测试；不得把回环服务、主机 FFI 重开或构建通过写作实网成功。iOS 实机、Android 云同步页面完整触摸交互、iPad 云端详情、浅深色全覆盖和旧系统仍待设备验收。
+
+自动同步开关只保存偏好，当前仅手动触发。自动调度和完整删除／恢复／冲突操作留给第六批；阶段 D 仍为 PARTIAL。
+
+2026-10-02 Android 导航复测：初次新 APK 实际更新的是生产包 `com.folio.mobile.poc`，前台 Folio Dev 仍使用旧开发包；核对 applicationId 后重新生成 development 工程，保留数据更新 `com.folio.mobile.poc.dev`。四个 Tab 恢复，字体主页既有 10 个字体、星标和最近状态保留；云端未连接空态、禁用手动同步、云同步配置、123 云盘／坚果云预设地址及缺少安全密码的明确错误均已通过镜像确认。搜索输入退出随后复现离窗 Compose 延迟测量崩溃，故上述页面检查不代表导航整体验收通过。
+
+修复在三个 Compose 宿主离窗时跳过子视图测量和布局，重新附窗后请求布局；键盘避让改为保持底栏挂载，只隐藏显示与触摸／读屏入口。新增独立测试 APK 回归离窗后的真实 Expo 测量调用。最终类型检查、Lint、22 项 JS 测试、11 项 Kotlin 单元测试、Android arm64 Debug 与测试 APK 构建 PASS。18 时重新连接同一真机，系统实际为 Android 17 / API 37；最终开发包与测试包保留数据安装成功，Keystore、私有密文、配置重开、损坏检测、取消、断开及离窗测量全部 PASS，日志位于 `.build/sync-device-navigation-final.log`。
+
+用户授权 adb 操作后，最终开发包确认本地／搜索／云端／设置四个 Tab 可见且能切页；实际搜索输入与返回键收起键盘后，底栏恢复，查询返回 1 个匹配结果，未出现新的 Compose 崩溃。云端显示未连接、0 次传输与禁用手动同步，设置入口可打开配置页。已有 10 个字体及 Mars 星标保留，最近页统计为 4 项（包含本轮正常打开详情产生的记录）。配置页复测期间 USB 再次断开，剩余详情返回、重复输入退出及冷启动页面验收仍待完成；原生后台回归不代替这些页面检查。截图位于 `.build/navigation-home.png`、`.build/navigation-keyboard-return-1.png`、`.build/navigation-cloud.png` 和 `.build/navigation-settings.png`。最终双端 Hermes 导出也已通过。
+
 ## Environment
 
 macOS 27.2 arm64、Xcode 27.0（27A266a）、Rust 1.98.1、Node.js 24.14.1、pnpm 11.19.0、JDK 17.0.19、CocoaPods 1.16.2。Rust Android 库使用 NDK 29.0.13846066；Expo 生成工程使用其默认 NDK 27.1.12297006。依赖以本目录 `package.json` 和 `pnpm-lock.yaml` 为准。

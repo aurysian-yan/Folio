@@ -101,10 +101,9 @@ final class FolioFontImporter {
     }
 
     private func indexExistingFiles() throws {
-        let managed = directory.resolvingSymlinksInPath().path + "/"
-        for source in try engine.loadCachedLibrary().roots where source.kind == "file" {
-            let file = URL(fileURLWithPath: source.displayPath).resolvingSymlinksInPath()
-            if file.path.hasPrefix(managed), let digest = try? fingerprint(file) { digests.insert(digest) }
+        for file in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+            guard Self.fontExtensions.contains(file.pathExtension.lowercased()) || file.pathExtension.lowercased() == "font" else { continue }
+            digests.insert(try fingerprint(file))
         }
     }
 

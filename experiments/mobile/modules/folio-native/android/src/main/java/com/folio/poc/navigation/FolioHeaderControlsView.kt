@@ -192,11 +192,25 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
         onExpandedChange(mapOf("expanded" to value))
     }
 
+    // Expo 的延迟测量可能晚于卸载；离窗时不重建 Compose composition。
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (!isAttachedToWindow) {
+            setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec))
+            return
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        if (isAttachedToWindow) super.onLayout(changed, left, top, right, bottom)
+    }
+
     override fun onAttachedToWindow() {
         val activity = appContext.currentActivity
         (activity as? LifecycleOwner)?.let { setViewTreeLifecycleOwner(it) }
         (activity as? SavedStateRegistryOwner)?.let { setViewTreeSavedStateRegistryOwner(it) }
         super.onAttachedToWindow()
+        requestLayout()
     }
 
     override fun onDetachedFromWindow() {

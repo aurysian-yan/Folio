@@ -37,12 +37,15 @@ export function NavigationBackdrop(props: NavigationBackdropProps) {
   return <BackdropSource {...props} collapsable={false} />;
 }
 
-export function BottomNavigation({ sourceId, selectedId, dark, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
+export function BottomNavigation({ hidden = false, sourceId, selectedId, dark, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
   const { width } = useWindowDimensions();
   const availableWidth = Math.max(0, width - leftInset - rightInset);
   const sideMargin = Math.max(0, availableWidth * 0.08 - 4);
-  return <LiquidTabs sourceId={sourceId} selectedId={selectedId} dark={dark} accentColor={theme.accent} items={items}
+  // 键盘避让保持宿主挂载，避免改变原生搜索框的窗口关系。
+  return <LiquidTabs pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden}
+    importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'} sourceId={sourceId} selectedId={selectedId} dark={dark} accentColor={theme.accent} items={items}
     style={[styles.tabs, {
+      opacity: hidden ? 0 : 1,
       width: availableWidth - sideMargin * 2,
       left: leftInset + sideMargin,
       bottom: bottomOffset(bottomInset) - overflow,

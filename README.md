@@ -200,7 +200,7 @@ pnpm -C apps/desktop-ui test
 - macOS 客户端使用 SwiftUI/AppKit 和 UniFFI。
 - Windows/Linux 客户端共用 React、TypeScript、Vite、Tauri 2、HeroUI v3 和
   Tailwind CSS v4。
-- 移动端当前仅用于验证 React Native/Expo、UniFFI 和原生字体预览边界，尚未确定
+- 移动端隔离工程已接入 RN/Expo 字体管理和第五批 WebDAV 同步基础（平台安全凭据、手动同步、取消与真实进度）；独立服务商实网双向验收仍待完成，尚未确定
   正式客户端架构。
 
 ## 延伸阅读
