@@ -64,8 +64,9 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
                             onSelectionChange(mapOf("id" to id))
                             updateExpanded(false)
                         }
-                    }, modifier = Modifier.fillMaxSize(), triggerBackdrop = EmptyNavigationBackdrop) { progress ->
-                    ViewMenuIcon("caret", Color(android.graphics.Color.parseColor(palette.secondary)), 20.dp,
+                    }, modifier = Modifier.fillMaxSize(), triggerBackdrop = EmptyNavigationBackdrop,
+                    showTriggerSurface = false) { progress ->
+                    ViewMenuIcon("caret", Color(android.graphics.Color.parseColor(palette.secondary)), 22.dp,
                         Modifier.graphicsLayer { rotationZ = 180f * progress; alpha = if (disabled) 0.4f else 1f })
                 }
             }

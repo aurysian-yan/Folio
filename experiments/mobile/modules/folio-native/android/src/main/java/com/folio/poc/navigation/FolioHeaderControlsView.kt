@@ -250,7 +250,8 @@ private fun Modifier.headerSurface(colors: FolioViewMenuColors): Modifier {
 // 按钮沿用菜单的背景模糊与拖动回弹，拖动期间不提交点击。
 @Composable
 private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors: FolioViewMenuColors,
-    backdrop: Backdrop, shadowProgress: Float = 0f, onPressedChange: (Boolean) -> Unit = {}, onClick: () -> Unit): Modifier {
+    backdrop: Backdrop, shadowProgress: Float = 0f, onPressedChange: (Boolean) -> Unit = {},
+    showSurface: Boolean = true, onClick: () -> Unit): Modifier {
     val animationScope = rememberCoroutineScope()
     val drag = remember(animationScope) {
         InteractiveHighlight(animationScope, consumeDrag = true, pressDampingRatio = 0.36f, pressStiffness = 360f)
@@ -274,7 +275,7 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
                 vibrancy()
                 blur(if (dark) 12.dp.toPx() else 16.dp.toPx())
             },
-            onDrawBehind = { drawRect(colors.tab.menuColor()) },
+            onDrawBehind = { if (showSurface) drawRect(colors.tab.menuColor()) },
             layerBlock = {
                 val offset = if (motionEnabled && enabled) drag.offset else Offset.Zero
                 val pressed = if (motionEnabled && enabled) drag.pressProgress.coerceIn(-0.35f, 1.35f) else 0f
@@ -289,10 +290,12 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
                 translationY = limit * tanh(0.05f * offset.y / limit)
             },
             onDrawSurface = {
-                if (pressed) drawRect(colors.buttonPressed.menuColor())
-                else drawRect(colors.tab.menuColor().copy(alpha = if (Build.VERSION.SDK_INT >= 31) 0.70f else 0.96f))
+                if (showSurface) {
+                    if (pressed) drawRect(colors.buttonPressed.menuColor())
+                    else drawRect(colors.tab.menuColor().copy(alpha = if (Build.VERSION.SDK_INT >= 31) 0.70f else 0.96f))
+                }
             })
-        .glassOutline(shape, colors)
+        .then(if (showSurface) Modifier.glassOutline(shape, colors) else Modifier.clip(shape))
         .then(if (enabled) drag.gestureModifier else Modifier)
         .clickable(enabled = enabled, interactionSource = interactionSource,
             indication = null, role = Role.Button, onClick = onClick)
@@ -411,6 +414,7 @@ internal fun FolioGlassMenu(
     triggerBackdrop: Backdrop = backdrop,
     shadowProgress: Float = 0f,
     onPressedChange: (Boolean) -> Unit = {},
+    showTriggerSurface: Boolean = true,
     triggerContent: @Composable (Float) -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
@@ -442,7 +446,8 @@ internal fun FolioGlassMenu(
 
     Box(modifier) {
         Row(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - opacity.value.coerceIn(0f, 1f) }
-            .headerButtonSurface(active, dark, colors, triggerBackdrop, shadowProgress, onPressedChange) { onExpandedChange(!expanded) }
+            .headerButtonSurface(active, dark, colors, triggerBackdrop, shadowProgress, onPressedChange,
+                showSurface = showTriggerSurface) { onExpandedChange(!expanded) }
             .semantics {
                 contentDescription = label
                 stateDescription = if (expanded) expandedLabel else collapsedLabel
