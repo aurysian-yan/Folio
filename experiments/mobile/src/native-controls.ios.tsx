@@ -26,7 +26,7 @@ const glass = Number(Platform.Version) >= 26;
 const toolbarHeight = 44;
 
 export const NativeScrollContainer = requireNativeView<NativeScrollContainerProps>('FolioNative', 'FolioScrollContainer');
-const NativeTabContent = requireNativeView<{ children: React.ReactNode }>('FolioNative', 'FolioTabContent');
+const NativeTabContent = requireNativeView<{ children: React.ReactNode; animateTabChanges?: boolean }>('FolioNative', 'FolioTabContent');
 
 // 原生玻璃尺寸与控件边界保持一致。
 function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = false, prominent = false) {
@@ -98,18 +98,18 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
       }}
         modifiers={[tabViewStyle({ type: 'automatic' }), tint(theme.accent), background(theme.background)]}>
         <TabView.Tab value="local" label={t('navigation.local')} systemImage="textformat.alt">
-          <NativeTabContent>
+          <NativeTabContent animateTabChanges>
             <RNHostView><View style={styles.fill}>{children}</View></RNHostView>
           </NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="search" label={t('common.search')} systemImage="magnifyingglass">
-          <NativeTabContent><RNHostView><View style={styles.fill}>{search}</View></RNHostView></NativeTabContent>
+          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{search}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="cloud" label={t('navigation.cloud')} systemImage="cloud">
-          <NativeTabContent><RNHostView><View style={styles.fill}>{cloud}</View></RNHostView></NativeTabContent>
+          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{cloud}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="settings" label={t('navigation.settings')} systemImage="gear">
-          <NativeTabContent><RNHostView><View style={styles.fill}>{settings}</View></RNHostView></NativeTabContent>
+          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{settings}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
       </TabView>
     </Host>

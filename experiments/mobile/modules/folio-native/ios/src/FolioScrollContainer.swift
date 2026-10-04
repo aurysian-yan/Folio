@@ -3,7 +3,9 @@ import SwiftUI
 import UIKit
 
 // 滚动内容延伸至系统栏下方，键盘安全区域仍由系统管理。
-final class FolioTabContentProps: ExpoSwiftUI.ViewProps {}
+final class FolioTabContentProps: ExpoSwiftUI.ViewProps {
+    @Field var animateTabChanges: Bool = false
+}
 
 struct FolioTabContent: ExpoSwiftUI.View {
     @ObservedObject var props: FolioTabContentProps
@@ -11,6 +13,9 @@ struct FolioTabContent: ExpoSwiftUI.View {
     var body: some View {
         Children()
             .ignoresSafeArea(.container, edges: .vertical)
+            .background {
+                if props.animateTabChanges { FolioTabTransitionInstaller().allowsHitTesting(false) }
+            }
     }
 }
 

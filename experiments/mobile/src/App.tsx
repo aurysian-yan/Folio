@@ -40,6 +40,7 @@ import { SettingsSyncPage } from './SettingsSyncPage';
 import { CloudScreen } from './CloudScreen';
 import { useCloudSync, type CloudSyncController } from './useCloudSync';
 import { SettingsStoragePage } from './SettingsStoragePage';
+import { TabScenes } from './TabScenes';
 import { createTheme, IconButton, type Theme } from './ui';
 
 const pageSize = 40;
@@ -251,7 +252,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
     }
   }
 
-  const title = searchPage ? t('common.search') : active ? scopeTitle : destination === 'cloud' ? t('mobile.cloudFonts') : t('common.settings');
+  const title = searchPage ? t('common.search') : active || !usesNativeControls ? scopeTitle
+    : destination === 'cloud' ? t('mobile.cloudFonts') : t('common.settings');
   const openFilter = () => { Keyboard.dismiss(); setFilterOpen(true); };
   const openCollections = () => { Keyboard.dismiss(); setCollectionsOpen(true); };
   const showsHero = !searchPage && !hasConditions && scope === 'all';
@@ -427,7 +429,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
       ready={ready} importing={importing} importBlocked={syncBlocked} onModeChange={setMode}
       onSearchTextChange={setSearchText} onImport={importFont} onFilter={openFilter} filterCount={selectedFacets.length}>
-      {active ? content : <View style={[styles.screen, { backgroundColor: theme.background }]} />}
+      {content}
     </NativeLibraryContent></HeaderScrollContext.Provider>;
   }
   return content;
@@ -583,19 +585,16 @@ function MobileApp() {
       style={[styles.app, { backgroundColor: theme.background, paddingTop: Platform.OS === 'android' ? 0 : inset.top,
       paddingLeft: inset.left, paddingRight: inset.right }]}>
       <StatusBar style="auto" />
-      <View style={styles.screen}>
-        <View style={[styles.screen, tab !== 'local' && styles.hidden]}>
-          <LibraryScreen syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
+      <TabScenes selectedId={tab} scenes={{
+        local: <LibraryScreen syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
             target={libraryTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
             defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
             onSnapshotChange={applySnapshot} onTargetChange={setLibraryTarget}
-            onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />
-        </View>
-        <View style={[styles.screen, tab !== 'search' && styles.hidden]}>{searchContent}</View>
-        {tab !== 'local' && tab !== 'search' && <View style={styles.screen}>
-          {tab === 'settings' ? settingsContent : cloudContent}
-        </View>}
-      </View>
+            onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />,
+        search: searchContent,
+        cloud: cloudContent,
+        settings: settingsContent,
+      }} />
       <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme} hidden={keyboardVisible}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
         onSelectionChange={(id) => { Keyboard.dismiss(); setTab(id); }} />
@@ -623,7 +622,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  app: { flex: 1 }, screen: { flex: 1 }, hidden: { display: 'none' },
+  app: { flex: 1 }, screen: { flex: 1 },
   // 紧凑 iPad 窗口为系统控制按钮保留标准工具栏高度。
   windowControlsInset: { paddingTop: 44 },
   brand: { flex: 1, gap: 8, height: 44 }, logo: { width: 45.011, height: 16 },

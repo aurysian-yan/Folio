@@ -21,17 +21,15 @@ import androidx.activity.OnBackPressedCallback
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
-// 字体页原生转场与预测性返回，底层字体库保持挂载。
+// 二级页与上一页同步推移，预测性返回保留底层页面。
 class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     private val onDismissed by EventDispatcher()
     private var presented = false
     private var dismissing = false
     private var backInProgress = false
     private var backProgress = 0f
-    private var backDirection = 1f
     private var animator: ValueAnimator? = null
     private var callbackRegistered = false
     private var updateScheduled = false
@@ -55,7 +53,6 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
             if (!presented || dismissing) return
             cancelAnimation()
             backInProgress = true
-            backDirection = if (backEvent.swipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
             updateCornerRadii(rootWindowInsets)
             root?.visibility = VISIBLE
             applyBackProgress(0f)
@@ -162,7 +159,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         backInProgress = false
         dismissing = false
         detail?.translationX = 0f
-        backgroundDim = 0f
+        restoreRoot()
         super.onDetachedFromWindow()
     }
 
@@ -188,6 +185,12 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
             if (!isAttachedToWindow || width <= 0 || height <= 0 || detail == null) return@post
             if (visible && !presented) present()
             else if (!visible && presented && !dismissing) dismiss()
+            else if (visible && presented && animator == null && !backInProgress && !dismissing) {
+                detail?.let { applyTranslation(it, 0f) }
+                root?.visibility = INVISIBLE
+                root?.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                backgroundDim = 0f
+            }
         }
     }
 
@@ -206,16 +209,17 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         }
     }
 
-    // 手势进度直接绘制；取消回到详情页，提交后才通知 JS 出栈。
+    // 两侧返回手势统一向右退出；取消复位，提交后才通知 JS 出栈。
     private fun applyBackProgress(value: Float) {
         backProgress = value.coerceIn(0f, 1f)
         val progress = if (ValueAnimator.areAnimatorsEnabled()) backProgress else 0f
-        detail?.let { applyTranslation(it, backDirection * width * 0.25f * progress) }
+        detail?.let { applyTranslation(it, width * 0.25f * progress) }
     }
 
     private fun applyTranslation(page: View, translation: Float) {
         page.translationX = translation
-        val fraction = (abs(translation) / width.coerceAtLeast(1)).coerceIn(0f, 1f)
+        val fraction = (translation / width.coerceAtLeast(1)).coerceIn(0f, 1f)
+        root?.translationX = -width / 3f * (1f - fraction)
         backgroundDim = 0.2f * (1f - fraction)
         invalidate()
     }
@@ -226,9 +230,8 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         dismissing = true
         root?.visibility = VISIBLE
         val startX = page.translationX
-        val direction = if (backInProgress) backDirection else 1f
         animate({ fraction ->
-            applyTranslation(page, startX + (direction * width - startX) * fraction)
+            applyTranslation(page, startX + (width - startX) * fraction)
         }) {
             page.visibility = INVISIBLE
             presented = false
@@ -243,6 +246,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
 
     private fun restoreRoot() {
         backgroundDim = 0f
+        root?.translationX = 0f
         root?.visibility = VISIBLE
         root?.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
         invalidate()

@@ -41,7 +41,10 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
         set(value) {
             if (field == value) return
             field = value
-            if (!value) backdrop.release()
+            if (value) register() else {
+                unregister()
+                backdrop.release()
+            }
             invalidate()
         }
 
@@ -88,7 +91,7 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
     }
 
     private fun register() {
-        if (sourceId.isNotEmpty() && isAttachedToWindow) {
+        if (active && sourceId.isNotEmpty() && isAttachedToWindow) {
             FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] = backdrop
         }
     }
