@@ -51,8 +51,8 @@ export function SettingsCardsPage({ theme, onClose }: { theme: Theme; onClose: (
 
 const styles = StyleSheet.create({
   previewSection: { gap: 8 },
-  previewTitle: { ...settingsTypography.section, paddingHorizontal: 20 },
-  previewArea: { ...settingsLayout.card, ...settingsLayout.controls, height: 240,
+  previewTitle: { ...settingsTypography.section, ...settingsLayout.section },
+  previewArea: { ...settingsLayout.card, ...settingsLayout.formControls, height: 240,
     borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
   previewCard: { width: '50%', maxWidth: 200, aspectRatio: 1 },
   listCard: { width: '100%' },

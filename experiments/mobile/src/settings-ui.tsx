@@ -1,5 +1,5 @@
 import { CaretLeftIcon, CaretRightIcon } from './icons';
-import { useRef, type ReactNode } from 'react';
+import { useImperativeHandle, useRef, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { GlassSwitch } from './GlassSwitch';
@@ -7,7 +7,17 @@ import { NavigationBackdrop } from './bottom-navigation';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { IconButton, type Theme } from './ui';
 import { NativeScrollContainer } from './native-controls';
-import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
+import { PageHeader, PageTitle, pageTitleInset, usePageHeader } from './PageHeader';
+import Motion, { Easing, FadeIn, FadeOut, LinearTransition, ReduceMotion } from 'react-native-reanimated';
+import { pageTitleMotion } from './page-header-motion';
+
+export interface SettingsPageHandle { restoreTitle: () => void }
+
+export const settingsTransition = {
+  layout: LinearTransition.duration(pageTitleMotion.duration).easing(Easing.inOut(Easing.ease)).reduceMotion(ReduceMotion.System),
+  entering: FadeIn.duration(pageTitleMotion.duration).reduceMotion(ReduceMotion.System),
+  exiting: FadeOut.duration(pageTitleMotion.duration).reduceMotion(ReduceMotion.System),
+};
 
 // 字节数按存储页的量级展示，保留一位小数。
 export function formatBytes(bytes: number) {
@@ -21,34 +31,44 @@ export function formatBytes(bytes: number) {
 }
 
 // 二级设置页统一使用滚动标题、返回工具栏与分组卡片。
-export function SettingsPage({ title, theme, onClose, children, backdropSourceId }: {
-  title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string;
+export function SettingsPage({ ref, title, theme, onClose, children, backdropSourceId, backLabel }: {
+  ref?: Ref<SettingsPageHandle>; title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string; backLabel?: string;
 }) {
   return <SafeAreaProvider><SettingsPageContent title={title} theme={theme} onClose={onClose}
-    backdropSourceId={backdropSourceId}>{children}</SettingsPageContent></SafeAreaProvider>;
+    pageRef={ref} backdropSourceId={backdropSourceId} backLabel={backLabel}>{children}</SettingsPageContent></SafeAreaProvider>;
 }
 
-function SettingsPageContent({ title, theme, onClose, children, backdropSourceId }: {
-  title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string;
+function SettingsPageContent({ pageRef, title, theme, onClose, children, backdropSourceId, backLabel }: {
+  pageRef?: Ref<SettingsPageHandle>; title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string; backLabel?: string;
 }) {
   const { t } = useTranslation();
   const scrollView = useRef<ScrollView>(null);
+  const scrollSize = useRef({ content: 0, viewport: 0 });
   const header = usePageHeader({ sourceId: backdropSourceId, bottomTabs: false,
     onSnap: (y, animated) => scrollView.current?.scrollTo({ y, animated }) });
+  useImperativeHandle(pageRef, () => ({ restoreTitle: header.restoreTitle }), [header.restoreTitle]);
+  // 内容缩短至一屏时，平滑恢复顶部位置与大标题。
+  function resetScrollIfContentFits() {
+    const { content, viewport } = scrollSize.current;
+    if (content <= 0 || viewport <= 0 || content > viewport) return;
+    header.restoreTitle();
+  }
   return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
       <NativeScrollContainer accessibilityViewIsModal hasHeader onInsetsChange={header.onInsetsChange} style={styles.screen}>
         <PageHeader {...header} title={title} theme={theme} style={styles.header} leading={
-          <IconButton theme={theme} label={t('mobile.backToSettings')} systemImage="chevron.left" onPress={onClose}>
+          <IconButton theme={theme} label={backLabel ?? t('mobile.backToSettings')} systemImage="chevron.left" onPress={onClose}>
             <CaretLeftIcon size={20} color={theme.label} />
           </IconButton>
         } />
         <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
           <Animated.ScrollView ref={scrollView} {...header.snapScrollProps} onScroll={header.onScroll} scrollEventThrottle={16}
+            onLayout={(event) => { scrollSize.current.viewport = event.nativeEvent.layout.height; resetScrollIfContentFits(); }}
+            onContentSizeChange={(_width, height) => { scrollSize.current.content = height; resetScrollIfContentFits(); }}
             contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
             scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
             contentContainerStyle={[styles.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}
             keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-            <PageTitle {...header} title={title} theme={theme} />
+            <PageTitle {...header} title={title} theme={theme} style={settingsLayout.pageTitle} />
             {children}
           </Animated.ScrollView>
         </NavigationBackdrop>
@@ -56,14 +76,18 @@ function SettingsPageContent({ title, theme, onClose, children, backdropSourceId
   </SafeAreaView>;
 }
 
-export function SettingsGroup({ theme, title, footer, children }: {
-  theme: Theme; title?: string; footer?: string; children: ReactNode;
+export function SettingsGroup({ theme, title, footer, children, animateLayout = false }: {
+  theme: Theme; title?: string; footer?: string; children: ReactNode; animateLayout?: boolean;
 }) {
-  return <View style={styles.group}>
+  const cardStyle = [styles.groupCard, { backgroundColor: theme.surface }];
+  const content = <>
     {!!title && <Text style={[styles.groupTitle, { color: theme.secondary }]}>{title}</Text>}
-    <View style={[styles.groupCard, { backgroundColor: theme.surface }]}>{children}</View>
+    {animateLayout ? <Motion.View layout={settingsTransition.layout} collapsable={false} style={cardStyle}>{children}</Motion.View>
+      : <View style={cardStyle}>{children}</View>}
     {!!footer && <Text style={[styles.groupFooter, { color: theme.secondary }]}>{footer}</Text>}
-  </View>;
+  </>;
+  return animateLayout ? <Motion.View layout={settingsTransition.layout} collapsable={false} style={styles.group}>{content}</Motion.View>
+    : <View style={styles.group}>{content}</View>;
 }
 
 function RowShell({ theme, children, onPress, accessibilityLabel, accessibilityState }: {
@@ -177,13 +201,22 @@ export const settingsTypography = StyleSheet.create({
 // 内嵌控件缩进八点，内圆角与外圆角保持相同圆心。
 const cardRadius = 24;
 const controlInset = 8;
+// 设置内容统一缩进，横纵内边距保持同比例。
+const settingsContentInset = 16;
+export const settingsInsetScale = settingsContentInset / 20;
+const formInset = controlInset * settingsInsetScale;
 export const settingsLayout = StyleSheet.create({
   title: { ...settingsTypography.title, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 },
+  pageTitle: { paddingLeft: pageTitleInset + 2 },
   content: { paddingHorizontal: 12, gap: 24 },
   card: { borderRadius: cardRadius, overflow: 'hidden' },
   controls: { padding: controlInset },
   control: { borderRadius: cardRadius - controlInset },
   insetControl: { marginHorizontal: controlInset, marginBottom: controlInset, borderRadius: cardRadius - controlInset },
+  section: { paddingHorizontal: settingsContentInset },
+  row: { paddingHorizontal: settingsContentInset, paddingVertical: 16 * settingsInsetScale },
+  formControls: { padding: formInset },
+  formControl: { borderRadius: cardRadius - formInset },
 });
 
 const styles = StyleSheet.create({
@@ -191,20 +224,21 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16 },
   content: { ...settingsLayout.content, paddingBottom: 32 },
   group: { gap: 8 },
-  groupTitle: { ...settingsTypography.section, paddingHorizontal: 20 },
+  groupTitle: { ...settingsTypography.section, ...settingsLayout.section },
   groupCard: { ...settingsLayout.card },
-  groupFooter: { ...settingsTypography.detail, paddingHorizontal: 20 },
-  row: { minHeight: 64, paddingHorizontal: 20, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  groupFooter: { ...settingsTypography.detail, ...settingsLayout.section },
+  row: { minHeight: 64, ...settingsLayout.row, flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowBody: { flex: 1, minWidth: 0, gap: 4 },
   rowTitle: { ...settingsTypography.body },
   rowDetail: { ...settingsTypography.detail },
   rowValue: { fontSize: 14, lineHeight: 20, maxWidth: '45%', textAlign: 'right', fontVariant: ['tabular-nums'] },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  choiceRow: { ...settingsLayout.controls },
-  choiceHeading: { marginHorizontal: 12 },
-  choicesWithTitle: { paddingTop: 8 },
-  choice: { ...settingsLayout.control, flex: 1, minWidth: 64, minHeight: 44, paddingHorizontal: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  choiceRow: { ...settingsLayout.formControls },
+  choiceHeading: { marginHorizontal: 12 * settingsInsetScale },
+  choicesWithTitle: { paddingTop: 8 * settingsInsetScale },
+  choice: { ...settingsLayout.formControl, flex: 1, minWidth: 64, minHeight: 44, padding: 12 * settingsInsetScale,
+    alignItems: 'center', justifyContent: 'center', gap: 8 },
   choiceLabel: { fontSize: 14, lineHeight: 20, fontWeight: '500', textAlign: 'center' },
   icon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
-  note: { ...settingsTypography.detail, paddingHorizontal: 20 },
+  note: { ...settingsTypography.detail, ...settingsLayout.section },
 });

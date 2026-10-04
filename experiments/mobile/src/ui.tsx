@@ -1,8 +1,12 @@
 import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, PanResponder, Platform, PlatformColor, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Motion, { cancelAnimation, interpolateColor, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { NativeActionButton, usesNativeControls } from './native-controls';
 import type { AccentId } from './settings';
 import { headerShadowColor, useHeaderShadowProgress } from './HeaderButtonShadow';
+import { pageTitleMotion } from './page-header-motion';
+
+const AnimatedPressable = Motion.createAnimatedComponent(Pressable);
 
 // 原生系统背景随浅深色及窗口层级自动变化。
 const systemBackground = Platform.OS === 'ios' ? PlatformColor('systemBackground') : undefined;
@@ -83,6 +87,8 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
   primary?: boolean;
 }) {
   const shadowProgress = useHeaderShadowProgress();
+  const pressShadowProgress = useSharedValue(0);
+  const [pressed, setPressed] = useState(false);
   const [pressScale] = useState(() => new Animated.Value(1));
   const [dragTranslation] = useState(() => new Animated.ValueXY());
   const [dragStretch] = useState(() => new Animated.ValueXY());
@@ -99,6 +105,7 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
     return () => { mounted = false; subscription.remove(); };
   }, []);
   useEffect(() => {
+    if (disabled) setPressed(false);
     if (disabled || reduceMotion) {
       pressScale.stopAnimation(); pressScale.setValue(1);
       dragTranslation.stopAnimation(); dragTranslation.setValue({ x: 0, y: 0 });
@@ -147,6 +154,19 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
   const scaleX = useMemo(() => Animated.add(pressScale, dragStretch.x), [pressScale, dragStretch]);
   const scaleY = useMemo(() => Animated.add(pressScale, dragStretch.y), [pressScale, dragStretch]);
   const activeDrag = dragging && !disabled && !reduceMotion;
+  const buttonPressed = (pressed || activeDrag) && !disabled;
+  const shadowColor = headerShadowColor(theme, shadowProgress);
+  const pressedShadowColor = headerShadowColor(theme, shadowProgress, true);
+  useEffect(() => {
+    pressShadowProgress.value = withTiming(buttonPressed ? 1 : 0, {
+      duration: pageTitleMotion.duration, reduceMotion: reduceMotion ? ReduceMotion.Always : ReduceMotion.System,
+    });
+    return () => cancelAnimation(pressShadowProgress);
+  }, [buttonPressed, reduceMotion, pressShadowProgress]);
+  const shadowStyle = useAnimatedStyle(() => ({
+    boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 32,
+      color: interpolateColor(pressShadowProgress.value, [0, 1], [shadowColor, pressedShadowColor]) }],
+  }));
   if (usesNativeControls && systemImage) {
     const size = StyleSheet.flatten(style)?.minWidth;
     return <NativeActionButton label={label} systemImage={systemImage} onPress={onPress}
@@ -172,23 +192,22 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
       onLayout={({ nativeEvent: { layout } }) => setButtonSize((previous) => previous.width === layout.width && previous.height === layout.height
         ? previous : { width: layout.width, height: layout.height })}
       style={{ transform: [{ translateX: dragTranslation.x }, { translateY: dragTranslation.y }, { scaleX }, { scaleY }], transformOrigin: 'center' }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={label}
+      <AnimatedPressable accessibilityRole="button" accessibilityLabel={label}
         accessibilityState={{ disabled: !!disabled, selected: !!selected, busy: !!busy }}
-        disabled={disabled} onPress={onPress} onPressIn={() => animatePress(true)}
-        onPressOut={() => { if (!draggingRef.current) animatePress(false); }} hitSlop={8}
-        style={({ pressed }) => [styles.iconButton, {
-          backgroundColor: (pressed || activeDrag) && !disabled ? theme.buttonPressed
+        disabled={disabled} onPress={onPress} onPressIn={() => { setPressed(true); animatePress(true); }}
+        onPressOut={() => { setPressed(false); if (!draggingRef.current) animatePress(false); }} hitSlop={8}
+        style={[styles.iconButton, {
+          backgroundColor: buttonPressed ? theme.buttonPressed
             : primary ? theme.accent : lightBackButton ? theme.surface : theme.tab,
           borderColor: primary ? theme.accent : lightBackButton ? theme.backButtonBorder : theme.border,
           opacity: disabled ? 0.4 : 1,
-        }, style, { boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 32,
-          color: headerShadowColor(theme, shadowProgress, (pressed || activeDrag) && !disabled) }] }]}>
-        {({ pressed }) => <View pointerEvents="none" style={styles.iconContent}>
-          {(pressed || activeDrag) && !disabled ? Children.map(children, (child) =>
+        }, style, shadowStyle]}>
+        <View pointerEvents="none" style={styles.iconContent}>
+          {buttonPressed ? Children.map(children, (child) =>
             isValidElement<{ color?: string }>(child) && 'color' in child.props
               ? cloneElement(child, { color: theme.buttonPressedLabel }) : child) : children}
-        </View>}
-      </Pressable>
+        </View>
+      </AnimatedPressable>
     </Animated.View>
   );
 }

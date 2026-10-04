@@ -1,4 +1,4 @@
-export const pageTitleMotion = { compactStart: 24, end: 64, blur: 8, minimumScale: 0.96, compactMinimumScale: 0.86 };
+export const pageTitleMotion = { compactStart: 24, end: 64, blur: 8, minimumScale: 0.96, compactMinimumScale: 0.86, duration: 220 };
 
 // 标题区间仅保留展开和收起位置，正文区间继续自由滚动。
 export function pageHeaderSnapTarget(offset: number, maximumOffset: number, collapseOffset = pageTitleMotion.end) {

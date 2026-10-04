@@ -2,7 +2,7 @@ import { CheckIcon, CircleHalfIcon } from './icons';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { previewScaleOptions, usePreferences, type AccentId } from './settings';
-import { SettingsChoiceRow, SettingsGroup, SettingsIcon, SettingsPage, settingsTypography } from './settings-ui';
+import { SettingsChoiceRow, SettingsGroup, SettingsIcon, SettingsPage, settingsLayout, settingsTypography } from './settings-ui';
 import { accentPresets, type Theme } from './ui';
 
 // 外观跟随系统，仅提供主题色与预览字号偏好。
@@ -60,16 +60,17 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
 }
 
 const styles = StyleSheet.create({
-  systemTheme: { paddingHorizontal: 20, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  systemTheme: { minHeight: 64, ...settingsLayout.row, flexDirection: 'row', alignItems: 'center', gap: 12 },
   systemBody: { flex: 1, gap: 4 },
   title: { ...settingsTypography.body },
   detail: { ...settingsTypography.detail },
   modeValue: { fontSize: 14, lineHeight: 20 },
-  swatches: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, paddingVertical: 20, gap: 12 },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', padding: settingsLayout.section.paddingHorizontal, gap: 12 },
   swatchOption: { flex: 1, minWidth: 56, alignItems: 'center', gap: 8 },
   swatchOutline: { padding: 4, borderRadius: 26, borderWidth: 2 },
   swatch: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   swatchLabel: { ...settingsTypography.detail, textAlign: 'center' },
-  preview: { minHeight: 144, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 8, justifyContent: 'center', alignItems: 'center' },
+  preview: { minHeight: 144, ...settingsLayout.section, paddingTop: settingsLayout.section.paddingHorizontal,
+    paddingBottom: 8 * (settingsLayout.section.paddingHorizontal / 24), justifyContent: 'center', alignItems: 'center' },
   sample: { textAlign: 'center' },
 });

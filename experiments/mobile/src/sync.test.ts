@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSyncClient, maskedSyncAccount, matchingWebdavPreset, syncErrorKey, validateProfile, webdavPresets, webdavSourceName, type SyncBridge, type SyncState } from './sync.ts';
+import { canReuseSyncPassword, createSyncClient, maskedSyncAccount, matchingWebdavPreset, syncErrorKey, validateProfile, webdavPresets, webdavSourceName, type SyncBridge, type SyncState } from './sync.ts';
 
 const profile = { serverUrl: 'https://dav.example.test/', remoteDirectory: 'Fonts', username: 'user', automatic: true };
 test('服务商预设使用桌面 WebDAV 地址，识别尾斜线并保留自定义地址', () => {
@@ -46,6 +46,15 @@ test('空密码由安全存储恢复，配置中没有密码字段', async () =>
     assert.equal('password' in received, false);
   };
   await createSyncClient(native).save(profile, '');
+});
+test('向导只在原地址、目录和账号下复用凭据，切换自动同步不要求重输密码', () => {
+  assert.equal(canReuseSyncPassword({ ...profile, automatic: false }, profile, true), true);
+  assert.equal(canReuseSyncPassword({ ...profile, serverUrl: ' https://dav.example.test ', username: ' user ', remoteDirectory: ' Fonts ' }, profile, true), true);
+  assert.equal(canReuseSyncPassword(profile, null, true), false);
+  assert.equal(canReuseSyncPassword(profile, profile, false), false);
+  for (const changed of [{ serverUrl: 'https://other.example.test/' }, { remoteDirectory: 'Other' }, { username: 'other' }, { serverUrl: 'invalid' }]) {
+    assert.equal(canReuseSyncPassword({ ...profile, ...changed }, profile, true), false);
+  }
 });
 test('手动同步与真正取消直接调用原生，状态读取失败不会伪造未连接', async () => {
   const native = bridge();

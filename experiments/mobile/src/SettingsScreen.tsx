@@ -60,7 +60,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
       contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
       scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
       contentContainerStyle={[settingsLayout.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}>
-    <PageTitle {...header} title={t('navigation.settings')} theme={theme} />
+    <PageTitle {...header} title={t('navigation.settings')} theme={theme} style={settingsLayout.pageTitle} />
     <View style={styles.overviewCards}>
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('sync')}
         style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
@@ -110,7 +110,8 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   overviewCards: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  overviewCard: { flex: 1, minWidth: 144, aspectRatio: 1, borderRadius: 24, padding: 16, flexDirection: 'column', gap: 4 },
+  overviewCard: { borderRadius: settingsLayout.card.borderRadius, flex: 1, minWidth: 144, aspectRatio: 1,
+    padding: settingsLayout.section.paddingHorizontal, flexDirection: 'column', gap: 4 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardBody: { flexDirection: 'column', marginTop: 'auto', gap: 3 },
   cardTitle: { ...settingsTypography.body, flexShrink: 1 },

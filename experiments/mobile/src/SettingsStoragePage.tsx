@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { storage } from './native';
 import type { StorageUsage } from './storage';
-import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, SettingsValueRow, formatBytes, settingsTypography } from './settings-ui';
+import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, SettingsValueRow, formatBytes, settingsLayout, settingsTypography } from './settings-ui';
 import type { Theme } from './ui';
 
 // 存储管理：真实用量统计与可重建缓存清理。
@@ -112,7 +112,7 @@ export function SettingsStoragePage({ theme, onClose }: { theme: Theme; onClose:
 const styles = StyleSheet.create({
   measuring: { minHeight: 96, alignItems: 'center', justifyContent: 'center', gap: 8 },
   measuringText: { fontSize: 14 },
-  overview: { padding: 20, gap: 16 },
+  overview: { padding: settingsLayout.section.paddingHorizontal, gap: 16 },
   overviewHeader: { gap: 4 },
   overviewLabel: { ...settingsTypography.detail },
   overviewValue: { fontSize: 36, lineHeight: 44, fontWeight: '600', fontVariant: ['tabular-nums'] },

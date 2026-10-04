@@ -39,6 +39,8 @@ export const CopyIcon = symbol('doc.on.doc', 'doc.on.doc.fill');
 export const DatabaseIcon = symbol('internaldrive', 'internaldrive.fill');
 export const DotsThreeIcon = symbol('ellipsis');
 export const DownloadSimpleIcon = symbol('arrow.down.to.line');
+export const EyeIcon = symbol('eye', 'eye.fill');
+export const EyeSlashIcon = symbol('eye.slash', 'eye.slash.fill');
 export const FileTextIcon = symbol('doc.text', 'doc.text.fill');
 export const FolderIcon = symbol('folder', 'folder.fill');
 export const FolderPlusIcon = symbol('folder.badge.plus');
@@ -64,6 +66,7 @@ export const SwatchesIcon = symbol('swatchpalette', 'swatchpalette.fill');
 export const TagIcon = symbol('tag', 'tag.fill');
 export const TextAaIcon = symbol('textformat');
 export const TrashIcon = symbol('trash', 'trash.fill');
+export const UserCircleIcon = symbol('person.crop.circle', 'person.crop.circle.fill');
 export const XIcon = symbol('xmark');
 
 export const NumberCircleZeroIcon = symbol('0.circle', '0.circle.fill');

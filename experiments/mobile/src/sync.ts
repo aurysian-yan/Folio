@@ -63,6 +63,16 @@ export function validateProfile(profile: SyncProfile): SyncProfile {
   }
   return { ...profile, serverUrl: url.toString(), remoteDirectory, username: profile.username.trim() };
 }
+
+// 安全存储按完整地址、目录和账号隔离，自动同步偏好不影响凭据范围。
+export function canReuseSyncPassword(profile: SyncProfile, saved: SyncProfile | null, credentialAvailable: boolean): boolean {
+  if (!saved || !credentialAvailable) return false;
+  try {
+    const normalized = validateProfile(profile);
+    return normalized.serverUrl === saved.serverUrl && normalized.remoteDirectory === saved.remoteDirectory
+      && normalized.username === saved.username;
+  } catch { return false; }
+}
 export function createSyncClient(bridge: SyncBridge) {
   return {
     state: () => bridge.syncState(),
