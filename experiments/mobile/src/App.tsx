@@ -8,7 +8,7 @@ import {
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ActivityIndicator, Animated, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
+  ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
   Text, TextInput, useColorScheme, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +22,7 @@ import { ImportResults } from './ImportResults';
 import { ViewModeMenu } from './ViewModeMenu';
 import { AndroidHeaderControls } from './HeaderControls';
 import { PageHeader, usePageHeader } from './PageHeader';
+import { HeaderScrollContext } from './HeaderButtonShadow';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
 import { library, syncSession } from './native';
@@ -90,7 +91,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const [facetOptions, setFacetOptions] = useState<{ key: string; options: FacetOption[] }>({ key: '', options: [] });
   const [facetFailure, setFacetFailure] = useState<{ key: string; message: string } | null>(null);
   const [heroHeight, setHeroHeight] = useState(128);
-  const header = usePageHeader({ collapseOffset: heroHeight, sourceId });
+  const list = useRef<Animated.FlatList<FontFamily>>(null);
+  const header = usePageHeader({ collapseOffset: heroHeight, sourceId,
+    onSnap: (offset, animated) => list.current?.scrollToOffset({ offset, animated }) });
   const headerScrollOffset = header.scrollY;
   const [debouncedSearch, setDebouncedSearch] = useState({ key: scopeKey, text: '' });
   const queryText = debouncedSearch.key === scopeKey ? debouncedSearch.text : searchText.trim();
@@ -106,7 +109,6 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const [mode, setMode] = useState<'grid' | 'list'>(defaultMode);
   const modeInitialized = useRef(false);
   const searchInput = useRef<TextInput>(null);
-  const list = useRef<FlatList<FontFamily>>(null);
   const inset = useSafeAreaInsets();
   const [nativeInsets, setNativeInsets] = useState<{ top: number; bottom: number; contentTop?: number }>({
     top: sidebar ? 0 : inset.top, bottom: 0,
@@ -259,7 +261,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   });
   const localCountLabel = snapshot ? t('mobile.localFamilyCount', { count: snapshot.familyCount }) : t('mobile.localFonts');
   const fontList = (
-      <LibraryList ref={list} key={mode} data={page.families} keyExtractor={(family) => family.id}
+      <LibraryList ref={list}
+        {...(showsHero ? header.snapScrollProps : {})} key={mode} data={page.families} keyExtractor={(family) => family.id}
         numColumns={mode === 'grid' ? 2 : 1} columnWrapperStyle={mode === 'grid' ? styles.columns : undefined}
         contentContainerStyle={[styles.content, {
           paddingTop: Platform.OS === 'android' ? androidContentTop : usesNativeControls ? scrollTopInset : 0,
@@ -419,13 +422,13 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   );
 
   if (sidebar) {
-    return <NativeLibraryContent theme={theme} title={title} active={active}
+    return <HeaderScrollContext.Provider value={headerScrollOffset}><NativeLibraryContent theme={theme} title={title} active={active}
       subtitle={snapshot ? t('mobile.familyCount', { count: scope === 'all' ? snapshot.familyCount : page.totalMatches }) : t('library.title')}
       mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
       ready={ready} importing={importing} importBlocked={syncBlocked} onModeChange={setMode}
       onSearchTextChange={setSearchText} onImport={importFont} onFilter={openFilter} filterCount={selectedFacets.length}>
       {active ? content : <View style={[styles.screen, { backgroundColor: theme.background }]} />}
-    </NativeLibraryContent>;
+    </NativeLibraryContent></HeaderScrollContext.Provider>;
   }
   return content;
 }

@@ -46,6 +46,7 @@ class FolioNavigationModule : Module() {
             Prop("searchOpen") { view: FolioHeaderControlsView, value: Boolean -> view.searchOpen = value }
             Prop("searchText") { view: FolioHeaderControlsView, value: String -> view.searchText = value }
             Prop("filterCount") { view: FolioHeaderControlsView, value: Int -> view.filterCount = value.coerceAtLeast(0) }
+            Prop("shadowProgress") { view: FolioHeaderControlsView, value: Float -> view.shadowProgress = value.coerceIn(0f, 1f) }
             Prop("colors") { view: FolioHeaderControlsView, value: FolioViewMenuColors -> view.colors = value }
             Prop("labels") { view: FolioHeaderControlsView, value: FolioHeaderLabels -> view.labels = value }
         }

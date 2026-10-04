@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { NavigationBackdrop } from './bottom-navigation';
 import { NativeScrollContainer } from './native-controls';
-import { PageHeader, usePageHeader } from './PageHeader';
+import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
 import { CloudPanelTabs } from './CloudPanelTabs';
 import { CloudFontCard } from './CloudFontCard';
 import type { LibrarySnapshot } from './library';
@@ -22,7 +22,8 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
   theme: Theme; active: boolean; sourceId: string; controller: CloudSyncController; snapshot: LibrarySnapshot | null; onConfigure: () => void;
 }) {
   const { t } = useTranslation();
-  const header = usePageHeader({ sourceId });
+  const list = useRef<Animated.FlatList<CloudFont>>(null);
+  const header = usePageHeader({ sourceId, onSnap: (offset, animated) => list.current?.scrollToOffset({ offset, animated }) });
   const { state, readError, actionError, busy, run } = controller;
   const status = state?.status;
   const provider = !readError && state?.profile
@@ -56,9 +57,9 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
   }
   return <GestureHandlerRootView style={{ flex: 1 }}>
     <NativeScrollContainer hasHeader onInsetsChange={header.onInsetsChange} style={{ flex: 1, backgroundColor: theme.background }}>
-    <PageHeader {...header} theme={theme} active={active} title={t('mobile.cloudFonts')} expandedTitleInHeader />
+    <PageHeader {...header} theme={theme} active={active} title={t('mobile.cloudFonts')} />
     <NavigationBackdrop sourceId={sourceId} active={active} theme={theme} style={{ flex: 1 }}>
-    <Animated.FlatList style={{ flex: 1 }} onScroll={header.onScroll} scrollEventThrottle={16}
+    <Animated.FlatList ref={list} {...header.snapScrollProps} style={{ flex: 1 }} onScroll={header.onScroll} scrollEventThrottle={16}
     contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
     scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
     contentContainerStyle={[styles.content, { paddingTop: header.contentTop,
@@ -66,6 +67,7 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
     onScrollBeginDrag={() => openSwipe.current?.close()}
     keyExtractor={(font) => font.fingerprint}
     ListHeaderComponent={<View style={styles.header}>
+      <PageTitle {...header} title={t('mobile.cloudFonts')} theme={theme} />
       <SettingsGroup theme={theme}>
         <Pressable accessibilityRole="button" onPress={onConfigure}
           style={({ pressed }) => [styles.connection, { opacity: pressed ? 0.7 : 1 }]}>

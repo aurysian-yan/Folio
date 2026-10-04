@@ -9,6 +9,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -120,6 +121,9 @@ class FolioViewMenuColors : Record {
     @Field var tab: String = ""
     @Field var border: String = ""
     @Field var raised: String = ""
+    @Field var shadow: String = "#000000"
+    @Field var buttonPressed: String = "#FFFFFF"
+    @Field var buttonPressedLabel: String = "#1A1A1A"
 }
 
 // 顶栏文案由共享语言目录提供。
@@ -151,6 +155,7 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
     var searchOpen by mutableStateOf(false)
     var searchText by mutableStateOf("")
     var filterCount by mutableStateOf(0)
+    var shadowProgress by mutableStateOf(0f)
     var colors by mutableStateOf<FolioViewMenuColors?>(null)
     var labels by mutableStateOf<FolioHeaderLabels?>(null)
     private var expanded by mutableStateOf(false)
@@ -173,7 +178,7 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
             LaunchedEffect(active, importing, searchOpen) {
                 if (!active || importing || searchOpen) updateExpanded(false)
             }
-            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, importBlocked, searchOpen, searchText, filterCount, palette, text, backdrop,
+            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, importBlocked, searchOpen, searchText, filterCount, shadowProgress, palette, text, backdrop,
                 onExpandedChange = ::updateExpanded,
                 onFilter = { if (ready) onFilter(emptyMap<String, Any>()) },
                 onImport = { if (ready && !importing && !importBlocked) onImport(emptyMap<String, Any>()) },
@@ -235,7 +240,7 @@ private fun String.menuColor() = Color(android.graphics.Color.parseColor(this))
 
 // 操作按钮、搜索框和菜单使用一致的淡描边。
 private fun Modifier.glassOutline(shape: Shape, colors: FolioViewMenuColors) =
-    border(0.5.dp, colors.border.menuColor(), shape).clip(shape)
+    border(0.6.dp, colors.border.menuColor(), shape).clip(shape)
 
 private fun Modifier.headerSurface(colors: FolioViewMenuColors): Modifier {
     val shape = ContinuousCapsule()
@@ -245,13 +250,26 @@ private fun Modifier.headerSurface(colors: FolioViewMenuColors): Modifier {
 // 按钮沿用菜单的背景模糊与拖动回弹，拖动期间不提交点击。
 @Composable
 private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors: FolioViewMenuColors,
-    backdrop: Backdrop, onClick: () -> Unit): Modifier {
+    backdrop: Backdrop, shadowProgress: Float = 0f, onPressedChange: (Boolean) -> Unit = {}, onClick: () -> Unit): Modifier {
     val animationScope = rememberCoroutineScope()
-    val drag = remember(animationScope) { InteractiveHighlight(animationScope, consumeDrag = true) }
+    val drag = remember(animationScope) {
+        InteractiveHighlight(animationScope, consumeDrag = true, pressDampingRatio = 0.36f, pressStiffness = 360f)
+    }
+    val interactionSource = remember { MutableInteractionSource() }
+    val touchPressed by interactionSource.collectIsPressedAsState()
+    // 点击与拖动共用按压反馈，手势接管后仍保持高亮与阴影。
+    val pressed = enabled && (touchPressed || drag.isPressed)
     val motionEnabled = (animationScope.coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f) > 0f
+    LaunchedEffect(pressed) { onPressedChange(pressed) }
     val shape = ContinuousCapsule()
     return drawWithContent { backdrop.contentVersion; drawContent() }
-        .drawPlainBackdrop(backdrop = backdrop, shape = { shape },
+        .drawBackdrop(backdrop = backdrop, shape = { shape }, highlight = null,
+            shadow = {
+                if (pressed || shadowProgress > 0f) Shadow(radius = 32.dp,
+                    color = colors.shadow.menuColor().copy(alpha = ((if (dark) 0.6f else 0.2f) * (if (pressed) 2f else 1f)).coerceAtMost(1f)),
+                    alpha = if (pressed) 1f else shadowProgress)
+                else null
+            },
             effects = {
                 vibrancy()
                 blur(if (dark) 12.dp.toPx() else 16.dp.toPx())
@@ -259,11 +277,11 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
             onDrawBehind = { drawRect(colors.tab.menuColor()) },
             layerBlock = {
                 val offset = if (motionEnabled && enabled) drag.offset else Offset.Zero
-                val pressed = if (motionEnabled && enabled) drag.pressProgress.coerceIn(0f, 1f) else 0f
+                val pressed = if (motionEnabled && enabled) drag.pressProgress.coerceIn(-0.35f, 1.35f) else 0f
                 val width = size.width.coerceAtLeast(1f)
                 val height = size.height.coerceAtLeast(1f)
                 val stretch = 4.dp.toPx() / height
-                val pressScale = 1f + stretch * pressed
+                val pressScale = 1f + 0.12f * pressed
                 scaleX = pressScale + stretch * (abs(offset.x) / width).coerceAtMost(1f)
                 scaleY = pressScale + stretch * (abs(offset.y) / height).coerceAtMost(1f)
                 val limit = size.minDimension.coerceAtLeast(1f)
@@ -271,17 +289,18 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
                 translationY = limit * tanh(0.05f * offset.y / limit)
             },
             onDrawSurface = {
-                drawRect(colors.tab.menuColor().copy(alpha = if (Build.VERSION.SDK_INT >= 31) 0.70f else 0.96f))
+                if (pressed) drawRect(colors.buttonPressed.menuColor())
+                else drawRect(colors.tab.menuColor().copy(alpha = if (Build.VERSION.SDK_INT >= 31) 0.70f else 0.96f))
             })
         .glassOutline(shape, colors)
         .then(if (enabled) drag.gestureModifier else Modifier)
-        .clickable(enabled = enabled, interactionSource = remember { MutableInteractionSource() },
+        .clickable(enabled = enabled, interactionSource = interactionSource,
             indication = null, role = Role.Button, onClick = onClick)
 }
 
 @Composable
 private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean, dark: Boolean,
-    ready: Boolean, importing: Boolean, importBlocked: Boolean, searchOpen: Boolean, searchText: String, filterCount: Int,
+    ready: Boolean, importing: Boolean, importBlocked: Boolean, searchOpen: Boolean, searchText: String, filterCount: Int, shadowProgress: Float,
     colors: FolioViewMenuColors, labels: FolioHeaderLabels, backdrop: Backdrop, onExpandedChange: (Boolean) -> Unit,
     onSelect: (String) -> Unit, onImport: () -> Unit, onFilter: () -> Unit, onSearchTextChange: (String) -> Unit) {
     val focus = remember { FocusRequester() }
@@ -318,22 +337,20 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
                                 }
                             })
                     }
-                    if (searchText.isNotEmpty()) Box(Modifier.size(20.dp)
-                        .clickable(enabled = active && ready, role = Role.Button) { onSearchTextChange(""); focus.requestFocus() }
-                        .semantics { contentDescription = labels.clearSearch }) {
-                        ViewMenuIcon("close", colors.secondary.menuColor(), 18.dp)
-                    }
+                    if (searchText.isNotEmpty()) HeaderAction("close", labels.clearSearch,
+                        active && ready, false, dark, colors, backdrop,
+                        { onSearchTextChange(""); focus.requestFocus() }, shadowProgress, diameter = 20.dp, iconSize = 18.dp)
                 }
                 HeaderAction("filter", labels.filter,
-                    active && ready, false, dark, colors, backdrop, onFilter, selected = filterCount > 0)
+                    active && ready, false, dark, colors, backdrop, onFilter, shadowProgress, selected = filterCount > 0)
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 FolioViewModeMenu(mode, expanded, active && !importing, dark, colors, labels, backdrop,
-                    onExpandedChange, onSelect, Modifier.size(if (availableWidth < HeaderButtonHeight * 7) HeaderButtonHeight else 64.dp, HeaderButtonHeight))
-                HeaderAction("filter", labels.filter, active && ready, false, dark, colors, backdrop, onFilter, selected = filterCount > 0)
+                    onExpandedChange, onSelect, shadowProgress, Modifier.size(if (availableWidth < HeaderButtonHeight * 7) HeaderButtonHeight else 64.dp, HeaderButtonHeight))
+                HeaderAction("filter", labels.filter, active && ready, false, dark, colors, backdrop, onFilter, shadowProgress, selected = filterCount > 0)
                 HeaderAction("plus", if (importing) labels.loadingImport else labels.importFonts,
-                    active && ready && !importing && !importBlocked, importing, dark, colors, backdrop, onImport)
+                    active && ready && !importing && !importBlocked, importing, dark, colors, backdrop, onImport, shadowProgress)
             }
         }
     }
@@ -341,29 +358,35 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
 
 @Composable
 private fun HeaderAction(icon: String, label: String, enabled: Boolean, loading: Boolean,
-    dark: Boolean, colors: FolioViewMenuColors, backdrop: Backdrop, onClick: () -> Unit, selected: Boolean = false) {
-    Box(Modifier.size(HeaderButtonHeight).headerButtonSurface(enabled, dark, colors, backdrop, onClick)
+    dark: Boolean, colors: FolioViewMenuColors, backdrop: Backdrop, onClick: () -> Unit, shadowProgress: Float,
+    selected: Boolean = false, diameter: Dp = HeaderButtonHeight, iconSize: Dp = 20.dp) {
+    var pressed by remember { mutableStateOf(false) }
+    Box(Modifier.size(diameter).headerButtonSurface(enabled, dark, colors, backdrop, shadowProgress,
+        onPressedChange = { pressed = it }, onClick = onClick)
         .semantics { contentDescription = label; if (loading) stateDescription = "正在导入" },
         contentAlignment = Alignment.Center) {
-        val tint = (if (selected) colors.accent else colors.label).menuColor().copy(alpha = if (enabled || loading) 1f else 0.4f)
+        val tint = (if (pressed) colors.buttonPressedLabel else if (selected) colors.accent else colors.label).menuColor()
+            .copy(alpha = if (enabled || loading) 1f else 0.4f)
         if (loading) AndroidView(factory = { context -> ProgressBar(context, null, android.R.attr.progressBarStyleSmall) },
-            modifier = Modifier.size(20.dp), update = { it.indeterminateTintList = ColorStateList.valueOf(tint.toArgb()) })
-        else ViewMenuIcon(icon, tint, 20.dp)
+            modifier = Modifier.size(iconSize), update = { it.indeterminateTintList = ColorStateList.valueOf(tint.toArgb()) })
+        else ViewMenuIcon(icon, tint, iconSize)
     }
 }
 
 @Composable
 private fun FolioViewModeMenu(mode: String, expanded: Boolean, active: Boolean, dark: Boolean,
     colors: FolioViewMenuColors, labels: FolioHeaderLabels, backdrop: Backdrop,
-    onExpandedChange: (Boolean) -> Unit, onSelect: (String) -> Unit, modifier: Modifier) {
+    onExpandedChange: (Boolean) -> Unit, onSelect: (String) -> Unit, shadowProgress: Float, modifier: Modifier) {
+    var pressed by remember { mutableStateOf(false) }
     val options = remember(labels.gridView, labels.listView) {
         listOf(FolioNavigationItem().apply { id = "grid"; label = labels.gridView; icon = "grid" },
             FolioNavigationItem().apply { id = "list"; label = labels.listView; icon = "list" })
     }
     FolioGlassMenu(mode, expanded, active, dark, colors, backdrop, options, labels.viewOptions,
-        labels.viewMode, labels.expanded, labels.collapsed, onExpandedChange, onSelect, modifier) { progress ->
-        ViewMenuIcon(mode, colors.label.menuColor(), 20.dp)
-        ViewMenuIcon("caret", colors.secondary.menuColor(), 10.dp,
+        labels.viewMode, labels.expanded, labels.collapsed, onExpandedChange, onSelect, modifier,
+        shadowProgress = shadowProgress, onPressedChange = { pressed = it }) { progress ->
+        ViewMenuIcon(mode, (if (pressed) colors.buttonPressedLabel else colors.label).menuColor(), 20.dp)
+        ViewMenuIcon("caret", (if (pressed) colors.buttonPressedLabel else colors.secondary).menuColor(), 10.dp,
             Modifier.graphicsLayer { rotationZ = 180f * progress })
     }
 }
@@ -386,6 +409,8 @@ internal fun FolioGlassMenu(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     triggerBackdrop: Backdrop = backdrop,
+    shadowProgress: Float = 0f,
+    onPressedChange: (Boolean) -> Unit = {},
     triggerContent: @Composable (Float) -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
@@ -417,7 +442,7 @@ internal fun FolioGlassMenu(
 
     Box(modifier) {
         Row(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - opacity.value.coerceIn(0f, 1f) }
-            .headerButtonSurface(active, dark, colors, triggerBackdrop) { onExpandedChange(!expanded) }
+            .headerButtonSurface(active, dark, colors, triggerBackdrop, shadowProgress, onPressedChange) { onExpandedChange(!expanded) }
             .semantics {
                 contentDescription = label
                 stateDescription = if (expanded) expandedLabel else collapsedLabel

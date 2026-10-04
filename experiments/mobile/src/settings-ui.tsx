@@ -1,7 +1,7 @@
 import { CaretLeftIcon, CaretRightIcon } from './icons';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { GlassSwitch } from './GlassSwitch';
 import { NavigationBackdrop } from './bottom-navigation';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -32,7 +32,9 @@ function SettingsPageContent({ title, theme, onClose, children, backdropSourceId
   title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string;
 }) {
   const { t } = useTranslation();
-  const header = usePageHeader({ sourceId: backdropSourceId, bottomTabs: false });
+  const scrollView = useRef<ScrollView>(null);
+  const header = usePageHeader({ sourceId: backdropSourceId, bottomTabs: false,
+    onSnap: (y, animated) => scrollView.current?.scrollTo({ y, animated }) });
   return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
       <NativeScrollContainer accessibilityViewIsModal hasHeader onInsetsChange={header.onInsetsChange} style={styles.screen}>
         <PageHeader {...header} title={title} theme={theme} style={styles.header} leading={
@@ -41,12 +43,12 @@ function SettingsPageContent({ title, theme, onClose, children, backdropSourceId
           </IconButton>
         } />
         <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
-          <Animated.ScrollView onScroll={header.onScroll} scrollEventThrottle={16}
+          <Animated.ScrollView ref={scrollView} {...header.snapScrollProps} onScroll={header.onScroll} scrollEventThrottle={16}
             contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
             scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
             contentContainerStyle={[styles.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}
             keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-            <PageTitle title={title} theme={theme} collapsed={header.collapsed} />
+            <PageTitle {...header} title={title} theme={theme} />
             {children}
           </Animated.ScrollView>
         </NavigationBackdrop>

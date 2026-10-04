@@ -9,7 +9,7 @@ interface NativePresetMenuProps extends ViewProps {
   selectedId: string;
   disabled: boolean;
   dark: boolean;
-  colors: Pick<WebDAVPresetMenuProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'raised'>;
+  colors: Pick<WebDAVPresetMenuProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'raised' | 'buttonPressed' | 'buttonPressedLabel'>;
   items: { id: string; label: string; icon: string }[];
   labels: { title: string; expanded: string; collapsed: string };
   onSelectionChange: (event: NativeSyntheticEvent<{ id: string }>) => void;
@@ -21,9 +21,9 @@ const PresetMenu = requireNativeView<NativePresetMenuProps>('FolioNavigation', '
 // 安卓地址菜单复用主页视图菜单的原生玻璃弹层。
 export function WebDAVPresetMenu({ theme, serverUrl, disabled, sourceId = '', onChange }: WebDAVPresetMenuProps) {
   const { t } = useTranslation();
-  const { label, secondary, muted, accent, tab, border, raised } = theme;
+  const { label, secondary, muted, accent, tab, border, raised, buttonPressed, buttonPressedLabel } = theme;
   return <PresetMenu sourceId={sourceId} selectedId={matchingWebdavPreset(serverUrl)} disabled={disabled} dark={theme.dark}
-    colors={{ label, secondary, muted, accent, tab, border, raised }}
+    colors={{ label, secondary, muted, accent, tab, border, raised, buttonPressed, buttonPressedLabel }}
     items={webdavPresets.map((preset) => ({ id: preset.id, label: t(preset.label), icon: '' }))}
     labels={{ title: t('cloud.provider'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
     style={{ width: 44, height: 44 }}

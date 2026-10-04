@@ -39,6 +39,7 @@ export interface NativeHeaderProps {
 }
 
 export interface NativeActionProps {
+  shadowColor?: string;
   minimumWidth?: number;
   foregroundColor?: string;
   label: string;

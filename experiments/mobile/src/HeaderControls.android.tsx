@@ -2,6 +2,7 @@ import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, StyleSheet, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import type { AndroidHeaderBackdropProps, AndroidHeaderProps } from './HeaderControls';
+import { useHeaderShadowProgress } from './HeaderButtonShadow';
 
 interface NativeAndroidHeaderProps extends ViewProps {
   sourceId: string;
@@ -14,8 +15,9 @@ interface NativeAndroidHeaderProps extends ViewProps {
   searchOpen: boolean;
   searchText: string;
   filterCount: number;
+  shadowProgress: number;
   labels: { search: string; searchPlaceholder: string; clearSearch: string; filter: string; importFonts: string; loadingImport: string; viewOptions: string; viewMode: string; gridView: string; listView: string; expanded: string; collapsed: string };
-  colors: Pick<AndroidHeaderProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'raised'>;
+  colors: Pick<AndroidHeaderProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'raised' | 'shadow' | 'buttonPressed' | 'buttonPressedLabel'>;
   onModeChange: (event: NativeSyntheticEvent<{ mode: 'grid' | 'list' }>) => void;
   onExpandedChange: (event: NativeSyntheticEvent<{ expanded: boolean }>) => void;
   onImport: () => void;
@@ -42,14 +44,15 @@ export function AndroidHeaderBackdrop({ theme, ...props }: AndroidHeaderBackdrop
 export function AndroidHeaderControls({ sourceId, theme, mode, active, width, ready, importing, importBlocked = false,
   searchOpen, searchText, filterCount, onFilter, onModeChange, onImport, onSearchTextChange }: AndroidHeaderProps) {
   const { t } = useTranslation();
-  const { label, secondary, muted, accent, tab, border, raised } = theme;
+  const shadowProgress = useHeaderShadowProgress();
+  const { label, secondary, muted, accent, tab, border, raised, shadow, buttonPressed, buttonPressedLabel } = theme;
   return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
     ready={ready} importing={importing} importBlocked={importBlocked} searchOpen={searchOpen} searchText={searchText}
     labels={{ search: t('mobile.searchFonts'), searchPlaceholder: t('mobile.searchPlaceholder'), clearSearch: t('mobile.clearSearch'),
       filter: filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'),
       importFonts: t('import.importFonts'), loadingImport: t('mobile.loadingImport'), viewOptions: t('libraryView.viewOptions'), viewMode: t('mobile.viewMode'),
       gridView: t('mobile.gridView'), listView: t('mobile.listView'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
-    colors={{ label, secondary, muted, accent, tab, border, raised }} style={[styles.header, { width }]}
+    colors={{ label, secondary, muted, accent, tab, border, raised, shadow, buttonPressed, buttonPressedLabel }} shadowProgress={shadowProgress} style={[styles.header, { width }]}
     onImport={onImport} onFilter={onFilter} filterCount={filterCount}
     onSearchTextChange={({ nativeEvent }) => onSearchTextChange(nativeEvent.text)}
     onExpandedChange={({ nativeEvent }) => { if (nativeEvent.expanded) Keyboard.dismiss(); }}

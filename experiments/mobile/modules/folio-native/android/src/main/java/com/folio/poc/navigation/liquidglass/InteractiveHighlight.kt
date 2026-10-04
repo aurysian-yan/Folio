@@ -6,6 +6,9 @@ import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -26,10 +29,12 @@ class InteractiveHighlight(
     val animationScope: CoroutineScope,
     val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset },
     private val consumeDrag: Boolean = false,
+    private val pressDampingRatio: Float = 0.5f,
+    private val pressStiffness: Float = 300f,
 ) {
 
     private val pressProgressAnimationSpec =
-        spring(0.5f, 300f, 0.001f)
+        spring(pressDampingRatio, pressStiffness, 0.001f)
     private val positionAnimationSpec =
         spring(0.5f, 300f, Offset.VisibilityThreshold)
 
@@ -40,6 +45,8 @@ class InteractiveHighlight(
 
     private var startPosition = Offset.Zero
     private var hasDragged = false
+    var isPressed by mutableStateOf(false)
+        private set
     val pressProgress: Float get() = pressProgressAnimation.value
     val offset: Offset get() = positionAnimation.value - startPosition
 
@@ -101,6 +108,7 @@ half4 main(float2 coord) {
         Modifier.pointerInput(animationScope, consumeDrag) {
             inspectDragGestures(
                 onDragStart = { down ->
+                    isPressed = true
                     hasDragged = false
                     startPosition = down.position
                     animationScope.launch {
@@ -109,12 +117,14 @@ half4 main(float2 coord) {
                     }
                 },
                 onDragEnd = {
+                    isPressed = false
                     animationScope.launch {
                         launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
                         launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
                     }
                 },
                 onDragCancel = {
+                    isPressed = false
                     animationScope.launch {
                         launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
                         launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
@@ -134,6 +144,7 @@ half4 main(float2 coord) {
         Modifier.pointerInput(animationScope) {
             awaitEachGesture {
                 val down = awaitFirstDown()
+                isPressed = true
                 
                 animationScope.launch {
                     pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec)
@@ -142,6 +153,7 @@ half4 main(float2 coord) {
                 do {
                     val event = awaitPointerEvent(PointerEventPass.Final)
                 } while (event.changes.any { it.pressed })
+                isPressed = false
                 animationScope.launch {
                     pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec)
                 }

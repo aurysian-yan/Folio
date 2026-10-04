@@ -1,10 +1,10 @@
 import { CloudIcon, CardsIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from './icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { NavigationBackdrop } from './bottom-navigation';
 import { NativeScrollContainer } from './native-controls';
-import { PageHeader, usePageHeader } from './PageHeader';
+import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
 import { storage } from './native';
 import { SettingsGroup, SettingsIcon, SettingsNavRow, formatBytes, settingsLayout, settingsTypography } from './settings-ui';
 import { accentPresets, type Theme } from './ui';
@@ -18,7 +18,8 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
   theme: Theme; active: boolean; sourceId: string; controller: CloudSyncController; onOpenPage: (page: SettingsPageId) => void;
 }) {
   const { t } = useTranslation();
-  const header = usePageHeader({ sourceId });
+  const scrollView = useRef<ScrollView>(null);
+  const header = usePageHeader({ sourceId, onSnap: (y, animated) => scrollView.current?.scrollTo({ y, animated }) });
   const [usage, setUsage] = useState<{ total: number; free: number } | null>(null);
   const [storageError, setStorageError] = useState(false);
   useEffect(() => {
@@ -53,12 +54,13 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
 
   return <NativeScrollContainer hasHeader onInsetsChange={header.onInsetsChange}
     style={[styles.screen, { backgroundColor: theme.background }]}>
-    <PageHeader {...header} theme={theme} active={active} title={t('navigation.settings')} expandedTitleInHeader />
+    <PageHeader {...header} theme={theme} active={active} title={t('navigation.settings')} />
     <NavigationBackdrop sourceId={sourceId} active={active} theme={theme} style={styles.screen}>
-    <Animated.ScrollView onScroll={header.onScroll} scrollEventThrottle={16}
+    <Animated.ScrollView ref={scrollView} {...header.snapScrollProps} onScroll={header.onScroll} scrollEventThrottle={16}
       contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
       scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
       contentContainerStyle={[settingsLayout.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}>
+    <PageTitle {...header} title={t('navigation.settings')} theme={theme} />
     <View style={styles.overviewCards}>
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('sync')}
         style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>

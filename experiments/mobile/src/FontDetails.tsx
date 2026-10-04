@@ -31,7 +31,9 @@ export function FontDetails(props: FontDetailsProps) {
 
 function FontDetailsContent({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite }: FontDetailsProps) {
   const { t } = useTranslation();
-  const header = usePageHeader({ bottomTabs: false });
+  const list = useRef<Animated.FlatList<FontFace>>(null);
+  const header = usePageHeader({ bottomTabs: false,
+    onSnap: (offset, animated) => list.current?.scrollToOffset({ offset, animated }) });
   const [favoritePending, setFavoritePending] = useState(false);
   const favoriteInFlight = useRef(false);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
@@ -79,14 +81,14 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
             </IconButton>
           </>} />
           <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
-          <Animated.FlatList data={family.faces} keyExtractor={(face) => face.id}
+          <Animated.FlatList ref={list} {...header.snapScrollProps} data={family.faces} keyExtractor={(face) => face.id}
             onScroll={header.onScroll} scrollEventThrottle={16}
             contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
             scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
             contentContainerStyle={[styles.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}
             initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
             ListHeaderComponent={<View style={styles.summary}>
-              <PageTitle title={family.displayName} theme={theme} collapsed={header.collapsed} />
+              <PageTitle {...header} title={family.displayName} theme={theme} />
               <Text style={[styles.detail, { color: theme.secondary }]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
               {recentError && <View><Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{recentError}</Text>
                 <PanelAction label={t('common.retry')} theme={theme} onPress={onRetryRecent} /></View>}

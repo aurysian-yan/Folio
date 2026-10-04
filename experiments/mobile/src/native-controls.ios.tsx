@@ -8,13 +8,14 @@ import {
   accessibilityLabel, autocorrectionDisabled, background, buttonBorderShape,
   buttonStyle, contentShape, controlSize, disabled, font, foregroundStyle, frame, glassEffect,
   labelStyle, listStyle, menuIndicator, menuStyle, navigationSplitViewStyle, navigationTitle, onSubmit, opacity, padding, submitLabel,
-  shapes, tabViewStyle, tag, textFieldStyle, textInputAutocapitalization, tint,
+  shadow, shapes, tabViewStyle, tag, textFieldStyle, textInputAutocapitalization, tint,
 } from '@expo/ui/swift-ui/modifiers';
 import { requireNativeView } from 'expo';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, Platform, StyleSheet, View } from 'react-native';
 import { collectionColorValue, collectionSystemImage } from './collection-style';
+import { HeaderScrollContext, headerShadowColor, useHeaderShadowProgress } from './HeaderButtonShadow';
 import type {
   NativeActionProps, NativeDestination, NativeHeaderProps, NativeLibraryContentProps, NativeNavigationProps, NativeScrollContainerProps,
 } from './native-controls';
@@ -119,6 +120,8 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
 export function NativeLibraryContent({ children, title, subtitle, active, theme, mode, width,
   searchOpen, searchText, ready, importing, importBlocked = false, onModeChange, onSearchTextChange, onImport, onFilter, filterCount }: NativeLibraryContentProps) {
   const { t } = useTranslation();
+  const shadowProgress = useHeaderShadowProgress();
+  const scrollShadow = shadow({ radius: 32, y: 2, color: headerShadowColor(theme, shadowProgress) });
   const text = useNativeState(searchText);
   const searchInput = useRef<TextFieldRef>(null);
   useEffect(() => {
@@ -127,10 +130,10 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
   }, [active, ready, searchOpen]);
   useEffect(() => { if (searchText !== text.get()) text.set(searchText); }, [searchText, text]);
 
-  const actionModifiers = [labelStyle('iconOnly'), tint(theme.label)];
+  const actionModifiers = [labelStyle('iconOnly'), tint(theme.label), scrollShadow];
   return (
     <Toolbar>
-      <NativeTabContent><RNHostView>{children}</RNHostView></NativeTabContent>
+      <NativeTabContent><RNHostView><HeaderScrollContext.Provider value={null}>{children}</HeaderScrollContext.Provider></RNHostView></NativeTabContent>
       <Toolbar.Content>
         <ToolbarItem placement="principal">
           {active && searchOpen ? <HStack spacing={8} modifiers={[
@@ -146,7 +149,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
               ]} />
             {searchText.length > 0 && <Button label={t('mobile.clearSearch')} systemImage="xmark.circle.fill"
               onPress={() => { text.set(''); onSearchTextChange(''); }}
-              modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch'))]} />}
+              modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch')), scrollShadow]} />}
           </HStack> : <VStack>
             <Text modifiers={[font({ textStyle: 'headline' })]}>{title}</Text>
             {active && <Text modifiers={[font({ textStyle: 'caption' }), foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>{subtitle}</Text>}
@@ -159,7 +162,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
                 onPress={onFilter} modifiers={[...actionModifiers, tint(filterCount ? theme.accent : theme.label), disabled(!ready)]} />
             </> : <>
               <Menu label={<Label title={t('libraryView.viewOptions')} systemImage={mode === 'grid' ? 'square.grid.2x2' : 'list.bullet'} />}
-                modifiers={[labelStyle('iconOnly'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel(t('libraryView.viewOptions'))]}>
+                modifiers={[labelStyle('iconOnly'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel(t('libraryView.viewOptions')), scrollShadow]}>
                 <Picker label={t('mobile.viewMode')} selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
                   <Label title={t('mobile.gridView')} systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
                   <Label title={t('mobile.listView')} systemImage="list.bullet" modifiers={[tag('list')]} />
@@ -181,6 +184,8 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
 export function NativeHeaderControls({ theme, active, mode, width, searchOpen, searchText, ready, importing, importBlocked = false,
   onModeChange, onSearchTextChange, onImport, onFilter, filterCount }: NativeHeaderProps) {
   const { t } = useTranslation();
+  const shadowProgress = useHeaderShadowProgress();
+  const scrollShadow = shadow({ radius: 32, y: 2, color: headerShadowColor(theme, shadowProgress) });
   const menuWidth = width < toolbarHeight * 7 ? toolbarHeight : 64;
   const text = useNativeState(searchText);
   const searchInput = useRef<TextFieldRef>(null);
@@ -206,11 +211,11 @@ export function NativeHeaderControls({ theme, active, mode, width, searchOpen, s
                   textInputAutocapitalization('never'), submitLabel('search'), onSubmit(() => Keyboard.dismiss())]} />
               {searchText.length > 0 && <Button label={t('mobile.clearSearch')} systemImage="xmark.circle.fill"
                 onPress={() => { text.set(''); onSearchTextChange(''); }}
-                modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch'))]} />}
+                modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch')), scrollShadow]} />}
             </HStack>
             <Button onPress={onFilter}
               modifiers={[...iconButtonModifiers(filterCount ? theme.accent : theme.label), disabled(!ready || !active),
-                accessibilityLabel(filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'))]}>
+                accessibilityLabel(filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts')), scrollShadow]}>
               <Image systemName="line.3.horizontal.decrease" size={20} color={filterCount ? theme.accent : theme.label}
                 modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
             </Button>
@@ -223,7 +228,7 @@ export function NativeHeaderControls({ theme, active, mode, width, searchOpen, s
               modifiers={[menuStyle('button'), buttonStyle(glass ? 'plain' : 'bordered'),
                 controlSize('large'), menuIndicator('hidden'), tint(theme.label), accessibilityLabel(t('libraryView.viewOptions')),
                 frame({ width: menuWidth, height: toolbarHeight }),
-                ...(glass ? [glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'capsule' })] : [])]}>
+                ...(glass ? [glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'capsule' })] : []), scrollShadow]}>
               <Picker label={t('mobile.viewMode')} selection={mode} onSelectionChange={onModeChange} modifiers={[tint(theme.accent)]}>
                 <Label title={t('mobile.gridView')} systemImage="square.grid.2x2" modifiers={[tag('grid')]} />
                 <Label title={t('mobile.listView')} systemImage="list.bullet" modifiers={[tag('list')]} />
@@ -231,12 +236,12 @@ export function NativeHeaderControls({ theme, active, mode, width, searchOpen, s
             </Menu>
             <Button onPress={onFilter}
               modifiers={[...iconButtonModifiers(filterCount ? theme.accent : theme.label), disabled(!ready),
-                accessibilityLabel(filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'))]}>
+                accessibilityLabel(filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts')), scrollShadow]}>
               <Image systemName="line.3.horizontal.decrease" size={20} color={filterCount ? theme.accent : theme.label}
                 modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
             </Button>
             <Button onPress={onImport}
-              modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel(importing ? t('mobile.loadingImport') : t('import.importFonts')), disabled(!ready || importing || importBlocked)]}>
+              modifiers={[...iconButtonModifiers(theme.label), accessibilityLabel(importing ? t('mobile.loadingImport') : t('import.importFonts')), disabled(!ready || importing || importBlocked), scrollShadow]}>
               <Image systemName="plus" size={20} color={theme.label}
                 modifiers={[frame({ width: toolbarHeight, height: toolbarHeight }), contentShape(shapes.circle())]} />
             </Button>
@@ -248,12 +253,13 @@ export function NativeHeaderControls({ theme, active, mode, width, searchOpen, s
 }
 
 export function NativeActionButton({ label, systemImage, color, onPress, disabled: unavailable,
-  prominent = false, iconOnly = false, diameter = 44, plain = false, minimumWidth, foregroundColor }: NativeActionProps) {
+  prominent = false, iconOnly = false, diameter = 44, plain = false, minimumWidth, foregroundColor, shadowColor }: NativeActionProps) {
   return (
     <Host matchContents={!iconOnly} style={iconOnly ? { width: diameter, height: diameter } : undefined}>
       <Button label={iconOnly ? undefined : label} systemImage={systemImage as ButtonProps['systemImage']} onPress={onPress}
         modifiers={iconOnly ? [...iconButtonModifiers(color, diameter, plain, prominent), disabled(!!unavailable),
-          opacity(unavailable ? 0.5 : 1), accessibilityLabel(label)] : [
+          opacity(unavailable ? 0.5 : 1), accessibilityLabel(label),
+          ...(shadowColor ? [shadow({ radius: 32, y: 2, color: shadowColor })] : [])] : [
           buttonStyle(plain ? 'plain' : glass ? (prominent ? 'glassProminent' : 'glass') : (prominent ? 'borderedProminent' : 'bordered')),
           labelStyle('titleAndIcon'), disabled(!!unavailable),
           controlSize('large'), buttonBorderShape('capsule'), font({ size: 16, weight: 'semibold' }),
