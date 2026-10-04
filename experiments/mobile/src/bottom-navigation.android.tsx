@@ -24,7 +24,7 @@ interface NativeTabsProps extends ViewProps {
   onSelectionChange: (event: NativeSyntheticEvent<{ id: MobileTab }>) => void;
 }
 
-const BackdropSource = requireNativeView<NavigationBackdropProps>('FolioNavigation', 'FolioBackdropSourceView');
+const BackdropSource = requireNativeView<Omit<NavigationBackdropProps, 'theme'>>('FolioNavigation', 'FolioBackdropSourceView');
 const LiquidTabs = requireNativeView<NativeTabsProps>('FolioNavigation', 'FolioLiquidTabsView');
 
 const bottomOffset = (bottomInset: number) => Math.max(32, bottomInset + 16);
@@ -33,8 +33,9 @@ export function navigationContentInset(bottomInset: number) {
   return bottomOffset(bottomInset) + containerHeight + overflow;
 }
 
-export function NavigationBackdrop(props: NavigationBackdropProps) {
-  return <BackdropSource {...props} collapsable={false} />;
+// 采样包含页面底色，避免透明模糊与下方清晰正文叠加。
+export function NavigationBackdrop({ theme, style, ...props }: NavigationBackdropProps) {
+  return <BackdropSource {...props} collapsable={false} style={[style, { backgroundColor: theme.background }]} />;
 }
 
 export function BottomNavigation({ hidden = false, sourceId, selectedId, dark, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {

@@ -9,7 +9,7 @@ export function WebDAVPresetMenu({ theme, serverUrl, disabled: isDisabled, onCha
   const { t } = useTranslation();
   const selected = matchingWebdavPreset(serverUrl);
   return <Host style={{ width: 44, height: 44 }}>
-    <Menu label={<Image systemName="chevron.down" size={14} color={theme.secondary} modifiers={[frame({ width: 44, height: 44 })]} />}
+    <Menu label={<Image systemName="chevron.down" size={20} color={theme.secondary} modifiers={[frame({ width: 44, height: 44 })]} />}
       modifiers={[menuStyle('button'), buttonStyle('plain'), menuIndicator('hidden'), tint(theme.label),
       disabled(isDisabled), accessibilityLabel(t('cloud.provider'))]}>
       <Picker label={t('cloud.provider')} selection={selected} onSelectionChange={(id) => onChange(webdavPresets.find((preset) => preset.id === id)!.url)}>

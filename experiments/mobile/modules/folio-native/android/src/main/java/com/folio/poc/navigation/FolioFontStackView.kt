@@ -4,8 +4,16 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.os.Build
 import android.view.MotionEvent
+import android.view.RoundedCorner
 import android.view.View
+import android.view.WindowInsets
 import android.view.animation.AnimationUtils
 import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
@@ -13,6 +21,8 @@ import androidx.activity.OnBackPressedCallback
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 // 字体页原生转场与预测性返回，底层字体库保持挂载。
 class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
@@ -25,6 +35,11 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
     private var animator: ValueAnimator? = null
     private var callbackRegistered = false
     private var updateScheduled = false
+    private var backgroundDim = 0f
+    private val dimPaint = Paint().apply { color = Color.BLACK }
+    private val cornerPath = Path()
+    private val cornerBounds = RectF()
+    private val cornerRadii = FloatArray(8)
 
     var visible = false
         set(value) {
@@ -41,6 +56,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
             cancelAnimation()
             backInProgress = true
             backDirection = if (backEvent.swipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
+            updateCornerRadii(rootWindowInsets)
             root?.visibility = VISIBLE
             applyBackProgress(0f)
         }
@@ -55,6 +71,8 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
             animate({ fraction -> applyBackProgress(start * (1f - fraction)) }) {
                 backInProgress = false
                 root?.visibility = INVISIBLE
+                backgroundDim = 0f
+                invalidate()
             }
         }
 
@@ -63,8 +81,54 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
 
     // Yoga 管理两个页面的边界，原生只改变绘制变换。
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        updateCornerRadii(rootWindowInsets)
         scheduleUpdate()
         if (backInProgress && !dismissing) applyBackProgress(backProgress)
+    }
+
+    override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
+        updateCornerRadii(insets)
+        return super.onApplyWindowInsets(insets)
+    }
+
+    // 遮罩仅覆盖底层页面，前层圆角随位移一起裁剪。
+    override fun drawChild(canvas: Canvas, child: View, drawingTime: Long): Boolean {
+        val saveCount = canvas.save()
+        try {
+            if (child === detail && child.translationX != 0f && cornerRadii.any { it > 0f }) {
+                val left = child.left + child.translationX
+                val top = child.top + child.translationY
+                cornerBounds.set(left, top, left + child.width, top + child.height)
+                cornerPath.rewind()
+                cornerPath.addRoundRect(cornerBounds, cornerRadii, Path.Direction.CW)
+                canvas.clipPath(cornerPath)
+            }
+            val drawn = super.drawChild(canvas, child, drawingTime)
+            if (child === root && backgroundDim > 0f) {
+                dimPaint.alpha = (backgroundDim * 255f).roundToInt()
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dimPaint)
+            }
+            return drawn
+        } finally {
+            canvas.restoreToCount(saveCount)
+        }
+    }
+
+    // 使用窗口报告的四角半径，旧系统与无圆角屏幕保持直角。
+    private fun updateCornerRadii(insets: WindowInsets?) {
+        cornerRadii.fill(0f)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val positions = intArrayOf(
+                RoundedCorner.POSITION_TOP_LEFT, RoundedCorner.POSITION_TOP_RIGHT,
+                RoundedCorner.POSITION_BOTTOM_RIGHT, RoundedCorner.POSITION_BOTTOM_LEFT,
+            )
+            positions.forEachIndexed { index, position ->
+                val radius = insets?.getRoundedCorner(position)?.radius?.toFloat() ?: 0f
+                cornerRadii[index * 2] = radius
+                cornerRadii[index * 2 + 1] = radius
+            }
+        }
+        invalidate()
     }
 
     override fun onViewAdded(child: View) {
@@ -86,6 +150,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        updateCornerRadii(rootWindowInsets)
         registerBackCallback()
         scheduleUpdate()
     }
@@ -96,7 +161,8 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         callbackRegistered = false
         backInProgress = false
         dismissing = false
-        detail?.let { it.translationX = 0f; it.scaleX = 1f; it.scaleY = 1f }
+        detail?.translationX = 0f
+        backgroundDim = 0f
         super.onDetachedFromWindow()
     }
 
@@ -133,8 +199,10 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         root?.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         root?.visibility = VISIBLE
         page.visibility = VISIBLE
-        animate({ fraction -> page.translationX = width * (1f - fraction) }) {
+        animate({ fraction -> applyTranslation(page, width * (1f - fraction)) }) {
             root?.visibility = INVISIBLE
+            backgroundDim = 0f
+            invalidate()
         }
     }
 
@@ -142,11 +210,14 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
     private fun applyBackProgress(value: Float) {
         backProgress = value.coerceIn(0f, 1f)
         val progress = if (ValueAnimator.areAnimatorsEnabled()) backProgress else 0f
-        detail?.let {
-            it.translationX = backDirection * width * 0.1f * progress
-            it.scaleX = 1f - 0.1f * progress
-            it.scaleY = 1f - 0.1f * progress
-        }
+        detail?.let { applyTranslation(it, backDirection * width * 0.25f * progress) }
+    }
+
+    private fun applyTranslation(page: View, translation: Float) {
+        page.translationX = translation
+        val fraction = (abs(translation) / width.coerceAtLeast(1)).coerceIn(0f, 1f)
+        backgroundDim = 0.2f * (1f - fraction)
+        invalidate()
     }
 
     private fun dismiss() {
@@ -155,12 +226,9 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         dismissing = true
         root?.visibility = VISIBLE
         val startX = page.translationX
-        val startScale = page.scaleX
         val direction = if (backInProgress) backDirection else 1f
         animate({ fraction ->
-            page.translationX = startX + (direction * width - startX) * fraction
-            page.scaleX = startScale + (1f - startScale) * fraction
-            page.scaleY = page.scaleX
+            applyTranslation(page, startX + (direction * width - startX) * fraction)
         }) {
             page.visibility = INVISIBLE
             presented = false
@@ -174,8 +242,10 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     private fun restoreRoot() {
+        backgroundDim = 0f
         root?.visibility = VISIBLE
         root?.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        invalidate()
     }
 
     private fun cancelAnimation() {

@@ -17,6 +17,7 @@ export interface NavigationBackdropProps extends ViewProps {
   children: ReactNode;
   sourceId: string;
   active: boolean;
+  theme: Theme;
   style?: StyleProp<ViewStyle>;
 }
 

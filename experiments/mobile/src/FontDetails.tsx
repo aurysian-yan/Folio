@@ -1,16 +1,18 @@
 import { CaretLeftIcon, CheckIcon, CopyIcon, FolderPlusIcon, StarIcon } from './icons';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, PixelRatio, StyleSheet, Text, View } from 'react-native';
+import { Animated, PixelRatio, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { FontFace, FontFamily, LibrarySnapshot } from './library';
 import { PanelAction } from './panel-content';
 import { FamilyCollectionsPanel } from './CollectionsPanel';
 import { copyText, NativeFontPreview, type PreviewStatus } from './native';
 import { IconButton, type Theme } from './ui';
+import { NavigationBackdrop } from './bottom-navigation';
+import { NativeScrollContainer } from './native-controls';
+import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
 
-// 字体二级页展示家族字款，并承接复制与收藏操作。
-export function FontDetails({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite }: {
+interface FontDetailsProps {
   family: FontFamily;
   theme: Theme;
   snapshot: LibrarySnapshot | null;
@@ -20,8 +22,16 @@ export function FontDetails({ family, theme, snapshot, collectionId, recentError
   onSnapshotChange: (snapshot: LibrarySnapshot) => void;
   onClose: () => void;
   onFavorite: () => Promise<void>;
-}) {
+}
+
+// 字体二级页展示家族字款，并承接复制与收藏操作。
+export function FontDetails(props: FontDetailsProps) {
+  return <SafeAreaProvider><FontDetailsContent {...props} /></SafeAreaProvider>;
+}
+
+function FontDetailsContent({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite }: FontDetailsProps) {
   const { t } = useTranslation();
+  const header = usePageHeader({ bottomTabs: false });
   const [favoritePending, setFavoritePending] = useState(false);
   const favoriteInFlight = useRef(false);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
@@ -47,14 +57,13 @@ export function FontDetails({ family, theme, snapshot, collectionId, recentError
     finally { favoriteInFlight.current = false; setFavoritePending(false); }
   }
 
-  return <SafeAreaProvider>
-      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
-        <View accessibilityViewIsModal style={styles.screen}>
-          <View style={styles.header}>
+  return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
+        <NativeScrollContainer accessibilityViewIsModal hasHeader onInsetsChange={header.onInsetsChange} style={styles.screen}>
+          <PageHeader {...header} title={family.displayName} theme={theme} style={styles.header} leading={
             <IconButton theme={theme} label={t('mobile.backToLibrary')} systemImage="chevron.left" onPress={onClose}>
               <CaretLeftIcon size={20} color={theme.label} />
             </IconButton>
-            <Text accessibilityRole="header" numberOfLines={1} style={[styles.title, { color: theme.label }]}>{family.displayName}</Text>
+          } actions={<>
             <IconButton theme={theme} label={copied ? t('mobile.copiedName') : t('mobile.copyName')}
               systemImage={copied ? 'checkmark' : 'document.on.document'} onPress={copy}>
               {copied ? <CheckIcon size={20} color={theme.accent} /> : <CopyIcon size={20} color={theme.label} />}
@@ -68,21 +77,27 @@ export function FontDetails({ family, theme, snapshot, collectionId, recentError
               onPress={() => setCollectionsOpen(true)}>
               <FolderPlusIcon size={20} color={theme.label} />
             </IconButton>
-          </View>
-          <FlatList data={family.faces} keyExtractor={(face) => face.id}
-            contentContainerStyle={styles.content} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
+          </>} />
+          <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
+          <Animated.FlatList data={family.faces} keyExtractor={(face) => face.id}
+            onScroll={header.onScroll} scrollEventThrottle={16}
+            contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
+            scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
+            contentContainerStyle={[styles.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}
+            initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
             ListHeaderComponent={<View style={styles.summary}>
+              <PageTitle title={family.displayName} theme={theme} collapsed={header.collapsed} />
               <Text style={[styles.detail, { color: theme.secondary }]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
               {recentError && <View><Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{recentError}</Text>
                 <PanelAction label={t('common.retry')} theme={theme} onPress={onRetryRecent} /></View>}
               {error && <Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{error}</Text>}
             </View>}
             renderItem={({ item }) => <FacePreview key={`${item.id}:${item.revisionId}`} face={item} familyName={family.displayName} theme={theme} />} />
+          </NavigationBackdrop>
           <FamilyCollectionsPanel visible={collectionsOpen} family={family} snapshot={snapshot} collectionId={collectionId}
             theme={theme} onSnapshot={onSnapshotChange} onClose={() => setCollectionsOpen(false)} />
-        </View>
-      </SafeAreaView>
-  </SafeAreaProvider>;
+        </NativeScrollContainer>
+  </SafeAreaView>;
 }
 
 function FacePreview({ face, familyName, theme }: { face: FontFace; familyName: string; theme: Theme }) {
@@ -106,8 +121,7 @@ function FacePreview({ face, familyName, theme }: { face: FontFace; familyName: 
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 18, fontWeight: '600' },
+  header: { paddingHorizontal: 16 },
   content: { paddingHorizontal: 16, paddingBottom: 16 },
   summary: { paddingVertical: 12, gap: 8 },
   detail: { fontSize: 14, lineHeight: 20 },

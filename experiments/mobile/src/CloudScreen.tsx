@@ -1,10 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { CloudIcon, CaretRightIcon } from './icons';
-import { ActivityIndicator, Alert, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NavigationBackdrop } from './bottom-navigation';
+import { NativeScrollContainer } from './native-controls';
+import { PageHeader, usePageHeader } from './PageHeader';
 import { CloudPanelTabs } from './CloudPanelTabs';
 import { CloudFontCard } from './CloudFontCard';
 import type { LibrarySnapshot } from './library';
@@ -16,9 +18,11 @@ import type { CloudSyncController } from './useCloudSync';
 import type { Theme } from './ui';
 
 // 云端文件不进入本地预览、筛选与智慧匹配。
-export function CloudScreen({ theme, controller, snapshot, onConfigure }: { theme: Theme; controller: CloudSyncController; snapshot: LibrarySnapshot | null; onConfigure: () => void }) {
+export function CloudScreen({ theme, active, sourceId, controller, snapshot, onConfigure }: {
+  theme: Theme; active: boolean; sourceId: string; controller: CloudSyncController; snapshot: LibrarySnapshot | null; onConfigure: () => void;
+}) {
   const { t } = useTranslation();
-  const inset = useSafeAreaInsets();
+  const header = usePageHeader({ sourceId });
   const { state, readError, actionError, busy, run } = controller;
   const status = state?.status;
   const provider = !readError && state?.profile
@@ -50,13 +54,18 @@ export function CloudScreen({ theme, controller, snapshot, onConfigure }: { them
       [{ text: t('common.cancel'), style: 'cancel' },
         { text: t(resolution === 'useLocal' ? 'cloud.useLocal' : 'cloud.useRemote'), style: 'destructive', onPress: execute }]);
   }
-  return <GestureHandlerRootView style={{ flex: 1 }}><FlatList style={{ flex: 1, backgroundColor: theme.background }}
-    contentContainerStyle={[styles.content, { paddingTop: inset.top + 16,
-      paddingBottom: Platform.OS === 'android' ? inset.bottom + 96 : 32 }]} data={readError ? [] : state?.fonts.filter((font) => font.deleted === (section === 'deleted')) ?? []}
+  return <GestureHandlerRootView style={{ flex: 1 }}>
+    <NativeScrollContainer hasHeader onInsetsChange={header.onInsetsChange} style={{ flex: 1, backgroundColor: theme.background }}>
+    <PageHeader {...header} theme={theme} active={active} title={t('mobile.cloudFonts')} expandedTitleInHeader />
+    <NavigationBackdrop sourceId={sourceId} active={active} theme={theme} style={{ flex: 1 }}>
+    <Animated.FlatList style={{ flex: 1 }} onScroll={header.onScroll} scrollEventThrottle={16}
+    contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
+    scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
+    contentContainerStyle={[styles.content, { paddingTop: header.contentTop,
+      paddingBottom: header.contentBottom }]} data={readError ? [] : state?.fonts.filter((font) => font.deleted === (section === 'deleted')) ?? []}
     onScrollBeginDrag={() => openSwipe.current?.close()}
     keyExtractor={(font) => font.fingerprint}
     ListHeaderComponent={<View style={styles.header}>
-      <Text accessibilityRole="header" style={[settingsLayout.title, { color: theme.label }]}>{t('mobile.cloudFonts')}</Text>
       <SettingsGroup theme={theme}>
         <Pressable accessibilityRole="button" onPress={onConfigure}
           style={({ pressed }) => [styles.connection, { opacity: pressed ? 0.7 : 1 }]}>
@@ -129,7 +138,10 @@ export function CloudScreen({ theme, controller, snapshot, onConfigure }: { them
           if (openSwipe.current !== methods) openSwipe.current?.close();
           openSwipe.current = methods;
         }} />;
-    }} /></GestureHandlerRootView>;
+    }} />
+    </NavigationBackdrop>
+    </NativeScrollContainer>
+  </GestureHandlerRootView>;
 }
 function phaseKey(phase?: string) {
   if (phase === '已同步') return 'mobile.sync.synced';

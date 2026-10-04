@@ -1,11 +1,13 @@
 import { CaretLeftIcon, CaretRightIcon } from './icons';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GlassSwitch } from './GlassSwitch';
 import { NavigationBackdrop } from './bottom-navigation';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { IconButton, type Theme } from './ui';
+import { NativeScrollContainer } from './native-controls';
+import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
 
 // 字节数按存储页的量级展示，保留一位小数。
 export function formatBytes(bytes: number) {
@@ -18,27 +20,38 @@ export function formatBytes(bytes: number) {
   return `${value.toFixed(digits)} ${units[unit]}`;
 }
 
-// 二级设置页统一使用返回工具栏、大标题与分组卡片。
+// 二级设置页统一使用滚动标题、返回工具栏与分组卡片。
 export function SettingsPage({ title, theme, onClose, children, backdropSourceId }: {
   title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string;
 }) {
+  return <SafeAreaProvider><SettingsPageContent title={title} theme={theme} onClose={onClose}
+    backdropSourceId={backdropSourceId}>{children}</SettingsPageContent></SafeAreaProvider>;
+}
+
+function SettingsPageContent({ title, theme, onClose, children, backdropSourceId }: {
+  title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string;
+}) {
   const { t } = useTranslation();
-  const content = <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-    <Text accessibilityRole="header" style={[settingsLayout.title, { color: theme.label }]}>{title}</Text>
-    {children}
-  </ScrollView>;
-  return <SafeAreaProvider>
-    <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
-      <View accessibilityViewIsModal style={styles.screen}>
-        <View style={styles.header}>
+  const header = usePageHeader({ sourceId: backdropSourceId, bottomTabs: false });
+  return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
+      <NativeScrollContainer accessibilityViewIsModal hasHeader onInsetsChange={header.onInsetsChange} style={styles.screen}>
+        <PageHeader {...header} title={title} theme={theme} style={styles.header} leading={
           <IconButton theme={theme} label={t('mobile.backToSettings')} systemImage="chevron.left" onPress={onClose}>
             <CaretLeftIcon size={20} color={theme.label} />
           </IconButton>
-        </View>
-        {backdropSourceId ? <NavigationBackdrop sourceId={backdropSourceId} active style={styles.screen}>{content}</NavigationBackdrop> : content}
-      </View>
-    </SafeAreaView>
-  </SafeAreaProvider>;
+        } />
+        <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
+          <Animated.ScrollView onScroll={header.onScroll} scrollEventThrottle={16}
+            contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
+            scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
+            contentContainerStyle={[styles.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}
+            keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+            <PageTitle title={title} theme={theme} collapsed={header.collapsed} />
+            {children}
+          </Animated.ScrollView>
+        </NavigationBackdrop>
+      </NativeScrollContainer>
+  </SafeAreaView>;
 }
 
 export function SettingsGroup({ theme, title, footer, children }: {
@@ -173,7 +186,7 @@ export const settingsLayout = StyleSheet.create({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  header: { paddingHorizontal: 16 },
   content: { ...settingsLayout.content, paddingBottom: 32 },
   group: { gap: 8 },
   groupTitle: { ...settingsTypography.section, paddingHorizontal: 20 },

@@ -18,7 +18,7 @@ export function WebDAVPresetMenu({ theme, serverUrl, disabled, onChange }: WebDA
       accessibilityState={{ disabled, expanded: !!anchor }} disabled={disabled}
       onPress={() => { Keyboard.dismiss(); trigger.current?.measureInWindow((x, y, width, height) => setAnchor({ right: x + width, top: y + height })); }}
       style={[styles.trigger, { opacity: disabled ? 0.4 : 1 }]}>
-      <CaretDownIcon size={14} color={theme.secondary} />
+      <CaretDownIcon size={20} color={theme.secondary} />
     </Pressable>
     <Modal transparent visible={!!anchor && !disabled} animationType="none" onRequestClose={() => setAnchor(null)}>
       <View style={styles.overlay}>

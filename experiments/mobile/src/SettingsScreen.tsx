@@ -1,22 +1,24 @@
 import { CloudIcon, CardsIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from './icons';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { NavigationBackdrop } from './bottom-navigation';
+import { NativeScrollContainer } from './native-controls';
+import { PageHeader, usePageHeader } from './PageHeader';
 import { storage } from './native';
 import { SettingsGroup, SettingsIcon, SettingsNavRow, formatBytes, settingsLayout, settingsTypography } from './settings-ui';
 import { accentPresets, type Theme } from './ui';
 import type { CloudSyncController } from './useCloudSync';
-import { maskedSyncAccount, webdavSourceName } from './sync';
+import { webdavSourceName } from './sync';
 
 export type SettingsPageId = 'sync' | 'storage' | 'cards' | 'appearance' | 'import' | 'about';
 
 // 设置主页显示真实概览；进入页面和回到前台时刷新存储用量。
-export function SettingsScreen({ theme, active, controller, onOpenPage }: {
-  theme: Theme; active: boolean; controller: CloudSyncController; onOpenPage: (page: SettingsPageId) => void;
+export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage }: {
+  theme: Theme; active: boolean; sourceId: string; controller: CloudSyncController; onOpenPage: (page: SettingsPageId) => void;
 }) {
   const { t } = useTranslation();
-  const inset = useSafeAreaInsets();
+  const header = usePageHeader({ sourceId });
   const [usage, setUsage] = useState<{ total: number; free: number } | null>(null);
   const [storageError, setStorageError] = useState(false);
   useEffect(() => {
@@ -49,12 +51,14 @@ export function SettingsScreen({ theme, active, controller, onOpenPage }: {
     { id: 'about', Icon: InfoIcon, color: accentPresets.blue[mode], title: t('settings.about'), description: t('mobile.settings.aboutDescription') },
   ] as const;
 
-  return <ScrollView style={[styles.screen, { backgroundColor: theme.background }]}
-    contentContainerStyle={[settingsLayout.content, {
-      paddingTop: inset.top + 16,
-      paddingBottom: Platform.OS === 'android' ? inset.bottom + 96 : 32,
-    }]}>
-    <Text accessibilityRole="header" style={[settingsLayout.title, { color: theme.label }]}>{t('navigation.settings')}</Text>
+  return <NativeScrollContainer hasHeader onInsetsChange={header.onInsetsChange}
+    style={[styles.screen, { backgroundColor: theme.background }]}>
+    <PageHeader {...header} theme={theme} active={active} title={t('navigation.settings')} expandedTitleInHeader />
+    <NavigationBackdrop sourceId={sourceId} active={active} theme={theme} style={styles.screen}>
+    <Animated.ScrollView onScroll={header.onScroll} scrollEventThrottle={16}
+      contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
+      scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
+      contentContainerStyle={[settingsLayout.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}>
     <View style={styles.overviewCards}>
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('sync')}
         style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
@@ -62,17 +66,16 @@ export function SettingsScreen({ theme, active, controller, onOpenPage }: {
           <SettingsIcon><CloudIcon size={22} color={accentPresets.blue[mode]} /></SettingsIcon>
           <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.cloud')}</Text>
         </View>
-        {profile ? <>
-          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.secondary }]}>{t('inspector.source')}</Text>
-          <Text numberOfLines={1} style={[styles.cloudMetric, { color: theme.label }]}>{webdavSourceName(profile.serverUrl, t)}</Text>
-          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.secondary }]}>{t('cloud.remoteDirectory')}</Text>
-          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.label }]}>{profile.remoteDirectory || '/'}</Text>
-          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.secondary }]}>{t('cloud.username')}</Text>
-          <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.label }]}>{maskedSyncAccount(profile.username) || '—'}</Text>
-        </> : <>
-          <Text style={[styles.cloudMetric, { color: readError ? theme.danger : theme.label }]}>{cloudDetail}</Text>
-          <Text style={[styles.cardDetail, { color: theme.secondary }]}>{t('mobile.settings.cloudSummary')}</Text>
-        </>}
+        <View style={styles.cardBody}>
+          {profile ? <>
+            <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.secondary }]}>{t('inspector.source')}</Text>
+            <Text numberOfLines={1} style={[styles.cloudMetric, { color: theme.label }]}>{webdavSourceName(profile.serverUrl, t)}</Text>
+            <Text numberOfLines={1} style={[styles.cardDetail, { color: theme.label }]}>{profile.remoteDirectory || '/'}</Text>
+          </> : <>
+            <Text style={[styles.cloudMetric, { color: readError ? theme.danger : theme.label }]}>{cloudDetail}</Text>
+            <Text style={[styles.cardDetail, { color: theme.secondary }]}>{t('mobile.settings.cloudSummary')}</Text>
+          </>}
+        </View>
       </Pressable>
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('storage')}
         style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
@@ -80,15 +83,15 @@ export function SettingsScreen({ theme, active, controller, onOpenPage }: {
           <SettingsIcon><DatabaseIcon size={22} color={theme.accent} /></SettingsIcon>
           <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.storage')}</Text>
         </View>
-        <Text style={[styles.cardDetail, { color: theme.secondary }]}>{t('storage.used')}</Text>
-        <View style={styles.cardMetricBlock}>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardDetail, { color: theme.secondary }]}>{t('storage.used')}</Text>
           <Text style={[styles.cardMetric, { color: storageError ? theme.danger : theme.label }, !usage && styles.cardDetail]}>
             {storageError ? t('mobile.settings.storageError') : usage ? formatBytes(usage.total) : t('storage.measuring')}
           </Text>
+          <Text style={[styles.cardDetail, { color: theme.secondary }]}>
+            {usage ? t('storage.freeSpace', { size: formatBytes(usage.free) }) : t('mobile.settings.storageSummary')}
+          </Text>
         </View>
-        <Text style={[styles.cardDetail, { color: theme.secondary }]}>
-          {usage ? t('storage.freeSpace', { size: formatBytes(usage.free) }) : t('mobile.settings.storageSummary')}
-        </Text>
       </Pressable>
     </View>
     {[entries.slice(0, 2), entries.slice(2)].map((group, index) => <SettingsGroup key={index} theme={theme}
@@ -97,17 +100,19 @@ export function SettingsScreen({ theme, active, controller, onOpenPage }: {
         icon={<SettingsIcon><Icon size={22} color={color} /></SettingsIcon>}
         title={title} detail={description} onPress={() => onOpenPage(id)} last={row === group.length - 1} />)}
     </SettingsGroup>)}
-  </ScrollView>;
+    </Animated.ScrollView>
+    </NavigationBackdrop>
+  </NativeScrollContainer>;
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   overviewCards: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  overviewCard: { flex: 1, minWidth: 144, borderRadius: 24, padding: 16, gap: 8 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 8 },
+  overviewCard: { flex: 1, minWidth: 144, aspectRatio: 1, borderRadius: 24, padding: 16, flexDirection: 'column', gap: 4 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardBody: { flexDirection: 'column', marginTop: 'auto', gap: 3 },
   cardTitle: { ...settingsTypography.body, flexShrink: 1 },
-  cardMetricBlock: { minHeight: 40, justifyContent: 'flex-end' },
   cardMetric: { ...settingsTypography.metric },
-  cloudMetric: { fontSize: 18, lineHeight: 26, fontWeight: '500' },
-  cardDetail: { ...settingsTypography.detail },
+  cloudMetric: { fontSize: 18, lineHeight: 22, fontWeight: '500' },
+  cardDetail: { ...settingsTypography.detail, lineHeight: 16 },
 });

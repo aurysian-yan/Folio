@@ -20,7 +20,8 @@ import { FontDetails } from './FontDetails';
 import { FontNavigation } from './FontNavigation';
 import { ImportResults } from './ImportResults';
 import { ViewModeMenu } from './ViewModeMenu';
-import { AndroidHeaderBackdrop, AndroidHeaderControls } from './HeaderControls';
+import { AndroidHeaderControls } from './HeaderControls';
+import { PageHeader, usePageHeader } from './PageHeader';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
 import { library, syncSession } from './native';
@@ -43,7 +44,7 @@ import { createTheme, IconButton, type Theme } from './ui';
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
 const emptyBrowse = { searchText: '', facets: [] as FacetSelection[] };
-const LibraryList = Platform.OS === 'android' ? Animated.FlatList<FontFamily> : FlatList<FontFamily>;
+const LibraryList = Animated.FlatList<FontFamily>;
 
 function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, searchPage = false, target, destination = 'local',
   snapshot, libraryVersion, initialError, defaultMode, preferencesReady, showImportResults, syncBlocked,
@@ -88,7 +89,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const [collectionsOpen, setCollectionsOpen] = useState(false);
   const [facetOptions, setFacetOptions] = useState<{ key: string; options: FacetOption[] }>({ key: '', options: [] });
   const [facetFailure, setFacetFailure] = useState<{ key: string; message: string } | null>(null);
-  const [headerScrollOffset] = useState(() => new Animated.Value(0));
+  const [heroHeight, setHeroHeight] = useState(128);
+  const header = usePageHeader({ collapseOffset: heroHeight, sourceId });
+  const headerScrollOffset = header.scrollY;
   const [debouncedSearch, setDebouncedSearch] = useState({ key: scopeKey, text: '' });
   const queryText = debouncedSearch.key === scopeKey ? debouncedSearch.text : searchText.trim();
   const [pagination, setPagination] = useState({ key: '', offset: 0 });
@@ -132,8 +135,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const importCounts = importReport ? summarizeImport(importReport.items) : null;
 
   useEffect(() => {
-    if (Platform.OS === 'android') headerScrollOffset.setValue(0);
-  }, [headerScrollOffset, mode]);
+    headerScrollOffset.setValue(0);
+  }, [headerScrollOffset, mode, scopeKey]);
 
   useEffect(() => {
     if (usesNativeControls || Platform.OS === 'android' || !searchPage) return;
@@ -249,6 +252,12 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const title = searchPage ? t('common.search') : active ? scopeTitle : destination === 'cloud' ? t('mobile.cloudFonts') : t('common.settings');
   const openFilter = () => { Keyboard.dismiss(); setFilterOpen(true); };
   const openCollections = () => { Keyboard.dismiss(); setCollectionsOpen(true); };
+  const showsHero = !searchPage && !hasConditions && scope === 'all';
+  const brandProgress = headerScrollOffset.interpolate({
+    inputRange: showsHero ? [Math.max(0, heroHeight - (header.reduceMotion ? 0.01 : 44)), heroHeight] : [-1, 0],
+    outputRange: [0, 1], extrapolate: 'clamp',
+  });
+  const localCountLabel = snapshot ? t('mobile.localFamilyCount', { count: snapshot.familyCount }) : t('mobile.localFonts');
   const fontList = (
       <LibraryList ref={list} key={mode} data={page.families} keyExtractor={(family) => family.id}
         numColumns={mode === 'grid' ? 2 : 1} columnWrapperStyle={mode === 'grid' ? styles.columns : undefined}
@@ -259,10 +268,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
         scrollIndicatorInsets={usesNativeControls ? { top: scrollTopInset, bottom: nativeInsets.bottom } : undefined}
         keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
-        onScroll={Platform.OS === 'android' ? Animated.event(
-          [{ nativeEvent: { contentOffset: { y: headerScrollOffset } } }], { useNativeDriver: true },
-        ) : undefined}
-        scrollEventThrottle={Platform.OS === 'android' ? 16 : undefined}
+        onScroll={header.onScroll} scrollEventThrottle={16}
         initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
         onEndReached={loadMore} onEndReachedThreshold={0.4}
         renderItem={({ item }) => (
@@ -273,16 +279,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         )}
         ListHeaderComponent={
           <View>
-            <View style={styles.libraryTools}>
-              <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.scopeSwitch', { scope: scopeTitle })}
-                disabled={!ready} onPress={openCollections} style={styles.rangeButton}>
-                <Text numberOfLines={1} style={[styles.rangeTitle, { color: theme.label }]}>{scopeTitle}</Text>
-                <CaretDownIcon size={16} color={theme.secondary} />
-              </Pressable>
-              {(searchOpen || selectedFacets.length > 0) && <PanelAction label={selectedFacets.length ? t('mobile.filterCount', { count: selectedFacets.length }) : t('mobile.filter')} theme={theme} onPress={openFilter} />}
-            </View>
-            {!searchPage && !hasConditions && scope === 'all' && (
-              <View style={styles.hero}>
+            {showsHero && (
+              <View style={styles.hero} onLayout={({ nativeEvent }) => setHeroHeight(nativeEvent.layout.height)}>
                 <Image source={require('../assets/design/lasso.svg')} style={styles.lasso} contentFit="contain" />
                 <Text accessibilityRole="header" style={[styles.heroTitle, { color: theme.label }]}>
                   {snapshot ? t('mobile.heroSubtitle', { count: snapshot.familyCount }) : t('mobile.heroTitle')}
@@ -292,6 +290,13 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
                 </Text>}
               </View>
             )}
+            <View style={styles.libraryTools}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.scopeSwitch', { scope: scopeTitle })}
+                disabled={!ready} onPress={openCollections} style={styles.rangeButton}>
+                <Text numberOfLines={1} style={[styles.rangeTitle, { color: theme.label }]}>{scopeTitle}</Text>
+                <CaretDownIcon size={16} color={theme.secondary} />
+              </Pressable>
+            </View>
             {(searchPage || hasConditions || scope !== 'all') && <Text accessibilityRole="header" style={[styles.searchSummary, { color: theme.secondary }]}>
               {loading && page.families.length === 0 ? t('mobile.loading') : queryText ? t('mobile.searchResultCount', { total: page.totalMatches }) : t('mobile.familyCount', { count: page.totalMatches })}
             </Text>}
@@ -344,24 +349,27 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       onInsetsChange={(event) => setNativeInsets(event.nativeEvent)}
       style={[styles.screen, { backgroundColor: theme.background }, reservesWindowControls && styles.windowControlsInset]}
       onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)}>
-      {Platform.OS === 'android' && !sidebar && <Animated.View pointerEvents="none"
-        accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-        style={[styles.headerBackdrop, { height: androidContentTop + 34,
-          opacity: headerScrollOffset.interpolate({ inputRange: [0, 56], outputRange: [0, 1], extrapolate: 'clamp' }) }]}>
-        <AndroidHeaderBackdrop sourceId={sourceId} active={active} theme={theme} style={styles.screen} />
-      </Animated.View>}
-      {!sidebar && <View collapsable={false} onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
-        style={[styles.header, (usesNativeControls || Platform.OS === 'android') && [styles.floatingHeader, {
-          top: Platform.OS === 'android' ? inset.top : nativeInsets.top,
-          backgroundColor: Platform.OS === 'ios' && Number(Platform.Version) < 26 ? theme.background : undefined }],
-          Platform.OS === 'android' && styles.androidHeader]}>
+      {!sidebar && <PageHeader scrollY={headerScrollOffset} theme={theme} sourceId={sourceId} active={active}
+        topInset={Platform.OS === 'android' ? inset.top : usesNativeControls ? nativeInsets.top : 0}
+        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
         {!searchOpen && <View
-          style={[styles.brand, (usesNativeControls || Platform.OS === 'android') && styles.nativeBrand]}>
-          <Image source={require('../assets/design/folio.svg')} style={styles.logo}
-            tintColor={theme.label} contentFit="contain" accessibilityLabel="Folio" />
-          <Text numberOfLines={1} style={[styles.libraryCount, { color: theme.muted }]}>
-            {scope === 'recent' ? t('macos.recentVisits') : snapshot ? t('mobile.localFamilyCount', { count: snapshot.familyCount }) : t('mobile.localFonts')}
-          </Text>
+          style={[styles.brand, (usesNativeControls || Platform.OS === 'android') && [styles.nativeBrand, {
+            right: 26 + (width - 52 < 44 * 7 ? 152 : 172) + 12,
+          }]]}>
+          <Animated.View style={{ transform: [{ translateY: brandProgress.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+            <Image source={require('../assets/design/folio.svg')} style={styles.logo}
+              tintColor={theme.label} contentFit="contain" accessibilityLabel="Folio" />
+          </Animated.View>
+          <Animated.View collapsable={false} style={{ opacity: brandProgress }} pointerEvents={!showsHero || header.collapsed ? 'auto' : 'none'}
+            accessibilityElementsHidden={showsHero && !header.collapsed}
+            importantForAccessibility={showsHero && !header.collapsed ? 'no-hide-descendants' : 'auto'}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${localCountLabel}, ${t('mobile.scopeSwitch', { scope: scopeTitle })}`}
+              disabled={!ready} onPress={openCollections} hitSlop={8}>
+              <Text numberOfLines={1} style={[styles.libraryCount, { color: theme.muted }]}>
+                {localCountLabel}
+              </Text>
+            </Pressable>
+          </Animated.View>
         </View>}
         {Platform.OS === 'android' ? <AndroidHeaderControls theme={theme} sourceId={sourceId} active={active}
           mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
@@ -394,9 +402,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
             {importing ? <ActivityIndicator size="small" color={theme.label} /> : <PlusIcon size={20} color={theme.label} />}
           </IconButton>
         </View>}
-      </View>}
+      </PageHeader>}
       {Platform.OS === 'android' ? <NavigationBackdrop sourceId={active ? sourceId : ''}
-        active={active} style={[styles.screen, { backgroundColor: theme.background }]}>{fontList}</NavigationBackdrop> : fontList}
+        active={active} theme={theme} style={styles.screen}>{fontList}</NavigationBackdrop> : fontList}
       <FilterPanel visible={filterOpen && active} theme={theme}
         options={facetOptions.key === optionsKey ? facetOptions.options : page.facets} counts={page.facets}
         selected={selectedFacets} loading={loading || optionsLoading || waitingForSearch} error={shownError ?? facetError}
@@ -542,8 +550,10 @@ function MobileApp() {
   }, []);
 
   function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
-  const cloudContent = <CloudScreen theme={theme} snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
-  const settingsContent = <SettingsScreen theme={theme} controller={syncController}
+  const cloudContent = <CloudScreen theme={theme} sourceId={sourceId}
+    active={(usesNativeControls ? nativeDestination === 'cloud' : tab === 'cloud') && !settingsPageVisible}
+    snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
+  const settingsContent = <SettingsScreen theme={theme} sourceId={sourceId} controller={syncController}
     active={(usesNativeControls ? nativeDestination === 'settings' : tab === 'settings') && !settingsPageVisible}
     onOpenPage={openSettingsPage} />;
   const searchContent = <LibraryScreen syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
@@ -579,10 +589,9 @@ function MobileApp() {
             onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />
         </View>
         <View style={[styles.screen, tab !== 'search' && styles.hidden]}>{searchContent}</View>
-        {tab !== 'local' && tab !== 'search' && <NavigationBackdrop sourceId={sourceId} active={!keyboardVisible}
-          style={[styles.screen, { backgroundColor: theme.background }]}>
+        {tab !== 'local' && tab !== 'search' && <View style={styles.screen}>
           {tab === 'settings' ? settingsContent : cloudContent}
-        </NavigationBackdrop>}
+        </View>}
       </View>
       <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme} hidden={keyboardVisible}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
@@ -614,13 +623,9 @@ const styles = StyleSheet.create({
   app: { flex: 1 }, screen: { flex: 1 }, hidden: { display: 'none' },
   // 紧凑 iPad 窗口为系统控制按钮保留标准工具栏高度。
   windowControlsInset: { paddingTop: 44 },
-  header: { minHeight: 64, paddingHorizontal: 26, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  floatingHeader: { position: 'absolute', left: 0, right: 0, zIndex: 1 },
-  androidHeader: { zIndex: 2 },
-  headerBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
-  brand: { flex: 1, gap: 8 }, logo: { width: 45.011, height: 16 },
-  nativeBrand: { position: 'absolute', left: 26, right: 254 },
-  libraryTools: { paddingHorizontal: 12, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  brand: { flex: 1, gap: 8, height: 44 }, logo: { width: 45.011, height: 16 },
+  nativeBrand: { position: 'absolute', left: 26, zIndex: 1 },
+  libraryTools: { paddingHorizontal: 16, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
   rangeButton: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
   rangeTitle: { fontSize: 16, fontWeight: '500', flexShrink: 1 },
   libraryCount: { fontSize: 14, lineHeight: 16, fontWeight: '500' },
