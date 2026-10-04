@@ -75,6 +75,7 @@ class FolioPreviewSelection : Record {
     @Field var text: String = ""
     @Field var fontSize: Double = 32.0
     @Field var centered: Boolean = false
+    @Field var wrapWidth: Double = 0.0
 }
 
 class FolioNativeModule : Module() {

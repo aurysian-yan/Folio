@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +38,8 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
     var selectedId by mutableStateOf("none")
     var disabled by mutableStateOf(false)
     var dark by mutableStateOf(false)
+    var triggerIcon by mutableStateOf("caret")
+    var triggerSurface by mutableStateOf(false)
     var colors by mutableStateOf<FolioViewMenuColors?>(null)
     var labels by mutableStateOf<FolioPresetMenuLabels?>(null)
     var items by mutableStateOf(emptyList<FolioNavigationItem>())
@@ -54,6 +57,9 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
             val palette = colors ?: return@setContent
             val text = labels ?: return@setContent
             val backdrop = FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] ?: EmptyNavigationBackdrop
+            var triggerPressed by remember { mutableStateOf(false) }
+            // 操作入口使用与顶栏按钮一致的表层、按压与拖动反馈。
+            val isActionsTrigger = triggerIcon == "more"
             LaunchedEffect(disabled) { if (disabled) updateExpanded(false) }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 FolioGlassMenu(selectedId, expanded, !disabled, dark, palette, backdrop,
@@ -64,10 +70,19 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
                             onSelectionChange(mapOf("id" to id))
                             updateExpanded(false)
                         }
-                    }, modifier = Modifier.fillMaxSize(), triggerBackdrop = EmptyNavigationBackdrop,
-                    showTriggerSurface = false) { progress ->
-                    ViewMenuIcon("caret", Color(android.graphics.Color.parseColor(palette.secondary)), 22.dp,
-                        Modifier.graphicsLayer { rotationZ = 180f * progress; alpha = if (disabled) 0.4f else 1f })
+                    }, modifier = Modifier.fillMaxSize(),
+                    triggerBackdrop = if (triggerSurface) backdrop else EmptyNavigationBackdrop,
+                    onPressedChange = { triggerPressed = it },
+                    showTriggerSurface = triggerSurface) { progress ->
+                    if (isActionsTrigger) {
+                        val tint = Color(android.graphics.Color.parseColor(if (triggerPressed) palette.buttonPressedLabel else palette.label))
+                        val caretTint = Color(android.graphics.Color.parseColor(if (triggerPressed) palette.buttonPressedLabel else palette.secondary))
+                        ViewMenuIcon("dots", tint, 20.dp)
+                        ViewMenuIcon("caret", caretTint, 10.dp, Modifier.graphicsLayer { rotationZ = 180f * progress })
+                    } else {
+                        ViewMenuIcon("caret", Color(android.graphics.Color.parseColor(palette.secondary)), 22.dp,
+                            Modifier.graphicsLayer { rotationZ = 180f * progress; alpha = if (disabled) 0.4f else 1f })
+                    }
                 }
             }
         }

@@ -286,3 +286,35 @@ pnpm android --device "23013RK75C" --no-bundler
 用户追加要求：构建 `APP_VARIANT=production`、`com.folio.mobile.poc` 的 Android Release 包。PASS，正式包标签 `Folio`，applicationId `com.folio.mobile.poc`，versionName `0.1.0`／versionCode `1`，Release 构建且 Manifest 无 debuggable 开关，包含 arm64-v8a／x86_64 的 Rust 库和 8,412,820 字节内嵌 Hermes；字体测试样本未进入正式 APK。`apksigner verify` 的 v2 签名校验通过。沿用工程既有 Expo Android Debug keystore 签名，这不是商店发布密钥。
 
 产物：[Folio-0.1.0-batch6-release.apk](.build/releases/Folio-0.1.0-batch6-release.apk)，147,387,803 字节（约 140.6 MiB）；SHA-256 `a496022294695c732b2201e834415ed1b39f2fb8c5db65858c4fc4d14d9d03c9`，同目录提供 `.apk.sha256` 与 `.json` 元数据。已按正式身份生成 Android 工程；iOS 工程仍保留开发身份。USB 未连接，未安装该正式包，也未覆盖手机正式包数据；离线启动及 Release 真机运行待验收。
+
+## Font Detail Inspector
+
+2026-10-04：按 macOS 端右侧预览侧边栏重做移动端字体详情页，保留 RN／Expo 页面与既有原生预览边界，不修改 Rust ABI、原生模块、数据库或依赖版本。
+
+- 详情页改为单张预览卡：字款一次显示一个，多字款时预览区左右提供 44 点圆形切换按钮，并以横向字款标签直接选择。预览文字、预览字号与可变轴实时驱动原生预览；轴值按字款身份重置，按轴范围选择步进后吸附并收敛到 Rust 返回的上下限。
+- 「复制为」提供 CSS、CSS font-face、SwiftUI 与字族名，沿用现有剪贴板桥接；信息区因移动端映射未暴露版本、厂牌、格式等字段，本轮不展示。
+- 预览文字与字号文案复用 `preview.*`，可变轴与复制标题复用 `inspector.*`；新增 `mobile.previewSample`、`mobile.previousStyle`、`mobile.nextStyle` 三键。桌面检查器的 34 点按钮在移动端统一放大到 44 点触摸尺寸。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| JS 与文案 | PASS，`pnpm typecheck`；改动文件 ESLint 通过；`pnpm test` 45 项（新增 6 项覆盖轴步进、吸附与越界收敛、格式、默认值与无效轴、字款切换端点）；`pnpm i18n:validate` 781 字段。全量 `pnpm lint` 仍被既有 `SettingsSyncPage.tsx` 与 `ui.tsx` 的 `react-hooks/set-state-in-effect` 阻断，与本次无关，未改动这两个文件。 |
+| 双端导出 | PASS，`expo export --platform all`，iOS／Android Hermes 包生成。 |
+| 待验收 | 本次未启动模拟器或真机，预览区左右切换、可变轴连续拖动与两端原生绘制、浅深色及长字款名称仍待设备确认。 |
+
+## Font Detail UI Refinement
+
+2026-10-04：参照现有云端、设置和设置二级页优化字体详情，复用共享分组卡片、文字尺度、内容缩进和主题色。保留已有字款、可变轴、星标、收藏夹和复制操作，不新增依赖，不修改 Rust、数据库或同步行为。
+
+- 预览移除套叠底板和覆盖字形的左右按钮，字款导航置于预览下方；输入支持多行，复制操作统一为分组列表并提供短时成功反馈与读屏播报。常用可变轴复用共享中文名称，字款标签在初次布局、窗口宽度变化和切换后保持当前项可见。
+- 详情通过可选的 `wrapWidth` 使用 CoreText／Android 原生排版按实际字号换行，回传内容高度，长文字和大字号不再整体缩小。未提供该字段的字体卡片保留原有绘制方式；Android 详情同时修正负 ascent 度量下的垂直居中。
+- 滑块手柄留在轨道边界内，手势对象保持稳定，纵向拖动交由页面滚动；保留轻点轨道、步进、上下限和读屏增减动作。新增的共用文案进入根语言目录。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| JS、文案与格式 | PASS：`pnpm install --frozen-lockfile`、类型检查、改动文件 ESLint、45 项现有 JS 回归、786 字段 i18n 校验、双端 Hermes 导出和 `git diff --check`。全量 Lint 仍有既有 `SettingsSyncPage.tsx` 与 `ui.tsx` 的两处 `react-hooks/set-state-in-effect` 错误。 |
+| 原生构建 | PASS：iOS arm64 Simulator `FolioDev` Debug 编译链接；Android 原生模块 Kotlin 编译及 arm64 Debug 应用构建。保留数据更新现有 iPhone 与 Pixel 10 模拟器开发包。 |
+| iPhone 深色 | PASS（限定范围）：Host Grotesk 真实字款预览、上下字款与端点禁用、斜体及当前标签、读屏字号连续增减至 64 再恢复 36、多行文字修改和原生换行、可变轴与复制列表布局。 |
+| Android 浅色 | PASS（限定范围）：应用启动、既有字体库、键盘导航打开 Abhaya Libre 字体详情、真实字体按 36 字号换行、预览编辑和复制分组布局。 |
+| 待验收 | 坐标输入工具返回 `noWindowsAvailable`，本轮改用原生辅助功能与 Android 模拟器键盘完成上述检查；连续触摸拖动、软件键盘完整避让、复制短时反馈、长字族／字款名、双端完整浅深色矩阵、iPad 和真机仍待验证。未把模拟器检查写作完整触摸或设备验收。 |
+
+2026-10-04 修正：Android 详情预览首行基线缺少 `ascent`，换行预览整体上移并溢出顶部，恢复逐行 `ascent` 后重新居中。顶栏操作菜单改回与返回按钮一致的表层、按压色与拖动回弹；浅色沿用返回按钮的白色表层，`FolioPresetMenuView` 新增 `triggerIcon`／`triggerSurface` 桥接。原生菜单图标补齐 `dots`、`star`、`star-fill`、`folder-plus`，展开项不再回退到对号；WebDAV 地址入口保持原来看守图标与无表层行为。改动文件 ESLint、`pnpm typecheck`、45 项 `pnpm test` 与 `:folio-native:compileDebugKotlin` 通过；真机触摸与浅深色外观仍待确认。

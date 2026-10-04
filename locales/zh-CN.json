@@ -39,7 +39,8 @@
     "unknownError": "发生未知错误",
     "operationFailed": "无法完成操作",
     "indexOfTotal": "第 {{index}} 个，共 {{total}} 个",
-    "widthPixels": "{{width}} 像素"
+    "widthPixels": "{{width}} 像素",
+    "copied": "已复制"
   },
   "language": {
     "title": "界面语言",
@@ -70,7 +71,8 @@
     "position": "字体位置",
     "operations": "字体操作",
     "missingGlyphNote": "字体未包含输入的字符，显示可用字形",
-    "boxGlyphNote": "方框表示字体未包含的字符"
+    "boxGlyphNote": "方框表示字体未包含的字符",
+    "opticalSize": "光学字号"
   },
   "fontState": {
     "available": "仅在字体库",
@@ -321,7 +323,10 @@
     "collapsed": "已折叠",
     "showOrHide": "显示或隐藏检查器",
     "close": "关闭检查器",
-    "source": "来源"
+    "source": "来源",
+    "copyCSS": "CSS",
+    "copyCSSFontFace": "CSS @font-face",
+    "copySwiftUI": "SwiftUI"
   },
   "settings": {
     "category": "设置分类",
@@ -712,6 +717,9 @@
     "scopeSwitch": "切换字体库，当前{{scope}}",
     "collectionCount": "{{name}}，{{count}} 个成员",
     "previewLabel": "{{name}}，{{style}} 字体预览",
+    "previewSample": "Sphinx of black quartz, judge my vow.",
+    "previousStyle": "上一个字款",
+    "nextStyle": "下一个字款",
     "viewDetails": "查看详情",
     "viewDetailsFavorite": "查看 {{name}} 字体详情，已收藏",
     "editCollection": "编辑{{name}}",

@@ -56,6 +56,7 @@ struct FolioPreviewSelection: Record {
     @Field var text: String = ""
     @Field var fontSize: Double = 32
     @Field var centered: Bool = false
+    @Field var wrapWidth: Double = 0
 }
 
 enum FolioPaths {

@@ -19,7 +19,7 @@ final class FolioFontPreview: ExpoView {
     func renderSelection() {
         let value = selection
         let axes = value.axes.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ";")
-        let key = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)|\(axes)|\(value.text)|\(value.fontSize)|\(value.centered)"
+        let key = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)|\(axes)|\(value.text)|\(value.fontSize)|\(value.centered)|\(value.wrapWidth)"
         guard key != lastKey else { return }
         lastKey = key
         generation += 1
@@ -43,11 +43,24 @@ final class FolioFontPreview: ExpoView {
                             NSAttributedString.Key(kCTFontAttributeName as String): font,
                             NSAttributedString.Key(kCTForegroundColorAttributeName as String): UIColor.label.cgColor,
                         ]
-                        self.lines = paragraphs.map {
-                            CTLineCreateWithAttributedString(NSAttributedString(string: $0, attributes: attributes))
+                        self.lines = paragraphs.flatMap { paragraph -> [CTLine] in
+                            let text = NSAttributedString(string: paragraph, attributes: attributes)
+                            guard value.wrapWidth > 0, text.length > 0 else {
+                                return [CTLineCreateWithAttributedString(text)]
+                            }
+                            let typesetter = CTTypesetterCreateWithAttributedString(text)
+                            var wrapped: [CTLine] = []
+                            var offset = 0
+                            while offset < text.length {
+                                let count = max(1, CTTypesetterSuggestLineBreak(typesetter, offset, value.wrapWidth))
+                                wrapped.append(CTTypesetterCreateLine(typesetter, CFRange(location: offset, length: count)))
+                                offset += count
+                            }
+                            return wrapped
                         }
                     }
-                    self.onStatus(["status": supported ? "ready" : "missing-glyph"])
+                    self.onStatus(["status": supported ? "ready" : "missing-glyph",
+                                   "contentHeight": supported ? value.fontSize * (value.wrapWidth > 0 ? 1.3 : 1.05) * Double(self.lines.count) : 0])
                 case .failure:
                     self.onStatus(["status": "error"])
                 }
@@ -58,7 +71,8 @@ final class FolioFontPreview: ExpoView {
 
     private static func makeFont(_ value: FolioPreviewSelection) -> Result<CTFont, Error> {
         Result {
-            guard value.fontSize.isFinite, (8...160).contains(value.fontSize) else {
+            guard value.fontSize.isFinite, (8...160).contains(value.fontSize),
+                  value.wrapWidth.isFinite, value.wrapWidth >= 0 else {
                 throw NSError(domain: "FolioPreview", code: 4)
             }
             let url = try FolioPaths.managedFont(value.sourcePath)
@@ -90,10 +104,10 @@ final class FolioFontPreview: ExpoView {
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext(), !lines.isEmpty,
               bounds.width > 0, bounds.height > 0 else { return }
-        let lineHeight = CGFloat(selection.fontSize) * 1.05
+        let lineHeight = CGFloat(selection.fontSize) * (selection.wrapWidth > 0 ? 1.3 : 1.05)
         let height = lineHeight * CGFloat(lines.count)
         let widths = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }
-        let scale = selection.centered
+        let scale = selection.centered && selection.wrapWidth == 0
             ? min(1, bounds.width / max(1, widths.max() ?? 1), bounds.height / max(1, height)) : 1
         context.saveGState()
         context.textMatrix = .identity

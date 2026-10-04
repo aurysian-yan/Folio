@@ -20,10 +20,12 @@ export interface PreviewSelection {
   text: string;
   fontSize?: number;
   centered?: boolean;
+  wrapWidth?: number;
 }
 
 export interface PreviewStatus {
   status: 'ready' | 'missing-glyph' | 'error';
+  contentHeight?: number;
 }
 
 interface PreviewProps extends ViewProps {

@@ -9,6 +9,9 @@ import android.graphics.fonts.FontFamily
 import android.graphics.text.PositionedGlyphs
 import android.graphics.text.TextRunShaper
 import android.os.Build
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -28,7 +31,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
 
     fun renderSelection() {
         val value = selection
-        val key = "${value.sourcePath}|${value.faceIndex}|${value.revisionId}|${value.axes.toSortedMap()}|${value.text}|${value.fontSize}|${value.centered}"
+        val key = "${value.sourcePath}|${value.faceIndex}|${value.revisionId}|${value.axes.toSortedMap()}|${value.text}|${value.fontSize}|${value.centered}|${value.wrapWidth}"
         if (key == lastKey) return
         lastKey = key
         val token = generation.incrementAndGet()
@@ -46,7 +49,13 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
                 if (generation.get() != token) return@post
                 result.fold(onSuccess = { (shaped, supported) ->
                     lines = if (supported) shaped else emptyList()
-                    onStatus(mapOf("status" to if (supported) "ready" else "missing-glyph"))
+                    // 换行预览按真实字形度量取行高，避免 ascent 过大时溢出顶部。
+                    val density = context.resources.displayMetrics.density
+                    val base = value.fontSize.toFloat() * (if (value.wrapWidth > 0) 1.3f else 1.05f)
+                    val lineHeight = if (value.wrapWidth > 0 && supported && shaped.isNotEmpty())
+                        maxOf(base, shaped.maxOf { it.ascent + it.descent } / density) else base
+                    onStatus(mapOf("status" to if (supported) "ready" else "missing-glyph",
+                        "contentHeight" to if (supported) lineHeight.toDouble() * shaped.size else 0.0))
                 }, onFailure = { onStatus(mapOf("status" to "error")) })
                 invalidate()
             }
@@ -61,9 +70,11 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
         context.theme.resolveAttribute(android.R.attr.textColorPrimary, value, true)
         paint.color = if (value.resourceId != 0) context.getColor(value.resourceId) else value.data
         paint.textSize = selection.fontSize.toFloat() * resources.displayMetrics.density
-        val lineHeight = paint.textSize * 1.05f
+        val baseLineHeight = paint.textSize * (if (selection.wrapWidth > 0) 1.3f else 1.05f)
+        val lineHeight = if (selection.wrapWidth > 0 && lines.isNotEmpty())
+            maxOf(baseLineHeight, lines.maxOf { it.ascent + it.descent }) else baseLineHeight
         val textHeight = lineHeight * lines.size
-        val scale = if (selection.centered) minOf(1f,
+        val scale = if (selection.centered && selection.wrapWidth == 0.0) minOf(1f,
             width / maxOf(1f, lines.maxOf { it.advance }), height / maxOf(1f, textHeight)) else 1f
         canvas.save()
         canvas.scale(scale, scale)
@@ -99,6 +110,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
             require(source.path.startsWith(directory.path + File.separator) && source.canRead())
             require(value.faceIndex >= 0)
             require(value.fontSize.isFinite() && value.fontSize in 8.0..160.0)
+            require(value.wrapWidth.isFinite() && value.wrapWidth >= 0)
             require(value.axes.all { (tag, number) ->
                 tag.matches(Regex("[A-Za-z0-9 ]{4}")) && number.isFinite()
             })
@@ -107,11 +119,20 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
             if (settings.isNotEmpty()) builder.setFontVariationSettings(settings)
             val font = builder.build()
             val typeface = Typeface.CustomFallbackBuilder(FontFamily.Builder(font).build()).build()
-            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.typeface = typeface
                 textSize = value.fontSize.toFloat() * context.resources.displayMetrics.density
             }
-            val shaped = value.text.split('\n').map { paragraph ->
+            // 详情按真实字号换行，卡片仍使用原有单行缩放。
+            val paragraphs = if (value.wrapWidth > 0 && value.text.isNotEmpty()) {
+                val layout = StaticLayout.Builder.obtain(value.text, 0, value.text.length, textPaint,
+                    maxOf(1, (value.wrapWidth * context.resources.displayMetrics.density).toInt()))
+                    .setAlignment(Layout.Alignment.ALIGN_NORMAL).setIncludePad(false).build()
+                (0 until layout.lineCount).map { index ->
+                    value.text.substring(layout.getLineStart(index), layout.getLineEnd(index)).trimEnd('\n', '\r')
+                }
+            } else value.text.split('\n')
+            val shaped = paragraphs.map { paragraph ->
                 TextRunShaper.shapeTextRun(paragraph, 0, paragraph.length,
                     0, paragraph.length, 0f, 0f, false, textPaint)
             }

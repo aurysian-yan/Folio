@@ -121,6 +121,10 @@ export function PageHeader({ theme, scrollY, topInset, sourceId, active = true, 
   leading?: ReactNode; actions?: ReactNode; children?: ReactNode;
 } & ViewProps) {
   const compact = useTitleTransition(scrollY, true, reduceMotion);
+  const [leadingWidth, setLeadingWidth] = useState(44);
+  const [actionsWidth, setActionsWidth] = useState(44);
+  const horizontalInset = StyleSheet.flatten([styles.header, style]).paddingHorizontal ?? 26;
+  const titleInset = Number(horizontalInset) + Math.max(leadingWidth, actionsWidth) + 12;
   return <>
     {Platform.OS === 'android' && <Animated.View pointerEvents="none"
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
@@ -132,13 +136,13 @@ export function PageHeader({ theme, scrollY, topInset, sourceId, active = true, 
       style={[styles.header, { top: topInset,
         backgroundColor: Platform.OS === 'ios' && Number(Platform.Version) < 26 ? theme.background : undefined }, style]}>
       <HeaderScrollContext.Provider value={scrollY}>{children ?? <>
-        <View style={styles.leading}>{leading}</View>
-        <Animated.View accessibilityElementsHidden={!collapsed} importantForAccessibility={collapsed ? 'auto' : 'no-hide-descendants'}
-          style={[styles.compactTitle, { opacity: compact.opacity, transform: [{ scale: compact.scale }],
+        <View onLayout={({ nativeEvent }) => setLeadingWidth(nativeEvent.layout.width)} style={styles.leading}>{leading}</View>
+        <Animated.View pointerEvents="none" accessibilityElementsHidden={!collapsed} importantForAccessibility={collapsed ? 'auto' : 'no-hide-descendants'}
+          style={[styles.compactTitle, { left: titleInset, right: titleInset, opacity: compact.opacity, transform: [{ scale: compact.scale }],
             ...(Platform.OS === 'android' ? { filter: [{ blur: compact.blurRadius }] } : {}) }]}>
           <PageHeaderText title={title} theme={theme} compact scrollY={scrollY} reduceMotion={reduceMotion} style={styles.smallTitle} />
         </Animated.View>
-        <View style={styles.actions}>{actions}</View>
+        <View onLayout={({ nativeEvent }) => setActionsWidth(nativeEvent.layout.width)} style={styles.actions}>{actions}</View>
       </>}</HeaderScrollContext.Provider>
     </View>
   </>;
@@ -164,7 +168,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
   leading: { minWidth: 44 }, actions: { minWidth: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  compactTitle: { flex: 1, paddingVertical: 8 }, smallTitle: { fontSize: 18, lineHeight: 24, fontWeight: '600', textAlign: 'center' },
+  compactTitle: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center', paddingVertical: 8 }, smallTitle: { fontSize: 18, lineHeight: 24, fontWeight: '600', textAlign: 'center' },
   largeTitle: { fontSize: 34, lineHeight: 44, fontWeight: '600' },
   contentTitle: { paddingHorizontal: pageTitleInset, paddingVertical: 8, zIndex: 1 },
 });

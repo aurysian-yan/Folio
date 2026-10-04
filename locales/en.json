@@ -39,7 +39,8 @@
     "unknownError": "Something went wrong",
     "operationFailed": "Couldn't complete the action",
     "indexOfTotal": "{{index}} of {{total}}",
-    "widthPixels": "{{width}} px"
+    "widthPixels": "{{width}} px",
+    "copied": "Copied"
   },
   "language": {
     "title": "Language",
@@ -70,7 +71,8 @@
     "position": "Location",
     "operations": "Font Actions",
     "missingGlyphNote": "This font doesn't include the typed characters; showing available glyphs",
-    "boxGlyphNote": "Boxes mark characters the font doesn't include"
+    "boxGlyphNote": "Boxes mark characters the font doesn't include",
+    "opticalSize": "Optical Size"
   },
   "fontState": {
     "available": "In Library",
@@ -323,7 +325,10 @@
     "collapsed": "Collapsed",
     "showOrHide": "Show or hide the inspector",
     "close": "Close Inspector",
-    "source": "Source"
+    "source": "Source",
+    "copyCSS": "CSS",
+    "copyCSSFontFace": "CSS @font-face",
+    "copySwiftUI": "SwiftUI"
   },
   "settings": {
     "category": "Settings Section",
@@ -715,6 +720,9 @@
     "scopeSwitch": "Switch library, currently {{scope}}",
     "collectionCount": "{{name}}, {{count}} members",
     "previewLabel": "{{name}}, {{style}} font preview",
+    "previewSample": "Sphinx of black quartz, judge my vow.",
+    "previousStyle": "Previous style",
+    "nextStyle": "Next style",
     "viewDetails": "View details",
     "viewDetailsFavorite": "View details for {{name}}, favorited",
     "editCollection": "Edit {{name}}",
