@@ -13,6 +13,7 @@ export const themes = {
     dark: false,
     background: systemBackground ?? '#FFFFFF', onAccent: '#FFFFFF', surface: '#EFEFEF', raised: '#FFFFFF', label: '#1A1A1A',
     secondary: '#727272', muted: '#999999', border: '#E4E4E4', accent: '#F06835',
+    backButtonBorder: '#E4E4E4',
     selection: 'rgba(240, 104, 53, 0.2)', tab: '#F7F7F7', activeTab: '#E6E6E6',
     switchTrack: '#D8D8DC', switchThumb: '#FFFFFF',
     buttonPressed: '#FFFFFF', buttonPressedLabel: '#1A1A1A',
@@ -23,6 +24,7 @@ export const themes = {
     dark: true,
     background: systemBackground ?? '#121212', onAccent: '#121212', surface: '#242424', raised: '#2C2C2E', label: '#F2F2F2',
     secondary: '#AEAEAE', muted: '#8E8E93', border: '#38383A', accent: '#FF8758',
+    backButtonBorder: '#38383A',
     selection: 'rgba(255, 135, 88, 0.25)', tab: '#202020', activeTab: '#38383A',
     switchTrack: '#606064', switchThumb: '#FFFFFF',
     buttonPressed: '#38383A', buttonPressedLabel: '#F2F2F2',
@@ -32,6 +34,20 @@ export const themes = {
 };
 
 export type Theme = typeof themes.light;
+
+// 安卓浅色使用灰底白卡，深色使用黑底灰卡。
+const androidColors = {
+  light: {
+    background: '#F3F3F3', surface: '#FFFFFF', raised: '#EDEDED', label: '#000000',
+    secondary: '#666666', backButtonBorder: '#CCCCCC',
+    listCardSurface: '#FFFFFF', listCardBorder: 'rgba(0, 0, 0, 0.06)',
+  },
+  dark: {
+    background: '#000000', surface: '#242424', raised: '#303030', label: '#F4F4F4',
+    secondary: '#929292', muted: '#8C8C8C', border: '#363636',
+    listCardSurface: '#242424', listCardBorder: 'rgba(255, 255, 255, 0.08)',
+  },
+};
 
 // 外观页可选主题色，浅深色各自使用对应色值。
 export const accentPresets: Record<AccentId, { light: string; dark: string }> = {
@@ -46,11 +62,12 @@ function withAlpha(hex: string, alpha: number) {
   return `rgba(${(value >> 16) & 0xff}, ${(value >> 8) & 0xff}, ${value & 0xff}, ${alpha})`;
 }
 
-// 按浅深色与主题色派生界面主题，其余语义色沿用设计稿。
+// 按平台、浅深色与主题色派生界面语义色。
 export function createTheme(dark: boolean, accent: AccentId): Theme {
   const base = dark ? themes.dark : themes.light;
   const accentValue = accentPresets[accent][dark ? 'dark' : 'light'];
-  return { ...base, accent: accentValue, selection: withAlpha(accentValue, dark ? 0.25 : 0.2) };
+  return { ...base, ...(Platform.OS === 'android' ? androidColors[dark ? 'dark' : 'light'] : {}),
+    accent: accentValue, selection: withAlpha(accentValue, dark ? 0.25 : 0.2) };
 }
 
 export function IconButton({ label, onPress, children, theme, disabled, busy, selected, style, systemImage, primary = false }: {
@@ -73,6 +90,7 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
   const [dragging, setDragging] = useState(false);
   const draggingRef = useRef(false);
   const draggable = Platform.OS === 'android' && systemImage === 'chevron.left';
+  const lightBackButton = draggable && !theme.dark;
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
     let mounted = true;
@@ -159,8 +177,9 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
         disabled={disabled} onPress={onPress} onPressIn={() => animatePress(true)}
         onPressOut={() => { if (!draggingRef.current) animatePress(false); }} hitSlop={8}
         style={({ pressed }) => [styles.iconButton, {
-          backgroundColor: (pressed || activeDrag) && !disabled ? theme.buttonPressed : primary ? theme.accent : theme.tab,
-          borderColor: primary ? theme.accent : theme.border,
+          backgroundColor: (pressed || activeDrag) && !disabled ? theme.buttonPressed
+            : primary ? theme.accent : lightBackButton ? theme.surface : theme.tab,
+          borderColor: primary ? theme.accent : lightBackButton ? theme.backButtonBorder : theme.border,
           opacity: disabled ? 0.4 : 1,
         }, style, { boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 32,
           color: headerShadowColor(theme, shadowProgress, (pressed || activeDrag) && !disabled) }] }]}>

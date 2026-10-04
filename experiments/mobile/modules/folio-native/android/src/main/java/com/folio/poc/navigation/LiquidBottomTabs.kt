@@ -226,6 +226,7 @@ fun LiquidBottomTabs(
                     shape = { ContinuousCapsule() },
                     effects = panelEffects,
                     highlight = null,
+                    shadow = { if (preserveCapsuleOnPress) null else Shadow.Default },
                     layerBlock = {
                         val progress = if (motionEnabled) dampedDragAnimation.pressProgress else 0f
                         val scale = if (preserveCapsuleOnPress) 1f else lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)

@@ -21,7 +21,7 @@ const PresetMenu = requireNativeView<NativePresetMenuProps>('FolioNavigation', '
 // 安卓地址菜单复用主页视图菜单的原生玻璃弹层。
 export function WebDAVPresetMenu({ theme, serverUrl, disabled, sourceId = '', onChange }: WebDAVPresetMenuProps) {
   const { t } = useTranslation();
-  const { label, secondary, muted, accent, tab, border, raised, buttonPressed, buttonPressedLabel } = theme;
+  const { label, secondary, muted, accent, tab, border, surface: raised, buttonPressed, buttonPressedLabel } = theme;
   return <PresetMenu sourceId={sourceId} selectedId={matchingWebdavPreset(serverUrl)} disabled={disabled} dark={theme.dark}
     colors={{ label, secondary, muted, accent, tab, border, raised, buttonPressed, buttonPressedLabel }}
     items={webdavPresets.map((preset) => ({ id: preset.id, label: t(preset.label), icon: '' }))}
