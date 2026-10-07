@@ -222,7 +222,8 @@
     "summary": "{{families}} 个字族 · {{variable}} 个可变字族 · {{recent}} 个最近访问",
     "summaryDamaged": "{{damaged}} 个损坏字体 · {{variable}} 个可变字族 · {{recent}} 个最近访问",
     "summaryConflict": "{{revisions}} 个字族有多个版本 · {{conflicts}} 个字族有元数据冲突",
-    "availableNow": "现有 {{count}} 个字族，随时可用"
+    "availableNow": "现有 {{count}} 个字族，随时可用",
+    "localSummary": "本地 {{families}} 个字族 · {{variable}} 个可变字族 · {{recent}} 个最近访问"
   },
   "filters": {
     "title": "筛选",
@@ -533,7 +534,12 @@
       "collection_name": "收藏夹名称重复",
       "smart_folder": "智慧收藏夹内容冲突",
       "smart_folder_name": "智慧收藏夹名称重复"
-    }
+    },
+    "localUnsynced": "本地有 {{count}} 个字体未同步",
+    "localAhead": "{{connection}} 云端落后本地",
+    "remoteAhead": "{{connection}} 云端领先本地",
+    "bothUnsynced": "{{connection}} · {{uploads}} 个本地字体未同步 · {{downloads}} 个云端字体可下载",
+    "cloudOnlySummary": "{{connection}} · {{count}} 个字体仅在云端"
   },
   "online": {
     "title": "在线字体",

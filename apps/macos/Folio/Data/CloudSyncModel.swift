@@ -14,6 +14,8 @@ final class CloudSyncModel {
     private(set) var conflicts: [SyncConflictDto] = []
     private(set) var connectionAlias: String?
     private(set) var libraryGeneration = 0
+    private(set) var stateLoaded = false
+    private(set) var stateReadError = false
     var message: String?
     var errorMessage: String?
 
@@ -36,7 +38,9 @@ final class CloudSyncModel {
     var connectionName: String {
         if let connectionAlias, !connectionAlias.isEmpty { return connectionAlias }
         guard let profile, let host = URL(string: profile.serverUrl)?.host else { return "WebDAV" }
-        return host.localizedCaseInsensitiveContains("123pan") ? "123PAN" : host
+        if host.range(of: "(^|\\.)123pan\\.(com|cn)$", options: [.regularExpression, .caseInsensitive]) != nil { return "123PAN" }
+        if host.range(of: "(^|\\.)jianguoyun\\.com$", options: [.regularExpression, .caseInsensitive]) != nil { return L.text("macos.providerJianguoyun") }
+        return host
     }
 
     func renameConnection(_ name: String) {
@@ -74,6 +78,8 @@ final class CloudSyncModel {
             monitorNetwork()
             requestAutomaticSync()
         } catch {
+            stateLoaded = true
+            stateReadError = true
             record(error)
         }
     }
@@ -319,7 +325,7 @@ final class CloudSyncModel {
     private func observeRun() async {
         while !Task.isCancelled {
             do { status = try engine?.status() }
-            catch { record(error) }
+            catch { stateReadError = true; record(error) }
             guard status?.isRunning == true else {
                 reloadState()
                 libraryGeneration += 1
@@ -343,7 +349,11 @@ final class CloudSyncModel {
             status = try engine.status()
             fonts = try engine.cloudFonts()
             conflicts = try engine.conflicts()
+            stateLoaded = true
+            stateReadError = false
         } catch {
+            stateLoaded = true
+            stateReadError = true
             record(error)
         }
     }

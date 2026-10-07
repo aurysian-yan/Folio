@@ -66,6 +66,7 @@ export interface LibrarySnapshotDto {
   faceCount: number;
   variableFamilyCount: number;
   recentCount: number;
+  syncSummary?: import("../../../shared/library-hero").FontSyncSummary | null;
   roots: string[];
   fontStateCounts: Record<string, number>;
   userFontGroups: {

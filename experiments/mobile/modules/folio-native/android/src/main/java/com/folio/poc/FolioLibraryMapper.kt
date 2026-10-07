@@ -50,6 +50,10 @@ internal object FolioLibraryMapper {
     fun snapshot(value: LibrarySnapshotDto): Map<String, Any> = mapOf(
         "familyCount" to value.familyCount.toDouble(), "faceCount" to value.faceCount.toDouble(),
         "variableFamilyCount" to value.variableFamilyCount.toDouble(), "recentCount" to value.recentCount.toDouble(),
+        "syncSummary" to mapOf("syncedCount" to value.syncSummary.syncedCount.toDouble(),
+            "cloudOnlyCount" to value.syncSummary.cloudOnlyCount.toDouble(), "localOnlyFingerprints" to value.syncSummary.localOnlyFingerprints),
+        "health" to mapOf("damagedFiles" to value.health.damagedFiles.toDouble(), "multipleRevisions" to value.health.multipleRevisions.toDouble(),
+            "metadataConflicts" to value.health.metadataConflicts.toDouble()),
         "damagedCount" to value.health.damagedFiles.toDouble(), "collections" to value.collections.map { collection ->
             mapOf("id" to collection.id.value, "name" to collection.name, "icon" to collection.icon,
                 "color" to collection.color, "memberCount" to collection.memberCount.toDouble())

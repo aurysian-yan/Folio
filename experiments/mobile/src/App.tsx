@@ -38,6 +38,8 @@ import { SettingsImportPage } from './SettingsImportPage';
 import { SettingsScreen, type SettingsPageId } from './SettingsScreen';
 import { SettingsSyncPage } from './SettingsSyncPage';
 import { CloudScreen } from './CloudScreen';
+import { LibraryHero } from './LibraryHero';
+import { createLibraryHero, type HeroAction } from './library-hero';
 import { useCloudSync, type CloudSyncController } from './useCloudSync';
 import { SettingsStoragePage } from './SettingsStoragePage';
 import { TabScenes } from './TabScenes';
@@ -50,7 +52,7 @@ const LibraryList = Animated.FlatList<FontFamily>;
 
 function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, searchPage = false, target, destination = 'local',
   snapshot, libraryVersion, initialError, defaultMode, preferencesReady, showImportResults, syncBlocked,
-  onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily }: {
+  onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily, syncController, onHeroAction }: {
   theme: Theme;
   bottomInset: number;
   active: boolean;
@@ -66,6 +68,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   preferencesReady: boolean;
   showImportResults: boolean;
   syncBlocked: boolean;
+  syncController: CloudSyncController;
+  onHeroAction: (action: HeroAction) => void;
   onSnapshotChange: (snapshot: LibrarySnapshot) => void;
   onRetryInitialize: () => void;
   onTargetChange: (target: LibraryTarget) => void;
@@ -285,15 +289,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         ListHeaderComponent={
           <View>
             {showsHero && (
-              <View style={styles.hero} onLayout={({ nativeEvent }) => setHeroHeight(nativeEvent.layout.height)}>
-                <Image source={require('../assets/design/lasso.svg')} style={styles.lasso} contentFit="contain" />
-                <Text accessibilityRole="header" style={[styles.heroTitle, { color: theme.label }]}>
-                  {snapshot ? t('mobile.heroSubtitle', { count: snapshot.familyCount }) : t('mobile.heroTitle')}
-                </Text>
-                {snapshot && <Text style={[styles.heroDetail, { color: theme.secondary }]}>
-                  {t('library.summaryDamaged', { damaged: snapshot.damagedCount, variable: snapshot.variableFamilyCount, recent: snapshot.recentCount })}
-                </Text>}
-              </View>
+              <LibraryHero theme={theme} presentation={createLibraryHero(snapshot, syncController.state, syncController.readError)}
+                onAction={onHeroAction} onLayout={({ nativeEvent }) => setHeroHeight(nativeEvent.layout.height)} />
             )}
             <View style={styles.libraryTools}>
               <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.scopeSwitch', { scope: scopeTitle })}
@@ -561,7 +558,11 @@ function MobileApp() {
   const settingsContent = <SettingsScreen theme={theme} sourceId={sourceId} controller={syncController}
     active={(usesNativeControls ? nativeDestination === 'settings' : tab === 'settings') && !settingsPageVisible}
     onOpenPage={openSettingsPage} />;
-  const searchContent = <LibraryScreen syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
+  const onHeroAction = (action: HeroAction) => {
+    if (action === 'cloudSettings') openSettingsPage('sync');
+    else if (action === 'cloudFonts') navigate('cloud');
+  };
+  const searchContent = <LibraryScreen syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
     sidebar={sidebar} searchPage destination="search" target={searchTarget} snapshot={snapshot} libraryVersion={libraryVersion}
     initialError={initialError} defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady}
     showImportResults={preferences.importShowResults} onSnapshotChange={applySnapshot} onOpenFamily={(family) => openFamily(family, searchTarget)}
@@ -572,7 +573,7 @@ function MobileApp() {
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
         settings={settingsContent} search={searchContent} cloud={cloudContent} onDestinationChange={navigate}>
-        <LibraryScreen syncBlocked={syncController.blocked} theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
+        <LibraryScreen syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
           target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
           defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
           onTargetChange={selectTarget} onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
@@ -586,7 +587,7 @@ function MobileApp() {
       paddingLeft: inset.left, paddingRight: inset.right }]}>
       <StatusBar style="auto" />
       <TabScenes selectedId={tab} scenes={{
-        local: <LibraryScreen syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
+        local: <LibraryScreen syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
             target={libraryTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
             defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
             onSnapshotChange={applySnapshot} onTargetChange={setLibraryTarget}
@@ -635,9 +636,6 @@ const styles = StyleSheet.create({
   search: { flex: 1, paddingHorizontal: 12, minHeight: 44, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchInput: { flex: 1, minHeight: 44, fontSize: 15, paddingVertical: 8 },
   content: { paddingHorizontal: 10, gap: 12 }, columns: { gap: 12 }, listItem: { width: '100%' },
-  hero: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, gap: 8 }, lasso: { width: 32, height: 32 },
-  heroTitle: { fontSize: 30, fontWeight: '600', lineHeight: 36 },
-  heroDetail: { fontSize: 16, fontWeight: '500', lineHeight: 22 },
   searchSummary: { fontSize: 14, paddingHorizontal: 12, paddingVertical: 12 },
   notice: { marginVertical: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
   noticeText: { flex: 1, fontSize: 14, lineHeight: 20 }, retry: { minHeight: 44, justifyContent: 'center' },

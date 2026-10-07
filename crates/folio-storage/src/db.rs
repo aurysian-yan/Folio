@@ -184,6 +184,47 @@ impl FolioDatabase {
         Ok(rebuild_catalog(faces))
     }
 
+    /// 返回指定目录内仍存在的有效字体指纹，不解码字体元数据。
+    pub fn local_font_fingerprints(
+        &self,
+        directory: &Path,
+    ) -> Result<std::collections::BTreeSet<String>, StorageError> {
+        // 根目录缓存使用真实路径，统一处理 iOS 沙盒与系统目录别名。
+        let directory = match directory.canonicalize() {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Default::default())
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let mut statement = self.conn.prepare(
+            "SELECT path_platform,path_bytes,display_path,content_hash FROM source_files WHERE status='parsed'",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Vec<u8>>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Vec<u8>>(3)?,
+            ))
+        })?;
+        let mut fingerprints = std::collections::BTreeSet::new();
+        for row in rows {
+            let (platform, bytes, display, hash) = row?;
+            let path = crate::path_codec::decode_path(
+                crate::path_codec::PathPlatform::parse(&platform)?,
+                &bytes,
+                &display,
+            )?
+            .path;
+            if path.starts_with(&directory) && path.is_file() {
+                let digest = crate::root::id_bytes::<32>(&hash, "source_files.content_hash")?;
+                fingerprints.insert(folio_core::ContentFingerprint::from_digest(digest).to_hex());
+            }
+        }
+        Ok(fingerprints)
+    }
+
     /// 刷新全部库根目录。
     pub fn refresh(&mut self, mode: RefreshMode) -> Result<RefreshResult, StorageError> {
         let roots = root::list_roots(&self.conn)?;

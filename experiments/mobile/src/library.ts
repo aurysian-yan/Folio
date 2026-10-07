@@ -76,6 +76,8 @@ export interface LibrarySnapshot {
   variableFamilyCount: number;
   recentCount: number;
   damagedCount: number;
+  syncSummary?: import('../../../shared/library-hero.ts').FontSyncSummary;
+  health?: { damagedFiles: number; multipleRevisions: number; metadataConflicts: number };
   collections: FontCollection[];
   smartFolders: SmartFolder[];
 }

@@ -224,7 +224,8 @@
     "summaryDamaged": "{{damaged}} damaged fonts · {{variable}} variable · {{recent}} recent",
     "summaryConflict": "{{revisions}} families with multiple versions · {{conflicts}} families with metadata conflicts",
     "availableNow_one": "{{count}} family ready to use",
-    "availableNow": "{{count}} families ready to use"
+    "availableNow": "{{count}} families ready to use",
+    "localSummary": "Local: {{families}} families · {{variable}} variable · {{recent}} recently viewed"
   },
   "filters": {
     "title": "Filters",
@@ -403,16 +404,21 @@
     "userFontsFolder": "User Fonts · {{name}}"
   },
   "health": {
-    "damagedCount": "Found {{count}} damaged fonts",
     "conflictCount": "Found {{count}} font conflicts",
-    "conflictCountShort": "Found {{count}} families with conflicts",
     "viewScanIssues": "View scan issues in Font Health",
     "viewFontHealth": "View Font Health",
     "viewConflicts": "View Font Conflicts",
     "viewVersions": "View Font Versions",
-    "revisions": "{{count}} version conflicts",
-    "names": "{{count}} naming conflicts",
-    "otherConflicts": "{{count}} other font conflicts"
+    "damagedCount_one": "Found {{count}} damaged font",
+    "damagedCount_other": "Found {{count}} damaged fonts",
+    "conflictCountShort_one": "Found {{count}} family with conflicts",
+    "conflictCountShort_other": "Found {{count}} families with conflicts",
+    "revisions_one": "{{count}} version conflict",
+    "revisions_other": "{{count}} version conflicts",
+    "names_one": "{{count}} naming conflict",
+    "names_other": "{{count}} naming conflicts",
+    "otherConflicts_one": "{{count}} other font conflict",
+    "otherConflicts_other": "{{count}} other font conflicts"
   },
   "cloud": {
     "library": "Cloud Library",
@@ -473,8 +479,6 @@
     "uploadedFiles": "{{count}} to upload",
     "downloadedFiles": "{{count}} to download",
     "pendingUploads": "{{count}} local fonts to upload",
-    "pendingDownloads": "{{count}} cloud fonts to download",
-    "cloudOnlyAvailable": "{{count}} fonts available to download from the cloud",
     "allSynced": "Local and cloud are up to date",
     "syncingCloud": "{{connection}} · syncing {{percent}}%",
     "readingCloud": "{{connection}} · reading…",
@@ -483,7 +487,6 @@
     "conflictsPending": "{{connection}} · {{count}} sync conflicts to resolve",
     "conflictsPendingShort": "{{count}} sync conflicts to resolve",
     "fontUsage": "Using {{size}}",
-    "conflictCount": "Found {{count}} font sync conflicts",
     "handleConflicts": "Resolve Sync Conflicts",
     "conflicts": "Sync Conflicts",
     "keepBoth": "Keep Both",
@@ -536,7 +539,19 @@
       "collection_name": "Duplicate collection name",
       "smart_folder": "Smart collection conflict",
       "smart_folder_name": "Duplicate smart collection name"
-    }
+    },
+    "localUnsynced_one": "{{count}} local font is not synced",
+    "localUnsynced_other": "{{count}} local fonts are not synced",
+    "localAhead": "{{connection}} is behind this device",
+    "remoteAhead": "{{connection}} has fonts to download",
+    "bothUnsynced": "{{connection}} · {{uploads}} local fonts not synced · {{downloads}} cloud fonts available",
+    "cloudOnlySummary": "{{connection}} · Cloud-only fonts: {{count}}",
+    "conflictCount_one": "Found {{count}} font sync conflict",
+    "conflictCount_other": "Found {{count}} font sync conflicts",
+    "pendingDownloads_one": "{{count}} cloud font to download",
+    "pendingDownloads_other": "{{count}} cloud fonts to download",
+    "cloudOnlyAvailable_one": "{{count}} font available to download from the cloud",
+    "cloudOnlyAvailable_other": "{{count}} fonts available to download from the cloud"
   },
   "online": {
     "title": "Online Fonts",

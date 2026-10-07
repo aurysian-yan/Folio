@@ -347,6 +347,7 @@ actor FolioRepository {
             faceCount: dto.faceCount,
             variableFamilyCount: dto.variableFamilyCount,
             recentCount: dto.recentCount,
+            syncSummary: dto.syncSummary,
             collections: dto.collections.map {
                 CollectionSummary(
                     id: CollectionID(rawValue: $0.id.value),

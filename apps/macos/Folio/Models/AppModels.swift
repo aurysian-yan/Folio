@@ -481,6 +481,7 @@ struct LibrarySnapshot: Hashable, Sendable {
     let faceCount: UInt64
     let variableFamilyCount: UInt64
     let recentCount: UInt64
+    var syncSummary = FontSyncSummaryDto(syncedCount: 0, cloudOnlyCount: 0, localOnlyFingerprints: [])
     let collections: [CollectionSummary]
     let smartFolders: [SmartFolderSummary]
     let roots: [RootSummary]
@@ -491,6 +492,7 @@ struct LibrarySnapshot: Hashable, Sendable {
         faceCount: 0,
         variableFamilyCount: 0,
         recentCount: 0,
+        syncSummary: .init(syncedCount: 0, cloudOnlyCount: 0, localOnlyFingerprints: []),
         collections: [],
         smartFolders: [],
         roots: [],
@@ -601,6 +603,22 @@ struct HeroPresentation: Hashable, Identifiable, Sendable {
     let title: String
     let subtitle: String
     let detail: String?
+    var action: HeroAction? = nil
+    var sync: HeroSyncPresentation = .init(state: .disconnected, text: L.text("cloud.notConnected"), action: .cloudSettings)
     var id: String { kind.rawValue }
     var symbol: String { kind.symbol }
+}
+
+enum HeroAction: Hashable, Sendable {
+    case fontHealth, cloudFonts, cloudSettings
+}
+
+enum HeroSyncState: Hashable, Sendable {
+    case disconnected, checking, connected, synced, pending, running, error
+}
+
+struct HeroSyncPresentation: Hashable, Sendable {
+    let state: HeroSyncState
+    let text: String
+    let action: HeroAction?
 }

@@ -2399,6 +2399,63 @@ public func FfiConverterTypeFontSourceDto_lower(_ value: FontSourceDto) -> RustB
 }
 
 
+public struct FontSyncSummaryDto: Equatable, Hashable {
+    public var syncedCount: UInt64
+    public var cloudOnlyCount: UInt64
+    public var localOnlyFingerprints: [String]
+
+    // 提供跨模块使用的成员初始化器。
+    public init(syncedCount: UInt64, cloudOnlyCount: UInt64, localOnlyFingerprints: [String]) {
+        self.syncedCount = syncedCount
+        self.cloudOnlyCount = cloudOnlyCount
+        self.localOnlyFingerprints = localOnlyFingerprints
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FontSyncSummaryDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFontSyncSummaryDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FontSyncSummaryDto {
+        return
+            try FontSyncSummaryDto(
+                syncedCount: FfiConverterUInt64.read(from: &buf),
+                cloudOnlyCount: FfiConverterUInt64.read(from: &buf),
+                localOnlyFingerprints: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FontSyncSummaryDto, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.syncedCount, into: &buf)
+        FfiConverterUInt64.write(value.cloudOnlyCount, into: &buf)
+        FfiConverterSequenceString.write(value.localOnlyFingerprints, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontSyncSummaryDto_lift(_ buf: RustBuffer) throws -> FontSyncSummaryDto {
+    return try FfiConverterTypeFontSyncSummaryDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontSyncSummaryDto_lower(_ value: FontSyncSummaryDto) -> RustBuffer {
+    return FfiConverterTypeFontSyncSummaryDto.lower(value)
+}
+
+
 public struct HealthSummaryDto: Equatable, Hashable {
     public var damagedFiles: UInt64
     public var duplicateSources: UInt64
@@ -2718,6 +2775,7 @@ public struct LibrarySnapshotDto: Equatable, Hashable {
     public var faceCount: UInt64
     public var variableFamilyCount: UInt64
     public var recentCount: UInt64
+    public var syncSummary: FontSyncSummaryDto
     public var collections: [CollectionDto]
     public var smartFolders: [SmartFolderSummaryDto]
     public var roots: [RootDto]
@@ -2725,11 +2783,12 @@ public struct LibrarySnapshotDto: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(familyCount: UInt64, faceCount: UInt64, variableFamilyCount: UInt64, recentCount: UInt64, collections: [CollectionDto], smartFolders: [SmartFolderSummaryDto], roots: [RootDto], health: HealthSummaryDto) {
+    public init(familyCount: UInt64, faceCount: UInt64, variableFamilyCount: UInt64, recentCount: UInt64, syncSummary: FontSyncSummaryDto, collections: [CollectionDto], smartFolders: [SmartFolderSummaryDto], roots: [RootDto], health: HealthSummaryDto) {
         self.familyCount = familyCount
         self.faceCount = faceCount
         self.variableFamilyCount = variableFamilyCount
         self.recentCount = recentCount
+        self.syncSummary = syncSummary
         self.collections = collections
         self.smartFolders = smartFolders
         self.roots = roots
@@ -2756,6 +2815,7 @@ public struct FfiConverterTypeLibrarySnapshotDto: FfiConverterRustBuffer {
                 faceCount: FfiConverterUInt64.read(from: &buf),
                 variableFamilyCount: FfiConverterUInt64.read(from: &buf),
                 recentCount: FfiConverterUInt64.read(from: &buf),
+                syncSummary: FfiConverterTypeFontSyncSummaryDto.read(from: &buf),
                 collections: FfiConverterSequenceTypeCollectionDto.read(from: &buf),
                 smartFolders: FfiConverterSequenceTypeSmartFolderSummaryDto.read(from: &buf),
                 roots: FfiConverterSequenceTypeRootDto.read(from: &buf),
@@ -2768,6 +2828,7 @@ public struct FfiConverterTypeLibrarySnapshotDto: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.faceCount, into: &buf)
         FfiConverterUInt64.write(value.variableFamilyCount, into: &buf)
         FfiConverterUInt64.write(value.recentCount, into: &buf)
+        FfiConverterTypeFontSyncSummaryDto.write(value.syncSummary, into: &buf)
         FfiConverterSequenceTypeCollectionDto.write(value.collections, into: &buf)
         FfiConverterSequenceTypeSmartFolderSummaryDto.write(value.smartFolders, into: &buf)
         FfiConverterSequenceTypeRootDto.write(value.roots, into: &buf)

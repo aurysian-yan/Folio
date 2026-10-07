@@ -74,7 +74,7 @@ struct CloudLibraryView: View {
                                 .font(.caption)
                                 .foregroundStyle(syncItemTint(item))
                             } else {
-                                Text(font.cloudOnly ? L.text("cloud.cloudOnly") : L.text("cloud.availableLocally"))
+                                Text(font.cloudOnly ? L.text("cloud.cloudOnly") : L.text("cloud.syncedTo"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

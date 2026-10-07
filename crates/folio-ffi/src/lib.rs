@@ -265,10 +265,18 @@ pub struct LibrarySnapshotDto {
     pub face_count: u64,
     pub variable_family_count: u64,
     pub recent_count: u64,
+    pub sync_summary: FontSyncSummaryDto,
     pub collections: Vec<CollectionDto>,
     pub smart_folders: Vec<SmartFolderSummaryDto>,
     pub roots: Vec<RootDto>,
     pub health: HealthSummaryDto,
+}
+
+#[derive(Clone, Debug, Default, uniffi::Record)]
+pub struct FontSyncSummaryDto {
+    pub synced_count: u64,
+    pub cloud_only_count: u64,
+    pub local_only_fingerprints: Vec<String>,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -1747,6 +1755,14 @@ fn snapshot(state: &mut EngineState) -> Result<LibrarySnapshotDto, FolioFfiError
         .map(root_dto)
         .collect();
     let health = state.index.health();
+    let managed_directory = state
+        .database
+        .path()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("ManagedFonts");
+    let sync_summary = folio_sync::font_sync_summary(&state.database, &managed_directory)
+        .map_err(FolioFfiError::operation)?;
     Ok(LibrarySnapshotDto {
         family_count: state.catalog.family_count() as u64,
         face_count: state.catalog.face_count() as u64,
@@ -1762,6 +1778,11 @@ fn snapshot(state: &mut EngineState) -> Result<LibrarySnapshotDto, FolioFfiError
             })
             .count() as u64,
         recent_count: durable.recent.len() as u64,
+        sync_summary: FontSyncSummaryDto {
+            synced_count: sync_summary.synced_count,
+            cloud_only_count: sync_summary.cloud_only_count,
+            local_only_fingerprints: sync_summary.local_only_fingerprints,
+        },
         collections,
         smart_folders,
         roots,

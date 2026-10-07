@@ -3,11 +3,12 @@ import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import { LibraryHero } from "../components/LibraryHero";
 import { createLibraryHero, type HeroAction, type HeroInput } from "../library-hero";
+import i18n from "../i18n";
 import "../style.css";
 import "./hero-preview.css";
 
 const base: HeroInput = {
-  snapshot: { familyCount: 670, faceCount: 1200, variableFamilyCount: 42, recentCount: 12, roots: [], fontStateCounts: {}, userFontGroups: [], health: { damagedFiles: 0, duplicateSources: 0, multipleRevisions: 0, metadataConflicts: 0 } },
+  snapshot: { familyCount: 670, faceCount: 1200, variableFamilyCount: 42, recentCount: 12, syncSummary: { syncedCount: 670, cloudOnlyCount: 0, localOnlyFingerprints: [] }, roots: [], fontStateCounts: {}, userFontGroups: [], health: { damagedFiles: 0, duplicateSources: 0, multipleRevisions: 0, metadataConflicts: 0 } },
   profile: { serverUrl: "https://webdav.123pan.com", remoteDirectory: "Folio", username: "", automatic: true },
   status: { configured: true, running: false, phase: "同步完成", stage: "已同步", percent: 100, stageCompleted: 0, stageTotal: 0, uploadedFiles: 0, downloadedFiles: 0, publishedEvents: 0, items: [], error: null },
   fonts: [], conflicts: [], cloudLoaded: true,
@@ -28,6 +29,7 @@ export function HeroPreview() {
   const [action, setAction] = useState<HeroAction | null>(null);
   const [syncState, setSyncState] = useState("synced");
   const [width, setWidth] = useState("946");
+  const [language, setLanguage] = useState(i18n.language);
   const showAction = (value: HeroAction) => setAction(value);
   return <main className="hero-preview">
     <nav className="hero-preview-controls" aria-label="预览选项">
@@ -36,6 +38,7 @@ export function HeroPreview() {
         <option value="synced">已同步</option><option value="disconnected">未连接</option><option value="running">同步中</option><option value="error">同步失败</option><option value="readError">读取失败</option>
       </select></label>
       <label>组件宽度 <select value={width} onChange={(event) => setWidth(event.target.value)}><option value="946">946px</option><option value="480">480px</option><option value="308">308px</option></select></label>
+      <label>界面语言 <select value={language} onChange={(event) => { setLanguage(event.target.value); void i18n.changeLanguage(event.target.value); }}><option value="zh-CN">中文</option><option value="en">English</option></select></label>
       {action && <span role="status">已选择：{actionNames[action]}</span>}
     </nav>
     {cases.map(([name, input]) => {

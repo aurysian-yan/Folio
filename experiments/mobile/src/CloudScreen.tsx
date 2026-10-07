@@ -135,7 +135,7 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
       const action = t(progress?.action === 'upload' ? 'cloud.upload' : 'cloud.download');
       return <CloudFontCard font={item} theme={theme} disabled={disabled} status={progress ? t(progress.status === 'done' ? 'cloud.completed'
           : progress.status === 'running' ? 'cloud.running' : 'cloud.waiting', { action })
-          : t(item.deleted ? 'cloud.recentlyDeleted' : item.localAvailable ? 'cloud.availableLocally' : 'cloud.cloudOnly')}
+          : t(item.deleted ? 'cloud.recentlyDeleted' : item.localAvailable ? 'cloud.syncedTo' : 'cloud.cloudOnly')}
         onAction={(next) => fontAction(item, next)} onOpen={(methods) => {
           if (openSwipe.current !== methods) openSwipe.current?.close();
           openSwipe.current = methods;

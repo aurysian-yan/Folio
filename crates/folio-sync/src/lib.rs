@@ -241,6 +241,15 @@ pub struct CloudFont {
     pub identity_ids: Vec<String>,
 }
 
+/// 按文件指纹区分存放位置；系统与引用字体不进入待上传统计。
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FontSyncSummary {
+    pub synced_count: u64,
+    pub cloud_only_count: u64,
+    pub local_only_fingerprints: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncConflict {
     pub id: String,
@@ -494,6 +503,10 @@ pub async fn test_connection(profile: &SyncProfile, password: &str) -> Result<()
 
 pub fn list_cloud_fonts(database_path: impl AsRef<Path>) -> Result<Vec<CloudFont>, SyncError> {
     let db = FolioDatabase::open(database_path)?;
+    cloud_fonts(&db)
+}
+
+fn cloud_fonts(db: &FolioDatabase) -> Result<Vec<CloudFont>, SyncError> {
     let published = decoded_events(&db)?
         .into_iter()
         .filter(|(event, _)| event.published)
@@ -530,6 +543,42 @@ pub fn list_cloud_fonts(database_path: impl AsRef<Path>) -> Result<Vec<CloudFont
             })
         })
         .collect()
+}
+
+/// 使用现有目录快照识别首次同步前的本地字体，不扫描或重新解析字体文件。
+pub fn font_sync_summary(
+    db: &FolioDatabase,
+    managed_directory: &Path,
+) -> Result<FontSyncSummary, SyncError> {
+    let fonts = cloud_fonts(db)?;
+    let remote = fonts
+        .iter()
+        .map(|font| font.fingerprint.as_str())
+        .collect::<BTreeSet<_>>();
+    let excluded = db
+        .list_sync_assets()?
+        .into_iter()
+        .filter(|asset| asset.deleted || asset.cloud_only)
+        .map(|asset| asset.fingerprint)
+        .collect::<BTreeSet<_>>();
+    let local = db
+        .local_font_fingerprints(managed_directory)?
+        .into_iter()
+        .filter(|fingerprint| {
+            !remote.contains(fingerprint.as_str()) && !excluded.contains(fingerprint)
+        })
+        .collect::<BTreeSet<_>>();
+    Ok(FontSyncSummary {
+        synced_count: fonts
+            .iter()
+            .filter(|font| !font.deleted && !font.cloud_only)
+            .count() as u64,
+        cloud_only_count: fonts
+            .iter()
+            .filter(|font| !font.deleted && font.cloud_only)
+            .count() as u64,
+        local_only_fingerprints: local.into_iter().collect(),
+    })
 }
 
 pub fn list_conflicts(database_path: impl AsRef<Path>) -> Result<Vec<SyncConflict>, SyncError> {

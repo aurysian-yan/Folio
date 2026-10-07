@@ -1678,7 +1678,7 @@ export default function App() {
         : scope === "fontState"
           ? fontStateLabel(fontState, snapshot)
           : scopeTitle(scope);
-  const libraryHero = useMemo(() => createLibraryHero({ snapshot, profile: syncProfile, status: syncStatus, fonts: cloudFonts, conflicts: syncConflicts, cloudLoaded, cloudReadError }), [snapshot, syncProfile, syncStatus, cloudFonts, syncConflicts, cloudLoaded, cloudReadError]);
+  const libraryHero = createLibraryHero({ snapshot, profile: syncProfile, status: syncStatus, fonts: cloudFonts, conflicts: syncConflicts, cloudLoaded, cloudReadError });
   const handleHeroAction = (action: HeroAction) => {
     if (action === "cloudSettings") void openSettings().catch((cause) => setError(errorMessage(cause)));
     else selectLibraryScope(action);

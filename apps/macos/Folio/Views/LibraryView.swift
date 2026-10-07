@@ -8,6 +8,7 @@ enum LibraryLayout {
 struct LibraryView: View {
     @Bindable var model: LibraryViewModel
     @State private var cloud = CloudSyncModel.shared
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         Group {
@@ -158,7 +159,13 @@ struct LibraryView: View {
     @ViewBuilder
     private var libraryHeader: some View {
         if model.selectedDestination == .allFonts {
-            LibraryHeroView(presentation: model.hero)
+            LibraryHeroView(presentation: model.hero) { action in
+                switch action {
+                case .fontHealth: model.selectedDestination = .fontHealth
+                case .cloudFonts: model.selectedDestination = .cloudFonts
+                case .cloudSettings: openSettings()
+                }
+            }
                 .padding(.horizontal, 48)
                 .padding(.top, 42)
                 .padding(.bottom, 32)

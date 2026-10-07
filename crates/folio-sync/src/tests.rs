@@ -1,5 +1,62 @@
 use super::*;
 
+#[test]
+fn font_locations_are_independent_of_sync_tasks_and_font_families() {
+    let root = tempfile::tempdir().unwrap();
+    let managed = root.path().join("ManagedFonts");
+    let system = root.path().join("SystemFonts");
+    std::fs::create_dir_all(&managed).unwrap();
+    std::fs::create_dir_all(&system).unwrap();
+    let samples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts");
+    for name in ["Lato-Regular.ttf", "Lato-Bold.ttf"] {
+        std::fs::copy(samples.join(name), managed.join(name)).unwrap();
+    }
+    std::fs::copy(
+        samples.join("Lato-Regular.ttf"),
+        managed.join("duplicate.ttf"),
+    )
+    .unwrap();
+    std::fs::copy(samples.join("Inter-Variable.ttf"), system.join("Inter.ttf")).unwrap();
+    std::fs::copy(samples.join("not-a-font.ttf"), managed.join("damaged.ttf")).unwrap();
+    let mut db = FolioDatabase::open(root.path().join("folio.sqlite")).unwrap();
+    db.add_root(&managed, true).unwrap();
+    db.add_root(&system, true).unwrap();
+    db.refresh(folio_storage::RefreshMode::Incremental).unwrap();
+    let summary = font_sync_summary(&db, &managed).unwrap();
+    assert_eq!(summary.local_only_fingerprints.len(), 2);
+    assert_eq!(summary.synced_count, 0);
+    assert_eq!(summary.cloud_only_count, 0);
+
+    // 未发布的同步记录仍为仅本地，不能提前计入云字体库。
+    std::fs::remove_file(managed.join("damaged.ttf")).unwrap();
+    stage_managed_fonts(&mut db, &managed).unwrap();
+    assert_eq!(font_sync_summary(&db, &managed).unwrap(), summary);
+    assert!(list_cloud_fonts(db.path()).unwrap().is_empty());
+    for event in db.list_sync_events().unwrap() {
+        db.mark_sync_event_published(&event.id).unwrap();
+    }
+    let summary = font_sync_summary(&db, &managed).unwrap();
+    assert_eq!(summary.synced_count, 2);
+    assert!(summary.local_only_fingerprints.is_empty());
+
+    // 本地副本丢失后仅在云端可用，最近删除不计入活动字体。
+    for name in ["Lato-Regular.ttf", "duplicate.ttf"] {
+        std::fs::remove_file(managed.join(name)).unwrap();
+    }
+    let summary = font_sync_summary(&db, &managed).unwrap();
+    assert_eq!(summary.synced_count, 1);
+    assert_eq!(summary.cloud_only_count, 1);
+    let mut deleted = db
+        .list_sync_assets()
+        .unwrap()
+        .into_iter()
+        .find(|asset| asset.filename == "Lato-Bold.ttf")
+        .unwrap();
+    deleted.deleted = true;
+    db.upsert_sync_asset(&deleted).unwrap();
+    assert_eq!(font_sync_summary(&db, &managed).unwrap().synced_count, 0);
+}
+
 fn event(id: &str, change: Change) -> (StoredSyncEvent, Change) {
     (
         StoredSyncEvent {

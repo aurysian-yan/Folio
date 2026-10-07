@@ -192,7 +192,10 @@ final class LibraryViewModel {
     }
 
     var hero: HeroPresentation {
-        Self.hero(for: snapshot)
+        Self.hero(for: snapshot, profile: CloudSyncModel.shared.profile, status: CloudSyncModel.shared.status,
+            fonts: CloudSyncModel.shared.fonts, conflicts: CloudSyncModel.shared.conflicts,
+            cloudLoaded: CloudSyncModel.shared.stateLoaded, readError: CloudSyncModel.shared.stateReadError,
+            connectionName: CloudSyncModel.shared.connectionName)
     }
 
     func start() {
@@ -1186,58 +1189,108 @@ final class LibraryViewModel {
         errorMessage = error.localizedDescription
     }
 
-    static func hero(for snapshot: LibrarySnapshot) -> HeroPresentation {
+    static func hero(
+        for snapshot: LibrarySnapshot, profile: SyncProfileDto? = nil, status: SyncStatusDto? = nil,
+        fonts: [CloudFontDto] = [], conflicts: [SyncConflictDto] = [], cloudLoaded: Bool = true,
+        readError: Bool = false, connectionName: String = "WebDAV"
+    ) -> HeroPresentation {
         let health = snapshot.health
-        let summary = L.format(
-            "library.summary",
-            String(snapshot.familyCount),
-            String(snapshot.variableFamilyCount),
-            String(snapshot.recentCount)
-        )
+        let summary = L.format("library.summary", String(snapshot.familyCount), String(snapshot.variableFamilyCount), String(snapshot.recentCount))
+        let localSummary = L.format("library.localSummary", String(snapshot.familyCount), String(snapshot.variableFamilyCount), String(snapshot.recentCount))
+        let uploads = Set((status?.items ?? []).filter { $0.action == "upload" && $0.status != "done" }.map(\.fingerprint))
+        let downloads = Set((status?.items ?? []).filter { $0.action == "download" && $0.status != "done" }.map(\.fingerprint))
+        let local = Set(snapshot.syncSummary.localOnlyFingerprints).union(uploads)
+        let cloudOnly = Set(fonts.filter { $0.cloudOnly && !$0.deleted }.map(\.fingerprint))
+        let remote = cloudOnly.union(downloads)
+        let cloudOnlyCount = max(cloudOnly.count, Int(snapshot.syncSummary.cloudOnlyCount))
+        let remoteCount = max(remote.count, cloudOnlyCount)
+        let cloudReady = cloudLoaded && !readError && profile != nil
+        let sync: HeroSyncPresentation
+        if !cloudLoaded {
+            sync = .init(state: .checking, text: L.text("common.loading"), action: nil)
+        } else if readError {
+            sync = .init(state: .error, text: L.text("cloud.readStatusError"), action: .cloudSettings)
+        } else if profile == nil {
+            sync = .init(state: .disconnected, text: L.text("cloud.notConnected"), action: .cloudSettings)
+        } else if let status {
+            if status.isRunning {
+                sync = .init(state: .running, text: L.format("cloud.syncingCloud", connectionName, String(status.percent)), action: nil)
+            } else if status.errorMessage != nil {
+                sync = .init(state: .error, text: "\(connectionName) \(L.text("cloud.syncIncomplete"))", action: .cloudSettings)
+            } else if !local.isEmpty && remoteCount > 0 {
+                sync = .init(state: .pending, text: L.format("cloud.bothUnsynced", connectionName, String(local.count), String(remoteCount)), action: .cloudSettings)
+            } else if !local.isEmpty {
+                sync = .init(state: .pending, text: L.format("cloud.localAhead", connectionName), action: .cloudSettings)
+            } else if !downloads.isEmpty {
+                sync = .init(state: .pending, text: L.format("cloud.remoteAhead", connectionName), action: .cloudFonts)
+            } else if !conflicts.isEmpty {
+                sync = .init(state: .pending, text: L.format("cloud.conflictsPending", connectionName, String(conflicts.count)), action: .cloudSettings)
+            } else if cloudOnlyCount > 0 {
+                sync = .init(state: .connected, text: L.format("cloud.cloudOnlySummary", connectionName, String(cloudOnlyCount)), action: .cloudFonts)
+            } else if status.percent == 100 && status.stage == "已同步" {
+                sync = .init(state: .synced, text: L.format("cloud.librarySyncedTo", connectionName), action: nil)
+            } else {
+                sync = .init(state: .connected, text: L.format("cloud.connectedTo", connectionName), action: .cloudSettings)
+            }
+        } else {
+            sync = .init(state: .checking, text: L.format("cloud.readingCloud", connectionName), action: nil)
+        }
         if health.damagedFiles > 0 {
-            return HeroPresentation(
-                kind: .damaged,
-                title: L.format("health.damagedCount", String(health.damagedFiles)),
-                subtitle: summary,
-                detail: L.text("health.viewScanIssues")
-            )
+            return .init(kind: .damaged, title: L.plural("health.damagedCount", Int(health.damagedFiles)), subtitle: summary, detail: nil, action: .fontHealth, sync: sync)
         }
         if health.metadataConflicts > 0 {
-            return HeroPresentation(
-                kind: .conflict,
-                title: L.format("health.conflictCount", String(health.metadataConflicts)),
-                subtitle: L.format(
-                    "library.summaryConflict",
-                    String(health.multipleRevisions),
-                    String(health.metadataConflicts)
-                ),
-                detail: summary
-            )
+            return .init(kind: .conflict, title: L.plural("health.conflictCountShort", Int(health.metadataConflicts)),
+                subtitle: L.format("library.summaryConflict", String(health.multipleRevisions), String(health.metadataConflicts)),
+                detail: localSummary, action: .fontHealth, sync: sync)
         }
-        return HeroPresentation(
-            kind: .normal,
-            title: L.plural("library.availableNow", Int(snapshot.familyCount)),
-            subtitle: L.format(
-                "library.summaryDamaged",
-                String(health.damagedFiles),
-                String(snapshot.variableFamilyCount),
-                String(snapshot.recentCount)
-            ),
-            detail: nil
-        )
+        let fontConflicts = cloudReady ? conflicts.filter { $0.kind.hasPrefix("font_") } : []
+        if !fontConflicts.isEmpty {
+            let revisions = fontConflicts.filter { $0.kind == "font_revision" }.count
+            let names = fontConflicts.filter { $0.kind == "font_name" }.count
+            let other = fontConflicts.count - revisions - names
+            let detail = [revisions > 0 ? L.plural("health.revisions", revisions) : "",
+                names > 0 ? L.plural("health.names", names) : "",
+                other > 0 ? L.plural("health.otherConflicts", other) : ""].filter { !$0.isEmpty }.joined(separator: " · ")
+            return .init(kind: .conflict, title: L.plural("cloud.conflictCount", fontConflicts.count), subtitle: detail,
+                detail: localSummary, action: .cloudSettings, sync: sync)
+        }
+        if cloudReady, let error = status?.errorMessage,
+           error.range(of: "可用空间不足|状态码\\s*507|insufficient storage", options: [.regularExpression, .caseInsensitive]) != nil {
+            return .init(kind: .cloudStorageLow, title: L.text("cloud.spaceLow"), subtitle: L.text("cloud.spaceLowHint"),
+                detail: localSummary, action: .cloudSettings, sync: sync)
+        }
+        if cloudReady && remoteCount > 0 {
+            let title = downloads.isEmpty ? L.plural("cloud.cloudOnlyAvailable", cloudOnlyCount) : L.plural("cloud.pendingDownloads", downloads.count)
+            return .init(kind: .cloudAhead, title: title, subtitle: localSummary, detail: nil, action: .cloudFonts, sync: sync)
+        }
+        if cloudReady && !local.isEmpty {
+            return .init(kind: .localUnsynced, title: L.plural("cloud.localUnsynced", local.count), subtitle: localSummary,
+                detail: nil, action: .cloudSettings, sync: sync)
+        }
+        return .init(kind: .normal, title: snapshot.familyCount > 0 ? L.plural("library.availableNow", Int(snapshot.familyCount)) : L.text("library.emptyAddFonts"),
+            subtitle: L.format("library.summaryDamaged", String(health.damagedFiles), String(snapshot.variableFamilyCount), String(snapshot.recentCount)), detail: nil, sync: sync)
     }
+
 }
 
 #if DEBUG
 extension HeroPresentation {
-    static let previewCases: [HeroPresentation] = [
-        .init(kind: .normal, title: "现有 670 个字族，随时可用", subtitle: "0 个损坏字体 · 42 个可变字族 · 12 个最近访问", detail: nil),
-        .init(kind: .damaged, title: "发现 8 个损坏字体", subtitle: "670 个字族 · 42 个可变字族 · 12 个最近访问", detail: "可在字体健康中查看扫描问题"),
-        .init(kind: .update, title: "检测到 3 个字体更新", subtitle: "670 个字族 · 42 个可变字族 · 12 个最近访问", detail: "Google Fonts 中有可用的新版本"),
-        .init(kind: .cloudAhead, title: "云端新增 16 个字体", subtitle: "123PAN 中有新的字体可供同步", detail: "预览状态"),
-        .init(kind: .localUnsynced, title: "本地有 32 个字体未同步", subtitle: "连接云端后即可同步", detail: "预览状态"),
-        .init(kind: .cloudStorageLow, title: "云端空间不足", subtitle: "请释放空间后再同步字体", detail: "预览状态"),
-        .init(kind: .conflict, title: "发现 4 个字体冲突", subtitle: "2 个版本冲突 · 2 个命名冲突", detail: "预览状态"),
-    ]
+    static var previewCases: [HeroPresentation] {
+        let summary = L.format("library.summary", "670", "42", "12")
+        let localSummary = L.format("library.localSummary", "670", "42", "12")
+        let synced = HeroSyncPresentation(state: .synced, text: L.format("cloud.librarySyncedTo", "123PAN"), action: nil)
+        return [
+            .init(kind: .normal, title: L.plural("library.availableNow", 670), subtitle: L.format("library.summaryDamaged", "0", "42", "12"), detail: nil, sync: synced),
+            .init(kind: .damaged, title: L.plural("health.damagedCount", 8), subtitle: summary, detail: nil, action: .fontHealth, sync: synced),
+            .init(kind: .update, title: L.format("desktop.updatesAvailable", "3"), subtitle: summary, detail: nil, action: .fontHealth, sync: synced),
+            .init(kind: .cloudAhead, title: L.plural("cloud.pendingDownloads", 12), subtitle: localSummary, detail: nil, action: .cloudFonts,
+                sync: .init(state: .pending, text: L.format("cloud.remoteAhead", "123PAN"), action: .cloudFonts)),
+            .init(kind: .localUnsynced, title: L.plural("cloud.localUnsynced", 32), subtitle: localSummary, detail: nil, action: .cloudSettings,
+                sync: .init(state: .pending, text: L.format("cloud.localAhead", "123PAN"), action: .cloudSettings)),
+            .init(kind: .cloudStorageLow, title: L.text("cloud.spaceAlmostFull"), subtitle: L.format("cloud.remainingSpace", "123PAN", "0.6 GB"), detail: localSummary, action: .cloudSettings, sync: synced),
+            .init(kind: .conflict, title: L.plural("cloud.conflictCount", 4), subtitle: [L.plural("health.revisions", 2), L.plural("health.names", 2)].joined(separator: " · "),
+                detail: localSummary, action: .cloudSettings, sync: .init(state: .pending, text: L.format("cloud.conflictsPending", "123PAN", "4"), action: .cloudSettings)),
+        ]
+    }
 }
 #endif

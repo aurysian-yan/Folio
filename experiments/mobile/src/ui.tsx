@@ -14,6 +14,7 @@ const systemBackground = Platform.OS === 'ios' ? PlatformColor('systemBackground
 // 移动端语义色与设计稿尺寸。
 export const themes = {
   light: {
+    heroNormal: '#26BF4D', heroDamaged: '#F5234B', heroUpdate: '#0078F0', heroCloud: '#F58625', heroConflict: '#CB30E0',
     dark: false,
     background: systemBackground ?? '#FFFFFF', onAccent: '#FFFFFF', surface: '#EFEFEF', raised: '#FFFFFF', label: '#1A1A1A',
     secondary: '#727272', muted: '#999999', border: '#E4E4E4', accent: '#F06835',
@@ -25,6 +26,7 @@ export const themes = {
     scrim: 'rgba(0, 0, 0, 0.16)', shadow: '#000000', danger: '#C62828',
   },
   dark: {
+    heroNormal: '#26BF4D', heroDamaged: '#F5234B', heroUpdate: '#0078F0', heroCloud: '#F58625', heroConflict: '#CB30E0',
     dark: true,
     background: systemBackground ?? '#121212', onAccent: '#121212', surface: '#242424', raised: '#2C2C2E', label: '#F2F2F2',
     secondary: '#AEAEAE', muted: '#8E8E93', border: '#38383A', accent: '#FF8758',

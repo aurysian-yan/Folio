@@ -208,6 +208,7 @@ pub struct LibrarySnapshotDto {
     pub face_count: usize,
     pub variable_family_count: usize,
     pub recent_count: usize,
+    pub sync_summary: Option<folio_sync::FontSyncSummary>,
     pub roots: Vec<String>,
     pub font_state_counts: HashMap<String, usize>,
     pub user_font_groups: Vec<UserFontGroupDto>,
@@ -772,6 +773,7 @@ impl LibraryService {
                 .filter(|family| family.faces.iter().any(|face| face.metadata.is_variable))
                 .count(),
             recent_count: self.state.recent.len(),
+            sync_summary: folio_sync::font_sync_summary(&self.database, &self.managed_directory).ok(),
             roots,
             font_state_counts,
             user_font_groups,

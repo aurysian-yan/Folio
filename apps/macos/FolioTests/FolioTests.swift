@@ -70,6 +70,26 @@ final class FolioTests: XCTestCase {
         XCTAssertEqual(HeroKind.conflict.symbol, "bookmark")
     }
 
+    func testLocalUnsyncedHeroDoesNotNeedAnUploadQueue() {
+        var snapshot = LibrarySnapshot.empty
+        snapshot.syncSummary = .init(syncedCount: 2, cloudOnlyCount: 0, localOnlyFingerprints: ["local", "local"])
+        let profile = SyncProfileDto(serverUrl: "https://webdav.123pan.com", remoteDirectory: "Folio", username: "", automatic: false)
+        let hero = LibraryViewModel.hero(for: snapshot, profile: profile)
+        XCTAssertEqual(hero.kind, .localUnsynced)
+        XCTAssertEqual(hero.action, .cloudSettings)
+        XCTAssertEqual(hero.sync.state, .checking)
+    }
+
+    func testHeroReadingFailureDoesNotReuseCloudDifferences() {
+        var snapshot = LibrarySnapshot.empty
+        snapshot.syncSummary = .init(syncedCount: 0, cloudOnlyCount: 0, localOnlyFingerprints: ["local"])
+        let profile = SyncProfileDto(serverUrl: "https://webdav.123pan.com", remoteDirectory: "Folio", username: "", automatic: false)
+        let hero = LibraryViewModel.hero(for: snapshot, profile: profile, readError: true)
+        XCTAssertEqual(hero.kind, .normal)
+        XCTAssertEqual(hero.sync.state, .error)
+        XCTAssertEqual(LibraryViewModel.hero(for: snapshot, cloudLoaded: false).sync.state, .checking)
+    }
+
     func testTypedIdentifiersDoNotCompareAcrossDomains() {
         XCTAssertEqual(FamilyID(rawValue: "a"), FamilyID(rawValue: "a"))
         XCTAssertNotEqual(FaceID(rawValue: "a").rawValue, FamilyID(rawValue: "b").rawValue)

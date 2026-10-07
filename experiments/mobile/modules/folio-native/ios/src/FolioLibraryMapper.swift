@@ -47,6 +47,10 @@ enum FolioLibraryMapper {
     static func snapshot(_ value: LibrarySnapshotDto) -> [String: Any] {
         ["familyCount": value.familyCount, "faceCount": value.faceCount,
          "variableFamilyCount": value.variableFamilyCount, "recentCount": value.recentCount,
+         "syncSummary": ["syncedCount": value.syncSummary.syncedCount,
+             "cloudOnlyCount": value.syncSummary.cloudOnlyCount, "localOnlyFingerprints": value.syncSummary.localOnlyFingerprints],
+         "health": ["damagedFiles": value.health.damagedFiles, "multipleRevisions": value.health.multipleRevisions,
+             "metadataConflicts": value.health.metadataConflicts],
          "damagedCount": value.health.damagedFiles, "collections": value.collections.map { collection in
             ["id": collection.id.value, "name": collection.name, "icon": collection.icon,
              "color": collection.color, "memberCount": collection.memberCount] as [String: Any]

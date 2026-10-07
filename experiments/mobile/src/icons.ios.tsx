@@ -21,6 +21,7 @@ function symbol(name: ImageProps['systemName'], filled?: ImageProps['systemName'
 }
 
 export const ArchiveIcon = symbol('archivebox', 'archivebox.fill');
+export const ArrowClockwiseIcon = symbol('arrow.clockwise');
 export const ArrowCounterClockwiseIcon = symbol('arrow.counterclockwise');
 export const BookmarkIcon = symbol('bookmark', 'bookmark.fill');
 export const BookIcon = symbol('book.closed', 'book.closed.fill');
@@ -35,6 +36,14 @@ export const CheckIcon = symbol('checkmark');
 export const CircleHalfIcon = symbol('circle.lefthalf.filled');
 export const ClockIcon = symbol('clock', 'clock.fill');
 export const CloudIcon = symbol('cloud', 'cloud.fill');
+export const CloudArrowDownIcon = symbol('icloud.and.arrow.down');
+export const CloudArrowUpIcon = symbol('icloud.and.arrow.up');
+export const CloudCheckIcon = symbol('checkmark.icloud');
+export const HardDrivesIcon = symbol('externaldrive.badge.icloud');
+export const LassoIcon = symbol('lasso.badge.sparkles');
+export const StethoscopeIcon = symbol('stethoscope');
+export const TrayArrowUpIcon = symbol('tray.and.arrow.up');
+export const WarningIcon = symbol('exclamationmark.triangle');
 export const CopyIcon = symbol('doc.on.doc', 'doc.on.doc.fill');
 export const DatabaseIcon = symbol('internaldrive', 'internaldrive.fill');
 export const DotsThreeIcon = symbol('ellipsis');
