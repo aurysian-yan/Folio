@@ -1,14 +1,19 @@
 import { CheckIcon, CircleHalfIcon } from './icons';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { wallpaperSeed } from './native';
 import { previewScaleOptions, usePreferences, type AccentId } from './settings';
-import { SettingsChoiceRow, SettingsGroup, SettingsIcon, SettingsPage, settingsLayout, settingsTypography } from './settings-ui';
-import { accentPresets, type Theme } from './ui';
+import { SettingsChoiceRow, SettingsGroup, SettingsIcon, SettingsPage, SettingsSwitchRow, settingsLayout, settingsTypography } from './settings-ui';
+import { resolveAccentColor, type Theme } from './ui';
 
-// 外观跟随系统，仅提供主题色与预览字号偏好。
+// 外观跟随系统，仅提供主题色、Material3 配色与预览字号偏好。
 export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClose: () => void }) {
   const { t } = useTranslation();
   const { preferences, update } = usePreferences();
+  // 仅 Android 12 及以上可取到壁纸种子，取不到时不显示壁纸配色项。
+  const [wallpaperAccent] = useState<string | null>(() => (Platform.OS === 'android' ? wallpaperSeed() : null));
+  const android = Platform.OS === 'android';
   const scaleOptions = previewScaleOptions.map((scale) => ({
     value: String(scale),
     label: scale === 18 ? t('mobile.settings.scaleSmall') : scale === 24 ? t('mobile.settings.scaleMedium') : t('mobile.settings.scaleLarge'),
@@ -18,6 +23,7 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
     { id: 'blue', label: t('mobile.settings.accentBlue') },
     { id: 'green', label: t('mobile.settings.accentGreen') },
     { id: 'purple', label: t('mobile.settings.accentPurple') },
+    ...(wallpaperAccent ? [{ id: 'wallpaper' as AccentId, label: t('mobile.settings.accentWallpaper') }] : []),
   ];
 
   return <SettingsPage title={t('settings.appearance')} theme={theme} onClose={onClose}>
@@ -35,7 +41,7 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
       <View accessibilityRole="radiogroup" accessibilityLabel={t('settings.theme')} style={styles.swatches}>
         {accents.map(({ id, label }) => {
           const selected = preferences.accent === id;
-          const color = accentPresets[id][theme.dark ? 'dark' : 'light'];
+          const color = resolveAccentColor(id, theme.dark, wallpaperAccent ?? undefined);
           return <Pressable key={id} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ selected }}
             onPress={() => update({ accent: id })}
             style={({ pressed }) => [styles.swatchOption, { opacity: pressed ? 0.7 : 1 }]}>
@@ -49,6 +55,10 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
         })}
       </View>
     </SettingsGroup>
+    {android && <SettingsGroup theme={theme}>
+      <SettingsSwitchRow theme={theme} title={t('mobile.settings.materialTheme')} detail={t('mobile.settings.materialThemeDetail')}
+        value={preferences.materialTheme} onChange={(value) => update({ materialTheme: value })} last />
+    </SettingsGroup>}
     <SettingsGroup theme={theme} title={t('preview.size')}>
       <View style={styles.preview}>
         <Text style={[styles.sample, { fontSize: preferences.previewScale, lineHeight: Math.round(preferences.previewScale * 1.5), color: theme.label }]}>{t('mobile.settings.previewSample')}</Text>

@@ -3,12 +3,13 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 
 // 移动端偏好：外观、字体卡片与导入行为，统一持久化到设备本地。
 export type AppearanceMode = 'system';
-export type AccentId = 'folio' | 'blue' | 'green' | 'purple';
+export type AccentId = 'folio' | 'blue' | 'green' | 'purple' | 'wallpaper';
 export type LibraryMode = 'grid' | 'list';
 
 export interface Preferences {
   appearance: AppearanceMode;
   accent: AccentId;
+  materialTheme: boolean;
   previewScale: number;
   showCardMetadata: boolean;
   showFavoriteBadge: boolean;
@@ -19,6 +20,7 @@ export interface Preferences {
 export const defaultPreferences: Preferences = {
   appearance: 'system',
   accent: 'folio',
+  materialTheme: false,
   previewScale: 24,
   showCardMetadata: true,
   showFavoriteBadge: true,
@@ -30,7 +32,7 @@ export const defaultPreferences: Preferences = {
 export const previewScaleOptions = [18, 24, 30] as const;
 
 const storageKey = 'folio.mobile.preferences.v1';
-const accentValues: readonly AccentId[] = ['folio', 'blue', 'green', 'purple'];
+const accentValues: readonly AccentId[] = ['folio', 'blue', 'green', 'purple', 'wallpaper'];
 const viewModeValues: readonly LibraryMode[] = ['grid', 'list'];
 
 function pick<T extends string>(values: readonly T[], value: unknown, fallback: T): T {
@@ -47,6 +49,7 @@ function sanitize(raw: unknown): Preferences {
     // 兼容旧偏好，深浅色统一跟随系统。
     appearance: 'system',
     accent: pick(accentValues, value.accent, defaultPreferences.accent),
+    materialTheme: typeof value.materialTheme === 'boolean' ? value.materialTheme : defaultPreferences.materialTheme,
     previewScale: scale,
     showCardMetadata: typeof value.showCardMetadata === 'boolean' ? value.showCardMetadata : defaultPreferences.showCardMetadata,
     showFavoriteBadge: typeof value.showFavoriteBadge === 'boolean' ? value.showFavoriteBadge : defaultPreferences.showFavoriteBadge,

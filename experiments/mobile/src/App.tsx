@@ -8,7 +8,7 @@ import {
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
+  ActivityIndicator, Animated, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
   Text, TextInput, useColorScheme, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +25,7 @@ import { PageHeader, usePageHeader } from './PageHeader';
 import { HeaderScrollContext } from './HeaderButtonShadow';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
-import { library, syncSession } from './native';
+import { library, materialPalette, syncSession, wallpaperSeed } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
   usesNativeControls, usesNativeSidebar, type NativeDestination,
@@ -43,7 +43,7 @@ import { createLibraryHero, type HeroAction } from './library-hero';
 import { useCloudSync, type CloudSyncController } from './useCloudSync';
 import { SettingsStoragePage } from './SettingsStoragePage';
 import { TabScenes } from './TabScenes';
-import { createTheme, IconButton, type Theme } from './ui';
+import { createTheme, IconButton, resolveAccentColor, type Theme } from './ui';
 
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
@@ -448,7 +448,22 @@ function MobileApp() {
   const { t } = useTranslation();
   const { preferences, ready: preferencesReady } = usePreferences();
   const dark = useColorScheme() === 'dark';
-  const theme = useMemo(() => createTheme(dark, preferences.accent), [dark, preferences.accent]);
+  const [wallpaperAccent, setWallpaperAccent] = useState<string | null>(() => (Platform.OS === 'android' ? wallpaperSeed() : null));
+  // 壁纸更换后进入前台重新读取，确保配色生效。
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setWallpaperAccent(wallpaperSeed());
+    });
+    return () => subscription.remove();
+  }, []);
+  const theme = useMemo(() => {
+    if (Platform.OS !== 'android') return createTheme(dark, preferences.accent);
+    const materialRoles = preferences.materialTheme
+      ? materialPalette(resolveAccentColor(preferences.accent, dark, wallpaperAccent ?? undefined), dark)
+      : undefined;
+    return createTheme(dark, preferences.accent, { materialRoles, wallpaperAccent: wallpaperAccent ?? undefined });
+  }, [dark, preferences.accent, preferences.materialTheme, wallpaperAccent]);
   const sourceId = useId();
   const inset = useSafeAreaInsets();
   const { width } = useWindowDimensions();

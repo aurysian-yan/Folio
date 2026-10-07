@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Keyboard, StyleSheet, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import type { AndroidHeaderBackdropProps, AndroidHeaderProps } from './HeaderControls';
 import { useHeaderShadowProgress } from './HeaderButtonShadow';
-import { themes } from './ui';
 
 interface NativeAndroidHeaderProps extends ViewProps {
   sourceId: string;
@@ -46,9 +45,8 @@ export function AndroidHeaderControls({ sourceId, theme, mode, active, width, re
   searchOpen, searchText, filterCount, onFilter, onModeChange, onImport, onSearchTextChange }: AndroidHeaderProps) {
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
-  // 搜索框与顶栏图标保留原有配色，菜单面板使用当前卡片色。
-  const { label, secondary, muted, tab, border } = theme.dark ? themes.dark : themes.light;
-  const { accent, surface: raised, shadow, buttonPressed, buttonPressedLabel } = theme;
+  // 搜索框、顶栏图标与菜单面板统一使用当前主题色，覆盖 Material3 配色。
+  const { label, secondary, muted, tab, border, accent, surface: raised, shadow, buttonPressed, buttonPressedLabel } = theme;
   return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
     ready={ready} importing={importing} importBlocked={importBlocked} searchOpen={searchOpen} searchText={searchText}
     labels={{ search: t('mobile.searchFonts'), searchPlaceholder: t('mobile.searchPlaceholder'), clearSearch: t('mobile.clearSearch'),

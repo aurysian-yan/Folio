@@ -3,6 +3,7 @@ import { AccessibilityInfo, Animated, PanResponder, Platform, PlatformColor, Pre
 import Motion, { cancelAnimation, interpolateColor, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { NativeActionButton, usesNativeControls } from './native-controls';
 import type { AccentId } from './settings';
+import { materialThemeOverrides, type MaterialRoles } from './material-theme';
 import { headerShadowColor, useHeaderShadowProgress } from './HeaderButtonShadow';
 import { pageTitleMotion } from './page-header-motion';
 
@@ -55,8 +56,9 @@ const androidColors = {
   },
 };
 
-// 外观页可选主题色，浅深色各自使用对应色值。
-export const accentPresets: Record<AccentId, { light: string; dark: string }> = {
+// 外观页可选固定主题色，浅深色各自使用对应色值；壁纸项在运行时解析。
+export type FixedAccentId = Exclude<AccentId, 'wallpaper'>;
+export const accentPresets: Record<FixedAccentId, { light: string; dark: string }> = {
   folio: { light: '#F06835', dark: '#FF8758' },
   blue: { light: '#0A84FF', dark: '#4CA6FF' },
   green: { light: '#2FA84F', dark: '#4CD07A' },
@@ -68,12 +70,26 @@ function withAlpha(hex: string, alpha: number) {
   return `rgba(${(value >> 16) & 0xff}, ${(value >> 8) & 0xff}, ${value & 0xff}, ${alpha})`;
 }
 
+// 解析当前强调色；壁纸项在种子缺失时回退到 Folio 橙。
+export function resolveAccentColor(accent: AccentId, dark: boolean, wallpaperAccent?: string): string {
+  if (accent === 'wallpaper') return wallpaperAccent ?? accentPresets.folio[dark ? 'dark' : 'light'];
+  return accentPresets[accent][dark ? 'dark' : 'light'];
+}
+
+export interface ThemeOptions {
+  /** Material3 语义色角色，仅安卓开启配色主题时提供。 */
+  materialRoles?: MaterialRoles;
+  /** 壁纸派生的强调色，仅在安卓且选用壁纸主题色时提供。 */
+  wallpaperAccent?: string;
+}
+
 // 按平台、浅深色与主题色派生界面语义色。
-export function createTheme(dark: boolean, accent: AccentId): Theme {
+export function createTheme(dark: boolean, accent: AccentId, options: ThemeOptions = {}): Theme {
   const base = dark ? themes.dark : themes.light;
-  const accentValue = accentPresets[accent][dark ? 'dark' : 'light'];
-  return { ...base, ...(Platform.OS === 'android' ? androidColors[dark ? 'dark' : 'light'] : {}),
+  const accentValue = resolveAccentColor(accent, dark, options.wallpaperAccent);
+  const themed: Theme = { ...base, ...(Platform.OS === 'android' ? androidColors[dark ? 'dark' : 'light'] : {}),
     accent: accentValue, selection: withAlpha(accentValue, dark ? 0.25 : 0.2) };
+  return options.materialRoles ? { ...themed, ...materialThemeOverrides(options.materialRoles, dark) } : themed;
 }
 
 export function IconButton({ label, onPress, children, theme, disabled, busy, selected, style, systemImage, primary = false }: {

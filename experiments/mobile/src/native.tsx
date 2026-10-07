@@ -1,16 +1,25 @@
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
 import type { NativeSyntheticEvent, ViewProps } from 'react-native';
 import { createLibraryClient, type LibraryBridge } from './library';
+import type { MaterialRoles } from './material-theme';
 import { createSyncClient, type SyncBridge } from './sync';
 import { ForegroundSyncSession } from './sync-session';
 import { createStorageClient, type StorageBridge } from './storage';
 
-const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & { copyText(text: string): Promise<void> }>('FolioNative');
+// 安卓外观主题桥接：壁纸种子与 Material3 语义色。
+interface MaterialBridge {
+  wallpaperSeed(): string | null;
+  materialPalette(seed: string, dark: boolean): MaterialRoles;
+}
+
+const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & { copyText(text: string): Promise<void> }>('FolioNative');
 export const cloudSync = createSyncClient(nativeModule);
 export const syncSession = new ForegroundSyncSession(cloudSync, () => nativeModule.snapshot());
 export const library = createLibraryClient(nativeModule, (action, kind) => syncSession.mutate(action, kind));
 export const storage = createStorageClient(nativeModule);
 export const copyText = (text: string) => nativeModule.copyText(text);
+export const wallpaperSeed = () => nativeModule.wallpaperSeed();
+export const materialPalette = (seed: string, dark: boolean) => nativeModule.materialPalette(seed, dark);
 
 export interface PreviewSelection {
   sourcePath: string;
