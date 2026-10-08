@@ -1,3 +1,5 @@
+import { locallyAvailable, locationFilters, locationLabel, transferLabel } from "../../../shared/font-location";
+import { removeCloudDownload, setFontUploadExcluded, revealFontSource, getAutomaticDownload, setAutomaticDownload, deleteCloudFont } from "./api";
 import {
   ArrowClockwiseIcon,
   CheckIcon,
@@ -711,6 +713,10 @@ export default function App() {
     Record<string, string[]>
   >({});
   const [sort, setSort] = useState("name");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [fileFingerprint, setFileFingerprint] = useState<string>();
+  const loadedCount = useRef(120);
+  const [automaticDownload, updateAutomaticDownload] = useState(false);
   const [page, setPage] = useState<LibraryPageDto | null>(null);
   const [selected, setSelected] = useState<FamilyDto | null>(null);
   const [selectedStyleKey, setSelectedStyleKey] = useState<string | null>(null);
@@ -962,24 +968,25 @@ export default function App() {
   }, []);
 
   const loadPage = useCallback(
-    async (text: string, currentScope: LibraryScope, offset = 0) => {
+    async (text: string, currentScope: LibraryScope, offset = 0, count = 120) => {
       if (currentScope === "cloudFonts") {
         setLoading(false);
         return;
       }
-      const key = JSON.stringify([text, currentScope, selectedFacets, sort, collectionId, smartFolderId, fontState]);
+      const key = JSON.stringify([text, currentScope, selectedFacets, sort, collectionId, smartFolderId, fontState, locationFilter, fileFingerprint]);
       const ticket = pageRequests.current.begin(key, offset);
       if (!ticket) return;
       setLoading(true);
       setError(null);
       try {
-        const result = await queryLibrary({
+        let result = await queryLibrary({
           text,
           scope: currentScope,
           offset,
           limit: 120,
           facets: selectedFacets,
           sort,
+          locationFilter, fileFingerprint,
           collectionId:
             currentScope === "collection"
               ? (collectionId ?? undefined)
@@ -991,7 +998,17 @@ export default function App() {
           fontState:
             currentScope === "fontState" ? fontState : undefined,
         });
+        while (offset === 0 && result.families.length < count && result.families.length < result.totalMatches) {
+          const next = await queryLibrary({ text, scope: currentScope, offset: result.families.length, limit: Math.min(240, count - result.families.length),
+            facets: selectedFacets, sort, locationFilter, fileFingerprint,
+            collectionId: currentScope === "collection" ? collectionId ?? undefined : undefined,
+            smartFolderId: currentScope === "smartFolder" ? smartFolderId ?? undefined : undefined,
+            fontState: currentScope === "fontState" ? fontState : undefined });
+          if (!next.families.length || !pageRequests.current.current(ticket)) break;
+          result = appendLibraryPage(result, next);
+        }
         if (!pageRequests.current.current(ticket)) return;
+        loadedCount.current = offset + result.families.length;
         setPage((current) =>
           offset > 0 && current
             ? appendLibraryPage(current, result)
@@ -999,7 +1016,7 @@ export default function App() {
         );
         setSelected((current) =>
           current
-            ? (result.families.find((family) => family.id === current.id) ??
+            ? (result.families.find((family) => family.id === current.id || family.faces.some((face) => current.faces.some((old) => old.identityId === face.identityId))) ??
               (offset > 0 ? current : null))
             : null,
         );
@@ -1013,6 +1030,8 @@ export default function App() {
       collectionId,
       fontState,
       selectedFacets,
+      locationFilter,
+      fileFingerprint,
       smartFolderId,
       sort,
     ],
@@ -1024,13 +1043,13 @@ export default function App() {
 
   const requestCarouselRange = useCallback(async (offset: number, limit: number) => {
     const result = await queryLibrary({
-      text: search, scope, offset, limit, facets: selectedFacets, sort,
+      text: search, scope, offset, limit, facets: selectedFacets, sort, locationFilter, fileFingerprint,
       collectionId: scope === "collection" ? (collectionId ?? undefined) : undefined,
       smartFolderId: scope === "smartFolder" ? (smartFolderId ?? undefined) : undefined,
       fontState: scope === "fontState" ? fontState : undefined,
     });
     return result.families;
-  }, [search, scope, selectedFacets, sort, collectionId, smartFolderId, fontState]);
+  }, [search, scope, selectedFacets, sort, collectionId, smartFolderId, fontState, locationFilter, fileFingerprint]);
 
   const favoriteFamily = useCallback((family: FamilyDto) => {
     void setFamilyFavorite(family.faces.map((face) => face.identityId), !family.isFavorite)
@@ -1137,7 +1156,7 @@ export default function App() {
     try {
       const result = await refreshLibrary();
       setSnapshot(result);
-      await Promise.all([loadPage(search, scope), reloadOrganization()]);
+      await Promise.all([loadPage(search, scope, 0, Math.max(120, loadedCount.current)), reloadOrganization()]);
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -1204,7 +1223,7 @@ export default function App() {
     if (settingsWindow) return;
     let active = true;
     let unlisten: (() => void) | undefined;
-    void listen("library-updated", () => void runRefresh())
+    void listen("library-updated", () => { void runRefresh(); void listCloudFonts().then(setCloudFonts).catch(() => setCloudReadError(true)); })
       .then((stop) => {
         if (active) unlisten = stop;
         else stop();
@@ -1331,6 +1350,27 @@ export default function App() {
     }
   };
 
+  const downloadFontFile = async (fingerprint: string) => {
+    try { await restoreCloudFont(fingerprint); await startCloudSync(); }
+    catch (cause) { setError(errorMessage(cause)); }
+  };
+  const changeFile = async (fingerprint: string, action: "remove" | "exclude" | "include") => {
+    try {
+      if (action === "remove") await removeCloudDownload(fingerprint);
+      else await setFontUploadExcluded(fingerprint,action === "exclude");
+      await runRefresh();
+      if (action === "include") await startCloudSync();
+    } catch (cause) { setError(errorMessage(cause)); }
+  };
+  const openCloudFont = async (font: CloudFontDto) => {
+    try {
+      const result = await queryLibrary({text:"",scope:"all",offset:0,limit:120,facets:{},sort:"name",fileFingerprint:font.fingerprint});
+      setSearch(""); setSelectedFacets({}); setScope("all"); setLocationFilter("all"); setFileFingerprint(font.fingerprint);
+      setPage(result); setSelected(result.families[0] ?? null); setRightSidebarOpen(true);
+    } catch (cause) { setError(errorMessage(cause)); }
+  };
+  useEffect(() => { if (settingsWindow) void getAutomaticDownload().then(updateAutomaticDownload).catch(() => {}); }, [settingsWindow]);
+
   const restoreCloudCopy = async (font: CloudFontDto) => {
     try {
       if (font.deleted) {
@@ -1416,12 +1456,14 @@ export default function App() {
   };
 
   const selectLibraryScope = (next: LibraryScope) => {
+    setFileFingerprint(undefined);
     if (next !== scope) clearQueryConditions();
     setScope(next);
     setSelected(null);
   };
 
   const selectFontState = (id: FontStateId) => {
+    setFileFingerprint(undefined);
     if (scope !== "fontState" || fontState !== id) clearQueryConditions();
     setFontState(id);
     setScope("fontState");
@@ -1429,6 +1471,7 @@ export default function App() {
   };
 
   const selectCollection = (id: string) => {
+    setFileFingerprint(undefined);
     if (scope !== "collection" || collectionId !== id) clearQueryConditions();
     setScope("collection");
     setCollectionId(id);
@@ -1437,6 +1480,7 @@ export default function App() {
   };
 
   const openSmartFolder = (folder: SmartFolderDto) => {
+    setFileFingerprint(undefined);
     setScope("smartFolder");
     setSmartFolderId(folder.id);
     setCollectionId(null);
@@ -2388,6 +2432,10 @@ export default function App() {
                       }
                     />
                   </TextField>
+                  <Switch isSelected={automaticDownload} onChange={(enabled) => { void setAutomaticDownload(enabled).then(() => updateAutomaticDownload(enabled)).catch((cause) => setSyncMessage(errorMessage(cause))); }}>
+                    <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>{t("fontLocation.autoDownload")}</Switch.Content>
+                  </Switch>
+                  <p>{t("fontLocation.autoDownloadHint")}</p>
                   <Switch
                     className="setting-toggle"
                     isSelected={syncAutomatic}
@@ -2848,17 +2896,20 @@ export default function App() {
           <section className="library-pane">
             {scope === "cloudFonts" ? (
               <CloudFontsPane
+                onOpen={(font) => void openCloudFont(font)}
                 fonts={cloudFonts}
                 connected={syncProfile !== null}
                 status={syncStatus}
                 onSync={() => void startCloudSync()}
                 onRestore={(font) => void restoreCloudCopy(font)}
                 onOpenSettings={() => void openSettings()}
+                onRemove={(font) => void changeFile(font.fingerprint, "remove")}
+                onDelete={async (font) => { await deleteCloudFont(font.fingerprint); await startCloudSync(); await runRefresh(); setCloudFonts(await listCloudFonts()); }}
               />
             ) : (
               <>
             <VirtualFontGrid
-              key={JSON.stringify([search, scope, sort, selectedFacets, collectionId, smartFolderId, fontState])}
+              key={JSON.stringify([search, scope, sort, selectedFacets, collectionId, smartFolderId, fontState, locationFilter, fileFingerprint])}
               families={error ? [] : page?.families ?? []} total={page?.totalMatches ?? 0}
               isLoading={loading} onLoadMore={loadMore} onRequestRange={requestCarouselRange}
               mode={viewMode} previewText={previewText} previewSize={previewAppearance.committed.size}
@@ -2867,18 +2918,19 @@ export default function App() {
               styleKey={selectedStyleKey} selectedId={selected?.id} onStyleChange={setSelectedStyleKey}
               showMetadata={cardMetadata} selectOnHover={cardHover} hoverDelay={cardHoverDelay}
               wheelSpeed={expandedCardWheelSpeed}
-              onSelect={selectFamily} onPreviewSelect={previewSelectFamily} onFavorite={favoriteFamily}
+              onSelect={selectFamily} onPreviewSelect={previewSelectFamily} onFavorite={favoriteFamily} onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
               header={
                 <div className="library-overview">
                   <div className="library-title-row">
                     <LibraryHero
-                      presentation={scope === "all" ? libraryHero : {
-                        kind: "normal", title: currentScopeTitle,
+                      presentation={scope === "all" && !fileFingerprint ? libraryHero : {
+                        kind: "normal", title: fileFingerprint ? cloudFonts.find((font) => font.fingerprint === fileFingerprint)?.filename ?? currentScopeTitle : currentScopeTitle,
                         subtitle: page ? t("library.familyCountLabel", { total: page.totalMatches }) : t("common.loadingLibrary"),
                         sync: libraryHero.sync,
                       }}
                       onAction={handleHeroAction}
                     />
+                    <OptionSelect label={t("fontLocation.title")} value={locationFilter} options={locationFilters.map((id) => ({ id,label:t(`fontLocation.${id}`) }))} onChange={(value) => { setFileFingerprint(undefined); setLocationFilter(value); }} />
                     <div className="sort-button">
                       <span>{t("library.sortBy")}</span>
                       <OptionSelect
@@ -2998,6 +3050,8 @@ export default function App() {
               {selected ? (
                 <Inspector
                   family={selected}
+                  onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
+                  onFileAction={(fingerprint,action) => void changeFile(fingerprint,action)}
                   styleKey={selectedStyleKey}
                   previewText={previewText}
                   previewSize={inspectorAppearance.size}
@@ -3324,6 +3378,8 @@ function describeSyncItem(item: SyncItemDto): string {
       return i18n.t("cloud.running", { action });
     case "done":
       return i18n.t("cloud.completed", { action });
+    case "failed": return i18n.t("fontLocation.transfer.failed");
+    case "cancelled": return i18n.t("fontLocation.transfer.cancelled");
     default:
       return i18n.t("cloud.waiting", { action });
   }
@@ -3441,6 +3497,9 @@ function CloudFontsPane({
   onSync,
   onRestore,
   onOpenSettings,
+  onOpen,
+  onRemove,
+  onDelete,
 }: {
   fonts: CloudFontDto[];
   connected: boolean;
@@ -3448,8 +3507,14 @@ function CloudFontsPane({
   onSync: () => void;
   onRestore: (font: CloudFontDto) => void;
   onOpenSettings: () => void;
+  onOpen: (font: CloudFontDto) => void;
+  onRemove: (font: CloudFontDto) => void;
+  onDelete: (font: CloudFontDto) => Promise<void>;
 }) {
   const { t } = useTranslation();
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [pendingDeletion, setPendingDeletion] = useState<CloudFontDto>();
+  const [actionError, setActionError] = useState<string>();
   if (!connected) {
     return (
       <div className="state-message empty-state">
@@ -3465,7 +3530,7 @@ function CloudFontsPane({
       </div>
     );
   }
-  const active = fonts.filter((font) => !font.deleted);
+  const active = fonts.filter((font) => font.deleted === showDeleted);
   const running = status?.running ?? false;
   return (
     <div className="cloud-pane">
@@ -3481,6 +3546,9 @@ function CloudFontsPane({
           {running ? t("cloud.syncing") : t("cloud.syncNow")}
         </Button>
       </header>
+      <SegmentedTabs ariaLabel={t("cloud.cloudFiles")} selectedKey={showDeleted ? "deleted" : "active"} onSelectionChange={(value) => setShowDeleted(value === "deleted")} panelId="cloud-files-panel" tabIdPrefix="cloud-files-tab" items={[{id:"active",title:t("cloud.cloudFiles")},{id:"deleted",title:t("cloud.recentlyDeleted")}]} />
+      {actionError && <p role="alert">{actionError}</p>}
+      <div id="cloud-files-panel" role="tabpanel" aria-labelledby={`cloud-files-tab-${showDeleted ? "deleted" : "active"}`}>
       {active.length ? (
         <ul className="cloud-font-list">
           {active.map((font) => {
@@ -3489,27 +3557,30 @@ function CloudFontsPane({
             );
             return (
               <li key={font.fingerprint}>
-                <span className="cloud-font-name">{font.displayName}</span>
+                <Button variant="ghost" isDisabled={font.deleted} onPress={() => onOpen(font)}>{font.displayName}</Button>
                 <span className="cloud-font-meta">
-                  {item ? (
+                  <span>{t(font.deleted ? "cloud.recentlyDeleted" : font.cloudOnly ? "fontLocation.cloudOnly" : "fontLocation.both")}</span>
+                  {item && (
                     <span className={`cloud-font-sync ${item.status}`}>
                       {describeSyncItem(item)}
                     </span>
-                  ) : (
-                    <span>{font.cloudOnly ? t("cloud.cloudOnly") : t("cloud.syncedTo")}</span>
                   )}{" "}
                   · {formatFileSize(font.fileSize)}
                 </span>
-                {font.cloudOnly && (
+                {(font.deleted || font.cloudOnly) && (
                   <Button
                     size="sm"
                     variant="secondary"
-                    isDisabled={running}
+                    isDisabled={font.deleted ? running : item?.status === "pending" || item?.status === "running"}
                     onPress={() => onRestore(font)}
                   >
-                    {t("cloud.download")}
+                    {t(font.deleted ? "cloud.restore" : "fontLocation.download")}
                   </Button>
                 )}
+                {!font.deleted && <>
+                  {font.localPath && <Button size="sm" variant="secondary" isDisabled={running} onPress={() => onRemove(font)}>{t("fontLocation.removeDownload")}</Button>}
+                  <Button size="sm" variant="ghost" isDisabled={running} onPress={() => setPendingDeletion(font)}>{t("cloud.deleteEverywhere")}</Button>
+                </>}
               </li>
             );
           })}
@@ -3523,6 +3594,14 @@ function CloudFontsPane({
           <p>{t("cloud.emptyHint")}</p>
         </div>
       )}
+      </div>
+      {pendingDeletion && <Modal isOpen onOpenChange={(open) => { if (!open) setPendingDeletion(undefined); }}>
+        <Modal.Backdrop className="storage-confirm-backdrop"><Modal.Container placement="center" className="storage-confirm-container">
+          <Modal.Dialog className="storage-confirm-dialog" aria-label={t("fontLocation.deleteTitle")}>
+            <h2>{t("fontLocation.deleteTitle")}</h2><p>{pendingDeletion.displayName}</p><p>{t("fontLocation.deleteHint")}</p>
+            <div className="setting-actions"><Button variant="secondary" onPress={() => setPendingDeletion(undefined)}>{t("common.cancel")}</Button>
+              <Button isDisabled={running} onPress={() => { void onDelete(pendingDeletion).then(() => setPendingDeletion(undefined)).catch((cause) => setActionError(errorMessage(cause))); }}>{t("cloud.deleteEverywhere")}</Button></div>
+          </Modal.Dialog></Modal.Container></Modal.Backdrop></Modal>}
     </div>
   );
 }
@@ -3628,6 +3707,8 @@ function Inspector({
   onCollectionTargetChange,
   onCollectionMembershipChange,
   onClose,
+  onDownload,
+  onFileAction,
 }: {
   family: FamilyDto;
   styleKey: string | null;
@@ -3640,6 +3721,8 @@ function Inspector({
   onCollectionTargetChange: (id: string) => void;
   onCollectionMembershipChange: (member: boolean) => void;
   onClose: () => void;
+  onDownload: (fingerprint: string) => void;
+  onFileAction: (fingerprint: string,action: "remove" | "exclude" | "include") => void;
 }) {
   const { t } = useTranslation();
   const style = currentPreviewStyle(family, styleKey);
@@ -3669,8 +3752,22 @@ function Inspector({
       <details className="inspector-section" open>
         <summary>{t("common.preview")}</summary>
         <div className="inspector-preview" style={{ backgroundColor: backgroundColor ?? undefined }}>
-          <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={6} align="left" priority="selected" label={t("desktop.previewLabelShort", { name: family.displayName, style: style?.name ?? t("font.regular") })} />
+          {!face || locallyAvailable(face) ? <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={6} align="left" priority="selected" label={t("desktop.previewLabelShort", { name: family.displayName, style: style?.name ?? t("font.regular") })} /> : <p>{t("fontLocation.previewHint")}</p>}
         </div>
+      </details>
+      <details className="inspector-section" open>
+        <summary>{t("fontLocation.title")}</summary>
+        <p>{locationLabel(family.faces,face,t)}</p>
+        {face?.location?.cloudConfirmedAtMs && <p>{t("fontLocation.lastConfirmed",{date:new Date(face.location.cloudConfirmedAtMs).toLocaleString()})}</p>}
+        {face?.location?.files.map((file) => <div key={file.fingerprint}>
+          <strong>{file.filename}</strong>
+          {file.localSources.map((source) => <div key={source.path}><span>{t(`fontLocation.source.${source.kind}`)}{source.previewSource && ` · ${t("fontLocation.currentPreview")}`}</span><p className="source-path">{source.path}</p><Button size="sm" variant="ghost" onPress={() => void revealFontSource(source.path).catch((cause) => setCopyMessage(errorMessage(cause)))}>{t("fontLocation.reveal")}</Button></div>)}
+          {transferLabel(file,t) && <p role="status">{transferLabel(file,t)}</p>}
+          {file.cloudAvailable && !file.localSources.length && <Button size="sm" onPress={() => onDownload(file.fingerprint)}>{t("fontLocation.download")}</Button>}
+          {file.cloudAvailable && file.localSources.some((source) => source.kind === "managed") && <Button size="sm" variant="secondary" onPress={() => onFileAction(file.fingerprint,"remove")}>{t("fontLocation.removeDownload")}</Button>}
+          {!file.cloudAvailable && !file.uploadExcluded && file.localSources.some((source) => source.kind === "managed") && <Button size="sm" variant="secondary" onPress={() => onFileAction(file.fingerprint,"include")}>{t("cloud.upload")}</Button>}
+          {file.localSources.some((source) => source.kind === "managed") && <Button size="sm" variant="ghost" onPress={() => onFileAction(file.fingerprint,file.uploadExcluded ? "include" : "exclude")}>{t(file.uploadExcluded ? "fontLocation.resumeUpload" : "fontLocation.keepLocal")}</Button>}
+        </div>)}
       </details>
       {face?.weight != null && (
         <div className="inspector-weight">
@@ -4015,6 +4112,8 @@ function parseSidebarBlur(value: string | null) {
 }
 
 function errorMessage(cause: unknown) {
+  const message = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
+  if (message && i18n.exists(message)) return i18n.t(message);
   return cause instanceof Error ? cause.message : i18n.t("common.unknownError");
 }
 

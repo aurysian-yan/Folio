@@ -60,6 +60,10 @@ pub struct PageRequest {
     pub smart_folder_id: Option<String>,
     #[serde(default)]
     pub font_state: Option<String>,
+    #[serde(default)]
+    pub location_filter: String,
+    #[serde(default)]
+    pub file_fingerprint: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -152,6 +156,7 @@ pub struct FaceDto {
     pub variable_axes: Vec<VariableAxisDto>,
     pub named_instances: Vec<NamedInstanceDto>,
     pub sources: Vec<SourceDto>,
+    pub location: Option<folio_query::FontLocation>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -181,6 +186,7 @@ pub struct FamilyDto {
     pub is_collection_member: bool,
     pub collection_ids: Vec<String>,
     pub is_variable: bool,
+    pub location: folio_query::FontFamilyLocation,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -296,6 +302,7 @@ pub struct LibraryService {
     catalog: Catalog,
     state: LibraryStateSnapshot,
     query_index: FontQueryIndex,
+    locations: BTreeMap<FontFaceId, folio_query::FontLocation>,
     preview_sources: HashMap<String, Vec<SourceDto>>,
     managed_directory: PathBuf,
 }
@@ -307,18 +314,31 @@ impl LibraryService {
             .map(|parent| parent.join("ManagedFonts"))
             .unwrap_or_else(|| PathBuf::from("ManagedFonts"));
         let mut database = FolioDatabase::open(path)?;
-        let catalog = database.load_cached_catalog()?;
+        database.set_sync_metadata("managed_directory", &managed_directory.to_string_lossy())?;
+        let local = database.load_cached_catalog()?;
+        let unified = folio_sync::unified_library(&database, &local)
+            .map_err(|error| LibraryError::Message(error.to_string()))?;
+        let locations = unified.locations.clone();
+        let catalog = unified.catalog;
         let state = database.library_state_snapshot()?;
-        let query_index = FontQueryIndex::build(&catalog, &state)?;
+        let mut query_index = FontQueryIndex::build(&catalog, &state)?;
+        query_index.set_locations(locations.clone());
         let preview_sources = preview_source_index(&catalog);
         Ok(Self {
             database,
             catalog,
             state,
             query_index,
+            locations,
             preview_sources,
             managed_directory,
         })
+    }
+
+    pub fn known_source(&self, path: &Path) -> bool {
+        self.catalog
+            .faces()
+            .any(|face| face.sources.iter().any(|source| source.path() == path))
     }
 
     pub fn add_default_roots(&mut self) -> Result<(), LibraryError> {
@@ -343,10 +363,15 @@ impl LibraryService {
     pub fn refresh(&mut self) -> Result<LibrarySnapshotDto, LibraryError> {
         self.add_managed_root()?;
         self.database.refresh(RefreshMode::Incremental)?;
-        self.catalog = self.database.load_cached_catalog()?;
+        let local = self.database.load_cached_catalog()?;
+        let unified = folio_sync::unified_library(&self.database, &local)
+            .map_err(|error| LibraryError::Message(error.to_string()))?;
+        self.locations = unified.locations;
+        self.catalog = unified.catalog;
         self.preview_sources = preview_source_index(&self.catalog);
         self.state = self.database.library_state_snapshot()?;
         self.query_index = FontQueryIndex::build(&self.catalog, &self.state)?;
+        self.query_index.set_locations(self.locations.clone());
         Ok(self.snapshot())
     }
 
@@ -410,14 +435,22 @@ impl LibraryService {
             "fontHealth" => Some(self.face_ids_for_health()),
             _ => None,
         };
-        let result = self
-            .query_index
-            .query_with_faces(&query, restricted_faces.as_ref())?;
+        let result = self.query_index.query_with_location(
+            &query,
+            restricted_faces.as_ref(),
+            &request.location_filter,
+            request.file_fingerprint.as_deref(),
+        )?;
         let mut facet_query = query.clone();
         facet_query.facets = FacetFilter::default();
         let facet_summary = self
             .query_index
-            .query_with_faces(&facet_query, restricted_faces.as_ref())?
+            .query_with_location(
+                &facet_query,
+                restricted_faces.as_ref(),
+                &request.location_filter,
+                request.file_fingerprint.as_deref(),
+            )?
             .facet_summary;
         let favorite_ids: HashSet<FontIdentityId> = self.state.favorites.iter().copied().collect();
         let collection_members: HashSet<FontIdentityId> = collection_id
@@ -429,13 +462,39 @@ impl LibraryService {
             })
             .map(|item| item.identities.iter().copied().collect())
             .unwrap_or_default();
+        let roots = FontSourceRoots::new(&self.managed_directory, &self.catalog);
         let families = result
             .families
             .into_iter()
             .filter_map(|matched| {
                 let family = self.catalog.find_family(matched.family_id)?;
-                let faces: Vec<FaceDto> = family.faces.iter().map(face_dto).collect();
+                let faces: Vec<FaceDto> = family
+                    .faces
+                    .iter()
+                    .map(|face| {
+                        let mut dto = face_dto(face);
+                        dto.location = self.locations.get(&face.id).cloned().map(|mut location| {
+                            for file in &mut location.files {
+                                for source in &mut file.local_sources {
+                                    source.kind =
+                                        match classify_source(Path::new(&source.path), &roots) {
+                                            FontStateKind::Available => "managed",
+                                            FontStateKind::User => "installed",
+                                            FontStateKind::System => "system",
+                                            _ => "reference",
+                                        }
+                                        .to_owned();
+                                }
+                            }
+                            location
+                        });
+                        dto
+                    })
+                    .collect();
                 Some(FamilyDto {
+                    location: folio_query::FontFamilyLocation::from_locations(
+                        faces.iter().filter_map(|face| face.location.as_ref()),
+                    ),
                     id: matched.family_id.to_string(),
                     display_name: matched
                         .display_name
@@ -764,7 +823,18 @@ impl LibraryService {
             .collect();
         let (font_state_counts, user_font_groups) = self.font_state_counts();
         LibrarySnapshotDto {
-            family_count: self.catalog.family_count(),
+            family_count: self
+                .catalog
+                .families
+                .iter()
+                .filter(|family| {
+                    family.faces.iter().any(|face| {
+                        self.locations
+                            .get(&face.id)
+                            .is_none_or(|location| location.metadata_complete)
+                    })
+                })
+                .count(),
             face_count: self.catalog.face_count(),
             variable_family_count: self
                 .catalog
@@ -773,7 +843,8 @@ impl LibraryService {
                 .filter(|family| family.faces.iter().any(|face| face.metadata.is_variable))
                 .count(),
             recent_count: self.state.recent.len(),
-            sync_summary: folio_sync::font_sync_summary(&self.database, &self.managed_directory).ok(),
+            sync_summary: folio_sync::font_sync_summary(&self.database, &self.managed_directory)
+                .ok(),
             roots,
             font_state_counts,
             user_font_groups,
@@ -1417,6 +1488,7 @@ fn face_dto(face: &FontFace) -> FaceDto {
         })
         .collect();
     FaceDto {
+        location: None,
         id: face.id.to_string(),
         identity_id: face.identity_id.to_string(),
         style_name: face.display_subfamily(),

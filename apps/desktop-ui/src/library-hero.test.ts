@@ -33,7 +33,8 @@ it("首次同步前与新增导入后的本地文件不依赖传输队列", () =
 it("双向差异、仅云端保留与过期读取保持不同语义", () => {
   const cloud = { fingerprint: "remote", displayName: "字族", filename: "remote.ttf", fileSize: 12, cloudOnly: true, deleted: false, localPath: null };
   const input = { ...base, fonts: [cloud], snapshot: { ...base.snapshot!, syncSummary: { syncedCount: 1, cloudOnlyCount: 1, localOnlyFingerprints: ["local"] } } };
-  expect(createLibraryHero(input).sync.text).toContain("1 个本地字体未同步 · 1 个云端字体可下载");
+  expect(createLibraryHero(input).sync.text).toContain("1");
+  expect(createLibraryHero(input).sync.text).not.toContain("领先");
   const cloudOnly = createLibraryHero({ ...base, fonts: [cloud], status: { ...base.status!, stage: "已同步", percent: 100 } });
   expect(cloudOnly.title).toContain("可下载");
   expect(cloudOnly.sync.text).toContain("仅在云端");

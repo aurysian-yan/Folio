@@ -7,7 +7,7 @@ import { FontCard } from "./FontCard";
 import { ExpandedFontCarousel } from "./ExpandedFontCarousel";
 
 type CardProps = ComponentProps<typeof FontCard>;
-type Props = Pick<CardProps, "mode" | "previewText" | "previewSize" | "textColor" | "backgroundColor" | "showMetadata" | "selectOnHover" | "hoverDelay" | "onSelect" | "onStyleChange" | "onFavorite"> & {
+type Props = Pick<CardProps, "mode" | "previewText" | "previewSize" | "textColor" | "backgroundColor" | "showMetadata" | "selectOnHover" | "hoverDelay" | "onSelect" | "onStyleChange" | "onFavorite" | "onDownload"> & {
   families: FamilyDto[];
   selectedId?: string;
   styleKey: string | null;

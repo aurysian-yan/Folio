@@ -14,6 +14,8 @@ export interface QueryRequest {
   collectionId?: string;
   smartFolderId?: string;
   fontState?: string;
+  locationFilter?: string;
+  fileFingerprint?: string;
 }
 
 export async function queryLibrary(request: QueryRequest): Promise<LibraryPageDto> {
@@ -155,4 +157,14 @@ export function listSyncConflicts(): Promise<SyncConflictDto[]> {
 
 export function resolveSyncConflict(id: string, resolution: "keepBoth" | "useLocal" | "useRemote"): Promise<void> {
   return invoke("resolve_sync_conflict", { request: { id, resolution } });
+}
+
+export function removeCloudDownload(fingerprint: string): Promise<void> { return invoke("remove_cloud_download",{ fingerprint }); }
+export function setFontUploadExcluded(fingerprint: string,excluded: boolean): Promise<void> { return invoke("set_font_upload_excluded",{ fingerprint,excluded }); }
+export function revealFontSource(path: string): Promise<void> { return invoke("reveal_font_source",{ path }); }
+export function getAutomaticDownload(): Promise<boolean> { return invoke("get_sync_preferences"); }
+export function setAutomaticDownload(automaticDownload: boolean): Promise<void> { return invoke("set_sync_preferences",{ automaticDownload }); }
+
+export function deleteCloudFont(fingerprint: string): Promise<void> {
+  return invoke("delete_cloud_font", { fingerprint });
 }

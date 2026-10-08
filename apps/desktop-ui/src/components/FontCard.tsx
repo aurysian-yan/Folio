@@ -1,6 +1,7 @@
+import { locallyAvailable, locationLabel, transferLabel } from "../../../../shared/font-location";
 import { Button, Card, Separator, Toolbar } from "@heroui/react";
 import { CaretLeftIcon, CaretRightIcon, CopySimpleIcon, StarIcon } from "@phosphor-icons/react";
-import { memo, useEffect, useEffectEvent, useState } from "react";
+import { memo, useEffect, useEffectEvent, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { currentPreviewStyle, previewStyles } from "../font-preview";
 import type { FamilyDto } from "../types";
@@ -8,7 +9,7 @@ import { FontPreview } from "./FontPreview";
 
 export type ViewMode = "compact" | "large" | "list" | "expanded";
 
-export const FontCard = memo(function FontCard({ family, mode, selected, styleKey, previewText, previewSize, textColor, backgroundColor, showMetadata, selectOnHover, hoverDelay, onSelect, onStyleChange, onFavorite, position, total }: {
+export const FontCard = memo(function FontCard({ family, mode, selected, styleKey, previewText, previewSize, textColor, backgroundColor, showMetadata, selectOnHover, hoverDelay, onSelect, onStyleChange, onFavorite, onDownload, position, total }: {
   family: FamilyDto;
   mode: ViewMode;
   selected: boolean;
@@ -23,10 +24,12 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
   onSelect: (family: FamilyDto) => void;
   onStyleChange: (key: string) => void;
   onFavorite: (family: FamilyDto) => void;
+  onDownload?: (fingerprint: string) => void;
   position: number;
   total: number;
 }) {
   const { t } = useTranslation();
+  const previewHintId = useId();
   const styles = previewStyles(family);
   const style = currentPreviewStyle(family, selected ? styleKey : null);
   const index = styles.findIndex((entry) => entry.key === style?.key);
@@ -58,6 +61,10 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
     <span>{t("macos.stylesCount", { count: styles.length })}</span>
     {family.isVariable && <><Separator orientation="vertical" /><span title={t("font.variable")}>VF</span></>}
   </Card.Description>;
+  const downloadButton = style && !locallyAvailable(style.face) && onDownload ? <Button className="font-card-download" aria-describedby={previewHintId} size="sm" variant="secondary" onPress={() => {
+          const file = style.face.location?.files.find((file) => file.cloudAvailable);
+          if (file) onDownload(file.fingerprint);
+        }}>{t("fontLocation.download")}</Button> : null;
   const selector = <div className="font-style-selector" role="group" aria-label={t("desktop.previewOf", { name: family.displayName })}>
     <Button isIconOnly size="sm" variant="ghost" className="font-style-step" aria-label={t("desktop.prevStyle")} isDisabled={styles.length < 2} onPress={() => moveStyle(-1)}><CaretLeftIcon /></Button>
     <span className="font-style-name" title={style?.name} aria-live="polite">{style?.name ?? t("font.regular")}</span>
@@ -74,15 +81,23 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
       <span className="sr-only">{t("desktop.selectFamily", { name: family.displayName })}</span>
     </Button>
     <div className="font-card-preview-area">
-      <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={mode === "compact" ? 2 : mode === "large" ? 3 : mode === "list" ? 1 : 6}
+      {!style || locallyAvailable(style.face) ? <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={mode === "compact" ? 2 : mode === "large" ? 3 : mode === "list" ? 1 : 6}
         priority={selected ? "selected" : "visible"}
-        align={mode === "expanded" ? "top" : mode === "list" ? "left" : "center"} label={t("desktop.previewLabel", { name: family.displayName, style: style?.name ?? t("font.regular") })} />
+        align={mode === "expanded" ? "top" : mode === "list" ? "left" : "center"} label={t("desktop.previewLabel", { name: family.displayName, style: style?.name ?? t("font.regular") })} /> : <div className="font-card-cloud-preview"><span id={previewHintId} className={mode === "compact" || mode === "list" ? "sr-only" : undefined}>{t("fontLocation.previewHint")}</span>
+        {mode !== "list" && downloadButton}
+      </div>}
+    </div>
+    <div className="font-card-location">
+      <span title={locationLabel(family.faces, selected ? style?.face : undefined, t, family.location)}>{locationLabel(family.faces, selected ? style?.face : undefined, t, family.location)}</span>
+      {style?.face.location?.files.map((file) => transferLabel(file,t) && <span key={file.fingerprint} role="status">{transferLabel(file,t)}</span>)}
     </div>
     <Card.Content className="font-card-content">
       <Card.Title title={family.displayName}>{family.displayName}</Card.Title>
+      {mode === "list" && downloadButton}
       {mode === "expanded" ? <div className="font-card-footer-row">{showMetadata && metadata}{selector}</div>
         : selected ? selector : showMetadata && metadata}
     </Card.Content>
+
     {selected && mode !== "expanded" && <Toolbar className="font-card-actions" aria-label={t("desktop.fontOf", { name: family.displayName })}>
       <Button isIconOnly size="sm" variant="secondary" className="font-card-action" aria-label={t("inspector.copyFamilyName")} onPress={() => void copyName()}><CopySimpleIcon /></Button>
       <Button isIconOnly size="sm" variant="secondary" className={`font-card-action${family.isFavorite ? " is-favorite" : ""}`} aria-label={family.isFavorite ? t("collection.unfavorite") : t("collection.favorite")}

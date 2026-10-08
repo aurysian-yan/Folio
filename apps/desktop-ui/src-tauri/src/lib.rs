@@ -34,6 +34,7 @@ struct AppState {
     managed_directory: PathBuf,
     sync_status: Arc<Mutex<SyncStatusDto>>,
     sync_cancel: Arc<AtomicBool>,
+    sync_pending: Arc<AtomicBool>,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -412,6 +413,24 @@ fn get_sync_status(
     status.configured = folio_sync::load_profile(&state.database_path)
         .map_err(|error| error.to_string())?
         .is_some();
+    for item in
+        folio_sync::transfer_items(&state.database_path).map_err(|error| error.to_string())?
+    {
+        let item = SyncItemDto {
+            fingerprint: item.fingerprint,
+            action: item.action.code().to_owned(),
+            status: item.status.code().to_owned(),
+        };
+        if let Some(current) = status
+            .items
+            .iter_mut()
+            .find(|current| current.fingerprint == item.fingerprint)
+        {
+            *current = item;
+        } else {
+            status.items.push(item);
+        }
+    }
     Ok(status)
 }
 
@@ -437,30 +456,38 @@ fn get_storage_usage(
 }
 
 #[tauri::command]
-fn clear_catalog_cache(
-    window: WebviewWindow,
-    state: State<'_, AppState>,
-) -> Result<u64, String> {
+fn clear_catalog_cache(window: WebviewWindow, state: State<'_, AppState>) -> Result<u64, String> {
     require_settings_window(&window)?;
-    let status = state.sync_status.lock().map_err(|_| "同步状态暂时不可用".to_owned())?;
+    let status = state
+        .sync_status
+        .lock()
+        .map_err(|_| "同步状态暂时不可用".to_owned())?;
     if status.running {
         return Err("请等待同步完成".to_owned());
     }
-    let mut library = state.library.try_lock().map_err(|_| "请等待字体库刷新完成".to_owned())?;
-    library.clear_catalog_cache().map_err(|error| error.to_string())
+    let mut library = state
+        .library
+        .try_lock()
+        .map_err(|_| "请等待字体库刷新完成".to_owned())?;
+    library
+        .clear_catalog_cache()
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn rebuild_sync_indexes(
-    window: WebviewWindow,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+fn rebuild_sync_indexes(window: WebviewWindow, state: State<'_, AppState>) -> Result<(), String> {
     require_settings_window(&window)?;
-    let status = state.sync_status.lock().map_err(|_| "同步状态暂时不可用".to_owned())?;
+    let status = state
+        .sync_status
+        .lock()
+        .map_err(|_| "同步状态暂时不可用".to_owned())?;
     if status.running {
         return Err("请等待同步完成".to_owned());
     }
-    let _library = state.library.try_lock().map_err(|_| "请等待字体库刷新完成".to_owned())?;
+    let _library = state
+        .library
+        .try_lock()
+        .map_err(|_| "请等待字体库刷新完成".to_owned())?;
     let mut db = folio_storage::FolioDatabase::open(&state.database_path)
         .map_err(|error| error.to_string())?;
     db.rebuild_sync_indexes().map_err(|error| error.to_string())
@@ -549,6 +576,7 @@ fn sync_now(
             .lock()
             .map_err(|_| "同步状态暂时不可用".to_owned())?;
         if status.running {
+            state.sync_pending.store(true, Ordering::Relaxed);
             return Ok(());
         }
         status.configured = true;
@@ -569,13 +597,17 @@ fn sync_now(
     let managed_directory = state.managed_directory.clone();
     let sync_status = Arc::clone(&state.sync_status);
     let sync_cancel = Arc::clone(&state.sync_cancel);
+    let sync_pending = Arc::clone(&state.sync_pending);
     let spawn_result = std::thread::Builder::new()
         .name("folio-webdav-sync".to_owned())
         .spawn(move || {
             tauri::async_runtime::block_on(async move {
                 let progress_status = Arc::clone(&sync_status);
+                let progress_app = app.clone();
                 let report = Arc::new(move |progress: folio_sync::SyncProgress| {
                     if let Ok(mut status) = progress_status.lock() {
+                        let directory_ready = progress.phase == folio_sync::SyncPhase::Downloading
+                            && status.stage != progress.phase.label();
                         status.phase = progress.phase.label().to_owned();
                         status.stage = progress.phase.label().to_owned();
                         status.percent = progress.percent;
@@ -593,16 +625,30 @@ fn sync_now(
                                 status: item.status.code().to_owned(),
                             })
                             .collect();
+                        drop(status);
+                        if directory_ready {
+                            let _ = progress_app.emit("library-updated", ());
+                        }
                     }
                 });
-                let result = folio_sync::synchronize(
-                    &database_path,
-                    &managed_directory,
-                    &password,
-                    Arc::clone(&sync_cancel),
-                    report,
-                )
-                .await;
+                let result = loop {
+                    let result = folio_sync::synchronize(
+                        &database_path,
+                        &managed_directory,
+                        &password,
+                        Arc::clone(&sync_cancel),
+                        report.clone(),
+                    )
+                    .await;
+                    if sync_pending.swap(false, Ordering::Relaxed)
+                        && !sync_cancel.load(Ordering::Relaxed)
+                        && result.is_ok()
+                    {
+                        let _ = app.emit("library-updated", ());
+                        continue;
+                    }
+                    break result;
+                };
                 if let Ok(mut status) = sync_status.lock() {
                     status.running = false;
                     match result {
@@ -678,6 +724,88 @@ fn list_cloud_fonts(
 }
 
 #[tauri::command]
+fn get_sync_preferences(window: WebviewWindow, state: State<'_, AppState>) -> Result<bool, String> {
+    require_sync_window(&window)?;
+    folio_sync::automatic_download(&state.database_path).map_err(|error| error.to_string())
+}
+#[tauri::command]
+fn set_sync_preferences(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    automatic_download: bool,
+) -> Result<(), String> {
+    require_settings_window(&window)?;
+    folio_sync::set_automatic_download(&state.database_path, automatic_download)
+        .map_err(|error| error.to_string())
+}
+#[tauri::command]
+fn remove_cloud_download(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    fingerprint: String,
+) -> Result<(), String> {
+    require_sync_window(&window)?;
+    if state
+        .sync_status
+        .lock()
+        .map_err(|_| "cloud.statusUnavailable")?
+        .running
+    {
+        return Err("cloud.statusBusy".to_owned());
+    }
+    folio_sync::set_cloud_only(&state.database_path, &fingerprint)
+        .map_err(|error| error.to_string())
+}
+#[tauri::command]
+fn set_font_upload_excluded(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    fingerprint: String,
+    excluded: bool,
+) -> Result<(), String> {
+    require_sync_window(&window)?;
+    if state
+        .sync_status
+        .lock()
+        .map_err(|_| "cloud.statusUnavailable")?
+        .running
+    {
+        return Err("cloud.statusBusy".to_owned());
+    }
+    folio_sync::set_upload_excluded(&state.database_path, &fingerprint, excluded)
+        .map_err(|error| error.to_string())
+}
+#[tauri::command]
+fn reveal_font_source(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    require_main_window(&window)?;
+    let source = PathBuf::from(path);
+    if !source.is_file()
+        || !state
+            .library
+            .lock()
+            .map_err(|_| "common.operationFailed")?
+            .known_source(&source)
+    {
+        return Err("macos.fileUnavailable".to_owned());
+    }
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer")
+        .arg(format!("/select,{}", source.display()))
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open")
+        .arg(source.parent().ok_or("macos.fileUnavailable")?)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn restore_cloud_font(
     window: WebviewWindow,
     state: State<'_, AppState>,
@@ -685,6 +813,25 @@ fn restore_cloud_font(
 ) -> Result<(), String> {
     require_sync_window(&window)?;
     folio_sync::request_restore(&state.database_path, &fingerprint)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn delete_cloud_font(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    fingerprint: String,
+) -> Result<(), String> {
+    require_sync_window(&window)?;
+    if state
+        .sync_status
+        .lock()
+        .map_err(|_| "cloud.statusUnavailable")?
+        .running
+    {
+        return Err("cloud.statusBusy".to_owned());
+    }
+    folio_sync::delete_everywhere(&state.database_path, &fingerprint)
         .map_err(|error| error.to_string())
 }
 
@@ -867,6 +1014,7 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             let database_path = data_dir.join("folio.sqlite");
             let managed_directory = data_dir.join("ManagedFonts");
+            folio_sync::recover_transfers(&database_path)?;
             let mut library = LibraryService::open(database_path.clone())?;
             library.add_default_roots()?;
             app.manage(AppState {
@@ -876,6 +1024,7 @@ pub fn run() {
                 managed_directory,
                 sync_status: Arc::new(Mutex::new(SyncStatusDto::default())),
                 sync_cancel: Arc::new(AtomicBool::new(false)),
+                sync_pending: Arc::new(AtomicBool::new(false)),
             });
 
             if let Some(window) = app.get_webview_window("main") {
@@ -913,7 +1062,13 @@ pub fn run() {
             cancel_sync,
             list_cloud_fonts,
             restore_cloud_font,
+            get_sync_preferences,
+            set_sync_preferences,
+            remove_cloud_download,
+            set_font_upload_excluded,
+            reveal_font_source,
             restore_deleted_cloud_font,
+            delete_cloud_font,
             list_sync_conflicts,
             resolve_sync_conflict,
             open_settings,

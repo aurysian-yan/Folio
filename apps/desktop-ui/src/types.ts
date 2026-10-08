@@ -15,6 +15,7 @@ export interface FaceDto {
   variableAxes: { tag: string; minValue: number; defaultValue: number; maxValue: number }[];
   namedInstances: { name: string; coordinates: Record<string, number> }[];
   sources: SourceDto[];
+  location?: import("../../../shared/font-location").FontLocation;
 }
 
 export interface FamilyDto {
@@ -26,6 +27,7 @@ export interface FamilyDto {
   isCollectionMember: boolean;
   collectionIds: string[];
   isVariable: boolean;
+  location?: import("../../../shared/font-location").FontFamilyLocation;
 }
 
 export interface CollectionDto {
@@ -130,7 +132,7 @@ export interface SyncStatusDto {
 export interface SyncItemDto {
   fingerprint: string;
   action: "upload" | "download";
-  status: "pending" | "running" | "done";
+  status: "pending" | "running" | "done" | "failed" | "cancelled";
 }
 
 export interface CloudFontDto {

@@ -1,3 +1,4 @@
+import { locallyAvailable } from "../../../shared/font-location";
 import { loadPreviewFont, renderPreviews } from "./api";
 import i18n from "./i18n";
 import { PreviewCache, PreviewScheduler, type PreviewPriority } from "./preview-cache";
@@ -14,7 +15,9 @@ export interface PreviewStyle {
 
 export function preferredFace(family: FamilyDto) {
   const matches = family.faces.filter((face) => family.matchedFaceIds.includes(face.id));
-  const faces = matches.length > 0 ? matches : family.faces;
+  const candidates = matches.length > 0 ? matches : family.faces;
+  const local = candidates.filter(locallyAvailable);
+  const faces = local.length > 0 ? local : candidates;
   return faces.find((face) => /^(regular|normal|常规)$/i.test(face.styleName)) ??
     faces.reduce<FaceDto | undefined>((nearest, face) =>
       !nearest || Math.abs((face.weight ?? 400) - 400) < Math.abs((nearest.weight ?? 400) - 400)
