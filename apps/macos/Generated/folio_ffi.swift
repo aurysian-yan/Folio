@@ -651,6 +651,8 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
 
     func querySmartFolder(id: SmartFolderIdDto, text: String?, facets: [FacetSelectionDto], offset: UInt64, limit: UInt64) throws  -> LibraryPageDto
 
+    func querySmartFolderWithLocation(id: SmartFolderIdDto, text: String?, facets: [FacetSelectionDto], offset: UInt64, limit: UInt64, locationFilter: String?, fileFingerprint: String?) throws  -> LibraryPageDto
+
     func recordRecent(identityId: IdentityIdDto) throws
 
     func refreshLibrary() throws  -> RefreshOutcomeDto
@@ -913,6 +915,22 @@ open func querySmartFolder(id: SmartFolderIdDto, text: String?, facets: [FacetSe
         FfiConverterSequenceTypeFacetSelectionDto.lower(facets),
         FfiConverterUInt64.lower(offset),
         FfiConverterUInt64.lower(limit),uniffiCallStatus
+    )
+})
+}
+
+open func querySmartFolderWithLocation(id: SmartFolderIdDto, text: String?, facets: [FacetSelectionDto], offset: UInt64, limit: UInt64, locationFilter: String?, fileFingerprint: String?)throws  -> LibraryPageDto  {
+    return try  FfiConverterTypeLibraryPageDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_query_smart_folder_with_location(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSmartFolderIdDto_lower(id),
+        FfiConverterOptionString.lower(text),
+        FfiConverterSequenceTypeFacetSelectionDto.lower(facets),
+        FfiConverterUInt64.lower(offset),
+        FfiConverterUInt64.lower(limit),
+        FfiConverterOptionString.lower(locationFilter),
+        FfiConverterOptionString.lower(fileFingerprint),uniffiCallStatus
     )
 })
 }
@@ -1320,6 +1338,8 @@ public func FfiConverterTypeFolioOnline_lower(_ value: FolioOnline) -> UInt64 {
 
 public protocol FolioSyncProtocol: AnyObject, Sendable {
 
+    func automaticDownload() throws  -> Bool
+
     func cancel()
 
     func clearCatalogCache() throws  -> UInt64
@@ -1350,7 +1370,11 @@ public protocol FolioSyncProtocol: AnyObject, Sendable {
 
     func saveProfile(profile: SyncProfileDto) throws
 
+    func setAutomaticDownload(enabled: Bool) throws
+
     func setCloudOnly(fingerprint: String) throws
+
+    func setUploadExcluded(fingerprint: String, excluded: Bool) throws
 
     func startSync(password: String) throws  -> Bool
 
@@ -1423,6 +1447,15 @@ public static func `open`(databasePath: String, managedDirectory: String)throws 
 }
 
 
+
+open func automaticDownload()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_automatic_download(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
 
 open func cancel()  {try! rustCall() {
         uniffiCallStatus in
@@ -1558,11 +1591,30 @@ open func saveProfile(profile: SyncProfileDto)throws   {try rustCallWithError(Ff
 }
 }
 
+open func setAutomaticDownload(enabled: Bool)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_set_automatic_download(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(enabled),uniffiCallStatus
+    )
+}
+}
+
 open func setCloudOnly(fingerprint: String)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
     uniffi_folio_ffi_fn_method_foliosync_set_cloud_only(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(fingerprint),uniffiCallStatus
+    )
+}
+}
+
+open func setUploadExcluded(fingerprint: String, excluded: Bool)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_foliosync_set_upload_excluded(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(fingerprint),
+        FfiConverterBool.lower(excluded),uniffiCallStatus
     )
 }
 }
@@ -1920,10 +1972,11 @@ public struct FaceSummaryDto: Equatable, Hashable {
     public var license: String
     public var scripts: [String]
     public var axes: [VariableAxisDto]
+    public var location: FontLocationDto
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: FaceIdDto, identityId: IdentityIdDto, revisionId: String, styleName: String, postscriptName: String?, fullName: String?, format: String, isVariable: Bool, weight: Double?, width: Double?, sourcePath: String?, sources: [FontSourceDto], faceIndex: UInt32, fileSize: UInt64, version: String?, manufacturer: String?, designer: String?, copyright: String?, category: String, license: String, scripts: [String], axes: [VariableAxisDto]) {
+    public init(id: FaceIdDto, identityId: IdentityIdDto, revisionId: String, styleName: String, postscriptName: String?, fullName: String?, format: String, isVariable: Bool, weight: Double?, width: Double?, sourcePath: String?, sources: [FontSourceDto], faceIndex: UInt32, fileSize: UInt64, version: String?, manufacturer: String?, designer: String?, copyright: String?, category: String, license: String, scripts: [String], axes: [VariableAxisDto], location: FontLocationDto) {
         self.id = id
         self.identityId = identityId
         self.revisionId = revisionId
@@ -1946,6 +1999,7 @@ public struct FaceSummaryDto: Equatable, Hashable {
         self.license = license
         self.scripts = scripts
         self.axes = axes
+        self.location = location
     }
 
 
@@ -1985,7 +2039,8 @@ public struct FfiConverterTypeFaceSummaryDto: FfiConverterRustBuffer {
                 category: FfiConverterString.read(from: &buf),
                 license: FfiConverterString.read(from: &buf),
                 scripts: FfiConverterSequenceString.read(from: &buf),
-                axes: FfiConverterSequenceTypeVariableAxisDto.read(from: &buf)
+                axes: FfiConverterSequenceTypeVariableAxisDto.read(from: &buf),
+                location: FfiConverterTypeFontLocationDto.read(from: &buf)
         )
     }
 
@@ -2012,6 +2067,7 @@ public struct FfiConverterTypeFaceSummaryDto: FfiConverterRustBuffer {
         FfiConverterString.write(value.license, into: &buf)
         FfiConverterSequenceString.write(value.scripts, into: &buf)
         FfiConverterSequenceTypeVariableAxisDto.write(value.axes, into: &buf)
+        FfiConverterTypeFontLocationDto.write(value.location, into: &buf)
     }
 }
 
@@ -2156,10 +2212,11 @@ public struct FamilyCardDto: Equatable, Hashable {
     public var isFavorite: Bool
     public var isVariable: Bool
     public var manufacturer: String?
+    public var location: FontFamilyLocationDto
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: FamilyIdDto, displayName: String, faces: [FaceSummaryDto], identityIds: [IdentityIdDto], matchedFaceIds: [FaceIdDto], isFavorite: Bool, isVariable: Bool, manufacturer: String?) {
+    public init(id: FamilyIdDto, displayName: String, faces: [FaceSummaryDto], identityIds: [IdentityIdDto], matchedFaceIds: [FaceIdDto], isFavorite: Bool, isVariable: Bool, manufacturer: String?, location: FontFamilyLocationDto) {
         self.id = id
         self.displayName = displayName
         self.faces = faces
@@ -2168,6 +2225,7 @@ public struct FamilyCardDto: Equatable, Hashable {
         self.isFavorite = isFavorite
         self.isVariable = isVariable
         self.manufacturer = manufacturer
+        self.location = location
     }
 
 
@@ -2193,7 +2251,8 @@ public struct FfiConverterTypeFamilyCardDto: FfiConverterRustBuffer {
                 matchedFaceIds: FfiConverterSequenceTypeFaceIdDto.read(from: &buf),
                 isFavorite: FfiConverterBool.read(from: &buf),
                 isVariable: FfiConverterBool.read(from: &buf),
-                manufacturer: FfiConverterOptionString.read(from: &buf)
+                manufacturer: FfiConverterOptionString.read(from: &buf),
+                location: FfiConverterTypeFontFamilyLocationDto.read(from: &buf)
         )
     }
 
@@ -2206,6 +2265,7 @@ public struct FfiConverterTypeFamilyCardDto: FfiConverterRustBuffer {
         FfiConverterBool.write(value.isFavorite, into: &buf)
         FfiConverterBool.write(value.isVariable, into: &buf)
         FfiConverterOptionString.write(value.manufacturer, into: &buf)
+        FfiConverterTypeFontFamilyLocationDto.write(value.location, into: &buf)
     }
 }
 
@@ -2231,15 +2291,17 @@ public struct FamilyDetailsDto: Equatable, Hashable {
     public var faces: [FaceSummaryDto]
     public var identityIds: [IdentityIdDto]
     public var isFavorite: Bool
+    public var location: FontFamilyLocationDto
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: FamilyIdDto, displayName: String, faces: [FaceSummaryDto], identityIds: [IdentityIdDto], isFavorite: Bool) {
+    public init(id: FamilyIdDto, displayName: String, faces: [FaceSummaryDto], identityIds: [IdentityIdDto], isFavorite: Bool, location: FontFamilyLocationDto) {
         self.id = id
         self.displayName = displayName
         self.faces = faces
         self.identityIds = identityIds
         self.isFavorite = isFavorite
+        self.location = location
     }
 
 
@@ -2262,7 +2324,8 @@ public struct FfiConverterTypeFamilyDetailsDto: FfiConverterRustBuffer {
                 displayName: FfiConverterString.read(from: &buf),
                 faces: FfiConverterSequenceTypeFaceSummaryDto.read(from: &buf),
                 identityIds: FfiConverterSequenceTypeIdentityIdDto.read(from: &buf),
-                isFavorite: FfiConverterBool.read(from: &buf)
+                isFavorite: FfiConverterBool.read(from: &buf),
+                location: FfiConverterTypeFontFamilyLocationDto.read(from: &buf)
         )
     }
 
@@ -2272,6 +2335,7 @@ public struct FfiConverterTypeFamilyDetailsDto: FfiConverterRustBuffer {
         FfiConverterSequenceTypeFaceSummaryDto.write(value.faces, into: &buf)
         FfiConverterSequenceTypeIdentityIdDto.write(value.identityIds, into: &buf)
         FfiConverterBool.write(value.isFavorite, into: &buf)
+        FfiConverterTypeFontFamilyLocationDto.write(value.location, into: &buf)
     }
 }
 
@@ -2341,6 +2405,224 @@ public func FfiConverterTypeFamilyIdDto_lower(_ value: FamilyIdDto) -> RustBuffe
 }
 
 
+public struct FontFamilyLocationDto: Equatable, Hashable {
+    public var state: String
+    public var localFaceCount: UInt64
+    public var totalFaceCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(state: String, localFaceCount: UInt64, totalFaceCount: UInt64) {
+        self.state = state
+        self.localFaceCount = localFaceCount
+        self.totalFaceCount = totalFaceCount
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FontFamilyLocationDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFontFamilyLocationDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FontFamilyLocationDto {
+        return
+            try FontFamilyLocationDto(
+                state: FfiConverterString.read(from: &buf),
+                localFaceCount: FfiConverterUInt64.read(from: &buf),
+                totalFaceCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FontFamilyLocationDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.state, into: &buf)
+        FfiConverterUInt64.write(value.localFaceCount, into: &buf)
+        FfiConverterUInt64.write(value.totalFaceCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontFamilyLocationDto_lift(_ buf: RustBuffer) throws -> FontFamilyLocationDto {
+    return try FfiConverterTypeFontFamilyLocationDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontFamilyLocationDto_lower(_ value: FontFamilyLocationDto) -> RustBuffer {
+    return FfiConverterTypeFontFamilyLocationDto.lower(value)
+}
+
+
+public struct FontFileLocationDto: Equatable, Hashable {
+    public var fingerprint: String
+    public var filename: String
+    public var fileSize: UInt64
+    public var faceIndex: UInt32
+    public var cloudAvailable: Bool
+    public var uploadExcluded: Bool
+    public var downloadPolicy: String
+    public var localSources: [LocalFontLocationDto]
+    public var transferAction: String?
+    public var transferStatus: String?
+    public var transferError: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(fingerprint: String, filename: String, fileSize: UInt64, faceIndex: UInt32, cloudAvailable: Bool, uploadExcluded: Bool, downloadPolicy: String, localSources: [LocalFontLocationDto], transferAction: String?, transferStatus: String?, transferError: String?) {
+        self.fingerprint = fingerprint
+        self.filename = filename
+        self.fileSize = fileSize
+        self.faceIndex = faceIndex
+        self.cloudAvailable = cloudAvailable
+        self.uploadExcluded = uploadExcluded
+        self.downloadPolicy = downloadPolicy
+        self.localSources = localSources
+        self.transferAction = transferAction
+        self.transferStatus = transferStatus
+        self.transferError = transferError
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FontFileLocationDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFontFileLocationDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FontFileLocationDto {
+        return
+            try FontFileLocationDto(
+                fingerprint: FfiConverterString.read(from: &buf),
+                filename: FfiConverterString.read(from: &buf),
+                fileSize: FfiConverterUInt64.read(from: &buf),
+                faceIndex: FfiConverterUInt32.read(from: &buf),
+                cloudAvailable: FfiConverterBool.read(from: &buf),
+                uploadExcluded: FfiConverterBool.read(from: &buf),
+                downloadPolicy: FfiConverterString.read(from: &buf),
+                localSources: FfiConverterSequenceTypeLocalFontLocationDto.read(from: &buf),
+                transferAction: FfiConverterOptionString.read(from: &buf),
+                transferStatus: FfiConverterOptionString.read(from: &buf),
+                transferError: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FontFileLocationDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.fingerprint, into: &buf)
+        FfiConverterString.write(value.filename, into: &buf)
+        FfiConverterUInt64.write(value.fileSize, into: &buf)
+        FfiConverterUInt32.write(value.faceIndex, into: &buf)
+        FfiConverterBool.write(value.cloudAvailable, into: &buf)
+        FfiConverterBool.write(value.uploadExcluded, into: &buf)
+        FfiConverterString.write(value.downloadPolicy, into: &buf)
+        FfiConverterSequenceTypeLocalFontLocationDto.write(value.localSources, into: &buf)
+        FfiConverterOptionString.write(value.transferAction, into: &buf)
+        FfiConverterOptionString.write(value.transferStatus, into: &buf)
+        FfiConverterOptionString.write(value.transferError, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontFileLocationDto_lift(_ buf: RustBuffer) throws -> FontFileLocationDto {
+    return try FfiConverterTypeFontFileLocationDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontFileLocationDto_lower(_ value: FontFileLocationDto) -> RustBuffer {
+    return FfiConverterTypeFontFileLocationDto.lower(value)
+}
+
+
+public struct FontLocationDto: Equatable, Hashable {
+    public var state: String
+    public var localAvailable: Bool
+    public var cloudAvailable: Bool
+    public var cloudConfirmedAtMs: UInt64?
+    public var metadataComplete: Bool
+    public var files: [FontFileLocationDto]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(state: String, localAvailable: Bool, cloudAvailable: Bool, cloudConfirmedAtMs: UInt64?, metadataComplete: Bool, files: [FontFileLocationDto]) {
+        self.state = state
+        self.localAvailable = localAvailable
+        self.cloudAvailable = cloudAvailable
+        self.cloudConfirmedAtMs = cloudConfirmedAtMs
+        self.metadataComplete = metadataComplete
+        self.files = files
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FontLocationDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFontLocationDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FontLocationDto {
+        return
+            try FontLocationDto(
+                state: FfiConverterString.read(from: &buf),
+                localAvailable: FfiConverterBool.read(from: &buf),
+                cloudAvailable: FfiConverterBool.read(from: &buf),
+                cloudConfirmedAtMs: FfiConverterOptionUInt64.read(from: &buf),
+                metadataComplete: FfiConverterBool.read(from: &buf),
+                files: FfiConverterSequenceTypeFontFileLocationDto.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FontLocationDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.state, into: &buf)
+        FfiConverterBool.write(value.localAvailable, into: &buf)
+        FfiConverterBool.write(value.cloudAvailable, into: &buf)
+        FfiConverterOptionUInt64.write(value.cloudConfirmedAtMs, into: &buf)
+        FfiConverterBool.write(value.metadataComplete, into: &buf)
+        FfiConverterSequenceTypeFontFileLocationDto.write(value.files, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontLocationDto_lift(_ buf: RustBuffer) throws -> FontLocationDto {
+    return try FfiConverterTypeFontLocationDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFontLocationDto_lower(_ value: FontLocationDto) -> RustBuffer {
+    return FfiConverterTypeFontLocationDto.lower(value)
+}
+
+
 public struct FontSourceDto: Equatable, Hashable {
     public var path: String
     public var faceIndex: UInt32
@@ -2404,7 +2686,8 @@ public struct FontSyncSummaryDto: Equatable, Hashable {
     public var cloudOnlyCount: UInt64
     public var localOnlyFingerprints: [String]
 
-    // 提供跨模块使用的成员初始化器。
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
     public init(syncedCount: UInt64, cloudOnlyCount: UInt64, localOnlyFingerprints: [String]) {
         self.syncedCount = syncedCount
         self.cloudOnlyCount = cloudOnlyCount
@@ -2699,18 +2982,22 @@ public struct LibraryQueryDto: Equatable, Hashable {
     public var facets: [FacetSelectionDto]
     public var allowedFaceIds: [FaceIdDto]?
     public var allowedSourcePaths: [String]?
+    public var locationFilter: String?
+    public var fileFingerprint: String?
     public var offset: UInt64
     public var limit: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(text: String?, scope: QueryScopeDto, collectionId: CollectionIdDto?, facets: [FacetSelectionDto], allowedFaceIds: [FaceIdDto]?, allowedSourcePaths: [String]?, offset: UInt64, limit: UInt64) {
+    public init(text: String?, scope: QueryScopeDto, collectionId: CollectionIdDto?, facets: [FacetSelectionDto], allowedFaceIds: [FaceIdDto]?, allowedSourcePaths: [String]?, locationFilter: String?, fileFingerprint: String?, offset: UInt64, limit: UInt64) {
         self.text = text
         self.scope = scope
         self.collectionId = collectionId
         self.facets = facets
         self.allowedFaceIds = allowedFaceIds
         self.allowedSourcePaths = allowedSourcePaths
+        self.locationFilter = locationFilter
+        self.fileFingerprint = fileFingerprint
         self.offset = offset
         self.limit = limit
     }
@@ -2737,6 +3024,8 @@ public struct FfiConverterTypeLibraryQueryDto: FfiConverterRustBuffer {
                 facets: FfiConverterSequenceTypeFacetSelectionDto.read(from: &buf),
                 allowedFaceIds: FfiConverterOptionSequenceTypeFaceIdDto.read(from: &buf),
                 allowedSourcePaths: FfiConverterOptionSequenceString.read(from: &buf),
+                locationFilter: FfiConverterOptionString.read(from: &buf),
+                fileFingerprint: FfiConverterOptionString.read(from: &buf),
                 offset: FfiConverterUInt64.read(from: &buf),
                 limit: FfiConverterUInt64.read(from: &buf)
         )
@@ -2749,6 +3038,8 @@ public struct FfiConverterTypeLibraryQueryDto: FfiConverterRustBuffer {
         FfiConverterSequenceTypeFacetSelectionDto.write(value.facets, into: &buf)
         FfiConverterOptionSequenceTypeFaceIdDto.write(value.allowedFaceIds, into: &buf)
         FfiConverterOptionSequenceString.write(value.allowedSourcePaths, into: &buf)
+        FfiConverterOptionString.write(value.locationFilter, into: &buf)
+        FfiConverterOptionString.write(value.fileFingerprint, into: &buf)
         FfiConverterUInt64.write(value.offset, into: &buf)
         FfiConverterUInt64.write(value.limit, into: &buf)
     }
@@ -2849,6 +3140,64 @@ public func FfiConverterTypeLibrarySnapshotDto_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeLibrarySnapshotDto_lower(_ value: LibrarySnapshotDto) -> RustBuffer {
     return FfiConverterTypeLibrarySnapshotDto.lower(value)
+}
+
+
+public struct LocalFontLocationDto: Equatable, Hashable {
+    public var path: String
+    public var kind: String
+    public var previewSource: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(path: String, kind: String, previewSource: Bool) {
+        self.path = path
+        self.kind = kind
+        self.previewSource = previewSource
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension LocalFontLocationDto: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLocalFontLocationDto: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LocalFontLocationDto {
+        return
+            try LocalFontLocationDto(
+                path: FfiConverterString.read(from: &buf),
+                kind: FfiConverterString.read(from: &buf),
+                previewSource: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LocalFontLocationDto, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.path, into: &buf)
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterBool.write(value.previewSource, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLocalFontLocationDto_lift(_ buf: RustBuffer) throws -> LocalFontLocationDto {
+    return try FfiConverterTypeLocalFontLocationDto.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLocalFontLocationDto_lower(_ value: LocalFontLocationDto) -> RustBuffer {
+    return FfiConverterTypeLocalFontLocationDto.lower(value)
 }
 
 
@@ -4711,6 +5060,31 @@ fileprivate struct FfiConverterSequenceTypeFamilyCardDto: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFontFileLocationDto: FfiConverterRustBuffer {
+    typealias SwiftType = [FontFileLocationDto]
+
+    public static func write(_ value: [FontFileLocationDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFontFileLocationDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FontFileLocationDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FontFileLocationDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFontFileLocationDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFontSourceDto: FfiConverterRustBuffer {
     typealias SwiftType = [FontSourceDto]
 
@@ -4778,6 +5152,31 @@ fileprivate struct FfiConverterSequenceTypeLibraryFaceSourcesDto: FfiConverterRu
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeLibraryFaceSourcesDto.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeLocalFontLocationDto: FfiConverterRustBuffer {
+    typealias SwiftType = [LocalFontLocationDto]
+
+    public static func write(_ value: [LocalFontLocationDto], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeLocalFontLocationDto.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [LocalFontLocationDto] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [LocalFontLocationDto]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeLocalFontLocationDto.read(from: &buf))
         }
         return seq
     }
@@ -5049,6 +5448,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_query_smart_folder() != 46254) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_query_smart_folder_with_location() != 30388) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_record_recent() != 8378) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5112,6 +5514,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioonline_validate_mirror() != 54688) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_foliosync_automatic_download() != 11988) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_foliosync_cancel() != 59610) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5157,7 +5562,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_foliosync_save_profile() != 29051) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_foliosync_set_automatic_download() != 11227) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_foliosync_set_cloud_only() != 50712) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_foliosync_set_upload_excluded() != 18470) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_foliosync_start_sync() != 39377) {

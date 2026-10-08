@@ -141,6 +141,8 @@ pub struct LibraryQueryDto {
     pub facets: Vec<FacetSelectionDto>,
     pub allowed_face_ids: Option<Vec<FaceIdDto>>,
     pub allowed_source_paths: Option<Vec<String>>,
+    pub location_filter: Option<String>,
+    pub file_fingerprint: Option<String>,
     pub offset: u64,
     pub limit: u64,
 }
@@ -179,6 +181,88 @@ pub struct FaceSummaryDto {
     pub license: String,
     pub scripts: Vec<String>,
     pub axes: Vec<VariableAxisDto>,
+    pub location: FontLocationDto,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct FontLocationDto {
+    pub state: String,
+    pub local_available: bool,
+    pub cloud_available: bool,
+    pub cloud_confirmed_at_ms: Option<u64>,
+    pub metadata_complete: bool,
+    pub files: Vec<FontFileLocationDto>,
+}
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct FontFamilyLocationDto {
+    pub state: String,
+    pub local_face_count: u64,
+    pub total_face_count: u64,
+}
+impl From<folio_query::FontFamilyLocation> for FontFamilyLocationDto {
+    fn from(value: folio_query::FontFamilyLocation) -> Self {
+        Self {
+            state: value.state,
+            local_face_count: value.local_face_count,
+            total_face_count: value.total_face_count,
+        }
+    }
+}
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct FontFileLocationDto {
+    pub fingerprint: String,
+    pub filename: String,
+    pub file_size: u64,
+    pub face_index: u32,
+    pub cloud_available: bool,
+    pub upload_excluded: bool,
+    pub download_policy: String,
+    pub local_sources: Vec<LocalFontLocationDto>,
+    pub transfer_action: Option<String>,
+    pub transfer_status: Option<String>,
+    pub transfer_error: Option<String>,
+}
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct LocalFontLocationDto {
+    pub path: String,
+    pub kind: String,
+    pub preview_source: bool,
+}
+impl From<folio_query::FontLocation> for FontLocationDto {
+    fn from(value: folio_query::FontLocation) -> Self {
+        Self {
+            state: value.state,
+            local_available: value.local_available,
+            cloud_available: value.cloud_available,
+            cloud_confirmed_at_ms: value.cloud_confirmed_at_ms,
+            metadata_complete: value.metadata_complete,
+            files: value
+                .files
+                .into_iter()
+                .map(|file| FontFileLocationDto {
+                    fingerprint: file.fingerprint,
+                    filename: file.filename,
+                    file_size: file.file_size,
+                    face_index: file.face_index,
+                    cloud_available: file.cloud_available,
+                    upload_excluded: file.upload_excluded,
+                    download_policy: file.download_policy,
+                    transfer_action: file.transfer_action,
+                    transfer_status: file.transfer_status,
+                    transfer_error: file.transfer_error,
+                    local_sources: file
+                        .local_sources
+                        .into_iter()
+                        .map(|source| LocalFontLocationDto {
+                            path: source.path,
+                            kind: source.kind,
+                            preview_source: source.preview_source,
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -205,6 +289,7 @@ pub struct FamilyCardDto {
     pub is_favorite: bool,
     pub is_variable: bool,
     pub manufacturer: Option<String>,
+    pub location: FontFamilyLocationDto,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -231,6 +316,7 @@ pub struct FamilyDetailsDto {
     pub faces: Vec<FaceSummaryDto>,
     pub identity_ids: Vec<IdentityIdDto>,
     pub is_favorite: bool,
+    pub location: FontFamilyLocationDto,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -652,6 +738,9 @@ impl FolioSync {
         managed_directory: String,
     ) -> Result<Arc<Self>, FolioFfiError> {
         let db = FolioDatabase::open(&database_path).map_err(FolioFfiError::operation)?;
+        folio_sync::recover_transfers(&database_path).map_err(FolioFfiError::operation)?;
+        db.set_sync_metadata("managed_directory", &managed_directory)
+            .map_err(FolioFfiError::operation)?;
         let connected = folio_sync::load_profile(&database_path)
             .map_err(FolioFfiError::operation)?
             .is_some();
@@ -893,6 +982,19 @@ impl FolioSync {
     pub fn status(&self) -> Result<SyncStatusDto, FolioFfiError> {
         let state = self.state.lock().map_err(FolioFfiError::operation)?;
         let progress = &state.progress;
+        let mut items = progress.items.clone();
+        for item in
+            folio_sync::transfer_items(&self.database_path).map_err(FolioFfiError::operation)?
+        {
+            if let Some(current) = items
+                .iter_mut()
+                .find(|current| current.fingerprint == item.fingerprint)
+            {
+                *current = item;
+            } else {
+                items.push(item);
+            }
+        }
         Ok(SyncStatusDto {
             phase: state.phase.clone(),
             stage: if state.running {
@@ -910,8 +1012,7 @@ impl FolioSync {
             downloaded_bytes: progress.downloaded_bytes,
             received_changes: progress.received_changes,
             published_events: progress.published_events,
-            items: progress
-                .items
+            items: items
                 .iter()
                 .map(|item| SyncItemDto {
                     fingerprint: item.fingerprint.clone(),
@@ -923,6 +1024,23 @@ impl FolioSync {
             last_synced_at_ms: state.last_synced_at_ms,
             error_message: state.error_message.clone(),
         })
+    }
+
+    pub fn automatic_download(&self) -> Result<bool, FolioFfiError> {
+        folio_sync::automatic_download(&self.database_path).map_err(FolioFfiError::operation)
+    }
+    pub fn set_automatic_download(&self, enabled: bool) -> Result<(), FolioFfiError> {
+        folio_sync::set_automatic_download(&self.database_path, enabled)
+            .map_err(FolioFfiError::operation)
+    }
+    pub fn set_upload_excluded(
+        &self,
+        fingerprint: String,
+        excluded: bool,
+    ) -> Result<(), FolioFfiError> {
+        self.require_idle()?;
+        folio_sync::set_upload_excluded(&self.database_path, &fingerprint, excluded)
+            .map_err(FolioFfiError::operation)
     }
 
     pub fn cloud_fonts(&self) -> Result<Vec<CloudFontDto>, FolioFfiError> {
@@ -991,7 +1109,6 @@ impl FolioSync {
     }
 
     pub fn restore_cloud_font(&self, fingerprint: String) -> Result<(), FolioFfiError> {
-        self.require_idle()?;
         folio_sync::request_restore(&self.database_path, &fingerprint)
             .map_err(FolioFfiError::operation)
     }
@@ -1137,35 +1254,18 @@ impl FolioEngine {
         Ok(())
     }
 
-    // 移动本地范围只查询可读取来源，云端记录使用独立列表。
     pub fn query_local_library(
         &self,
-        mut query: LibraryQueryDto,
+        query: LibraryQueryDto,
     ) -> Result<LibraryPageDto, FolioFfiError> {
-        query.allowed_source_paths = Some(
-            self.lock()?
-                .catalog
-                .faces()
-                .flat_map(|face| {
-                    face.sources
-                        .iter()
-                        .map(|source| source.path().to_path_buf())
-                })
-                .filter(|path| path.is_file())
-                .map(|path| path.to_string_lossy().into_owned())
-                .collect(),
-        );
         self.query_library(query)
     }
 
     pub fn query_library(&self, query: LibraryQueryDto) -> Result<LibraryPageDto, FolioFfiError> {
-        let state = self.lock()?;
-        let cloud_text = query.text.clone().unwrap_or_default();
-        let cloud_scope = query.scope;
-        let cloud_collection = query.collection_id.clone();
-        let include_cloud = query.allowed_face_ids.is_none()
-            && query.allowed_source_paths.is_none()
-            && query.facets.is_empty();
+        let mut state = self.lock()?;
+        rebuild_index(&mut state)?;
+        let location_filter = query.location_filter.clone().unwrap_or_default();
+        let file_fingerprint = query.file_fingerprint.clone();
         let allowed_face_ids = query
             .allowed_face_ids
             .as_ref()
@@ -1182,7 +1282,12 @@ impl FolioEngine {
         let query = query_from_dto(query)?;
         let result = state
             .index
-            .query_with_faces(&query, allowed_face_ids.as_ref())
+            .query_with_location(
+                &query,
+                allowed_face_ids.as_ref(),
+                &location_filter,
+                file_fingerprint.as_deref(),
+            )
             .map_err(FolioFfiError::operation)?;
         let favorites = state
             .database
@@ -1201,76 +1306,12 @@ impl FolioEngine {
                         &favorites,
                         &state.database,
                         allowed_source_paths.as_ref(),
+                        &state.index,
                     )
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let scoped_ids = match cloud_scope {
-            QueryScopeDto::All => None,
-            QueryScopeDto::Favorites => Some(
-                favorites
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<BTreeSet<_>>(),
-            ),
-            QueryScopeDto::Recent => Some(
-                state
-                    .database
-                    .list_recent(usize::MAX)
-                    .map_err(FolioFfiError::operation)?
-                    .into_iter()
-                    .map(|item| item.identity_id.to_string())
-                    .collect(),
-            ),
-            QueryScopeDto::Collection => {
-                let id = cloud_collection.ok_or_else(|| FolioFfiError::operation("收藏夹无效"))?;
-                let collection = CollectionId::from_bytes(parse_id(&id.value)?);
-                Some(
-                    state
-                        .database
-                        .list_collection_members(collection)
-                        .map_err(FolioFfiError::operation)?
-                        .into_iter()
-                        .map(|item| item.to_string())
-                        .collect(),
-                )
-            }
-        };
-        let cloud_only_fonts = if include_cloud {
-            folio_sync::list_cloud_fonts(state.database.path())
-                .map_err(FolioFfiError::operation)?
-                .into_iter()
-                .filter(|font| font.cloud_only && !font.deleted)
-                .filter(|font| {
-                    cloud_text.is_empty()
-                        || font
-                            .display_name
-                            .to_lowercase()
-                            .contains(&cloud_text.to_lowercase())
-                        || font
-                            .filename
-                            .to_lowercase()
-                            .contains(&cloud_text.to_lowercase())
-                })
-                .filter(|font| {
-                    scoped_ids
-                        .as_ref()
-                        .is_none_or(|ids| font.identity_ids.iter().any(|id| ids.contains(id)))
-                })
-                .map(|item| CloudFontDto {
-                    fingerprint: item.fingerprint,
-                    display_name: item.display_name,
-                    filename: item.filename,
-                    file_size: item.file_size,
-                    cloud_only: item.cloud_only,
-                    local_path: item.local_path,
-                    deleted: item.deleted,
-                    identity_ids: item.identity_ids,
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let cloud_only_fonts = Vec::new();
         Ok(LibraryPageDto {
             total_matches: result.total_matches as u64,
             families,
@@ -1308,7 +1349,8 @@ impl FolioEngine {
         &self,
         family_id: FamilyIdDto,
     ) -> Result<FamilyDetailsDto, FolioFfiError> {
-        let state = self.lock()?;
+        let mut state = self.lock()?;
+        rebuild_index(&mut state)?;
         let id = FontFamilyId::from_bytes(parse_id(&family_id.value)?);
         let family = state
             .catalog
@@ -1324,6 +1366,13 @@ impl FolioEngine {
             .collect::<BTreeSet<_>>();
         let identities = family_identities(family);
         Ok(FamilyDetailsDto {
+            location: folio_query::FontFamilyLocation::from_locations(
+                family
+                    .faces
+                    .iter()
+                    .filter_map(|face| state.index.location(face.id)),
+            )
+            .into(),
             id: family_id,
             display_name: family
                 .display_name
@@ -1332,7 +1381,9 @@ impl FolioEngine {
             faces: family
                 .faces
                 .iter()
-                .map(|face| face_summary(face, &state.database, None))
+                .map(|face| {
+                    face_summary(face, &state.database, None, state.index.location(face.id))
+                })
                 .collect::<Result<Vec<_>, _>>()?,
             is_favorite: !identities.is_empty()
                 && identities.iter().all(|id| favorites.contains(id)),
@@ -1603,7 +1654,8 @@ impl FolioEngine {
     }
 
     pub fn get_smart_folder(&self, id: SmartFolderIdDto) -> Result<SmartFolderDto, FolioFfiError> {
-        let state = self.lock()?;
+        let mut state = self.lock()?;
+        rebuild_index(&mut state)?;
         let id = SmartFolderId::from_bytes(parse_id(&id.value)?);
         let folder = state
             .database
@@ -1623,7 +1675,21 @@ impl FolioEngine {
         offset: u64,
         limit: u64,
     ) -> Result<LibraryPageDto, FolioFfiError> {
-        let state = self.lock()?;
+        self.query_smart_folder_with_location(id, text, facets, offset, limit, None, None)
+    }
+
+    pub fn query_smart_folder_with_location(
+        &self,
+        id: SmartFolderIdDto,
+        text: Option<String>,
+        facets: Vec<FacetSelectionDto>,
+        offset: u64,
+        limit: u64,
+        location_filter: Option<String>,
+        file_fingerprint: Option<String>,
+    ) -> Result<LibraryPageDto, FolioFfiError> {
+        let mut state = self.lock()?;
+        rebuild_index(&mut state)?;
         let id = SmartFolderId::from_bytes(parse_id(&id.value)?);
         let folder = state
             .database
@@ -1643,7 +1709,14 @@ impl FolioEngine {
         let extra = facet_filter_from_dto(facets)?;
         merge_facet_filters(&mut query.facets, extra);
         query.text = merge_search_text(query.text, text);
-        query_page(&state, query, None, None)
+        query_page(
+            &state,
+            query,
+            None,
+            None,
+            location_filter.as_deref().unwrap_or("all"),
+            file_fingerprint.as_deref(),
+        )
     }
 
     pub fn set_collection_members(
@@ -1679,12 +1752,16 @@ impl FolioEngine {
 }
 
 fn rebuild_index(state: &mut EngineState) -> Result<(), FolioFfiError> {
-    let snapshot = state
+    let local = state
         .database
-        .library_state_snapshot()
+        .load_cached_catalog()
         .map_err(FolioFfiError::operation)?;
-    state.index =
-        FontQueryIndex::build(&state.catalog, &snapshot).map_err(FolioFfiError::operation)?;
+    let library =
+        folio_sync::unified_library(&state.database, &local).map_err(FolioFfiError::operation)?;
+    state.index = library
+        .index(&mut state.database)
+        .map_err(FolioFfiError::operation)?;
+    state.catalog = library.catalog;
     Ok(())
 }
 
@@ -1764,7 +1841,9 @@ fn snapshot(state: &mut EngineState) -> Result<LibrarySnapshotDto, FolioFfiError
     let sync_summary = folio_sync::font_sync_summary(&state.database, &managed_directory)
         .map_err(FolioFfiError::operation)?;
     Ok(LibrarySnapshotDto {
-        family_count: state.catalog.family_count() as u64,
+        family_count: folio_sync::unified_library(&state.database, &state.catalog)
+            .map_err(FolioFfiError::operation)?
+            .recognized_family_count() as u64,
         face_count: state.catalog.face_count() as u64,
         variable_family_count: state
             .catalog
@@ -1904,10 +1983,12 @@ fn query_page(
     query: FontQuery,
     allowed_face_ids: Option<&BTreeSet<FontFaceId>>,
     allowed_source_paths: Option<&BTreeSet<String>>,
+    location_filter: &str,
+    file_fingerprint: Option<&str>,
 ) -> Result<LibraryPageDto, FolioFfiError> {
     let result = state
         .index
-        .query_with_faces(&query, allowed_face_ids)
+        .query_with_location(&query, allowed_face_ids, location_filter, file_fingerprint)
         .map_err(FolioFfiError::operation)?;
     let favorites = state
         .database
@@ -1926,6 +2007,7 @@ fn query_page(
                     &favorites,
                     &state.database,
                     allowed_source_paths,
+                    &state.index,
                 )
             })
         })
@@ -2020,6 +2102,7 @@ fn family_card(
     favorites: &BTreeSet<FontIdentityId>,
     database: &FolioDatabase,
     source_paths: Option<&BTreeSet<String>>,
+    index: &FontQueryIndex,
 ) -> Result<FamilyCardDto, FolioFfiError> {
     let identities = family_identities(family);
     let shown_faces: Vec<_> = family
@@ -2028,6 +2111,12 @@ fn family_card(
         .filter(|face| source_paths.is_none() || matched_faces.contains(&face.id))
         .collect();
     Ok(FamilyCardDto {
+        location: folio_query::FontFamilyLocation::from_locations(
+            shown_faces
+                .iter()
+                .filter_map(|face| index.location(face.id)),
+        )
+        .into(),
         id: family_dto(family.id),
         display_name: family
             .display_name
@@ -2035,7 +2124,7 @@ fn family_card(
             .unwrap_or_else(|| "未命名字体".to_owned()),
         faces: shown_faces
             .iter()
-            .map(|face| face_summary(face, database, source_paths))
+            .map(|face| face_summary(face, database, source_paths, index.location(face.id)))
             .collect::<Result<Vec<_>, _>>()?,
         identity_ids: identities.iter().copied().map(identity_dto).collect(),
         matched_face_ids: matched_faces.iter().copied().map(face_dto).collect(),
@@ -2063,7 +2152,9 @@ fn face_summary(
     face: &FontFace,
     database: &FolioDatabase,
     source_paths: Option<&BTreeSet<String>>,
+    location: Option<&folio_query::FontLocation>,
 ) -> Result<FaceSummaryDto, FolioFfiError> {
+    let location = location.cloned().unwrap_or_default();
     let selected_sources: Vec<_> = face
         .sources
         .iter()
@@ -2103,6 +2194,7 @@ fn face_summary(
         })
         .collect::<Result<Vec<_>, FolioFfiError>>()?;
     Ok(FaceSummaryDto {
+        location: location.into(),
         id: face_dto(face.id),
         identity_id: identity_dto(face.identity_id),
         revision_id: face.revision_id.to_string(),
@@ -2526,6 +2618,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 120,
             })
@@ -2577,23 +2671,29 @@ mod tests {
             facets: vec![],
             allowed_face_ids: None,
             allowed_source_paths: None,
+            location_filter: None,
+            file_fingerprint: None,
             offset: 0,
             limit: 120,
         };
         let all = engine.query_library(query(QueryScopeDto::All)).unwrap();
-        assert_eq!(all.cloud_only_fonts.len(), 1);
-        assert!(all.cloud_only_fonts[0].cloud_only);
+        assert_eq!(all.total_matches, 1);
+        assert!(all.cloud_only_fonts.is_empty());
+        assert!(all.families[0].faces[0].location.cloud_available);
+        assert!(!all.families[0].faces[0].location.local_available);
         let favorite = engine
             .query_library(query(QueryScopeDto::Favorites))
             .unwrap();
-        assert_eq!(favorite.cloud_only_fonts.len(), 1);
+        assert_eq!(favorite.families.len(), 1);
         let local = engine
             .query_local_library(query(QueryScopeDto::All))
             .unwrap();
-        assert!(local.cloud_only_fonts.is_empty());
-        assert_eq!(local.total_matches, 0);
-        assert!(local.families.is_empty());
-        assert!(local.facets.is_empty());
+        assert_eq!(local.families.len(), 1);
+        assert_eq!(local.total_matches, 1);
+        assert!(local
+            .facets
+            .iter()
+            .all(|facet| matches!(facet.kind, FacetKindDto::State)));
         let smart = engine
             .create_smart_folder(
                 "云端智慧".to_owned(),
@@ -2603,7 +2703,7 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(engine.get_smart_folder(smart).unwrap().match_count, 0);
+        assert_eq!(engine.get_smart_folder(smart).unwrap().match_count, 1);
     }
 
     #[test]
@@ -2639,6 +2739,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 120,
             })
@@ -2659,6 +2761,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 120,
             })
@@ -2719,6 +2823,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 1,
             })
@@ -2741,6 +2847,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 120,
             })
@@ -2764,6 +2872,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 120,
             })
@@ -2811,6 +2921,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 10,
             })
@@ -2839,6 +2951,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 10,
             })
@@ -2908,6 +3022,8 @@ mod tests {
                 facets: Vec::new(),
                 allowed_face_ids: None,
                 allowed_source_paths: None,
+                location_filter: None,
+                file_fingerprint: None,
                 offset: 0,
                 limit: 10,
             })

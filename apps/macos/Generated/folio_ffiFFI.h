@@ -343,6 +343,11 @@ RustBuffer uniffi_folio_ffi_fn_method_folioengine_query_local_library(uint64_t p
 RustBuffer uniffi_folio_ffi_fn_method_folioengine_query_smart_folder(uint64_t ptr, RustBuffer id, RustBuffer text, RustBuffer facets, uint64_t offset, uint64_t limit, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_QUERY_SMART_FOLDER_WITH_LOCATION
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_QUERY_SMART_FOLDER_WITH_LOCATION
+RustBuffer uniffi_folio_ffi_fn_method_folioengine_query_smart_folder_with_location(uint64_t ptr, RustBuffer id, RustBuffer text, RustBuffer facets, uint64_t offset, uint64_t limit, RustBuffer location_filter, RustBuffer file_fingerprint, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_RECORD_RECENT
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOENGINE_RECORD_RECENT
 void uniffi_folio_ffi_fn_method_folioengine_record_recent(uint64_t ptr, RustBuffer identity_id, RustCallStatus *_Nonnull out_status
@@ -478,6 +483,11 @@ void uniffi_folio_ffi_fn_free_foliosync(uint64_t handle, RustCallStatus *_Nonnul
 uint64_t uniffi_folio_ffi_fn_constructor_foliosync_open(RustBuffer database_path, RustBuffer managed_directory, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_AUTOMATIC_DOWNLOAD
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_AUTOMATIC_DOWNLOAD
+int8_t uniffi_folio_ffi_fn_method_foliosync_automatic_download(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_CANCEL
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_CANCEL
 void uniffi_folio_ffi_fn_method_foliosync_cancel(uint64_t ptr, RustCallStatus *_Nonnull out_status
@@ -553,9 +563,19 @@ void uniffi_folio_ffi_fn_method_foliosync_restore_deleted_font(uint64_t ptr, Rus
 void uniffi_folio_ffi_fn_method_foliosync_save_profile(uint64_t ptr, RustBuffer profile, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_SET_AUTOMATIC_DOWNLOAD
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_SET_AUTOMATIC_DOWNLOAD
+void uniffi_folio_ffi_fn_method_foliosync_set_automatic_download(uint64_t ptr, int8_t enabled, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_SET_CLOUD_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_SET_CLOUD_ONLY
 void uniffi_folio_ffi_fn_method_foliosync_set_cloud_only(uint64_t ptr, RustBuffer fingerprint, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_SET_UPLOAD_EXCLUDED
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_SET_UPLOAD_EXCLUDED
+void uniffi_folio_ffi_fn_method_foliosync_set_upload_excluded(uint64_t ptr, RustBuffer fingerprint, int8_t excluded, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_FN_METHOD_FOLIOSYNC_START_SYNC
@@ -940,6 +960,12 @@ uint16_t uniffi_folio_ffi_checksum_method_folioengine_query_smart_folder(void
 
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_QUERY_SMART_FOLDER_WITH_LOCATION
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_QUERY_SMART_FOLDER_WITH_LOCATION
+uint16_t uniffi_folio_ffi_checksum_method_folioengine_query_smart_folder_with_location(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_RECORD_RECENT
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOENGINE_RECORD_RECENT
 uint16_t uniffi_folio_ffi_checksum_method_folioengine_record_recent(void
@@ -1066,6 +1092,12 @@ uint16_t uniffi_folio_ffi_checksum_method_folioonline_validate_mirror(void
 
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_AUTOMATIC_DOWNLOAD
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_AUTOMATIC_DOWNLOAD
+uint16_t uniffi_folio_ffi_checksum_method_foliosync_automatic_download(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_CANCEL
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_CANCEL
 uint16_t uniffi_folio_ffi_checksum_method_foliosync_cancel(void
@@ -1156,9 +1188,21 @@ uint16_t uniffi_folio_ffi_checksum_method_foliosync_save_profile(void
 
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_SET_AUTOMATIC_DOWNLOAD
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_SET_AUTOMATIC_DOWNLOAD
+uint16_t uniffi_folio_ffi_checksum_method_foliosync_set_automatic_download(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_SET_CLOUD_ONLY
 #define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_SET_CLOUD_ONLY
 uint16_t uniffi_folio_ffi_checksum_method_foliosync_set_cloud_only(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_SET_UPLOAD_EXCLUDED
+#define UNIFFI_FFIDEF_UNIFFI_FOLIO_FFI_CHECKSUM_METHOD_FOLIOSYNC_SET_UPLOAD_EXCLUDED
+uint16_t uniffi_folio_ffi_checksum_method_foliosync_set_upload_excluded(void
 
 );
 #endif
