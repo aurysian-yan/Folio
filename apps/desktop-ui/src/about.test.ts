@@ -47,19 +47,20 @@ describe('更新协议', () => {
   });
 });
 describe('字标变奏', () => {
-  it('五次触发、播放期间忽略输入并恢复原字标', () => {
-    vi.useFakeTimers(); const frames: number[] = []; const egg = new WordmarkVariation((frame) => frames.push(frame), () => false);
-    for (let i = 0; i < 4; i++) egg.activate(i * 100); expect(frames).toEqual([]);
-    egg.activate(500); egg.activate(600); egg.play(); vi.advanceTimersByTime(2000);
-    expect(frames).toEqual([1, 2, 3, 0]); egg.dispose();
+  it('每次点击切换一个字标，六次后恢复原字标', () => {
+    const frames: number[] = []; const egg = new WordmarkVariation((frame) => frames.push(frame), 6);
+    egg.activate(); expect(frames).toEqual([1]);
+    for (let i = 0; i < 6; i++) egg.activate();
+    expect(frames).toEqual([1, 2, 3, 4, 5, 0, 1]); egg.dispose();
   });
-  it('过期计数失效，离页立即清除回调', () => {
-    vi.useFakeTimers(); const callback = vi.fn(); const egg = new WordmarkVariation(callback, () => false);
-    egg.activate(0); for (let i = 0; i < 4; i++) egg.activate(4000 + i); expect(callback).not.toHaveBeenCalled();
-    egg.activate(4010); egg.dispose(); vi.advanceTimersByTime(5000); expect(callback.mock.calls).toEqual([[1]]);
+  it('字标保持到下一次点击，离页后不再回调，重新进入从主字标开始', () => {
+    vi.useFakeTimers(); const callback = vi.fn(); const egg = new WordmarkVariation(callback, 6);
+    egg.activate(); vi.advanceTimersByTime(5000); expect(callback.mock.calls).toEqual([[1]]);
+    egg.dispose(); egg.activate(); expect(callback.mock.calls).toEqual([[1]]);
+    const reopened = new WordmarkVariation(callback, 6); reopened.activate();
+    expect(callback.mock.calls).toEqual([[1], [1]]); reopened.dispose();
   });
-  it('减少动态效果只展示一次替代字形', () => {
-    vi.useFakeTimers(); const callback = vi.fn(); const egg = new WordmarkVariation(callback, () => true);
-    egg.play(); vi.advanceTimersByTime(2000); expect(callback.mock.calls).toEqual([[1], [0]]); egg.dispose();
+  it('拒绝无效字标数量', () => {
+    for (const count of [0, -1, 1.5, NaN]) expect(() => new WordmarkVariation(vi.fn(), count)).toThrow();
   });
 });

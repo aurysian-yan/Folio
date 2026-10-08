@@ -28,7 +28,7 @@ export function AboutView() {
     if (reader && !selected && listScroll.current) listScroll.current.scrollTop = listPosition.current;
   }, [reader, selected]);
   useEffect(() => {
-    const egg = new WordmarkVariation(setFrame, () => matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const egg = new WordmarkVariation(setFrame, glyphs.length);
     variation.current = egg;
     let active = true;
     void getAboutInfo().then((value) => { if (active) setApp(value); }).catch(() => { if (active) setUpdate({ status: 'failed' }); });
@@ -50,8 +50,8 @@ export function AboutView() {
   return <div className="about-home">
     <svg className="about-specimen" viewBox="0 0 1024 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       {glyphs.map((glyph, index) => <g key={glyph.name} className="about-glyph-layer" opacity={frame === index ? 1 : 0}>
-        <g transform="translate(-740 -150) scale(2.4)" fill="none" stroke="currentColor" strokeWidth="0.6">{glyph.paths.map((path, p) => <path key={p} d={path} />)}</g>
-        <g transform="translate(710 560) scale(1.7)" fill="none" stroke="currentColor" strokeWidth="0.6">{glyph.paths.map((path, p) => <path key={p} d={path} />)}</g>
+        <g transform={`translate(-740 -150) scale(${2.4 * 1024 / glyph.width})`} fill="none" stroke="currentColor" strokeWidth="0.6">{glyph.paths.map((path, p) => <path key={p} d={path} />)}</g>
+        <g transform={`translate(710 560) scale(${1.7 * 1024 / glyph.width})`} fill="none" stroke="currentColor" strokeWidth="0.6">{glyph.paths.map((path, p) => <path key={p} d={path} />)}</g>
       </g>)}
       <path d="M0 144h140 M884 144h140 M0 556h100 M924 556h100 M96 128v32 M928 540v32" fill="none" stroke="currentColor" />
     </svg>
@@ -59,12 +59,12 @@ export function AboutView() {
       <header className="flex flex-col items-center gap-3 py-8 text-center">
         <Button variant="ghost" className="about-wordmark" aria-label={t('about.logoLabel')} aria-description={t('about.logoHint')}
           onPress={() => variation.current?.activate()}>
-          {glyphs.map((glyph, index) => <svg key={glyph.name} viewBox="0 0 1024 364" aria-hidden="true"
+          {glyphs.map((glyph, index) => <svg key={glyph.name} viewBox={`0 0 ${glyph.width} ${glyph.height}`} aria-hidden="true"
             className="about-glyph-layer absolute inset-0 h-full w-full" opacity={index === frame ? 1 : 0}>
             {glyph.paths.map((path, p) => <path key={p} d={path} fill="currentColor" />)}
           </svg>)}
         </Button>
-        <span className="sr-only" role="status">{frame > 0 ? t('about.fontVariant', { font: glyphs[frame]?.name }) : ''}</span>
+        <span className="sr-only" role="status">{t('about.logoVariant', { current: frame + 1, total: glyphs.length })}</span>
         <p className="about-tagline">{t('about.tagline')}</p>
         <p className="tabular-nums">{app ? t('macos.versionWithBuild', { version: app.version, build: app.build }) : t('common.unknownVersion')}</p>
         {app && <p>{t('about.platform', { platform: t(`about.platformNames.${app.platform}`), arch: app.arch })}</p>}

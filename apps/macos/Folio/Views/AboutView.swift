@@ -24,7 +24,7 @@ private struct GlyphCommand: Decodable {
         coordinates = values
     }
 }
-private struct AboutGlyph: Decodable { let name: String; let commands: [GlyphCommand] }
+private struct AboutGlyph: Decodable { let name: String; let width: Double; let height: Double; let commands: [GlyphCommand] }
 private enum AboutResources {
     static func load<T: Decodable>(_ name: String, as type: T.Type) -> T {
         guard let url = Bundle.main.url(forResource: name, withExtension: "json", subdirectory: "About"),
@@ -56,8 +56,10 @@ private struct GlyphShape: Shape {
             default: break
             }
         }
-        return path.applying(CGAffineTransform(scaleX: rect.width / 1024, y: rect.height / 364))
-            .applying(CGAffineTransform(translationX: rect.minX, y: rect.minY))
+        let scale = min(rect.width / glyph.width, rect.height / glyph.height)
+        return path.applying(CGAffineTransform(scaleX: scale, y: scale))
+            .applying(CGAffineTransform(translationX: rect.midX - glyph.width * scale / 2,
+                                       y: rect.midY - glyph.height * scale / 2))
     }
 }
 private struct AboutRelease: Decodable {
@@ -127,8 +129,6 @@ struct AboutView: View {
     var isActive = true
     @Environment(\.accessibilityReduceMotion) private var reducedMotion
     @State private var frame = 0
-    @State private var taps: [Date] = []
-    @State private var animationTask: Task<Void, Never>?
     @State private var updateTask: Task<Void, Never>?
     @State private var status = "idle"
     @State private var release: AboutRelease?
@@ -157,7 +157,8 @@ struct AboutView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(L.text("about.logoLabel"))
                     .accessibilityHint(L.text("about.logoHint"))
-                    .accessibilityAction(named: Text(L.text("about.play")), play)
+                    .accessibilityValue(L.format("about.logoVariant", String(frame + 1), String(AboutResources.glyphs.count)))
+                    .accessibilityAction(named: Text(L.text("about.nextVariation")), activate)
                     Text(L.text("about.tagline")).font(.body)
                     Text(L.format("macos.versionWithBuild", version, build)).monospacedDigit().foregroundStyle(.secondary)
                     Text(L.format("about.platform", "macOS", arch)).font(.caption).foregroundStyle(.secondary)
@@ -213,7 +214,8 @@ struct AboutView: View {
                     ZStack {
                         ForEach(AboutResources.glyphs.indices, id: \.self) { index in
                             GlyphShape(glyph: AboutResources.glyphs[index]).stroke(.primary, lineWidth: 0.5)
-                                .frame(width: geometry.size.width * 2.4, height: geometry.size.width * 2.4 * 364 / 1024)
+                                .frame(width: geometry.size.width * 2.4,
+                                       height: geometry.size.width * 2.4 * AboutResources.glyphs[index].height / AboutResources.glyphs[index].width)
                                 .offset(x: -geometry.size.width * 1.5, y: -100).opacity(frame == index ? 0.06 : 0)
                         }
                         Path { path in
@@ -239,26 +241,11 @@ struct AboutView: View {
         linkFailed = !NSWorkspace.shared.open(url)
     }
     private func activate() {
-        guard animationTask == nil, isActive else { return }
-        let now = Date(); taps = taps.filter { now.timeIntervalSince($0) <= 3 }; taps.append(now)
-        if taps.count == 5 { play() }
-    }
-    private func play() {
-        guard animationTask == nil, isActive else { return }; taps = []; frame = 1
-        animationTask = Task { @MainActor in
-            do {
-                if reducedMotion { try await Task.sleep(for: .seconds(2)) }
-                else {
-                    try await Task.sleep(for: .milliseconds(650)); frame = 2
-                    try await Task.sleep(for: .milliseconds(650)); frame = 3
-                    try await Task.sleep(for: .milliseconds(700))
-                }
-                frame = 0; animationTask = nil
-            } catch { }
-        }
+        guard isActive else { return }
+        frame = (frame + 1) % AboutResources.glyphs.count
     }
     private func cleanup() {
-        animationTask?.cancel(); animationTask = nil; frame = 0; taps = []
+        frame = 0
         updateTask?.cancel(); updateTask = nil
         if status == "checking" { status = "idle" }
         showLicenses = false

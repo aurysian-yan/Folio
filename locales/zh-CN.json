@@ -930,17 +930,12 @@
     "declaration": "许可声明",
     "sourceLink": "查看来源",
     "logoLabel": "Folio 字标",
-    "logoHint": "三秒内连续点击五次，发现字体变奏",
-    "play": "播放字体变奏",
-    "fontVariant": "字体变奏：{{font}}",
+    "logoHint": "点击切换下一个字标",
     "platform": "{{platform}} · {{arch}}",
     "nexio": "液态玻璃导航与交互参考",
     "kyant": "液态玻璃、平滑胶囊与着色器",
     "meilox": "导航交互与玻璃效果参考",
     "claralight": "桌面数值滑块",
-    "inter": "字标变奏 · SIL 开放字体许可",
-    "serif": "字标变奏 · SIL 开放字体许可",
-    "mono": "字标变奏与等宽字体 · SIL 开放字体许可",
     "appliesTo": "适用平台：{{platforms}}",
     "licenseNotices": "许可见原文",
     "platformNames": {
@@ -949,6 +944,8 @@
       "linux": "Linux",
       "ios": "iOS",
       "android": "Android"
-    }
+    },
+    "nextVariation": "切换字标",
+    "logoVariant": "字标 {{current}} / {{total}}"
   }
 }

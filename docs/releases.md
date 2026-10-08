@@ -27,8 +27,11 @@ Android 运行依赖快照与原始 Maven 声明保存在 `shared/about/`；原�
 先用 `tools/about/android-licenses.gradle` 导出实际 `releaseRuntimeClasspath`，
 再运行 `tools/about/collect-native.py` 收集对应 POM 与安装包内的原始许可。
 iOS 原生许可从 CocoaPods acknowledgements 收集并保存为离线快照；缺少已安装
-Pods 时复用该快照。生成字标矢量需要 Python fontTools，输入来自仓库内固定字体，
-无需在运行时下载字体：`python3 tools/about/generate-glyphs.py`。
+Pods 时复用该快照。字标来源保存在 `shared/about/wordmarks/`，按 main、egg1 至 egg5
+循环切换。运行 `python3 tools/about/generate-glyphs.py`，使用 Python fontTools
+将 SVG 路径生成三端共用资源；原始画布与路径保持一致，无需运行时下载字体。
+OFL 字体制作的字标图形无需字体署名，依据见 [OFL FAQ 1.1.2](https://openfontlicense.org/ofl-faq/)。
+应用中实际内置的字体继续随包保留原始许可与版权。
 
 ## 构建验证与正式发布
 

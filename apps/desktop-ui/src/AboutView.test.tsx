@@ -4,6 +4,23 @@ import { AboutView } from './AboutView';
 import { getAboutInfo, requestRelease } from './api';
 vi.mock('./api', () => ({ getAboutInfo: vi.fn(async () => ({version:'1.0.0',build:'2',platform:'linux',arch:'arm64'})), requestRelease: vi.fn(async () => ({status:404,body:''})), openAboutLink: vi.fn(async () => {}) }));
 describe('关于页', () => {
+  it('点击一次切换一个字标，循环后恢复主字标，重新进入重置状态', async () => {
+    const view = render(<AboutView />);
+    await waitFor(() => expect(getAboutInfo).toHaveBeenCalled());
+    const logo = screen.getByRole('button', { name: 'Folio 字标' });
+    const visible = () => [...logo.querySelectorAll('svg')].findIndex((svg) => svg.getAttribute('opacity') === '1');
+    expect(visible()).toBe(0);
+    expect(logo.querySelectorAll('svg')).toHaveLength(6);
+    for (const frame of [1, 2, 3, 4, 5, 0]) {
+      fireEvent.click(logo);
+      expect(visible()).toBe(frame);
+      expect(screen.getByText(`字标 ${frame + 1} / 6`).getAttribute('role')).toBe('status');
+    }
+    fireEvent.click(logo); view.unmount(); render(<AboutView />);
+    const reopened = screen.getByRole('button', { name: 'Folio 字标' });
+    expect(reopened.querySelector('svg')?.getAttribute('opacity')).toBe('1');
+    expect(screen.queryByRole('button', { name: /^Inter/ })).toBeNull();
+  });
   it('许可搜索、全文阅读和返回保留搜索内容与列表位置', async () => {
     render(<AboutView />); await waitFor(() => expect(getAboutInfo).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button',{name:'全部依赖与许可'}));

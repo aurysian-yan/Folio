@@ -14,6 +14,7 @@ import { IconButton, type Theme } from './ui';
 
 type LicenseEntry = typeof licenses.entries[number];
 const AnimatedG = Animated.createAnimatedComponent(G);
+const canvas = glyphs[0]!;
 
 // 字标与轮廓共享帧状态，始终占用相同画布。
 function Wordmark({ frame, color, reduced, specimen = false }: { frame: number; color: string; reduced: boolean; specimen?: boolean }) {
@@ -24,11 +25,11 @@ function Wordmark({ frame, color, reduced, specimen = false }: { frame: number; 
     })));
     animation.start(); return () => animation.stop();
   }, [frame, opacities, reduced]);
-  return <Svg width="100%" height="100%" viewBox={specimen ? '0 0 1024 700' : '0 0 1024 364'} accessible={false}>
+  return <Svg width="100%" height="100%" viewBox={specimen ? '0 0 1024 700' : `0 0 ${canvas.width} ${canvas.height}`} accessible={false}>
     {glyphs.map((glyph, index) => <AnimatedG key={glyph.name} opacity={opacities[index]}>
       {specimen ? <>
-        <G transform="translate(-740 -150) scale(2.4)">{glyph.paths.map((path, p) => <Path key={p} d={path} fill="none" stroke={color} strokeWidth={0.6} />)}</G>
-        <G transform="translate(710 560) scale(1.7)">{glyph.paths.map((path, p) => <Path key={p} d={path} fill="none" stroke={color} strokeWidth={0.6} />)}</G>
+        <G transform={`translate(-740 -150) scale(${2.4 * 1024 / glyph.width})`}>{glyph.paths.map((path, p) => <Path key={p} d={path} fill="none" stroke={color} strokeWidth={0.6} />)}</G>
+        <G transform={`translate(710 560) scale(${1.7 * 1024 / glyph.width})`}>{glyph.paths.map((path, p) => <Path key={p} d={path} fill="none" stroke={color} strokeWidth={0.6} />)}</G>
       </> : glyph.paths.map((path, p) => <Path key={p} d={path} fill={color} />)}
     </AnimatedG>)}
     {specimen && <Path d="M0 144h140 M884 144h140 M0 556h100 M924 556h100 M96 128v32 M928 540v32" fill="none" stroke={color} />}
@@ -39,7 +40,6 @@ export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: (
   const [app, setApp] = useState<AppInfo>();
   const [frame, setFrame] = useState(0);
   const [reduced, setReduced] = useState(true);
-  const reducedRef = useRef(true);
   const [update, setUpdate] = useState<UpdateResult>({ status: 'idle' });
   const [reader, setReader] = useState(false);
   const [selected, setSelected] = useState<LicenseEntry>();
@@ -49,8 +49,8 @@ export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: (
   const request = useRef<AbortController | null>(null);
   useEffect(() => {
     let active = true;
-    const egg = new WordmarkVariation(setFrame, () => reducedRef.current); variation.current = egg;
-    const setMotion = (value: boolean) => { if (active) { reducedRef.current = value; setReduced(value); } };
+    const egg = new WordmarkVariation(setFrame, glyphs.length); variation.current = egg;
+    const setMotion = (value: boolean) => { if (active) setReduced(value); };
     void AccessibilityInfo.isReduceMotionEnabled().then(setMotion);
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setMotion);
     void Promise.resolve().then(getAboutInfo).then((value) => { if (active) setApp(value); }).catch(() => { if (active) setUpdate({ status: 'failed' }); });
@@ -79,14 +79,14 @@ export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: (
         </View>
         <View style={styles.hero}>
           <Pressable style={styles.logo} accessibilityRole="button" accessibilityLabel={t('about.logoLabel')} accessibilityHint={t('about.logoHint')}
-            onPress={() => variation.current?.activate()} accessibilityActions={[{ name: 'play', label: t('about.play') }]}
-            onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === 'play') variation.current?.play(); }}>
+            accessibilityValue={{ text: t('about.logoVariant', { current: frame + 1, total: glyphs.length }) }}
+            onPress={() => variation.current?.activate()} accessibilityActions={[{ name: 'next', label: t('about.nextVariation') }]}
+            onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === 'next') variation.current?.activate(); }}>
             <Wordmark frame={frame} color={theme.label} reduced={reduced} />
           </Pressable>
           <Text style={[settingsTypography.body, { color: theme.label, textAlign: 'center' }]}>{t('about.tagline')}</Text>
           <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{app ? t('macos.versionWithBuild', { version: app.version, build: app.build }) : t('common.unknownVersion')}</Text>
           <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{app ? t('about.platform', { platform: t(`about.platformNames.${app.platform}`), arch: app.arch }) : ''}</Text>
-          <Text accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary }]}>{frame > 0 ? t('about.fontVariant', { font: glyphs[frame]?.name }) : '\u00a0'}</Text>
         </View>
         <SettingsGroup theme={theme}>
           <SettingsActionRow theme={theme} title={t(update.status === 'checking' ? 'about.checking' : 'about.check')} busy={update.status === 'checking'}

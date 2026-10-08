@@ -107,27 +107,20 @@ export async function checkForUpdate(app: AppInfo, transport: Transport = fetchT
   } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
 }
 
-// 点击计数与计时器集中管理，卸载后不再回调。
+// 每次操作切换一个字标，卸载后不再回调。
 export class WordmarkVariation {
-  private taps: number[] = [];
-  private timers: ReturnType<typeof setTimeout>[] = [];
-  private playing = false;
+  private frame = 0;
   private disposed = false;
   private readonly onFrame: (index: number) => void;
-  private readonly reducedMotion: () => boolean;
-  constructor(onFrame: (index: number) => void, reducedMotion: () => boolean) { this.onFrame = onFrame; this.reducedMotion = reducedMotion; }
-  activate(now = Date.now()): void {
-    if (this.disposed || this.playing) return;
-    this.taps = this.taps.filter((time) => now - time <= 3000); this.taps.push(now);
-    if (this.taps.length === 5) this.play();
+  private readonly count: number;
+  constructor(onFrame: (index: number) => void, count: number) {
+    if (!Number.isInteger(count) || count < 1) throw new Error('字标数量必须为正整数');
+    this.onFrame = onFrame; this.count = count;
   }
-  play(): void {
-    if (this.disposed || this.playing) return;
-    this.playing = true; this.taps = []; this.onFrame(1);
-    if (!this.reducedMotion()) {
-      this.timers.push(setTimeout(() => this.onFrame(2), 650), setTimeout(() => this.onFrame(3), 1300));
-    }
-    this.timers.push(setTimeout(() => { this.onFrame(0); this.playing = false; this.timers = []; }, 2000));
+  activate(): void {
+    if (this.disposed) return;
+    this.frame = (this.frame + 1) % this.count;
+    this.onFrame(this.frame);
   }
-  dispose(): void { this.disposed = true; this.timers.forEach(clearTimeout); this.timers = []; this.taps = []; }
+  dispose(): void { this.disposed = true; this.frame = 0; }
 }

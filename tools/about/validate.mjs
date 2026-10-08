@@ -28,5 +28,6 @@ for (const name of ['Folio','Inter','Source Serif 4','JetBrains Mono']) for (con
 for (const name of ['NexioSchedule','MeiloX','Kyant0 Capsule','Kyant0 AndroidLiquidGlass','Claralight Slider','ZIPFoundation','Phosphor native icons','AndroidX Gaussian blur']) assert(catalog.entries.some((entry) => entry.name === name), `缺少移植或原生组件许可：${name}`);
 for (const [path, hash] of Object.entries(JSON.parse(read('shared/about/glyph-sources.json')))) assert(createHash('sha256').update(read(path)).digest('hex') === hash, `字形来源已变动：${path}`);
 const glyphs = JSON.parse(read('shared/about/glyphs.json'));
-assert(glyphs.length === 4 && glyphs.every((glyph) => glyph.paths.length && glyph.commands.length), '字形资源不完整');
+assert(glyphs.length === 6 && glyphs.every((glyph) => glyph.width === 1275 && glyph.height === 559 && glyph.paths.length && glyph.commands.length), '字形资源不完整');
+assert(glyphs.map((glyph) => glyph.name).join(',') === 'logo-main,logo-egg1,logo-egg2,logo-egg3,logo-egg4,logo-egg5', '字标顺序错误');
 console.log(`关于资源有效：${catalog.entries.length} 项许可，${Object.keys(catalog.texts).length} 份原文`);

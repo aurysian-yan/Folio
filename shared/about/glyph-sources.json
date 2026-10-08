@@ -1,6 +1,8 @@
 {
-  "apps/macos/Folio/Assets.xcassets/BrandLogo.imageset/BrandLogo.svg": "0aa08208cfac73f603a2bd413140c5589f9d4e1eae287adbf9aa2569a0ef97bd",
-  "fixtures/fonts/Inter-Variable.ttf": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
-  "fixtures/fonts/SourceSerif4-Regular.otf": "edf160d0d584deee8a3bb2c3371b2a7624ca63580fbe02c57c1f4c91e84d8787",
-  "apps/desktop-ui/src/assets/fonts/JetBrainsMono-Variable.ttf": "662a196d58f1183bf2d77428b6d5283fe3f45161ab021bea4036bc98e5cac016"
+  "shared/about/wordmarks/logo-main.svg": "1ccb04f1340da123a66d181aca66d1f10aae1df8820c252a9c02b27f28961f78",
+  "shared/about/wordmarks/logo-egg1.svg": "f57ea453ea269956ebf90ff1fe8a8e1342f5fcb95f2abe877b795beccf6122a5",
+  "shared/about/wordmarks/logo-egg2.svg": "56105766c6dcaf0cc33afc837bae274fabd2307727e1d3eec3ea6726713c3f19",
+  "shared/about/wordmarks/logo-egg3.svg": "502639fe193b37b277b2236d2a4a5e865e724afb46b6f4e5bb1920f3a72de445",
+  "shared/about/wordmarks/logo-egg4.svg": "0d3bdd56ce1f43701a1f72580a72519036efb606e42a418563563738249134a0",
+  "shared/about/wordmarks/logo-egg5.svg": "456bb566ba0f5fb8aca72402356075887ec5a4eb79a2e57ed759c110bab72085"
 }

@@ -943,17 +943,12 @@
     "declaration": "License declaration",
     "sourceLink": "View source",
     "logoLabel": "Folio wordmark",
-    "logoHint": "Activate five times within three seconds to discover type variations",
-    "play": "Play type variations",
-    "fontVariant": "Type variation: {{font}}",
+    "logoHint": "Activate to switch to the next wordmark",
     "platform": "{{platform}} · {{arch}}",
     "nexio": "Liquid glass navigation and interaction reference",
     "kyant": "Liquid glass, smooth capsules and shaders",
     "meilox": "Navigation interactions and glass reference",
     "claralight": "Desktop value sliders",
-    "inter": "Wordmark variation · SIL Open Font License",
-    "serif": "Wordmark variation · SIL Open Font License",
-    "mono": "Wordmark variation and monospace type · SIL Open Font License",
     "appliesTo": "Platforms: {{platforms}}",
     "licenseNotices": "See license text",
     "platformNames": {
@@ -962,6 +957,8 @@
       "linux": "Linux",
       "ios": "iOS",
       "android": "Android"
-    }
+    },
+    "nextVariation": "Next wordmark",
+    "logoVariant": "Wordmark {{current}} of {{total}}"
   }
 }

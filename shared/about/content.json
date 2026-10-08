@@ -38,21 +38,6 @@
       "name": "Claralight Design",
       "key": "claralight",
       "url": "https://github.com/ClaralightDesign/react"
-    },
-    {
-      "name": "Inter",
-      "key": "inter",
-      "url": "https://github.com/rsms/inter"
-    },
-    {
-      "name": "Source Serif 4",
-      "key": "serif",
-      "url": "https://github.com/adobe-fonts/source-serif"
-    },
-    {
-      "name": "JetBrains Mono",
-      "key": "mono",
-      "url": "https://github.com/JetBrains/JetBrainsMono"
     }
   ]
 }
