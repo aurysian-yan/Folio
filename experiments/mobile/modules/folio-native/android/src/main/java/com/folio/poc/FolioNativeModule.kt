@@ -35,6 +35,8 @@ class FolioQuery : Record {
     @Field var collectionId: String? = null
     @Field var smartFolderId: String? = null
     @Field var facets: List<FolioFacetSelection> = emptyList()
+    @Field var locationFilter: String? = null
+    @Field var fileFingerprint: String? = null
     @Field var offset: Long = 0
     @Field var limit: Int = 40
 }
@@ -111,7 +113,7 @@ class FolioNativeModule : Module() {
         AsyncFunction("query") { request: FolioQuery, promise: Promise ->
             perform(promise) {
                 FolioLibraryMapper.page(FolioLibraryMapper.read(requireEngine(), request.text, request.scope, request.collectionId,
-                    request.smartFolderId, request.facets.map { it.kind to it.value }, request.offset, request.limit))
+                    request.smartFolderId, request.facets.map { it.kind to it.value }, request.offset, request.limit,request.locationFilter,request.fileFingerprint))
             }
         }
 
@@ -257,6 +259,7 @@ class FolioNativeModule : Module() {
                 }
             }
         }
+        AsyncFunction("setAutomaticDownload") { enabled: Boolean, promise: Promise -> performSync(promise) { syncEngine().setAutomaticDownload(enabled) } }
         AsyncFunction("cancelSync") { promise: Promise -> performSync(promise) { syncEngine().cancel() } }
 
         AsyncFunction("cloudFontAction") { fingerprint: String, action: String, promise: Promise ->
@@ -266,6 +269,8 @@ class FolioNativeModule : Module() {
                     "download" -> syncEngine().restoreCloudFont(fingerprint)
                     "delete" -> syncEngine().deleteEverywhere(fingerprint)
                     "restore" -> syncEngine().restoreDeletedFont(fingerprint)
+                    "excludeUpload" -> syncEngine().setUploadExcluded(fingerprint,true)
+                    "includeUpload" -> syncEngine().setUploadExcluded(fingerprint,false)
                     else -> throw IllegalArgumentException()
                 }
             }
@@ -380,7 +385,7 @@ class FolioNativeModule : Module() {
         var credentialError = false
         val available = try { profile?.let { FolioSyncCredentials(context()).read(it) != null } ?: false }
             catch (_: Exception) { credentialError = true; false }
-        return mapOf("profile" to profile?.let { mapOf("serverUrl" to it.serverUrl, "remoteDirectory" to it.remoteDirectory,
+        return mapOf("automaticDownload" to sync.automaticDownload(),"profile" to profile?.let { mapOf("serverUrl" to it.serverUrl, "remoteDirectory" to it.remoteDirectory,
             "username" to it.username, "automatic" to it.automatic) }, "credentialAvailable" to available, "credentialError" to credentialError,
             "status" to mapOf("phase" to status.phase, "stage" to status.stage, "percent" to status.percent.toInt(),
                 "stageCompleted" to status.stageCompleted.toDouble(), "stageTotal" to status.stageTotal.toDouble(),
@@ -393,7 +398,7 @@ class FolioNativeModule : Module() {
             "fonts" to sync.cloudFonts().map { mapOf("fingerprint" to it.fingerprint, "displayName" to it.displayName,
                 "filename" to it.filename, "fileSize" to it.fileSize.toDouble(), "cloudOnly" to it.cloudOnly,
                 "deleted" to it.deleted, "localPath" to it.localPath, "identityIds" to it.identityIds,
-                "localAvailable" to (!it.cloudOnly && !it.deleted && it.localPath?.let { path -> File(path).canRead() } == true)) })
+                "localAvailable" to (!it.cloudOnly && !it.deleted)) })
     }
 
     // 同步错误不附带凭据或原生异常对象。

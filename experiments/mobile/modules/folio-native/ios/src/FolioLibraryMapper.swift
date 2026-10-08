@@ -22,7 +22,7 @@ enum FolioLibraryMapper {
         }
         return LibraryQueryDto(text: text.isEmpty ? nil : text, scope: queryScope,
             collectionId: collectionId.map { CollectionIdDto(value: $0) }, facets: selections,
-            allowedFaceIds: nil, allowedSourcePaths: nil, offset: UInt64(offset), limit: UInt64(limit))
+            allowedFaceIds: nil, allowedSourcePaths: nil, locationFilter: nil, fileFingerprint: nil, offset: UInt64(offset), limit: UInt64(limit))
     }
 
     static func page(_ page: LibraryPageDto) -> [String: Any] {
@@ -32,16 +32,23 @@ enum FolioLibraryMapper {
              "familyCount": facet.familyCount] as [String: Any]
          }, "families": page.families.map { family in
             ["id": family.id.value, "displayName": family.displayName, "isFavorite": family.isFavorite,
+             "location": ["state":family.location.state,"localFaceCount":family.location.localFaceCount,"totalFaceCount":family.location.totalFaceCount],
              "identityIds": family.identityIds.map(\.value), "matchedFaceIds": family.matchedFaceIds.map(\.value),
              "faces": family.faces.map { face in
                 ["id": face.id.value, "identityId": face.identityId.value, "revisionId": face.revisionId,
                  "styleName": face.styleName, "sourcePath": face.sourcePath as Any? ?? NSNull(),
-                 "faceIndex": face.faceIndex, "axes": face.axes.map { axis in
+                 "location": location(face.location), "faceIndex": face.faceIndex, "axes": face.axes.map { axis in
                     ["tag": axis.tag, "name": axis.name, "minimum": axis.minValue,
                      "defaultValue": axis.defaultValue, "maximum": axis.maxValue] as [String: Any]
                  }] as [String: Any]
              }] as [String: Any]
          }]
+    }
+
+    static func location(_ value: FontLocationDto) -> [String:Any] {
+        ["state":value.state,"localAvailable":value.localAvailable,"cloudAvailable":value.cloudAvailable,"metadataComplete":value.metadataComplete,"cloudConfirmedAtMs":value.cloudConfirmedAtMs as Any? ?? NSNull(),"files":value.files.map { file in
+            ["fingerprint":file.fingerprint,"filename":file.filename,"fileSize":file.fileSize,"faceIndex":file.faceIndex,"cloudAvailable":file.cloudAvailable,"uploadExcluded":file.uploadExcluded,"downloadPolicy":file.downloadPolicy,"transferAction":file.transferAction as Any? ?? NSNull(),"transferStatus":file.transferStatus as Any? ?? NSNull(),"transferError":file.transferError as Any? ?? NSNull(),"localSources":file.localSources.map { ["path":$0.path,"kind":$0.kind,"previewSource":$0.previewSource] as [String:Any] }] as [String:Any]
+        }]
     }
 
     static func snapshot(_ value: LibrarySnapshotDto) -> [String: Any] {
@@ -68,14 +75,16 @@ enum FolioLibraryMapper {
 
     // 智慧范围交给 Rust 合并保存条件和临时浏览条件。
     static func read(engine: FolioEngine, text: String, scope: String, collectionId: String?, smartFolderId: String?,
-                     facets: [(String, String)], offset: Int, limit: Int) throws -> LibraryPageDto {
+                     facets: [(String, String)], offset: Int, limit: Int, locationFilter: String? = nil, fileFingerprint: String? = nil) throws -> LibraryPageDto {
         guard scope == "smart" ? smartFolderId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false && collectionId == nil
             : smartFolderId == nil else { throw invalidQuery() }
-        let request = try query(text: text, scope: scope == "smart" ? "all" : scope,
+        var request = try query(text: text, scope: scope == "smart" ? "all" : scope,
             collectionId: collectionId, facets: facets, offset: offset, limit: limit)
+        request.locationFilter = locationFilter
+        request.fileFingerprint = fileFingerprint
         if scope == "smart", let id = smartFolderId {
-            return try engine.querySmartFolder(id: SmartFolderIdDto(value: id), text: request.text,
-                facets: request.facets, offset: request.offset, limit: request.limit)
+            return try engine.querySmartFolderWithLocation(id: SmartFolderIdDto(value: id), text: request.text,
+                facets: request.facets, offset: request.offset, limit: request.limit, locationFilter: locationFilter,fileFingerprint: fileFingerprint)
         }
         return try engine.queryLocalLibrary(query: request)
     }

@@ -25,7 +25,7 @@ import { PageHeader, usePageHeader } from './PageHeader';
 import { HeaderScrollContext } from './HeaderButtonShadow';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
-import { library, materialPalette, syncSession, wallpaperSeed } from './native';
+import { cloudSync, library, materialPalette, syncSession, wallpaperSeed } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
   usesNativeControls, usesNativeSidebar, type NativeDestination,
@@ -47,12 +47,13 @@ import { createTheme, IconButton, resolveAccentColor, type Theme } from './ui';
 
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
-const emptyBrowse = { searchText: '', facets: [] as FacetSelection[] };
+const emptyBrowse = { searchText: '', locationFilter: 'all', facets: [] as FacetSelection[] };
 const LibraryList = Animated.FlatList<FontFamily>;
 
 function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, searchPage = false, target, destination = 'local',
   snapshot, libraryVersion, initialError, defaultMode, preferencesReady, showImportResults, syncBlocked,
-  onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily, syncController, onHeroAction }: {
+  onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily, syncController, onHeroAction, cloudFile }: {
+  cloudFile?: import('./sync').CloudFont | null;
   theme: Theme;
   bottomInset: number;
   active: boolean;
@@ -79,13 +80,14 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const { scope } = target;
   const collectionId = target.scope === 'collection' ? target.collectionId : undefined;
   const smartFolderId = target.scope === 'smart' ? target.smartFolderId : undefined;
-  const scopeKey = targetKey(target);
+  const fileFingerprint = cloudFile?.fingerprint;
+  const scopeKey = `${targetKey(target)}:${fileFingerprint ?? ''}`;
   const ready = snapshot !== null;
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [browseStates, setBrowseStates] = useState<Record<string, typeof emptyBrowse>>({});
   const browse = browseStates[scopeKey] ?? emptyBrowse;
-  const { searchText, facets: selectedFacets } = browse;
+  const { searchText, locationFilter, facets: selectedFacets } = browse;
   const searchOpen = searchPage;
   const updateBrowse = (change: Partial<typeof emptyBrowse>) => setBrowseStates((previous) => ({
     ...previous, [scopeKey]: { ...(previous[scopeKey] ?? emptyBrowse), ...change },
@@ -125,7 +127,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const scrollTopInset = Math.max(nativeInsets.contentTop ?? 0, nativeInsets.top + (sidebar ? 0 : headerHeight * 1.25));
   const androidContentTop = inset.top + headerHeight;
   const reservesWindowControls = usesNativeSidebar && !sidebar && Number(Platform.Version) >= 26;
-  const queryKey = JSON.stringify([scope, collectionId, smartFolderId, queryText, selectedFacets, retry]);
+  const queryKey = JSON.stringify([scope, collectionId, smartFolderId, queryText, selectedFacets, locationFilter, fileFingerprint, retry]);
   const offset = pagination.key === queryKey && loadedQuery.key === queryKey ? pagination.offset : 0;
   const requestKey = JSON.stringify([queryKey, offset, libraryVersion]);
   const optionsKey = JSON.stringify([scopeKey, queryText, libraryVersion, retry]);
@@ -189,7 +191,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
     const previous = loadedQueryRef.current;
     const reloading = previous.key === queryKey && previous.version !== libraryVersion;
     async function readPage() {
-      const request = { ...queryTarget, text: queryText, facets: selectedFacets, limit: pageSize };
+      const request = { ...queryTarget, text: queryText, facets: selectedFacets, locationFilter, fileFingerprint, limit: pageSize };
       const result = await library.query({ ...request, offset: reloading ? 0 : offset }, controller.signal);
       // 用户状态变化后重读已加载窗口，保留详情返回时的浏览位置。
       if (reloading) {
@@ -218,7 +220,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       }
     });
     return () => controller.abort();
-  }, [ready, queryText, scope, collectionId, smartFolderId, selectedFacets, offset, queryKey, requestKey, libraryVersion, t]);
+  }, [ready, queryText, scope, collectionId, smartFolderId, selectedFacets, locationFilter, fileFingerprint, offset, queryKey, requestKey, libraryVersion, t]);
 
   async function importFont() {
     if (!ready || syncBlocked || importInFlight.current) return;
@@ -289,7 +291,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         ListHeaderComponent={
           <View>
             {showsHero && (
-              <LibraryHero theme={theme} presentation={createLibraryHero(snapshot, syncController.state, syncController.readError)}
+              <LibraryHero theme={theme} presentation={cloudFile ? {kind:'normal', title:cloudFile.filename, subtitle:t('library.familyCountLabel',{total:page.totalMatches}), sync:createLibraryHero(snapshot,syncController.state,syncController.readError).sync} : createLibraryHero(snapshot, syncController.state, syncController.readError)}
                 onAction={onHeroAction} onLayout={({ nativeEvent }) => setHeroHeight(nativeEvent.layout.height)} />
             )}
             <View style={styles.libraryTools}>
@@ -407,7 +409,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       </PageHeader>}
       {Platform.OS === 'android' ? <NavigationBackdrop sourceId={active ? sourceId : ''}
         active={active} theme={theme} style={styles.screen}>{fontList}</NavigationBackdrop> : fontList}
-      <FilterPanel visible={filterOpen && active} theme={theme}
+      <FilterPanel locationFilter={locationFilter} onLocationChange={(locationFilter) => updateBrowse({locationFilter})} visible={filterOpen && active} theme={theme}
         options={facetOptions.key === optionsKey ? facetOptions.options : page.facets} counts={page.facets}
         selected={selectedFacets} loading={loading || optionsLoading || waitingForSearch} error={shownError ?? facetError}
         totalMatches={page.totalMatches} onChange={(facets) => updateBrowse({ facets })}
@@ -479,6 +481,7 @@ function MobileApp() {
   const [libraryTarget, setLibraryTarget] = useState<LibraryTarget>({ scope: 'all' });
   const [searchTarget, setSearchTarget] = useState<LibraryTarget>({ scope: 'all' });
   const [fontPage, setFontPage] = useState<FontFamily | null>(null);
+  const [focusedCloudFile, setFocusedCloudFile] = useState<import('./sync').CloudFont | null>(null);
   const recentAttempt = useRef(0);
   const [recentError, setRecentError] = useState<string | null>(null);
   const [fontPageCollectionId, setFontPageCollectionId] = useState<string | undefined>();
@@ -514,25 +517,28 @@ function MobileApp() {
 
   const displayedFamilyId = fontPage?.id;
   const displayedFamilyName = fontPage?.displayName;
+  const displayedIdentity = fontPage?.faces[0]?.identityId;
+  const displayedFingerprint = fontPage?.faces[0]?.location?.files[0]?.fingerprint;
   useEffect(() => {
     if (!fontPageVisible || !displayedFamilyId || !displayedFamilyName) return;
     const abort = new AbortController();
     void (async () => {
       let offset = 0;
       while (!abort.signal.aborted) {
-        const page = await library.query({ scope: 'all', text: displayedFamilyName, offset, limit: 100 }, abort.signal);
-        const family = page.families.find((item) => item.id === displayedFamilyId);
+        const page = await library.query({ scope: 'all', text: displayedFingerprint ? '' : displayedFamilyName, fileFingerprint: displayedFingerprint, offset, limit: 100 }, abort.signal);
+        const family = page.families.find((item) => item.id === displayedFamilyId || item.faces.some((face) => face.identityId === displayedIdentity));
         if (family) { setFontPage(family); return; }
         offset += page.families.length;
         if (!page.families.length || offset >= page.totalMatches) { setFontPageVisible(false); return; }
       }
     })().catch(() => { /* 查询错误不使用旧路径重新创建预览。 */ });
     return () => abort.abort();
-  }, [libraryVersion, displayedFamilyId, displayedFamilyName, fontPageVisible]);
+  }, [libraryVersion, displayedFamilyId, displayedFamilyName, displayedIdentity, displayedFingerprint, fontPageVisible]);
 
-  function selectTarget(target: LibraryTarget) { setLibraryTarget(target); setNativeDestination('local'); }
+  function selectTarget(target: LibraryTarget) { setFocusedCloudFile(null); setLibraryTarget(target); setNativeDestination('local'); }
   function navigate(value: NativeDestination) {
     Keyboard.dismiss();
+    setFocusedCloudFile(null);
     if (value === 'favorites') selectTarget({ scope: 'favorites' });
     else if (value.startsWith('collection:')) selectTarget({ scope: 'collection', collectionId: value.slice('collection:'.length) });
     else if (value.startsWith('smart:')) selectTarget({ scope: 'smart', smartFolderId: value.slice('smart:'.length) });
@@ -567,7 +573,16 @@ function MobileApp() {
   }, []);
 
   function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
-  const cloudContent = <CloudScreen theme={theme} sourceId={sourceId}
+  const openCloudFont = async (font: import('./sync').CloudFont) => {
+    try {
+      const result = await library.query({scope:'all',text:'',fileFingerprint:font.fingerprint,offset:0,limit:100});
+      if (result.families.length === 1) { setFontPage(result.families[0]!); setFontPageVisible(true); }
+      else if (result.families.length > 1) {
+        setFocusedCloudFile(font); setLibraryTarget({scope:'all'}); setNativeDestination('local'); setTab('local');
+      }
+    } catch { setRecentError(t('common.operationFailed')); }
+  };
+  const cloudContent = <CloudScreen onOpenFont={(font) => void openCloudFont(font)} theme={theme} sourceId={sourceId}
     active={(usesNativeControls ? nativeDestination === 'cloud' : tab === 'cloud') && !settingsPageVisible}
     snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
   const settingsContent = <SettingsScreen theme={theme} sourceId={sourceId} controller={syncController}
@@ -588,7 +603,7 @@ function MobileApp() {
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
         settings={settingsContent} search={searchContent} cloud={cloudContent} onDestinationChange={navigate}>
-        <LibraryScreen syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
+        <LibraryScreen cloudFile={focusedCloudFile} syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
           target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
           defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
           onTargetChange={selectTarget} onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
@@ -602,10 +617,10 @@ function MobileApp() {
       paddingLeft: inset.left, paddingRight: inset.right }]}>
       <StatusBar style="auto" />
       <TabScenes selectedId={tab} scenes={{
-        local: <LibraryScreen syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
+        local: <LibraryScreen cloudFile={focusedCloudFile} syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
             target={libraryTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
             defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
-            onSnapshotChange={applySnapshot} onTargetChange={setLibraryTarget}
+            onSnapshotChange={applySnapshot} onTargetChange={selectTarget}
             onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />,
         search: searchContent,
         cloud: cloudContent,
@@ -613,13 +628,23 @@ function MobileApp() {
       }} />
       <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme} hidden={keyboardVisible}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
-        onSelectionChange={(id) => { Keyboard.dismiss(); setTab(id); }} />
+        onSelectionChange={(id) => { Keyboard.dismiss(); setFocusedCloudFile(null); setTab(id); }} />
     </KeyboardAvoidingView>
   );
 
   const detail = fontPage ? (
     <FontDetails key={fontPage.id} family={fontPage} theme={theme}
       recentError={recentError} onRetryRecent={() => { if (fontPage) void recordVisit(fontPage); }}
+      onFileAction={async (fingerprint,action) => {
+        if (action === 'download') {
+          await cloudSync.fontAction(fingerprint, action);
+          syncController.requestSync();
+          await syncController.refresh();
+        } else {
+          const success = await syncController.run(() => cloudSync.fontAction(fingerprint,action),true);
+          if (success && action === 'includeUpload') syncController.requestSync();
+        }
+      }}
       snapshot={snapshot} collectionId={fontPageCollectionId}
       onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />
   ) : settingsPage ? settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false), syncController) : null;

@@ -16,6 +16,8 @@ struct FolioQuery: Record {
     @Field var collectionId: String? = nil
     @Field var smartFolderId: String? = nil
     @Field var facets: [FolioFacetSelection] = []
+    @Field var locationFilter: String? = nil
+    @Field var fileFingerprint: String? = nil
     @Field var offset: Int = 0
     @Field var limit: Int = 40
 }
@@ -114,7 +116,7 @@ public final class FolioNativeModule: Module {
         AsyncFunction("query") { (request: FolioQuery) throws -> [String: Any] in
             let page = try FolioLibraryMapper.read(engine: self.requireEngine(), text: request.text, scope: request.scope,
                 collectionId: request.collectionId, smartFolderId: request.smartFolderId,
-                facets: request.facets.map { ($0.kind, $0.value) }, offset: request.offset, limit: request.limit)
+                facets: request.facets.map { ($0.kind, $0.value) }, offset: request.offset, limit: request.limit,locationFilter:request.locationFilter,fileFingerprint:request.fileFingerprint)
             return FolioLibraryMapper.page(page)
         }.runOnQueue(queue)
 
@@ -251,6 +253,10 @@ public final class FolioNativeModule: Module {
             return try self.syncOperation { try sync.startSync(password: password) }
         }.runOnQueue(queue)
 
+        AsyncFunction("setAutomaticDownload") { (enabled: Bool) throws in
+            try self.syncEngine().setAutomaticDownload(enabled: enabled)
+        }.runOnQueue(queue)
+
         AsyncFunction("cancelSync") { () throws in
             try self.syncEngine().cancel()
         }.runOnQueue(queue)
@@ -263,6 +269,8 @@ public final class FolioNativeModule: Module {
                 case "download": try sync.restoreCloudFont(fingerprint: fingerprint)
                 case "delete": try sync.deleteEverywhere(fingerprint: fingerprint)
                 case "restore": try sync.restoreDeletedFont(fingerprint: fingerprint)
+                case "excludeUpload": try sync.setUploadExcluded(fingerprint:fingerprint,excluded:true)
+                case "includeUpload": try sync.setUploadExcluded(fingerprint:fingerprint,excluded:false)
                 default: throw self.syncBusy()
                 }
             }
@@ -384,7 +392,7 @@ public final class FolioNativeModule: Module {
             do { credentialAvailable = try FolioSyncCredentials.read(profile) != nil }
             catch { credentialError = true }
         }
-        return ["profile": profile.map { ["serverUrl": $0.serverUrl, "remoteDirectory": $0.remoteDirectory,
+        return ["automaticDownload": try sync.automaticDownload(),"profile": profile.map { ["serverUrl": $0.serverUrl, "remoteDirectory": $0.remoteDirectory,
             "username": $0.username, "automatic": $0.automatic] as [String: Any] } as Any? ?? NSNull(),
             "credentialAvailable": credentialAvailable, "credentialError": credentialError,
             "status": ["phase": status.phase, "stage": status.stage, "percent": status.percent,
@@ -398,7 +406,7 @@ public final class FolioNativeModule: Module {
             "fonts": try sync.cloudFonts().map { ["fingerprint": $0.fingerprint, "displayName": $0.displayName,
                 "filename": $0.filename, "fileSize": $0.fileSize, "cloudOnly": $0.cloudOnly, "deleted": $0.deleted,
                 "localPath": $0.localPath as Any? ?? NSNull(), "identityIds": $0.identityIds,
-                "localAvailable": !$0.cloudOnly && !$0.deleted && ($0.localPath.map { FileManager.default.isReadableFile(atPath: $0) } ?? false)] as [String: Any] }]
+                "localAvailable": !$0.cloudOnly && !$0.deleted] as [String: Any] }]
     }
 
     private func previewCacheDirectory() -> URL {

@@ -226,6 +226,8 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
             <SettingsValueRow title={t('cloud.remoteDirectory')} value={profile.remoteDirectory || '/'} theme={theme} last />
           </SettingsGroup>
           <SettingsGroup theme={theme}>
+            <SettingsSwitchRow title={t('fontLocation.autoDownload')} detail={t('fontLocation.autoDownloadHint')} theme={theme}
+              value={controller.state?.automaticDownload ?? false} disabled={disabled} onChange={(enabled) => { void controller.run(() => cloudSync.setAutomaticDownload(enabled),false); }} />
             <SettingsSwitchRow title={t('cloud.autoSync')} detail={t('mobile.sync.automaticHint')} theme={theme}
               value={profile.automatic} disabled={disabled} onChange={(automatic) => updateProfile({ automatic })} last />
           </SettingsGroup>
@@ -266,6 +268,8 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
             {!!(error || message) && <Text accessibilityLiveRegion="polite" style={[styles.feedback, { color: error ? theme.danger : theme.secondary }]}>{t(error ?? message!)}</Text>}
             {field('serverUrl', t('cloud.serverURL'))}{field('remoteDirectory', t('cloud.remoteDirectory'))}
             {field('username', t('cloud.username'))}{field('password', t('cloud.password'))}
+            <SettingsSwitchRow title={t('fontLocation.autoDownload')} detail={t('fontLocation.autoDownloadHint')} theme={theme}
+              value={controller.state?.automaticDownload ?? false} disabled={disabled} onChange={(enabled) => { void controller.run(() => cloudSync.setAutomaticDownload(enabled),false); }} />
             <SettingsSwitchRow title={t('cloud.autoSync')} detail={t('mobile.sync.automaticHint')} theme={theme}
               value={profile.automatic} disabled={disabled} onChange={(automatic) => updateProfile({ automatic })} />
             <SettingsActionRow title={t('cloud.testConnection')} theme={theme} disabled={disabled}

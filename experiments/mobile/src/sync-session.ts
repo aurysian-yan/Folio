@@ -80,7 +80,9 @@ export class ForegroundSyncSession<Snapshot> {
         const next = await this.client.state();
         if (!this.active || epoch !== this.epoch || revision !== this.revision) return;
         const complete = this.generation !== null && next.status.completionGeneration !== this.generation;
-        const needsSnapshot = !next.status.isRunning && (complete || this.generation === null || this.forceSnapshot);
+        const directoryReady = next.status.isRunning && ['下载字体', '上传字体'].includes(next.status.stage)
+          && next.status.stage !== this.view.state?.status.stage;
+        const needsSnapshot = directoryReady || (!next.status.isRunning && (complete || this.generation === null || this.forceSnapshot));
         const snapshot = needsSnapshot ? await this.snapshot() : undefined;
         if (!this.active || epoch !== this.epoch || revision !== this.revision) return;
         if (complete && next.status.phase === '同步失败') {

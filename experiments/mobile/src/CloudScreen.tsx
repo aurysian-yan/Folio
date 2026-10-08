@@ -17,9 +17,9 @@ import { SettingsActionRow, SettingsGroup, SettingsIcon, SettingsNote, SettingsV
 import type { CloudSyncController } from './useCloudSync';
 import type { Theme } from './ui';
 
-// 云端文件不进入本地预览、筛选与智慧匹配。
-export function CloudScreen({ theme, active, sourceId, controller, snapshot, onConfigure }: {
-  theme: Theme; active: boolean; sourceId: string; controller: CloudSyncController; snapshot: LibrarySnapshot | null; onConfigure: () => void;
+// 云端文件管理复用统一字体详情入口。
+export function CloudScreen({ theme, active, sourceId, controller, snapshot, onConfigure, onOpenFont }: {
+  theme: Theme; active: boolean; sourceId: string; controller: CloudSyncController; snapshot: LibrarySnapshot | null; onConfigure: () => void; onOpenFont: (font: CloudFont) => void;
 }) {
   const { t } = useTranslation();
   const list = useRef<Animated.FlatList<CloudFont>>(null);
@@ -36,12 +36,16 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
   const syncDisabled = busy || (!state && !readError) || (!readError && !!state?.profile
     && ((!status?.isRunning && controller.blocked) || (!status?.isRunning && !state.credentialAvailable)));
   function fontAction(font: CloudFont, action: CloudAction) {
+    if (action === 'download') {
+      void cloudSync.fontAction(font.fingerprint, action).then(async () => { controller.requestSync(); await controller.refresh(); }).catch(() => { void controller.refresh(); });
+      return;
+    }
     const execute = () => { void run(() => cloudSync.fontAction(font.fingerprint, action), true).then((success) => {
       if (success && action !== 'cloudOnly') controller.requestSync();
     }); };
     if (action === 'delete' || action === 'cloudOnly') {
-      Alert.alert(t(action === 'delete' ? 'cloud.deleteConfirmTitle' : 'cloud.keepCloudOnly'),
-        `${font.displayName || font.filename}\n${t(action === 'delete' ? 'cloud.deleteConfirmMessage' : 'cloud.cloudOnlyConfirmMessage')}`,
+      Alert.alert(t(action === 'delete' ? 'fontLocation.deleteTitle' : 'fontLocation.removeDownload'),
+        `${font.displayName || font.filename}\n${t(action === 'delete' ? 'fontLocation.deleteHint' : 'cloud.cloudOnlyConfirmMessage')}`,
         [{ text: t('common.cancel'), style: 'cancel' },
           { text: t(action === 'delete' ? 'cloud.deleteEverywhere' : 'cloud.keepCloudOnly'), style: 'destructive', onPress: execute }]);
     } else execute();
@@ -131,11 +135,11 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
     ListEmptyComponent={!readError && state ? <SettingsNote theme={theme}>{t(section === 'deleted' ? 'cloud.deletedEmpty'
       : !state.profile ? 'cloud.connectInSettingsHint' : 'cloud.emptyHint')}</SettingsNote> : null}
     renderItem={({ item }) => {
-      const progress = status?.isRunning ? status.items.find((entry) => entry.fingerprint === item.fingerprint) : undefined;
+      const progress = status?.items.find((entry) => entry.fingerprint === item.fingerprint);
       const action = t(progress?.action === 'upload' ? 'cloud.upload' : 'cloud.download');
-      return <CloudFontCard font={item} theme={theme} disabled={disabled} status={progress ? t(progress.status === 'done' ? 'cloud.completed'
+      return <CloudFontCard canDownload={!busy && !readError && !!state?.profile && !!state.credentialAvailable} onDetails={() => onOpenFont(item)} font={item} theme={theme} disabled={disabled} status={progress ? t(progress.status === 'failed' ? 'fontLocation.transfer.failed' : progress.status === 'cancelled' ? 'fontLocation.transfer.cancelled' : progress.status === 'done' ? 'cloud.completed'
           : progress.status === 'running' ? 'cloud.running' : 'cloud.waiting', { action })
-          : t(item.deleted ? 'cloud.recentlyDeleted' : item.localAvailable ? 'cloud.syncedTo' : 'cloud.cloudOnly')}
+          : item.deleted ? t('cloud.recentlyDeleted') : ''}
         onAction={(next) => fontAction(item, next)} onOpen={(methods) => {
           if (openSwipe.current !== methods) openSwipe.current?.close();
           openSwipe.current = methods;

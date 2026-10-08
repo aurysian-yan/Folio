@@ -38,11 +38,12 @@ export interface SyncStatus {
   items: { fingerprint: string; action: string; status: string }[];
 }
 export type SyncResolution = 'keepBoth' | 'useLocal' | 'useRemote';
-export type CloudAction = 'cloudOnly' | 'download' | 'delete' | 'restore';
+export type CloudAction = 'cloudOnly' | 'download' | 'delete' | 'restore' | 'excludeUpload' | 'includeUpload';
 export interface SyncConflict { id: string; kind: string; title: string; detail: string; localFingerprint: string | null; remoteFingerprint: string | null }
-export interface SyncState { profile: SyncProfile | null; credentialAvailable: boolean; credentialError: boolean; status: SyncStatus; fonts: CloudFont[]; conflicts: SyncConflict[] }
+export interface SyncState { automaticDownload?: boolean; profile: SyncProfile | null; credentialAvailable: boolean; credentialError: boolean; status: SyncStatus; fonts: CloudFont[]; conflicts: SyncConflict[] }
 export interface SyncBridge {
   syncState(): Promise<SyncState>;
+  setAutomaticDownload?(enabled: boolean): Promise<void>;
   testSyncConnection(profile: SyncProfile, password: string | null): Promise<void>;
   saveSyncConnection(profile: SyncProfile, password: string | null): Promise<void>;
   disconnectSync(): Promise<void>;
@@ -76,6 +77,7 @@ export function canReuseSyncPassword(profile: SyncProfile, saved: SyncProfile | 
 export function createSyncClient(bridge: SyncBridge) {
   return {
     state: () => bridge.syncState(),
+    setAutomaticDownload: (enabled: boolean) => bridge.setAutomaticDownload?.(enabled) ?? Promise.resolve(),
     test: (profile: SyncProfile, password: string) => bridge.testSyncConnection(validateProfile(profile), password || null),
     save: (profile: SyncProfile, password: string) => bridge.saveSyncConnection(validateProfile(profile), password || null),
     disconnect: () => bridge.disconnectSync(),

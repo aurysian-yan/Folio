@@ -1,3 +1,4 @@
+import { locationLabel, transferLabel } from "../../../shared/font-location";
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -22,10 +23,12 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
   const previewKey = `${face?.id}:${face?.revisionId}`;
   const status = previewStatus?.key === previewKey ? previewStatus.status : null;
   const compact = mode === 'list';
+  const locationText = locationLabel(family.faces,undefined,t,family.location);
+  const transfers = face?.location?.files.map((file) => ({ fingerprint: file.fingerprint, text: transferLabel(file,t) })).filter((item) => item.text) ?? [];
 
   return (
     <Pressable accessibilityRole={onOpen ? 'button' : undefined} accessible={!!onOpen}
-      accessibilityLabel={onOpen ? family.isFavorite ? t('mobile.viewDetailsFavorite', { name: family.displayName }) : t('mobile.viewDetails') : undefined}
+      accessibilityLabel={onOpen ? [family.isFavorite ? t('mobile.viewDetailsFavorite', { name: family.displayName }) : `${family.displayName} · ${t('mobile.viewDetails')}`, locationText, ...transfers.map((item) => item.text)].join(' · ') : undefined}
       disabled={!onOpen} onPress={onOpen} style={[styles.card, compact ? styles.listCard : styles.gridCard,
         { backgroundColor: compact ? theme.listCardSurface : theme.surface, borderColor: theme.border }]}>
       {compact && <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.outline, { borderColor: theme.listCardBorder }]} />}
@@ -45,10 +48,12 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
             onStatus={(event) => setPreviewStatus({ key: previewKey, status: event.nativeEvent.status })} />
         ) : (
           <Text style={[styles.unavailable, { color: theme.secondary }, compact && styles.listUnavailable]}>
-            {status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t('mobile.previewUnavailable')}
+            {status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t(face?.location?.cloudAvailable && !face.location.localAvailable ? 'fontLocation.previewHint' : 'mobile.previewUnavailable')}
           </Text>
         )}
       </View>
+      <Text style={[styles.detail, { color: theme.secondary }]}>{locationText}</Text>
+      {transfers.map((item) => <Text key={item.fingerprint} accessibilityLiveRegion="polite" style={[styles.detail, { color: theme.secondary }]}>{item.text}</Text>)}
       {preferences.showCardMetadata && <View pointerEvents="none" style={[styles.metadata, compact && styles.listMetadata]}>
         <Text numberOfLines={1} style={[styles.name, { color: theme.label }, compact && styles.listName]}>{family.displayName}</Text>
         <View style={styles.details}>

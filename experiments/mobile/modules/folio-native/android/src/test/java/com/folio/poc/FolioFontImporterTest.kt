@@ -56,12 +56,12 @@ class FolioFontImporterTest {
         val report = importer(root, engine).importFiles(files)
         assertEquals(listOf("imported", "imported", "failed", "duplicate", "failed"), report.items.map { it.status })
         assertEquals(2L, report.snapshot.faceCount.toLong())
-        val page = engine.queryLibrary(LibraryQueryDto(null, QueryScopeDto.ALL, null, emptyList(), null, null, 0uL, 100uL))
+        val page = engine.queryLibrary(LibraryQueryDto(null, QueryScopeDto.ALL, null, emptyList(), null, null, null, null, 0uL, 100uL))
         engine.setFavorite(listOf(page.families.first().faces.first().identityId), true)
         val reopened = FolioEngine.open(File(root, "folio.sqlite").absolutePath)
         try {
             assertEquals("duplicate", importer(root, reopened).importFiles(listOf(files.first())).items.single().status)
-            assertTrue(reopened.queryLibrary(LibraryQueryDto(null, QueryScopeDto.FAVORITES, null, emptyList(), null, null, 0uL, 100uL)).families.isNotEmpty())
+            assertTrue(reopened.queryLibrary(LibraryQueryDto(null, QueryScopeDto.FAVORITES, null, emptyList(), null, null, null, null, 0uL, 100uL)).families.isNotEmpty())
         } finally { reopened.destroy() }
         assertEquals(2, File(root, "fonts").listFiles()!!.size)
         assertClean(root)
@@ -75,7 +75,7 @@ class FolioFontImporterTest {
         val report = importer(root, engine).importFiles(listOf(zip))
         assertEquals(2, report.items.size)
         assertTrue(report.items.all { it.status == "imported" && it.archiveName == "中文.zip" })
-        val faces = engine.queryLibrary(LibraryQueryDto(null, QueryScopeDto.ALL, null, emptyList(), null, null, 0uL, 100uL)).families.flatMap { it.faces }
+        val faces = engine.queryLibrary(LibraryQueryDto(null, QueryScopeDto.ALL, null, emptyList(), null, null, null, null, 0uL, 100uL)).families.flatMap { it.faces }
         assertTrue(faces.any { it.faceIndex == 1u })
         assertTrue(faces.any { it.axes.isNotEmpty() })
         assertClean(root)
@@ -135,7 +135,7 @@ class FolioFontImporterTest {
 
     @Test fun refreshFailureRollsBackOnlyNewSources() = scenario { root, engine ->
         importer(root, engine).importFiles(listOf(selected("Lato-Regular.ttf")))
-        val query = LibraryQueryDto(null, QueryScopeDto.ALL, null, emptyList(), null, null, 0uL, 100uL)
+        val query = LibraryQueryDto(null, QueryScopeDto.ALL, null, emptyList(), null, null, null, null, 0uL, 100uL)
         engine.setFavorite(listOf(engine.queryLibrary(query).families.first().faces.first().identityId), true)
         val importer = FolioFontImporter(engine, root, { File(URI(it)).inputStream() }, refresh = { error("refresh failed") })
         try { importer.importFiles(listOf(selected("Lato-Bold.ttf"))); fail("must fail") } catch (_: FontImportFailure) { }

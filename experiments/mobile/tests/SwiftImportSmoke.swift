@@ -111,7 +111,7 @@ enum SwiftImportSmoke {
 
     private static func query(scope: QueryScopeDto = .all) -> LibraryQueryDto {
         LibraryQueryDto(text: nil, scope: scope, collectionId: nil, facets: [], allowedFaceIds: nil,
-            allowedSourcePaths: nil, offset: 0, limit: 100)
+            allowedSourcePaths: nil, locationFilter: nil, fileFingerprint: nil, offset: 0, limit: 100)
     }
 
     private static func archive(_ root: URL, _ name: String, entries: [(String, Data)],

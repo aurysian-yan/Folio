@@ -1,3 +1,4 @@
+import { locationLabel, transferLabel } from "../../../shared/font-location";
 import { CaretLeftIcon, CaretRightIcon, CheckIcon, CopyIcon } from './icons';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +27,7 @@ interface FontDetailsProps {
   onSnapshotChange: (snapshot: LibrarySnapshot) => void;
   onClose: () => void;
   onFavorite: () => Promise<void>;
+  onFileAction: (fingerprint: string,action: "download" | "cloudOnly" | "excludeUpload" | "includeUpload") => Promise<void>;
 }
 
 const axisLabelKeys: Record<string, string> = {
@@ -38,7 +40,7 @@ export function FontDetails(props: FontDetailsProps) {
   return <SafeAreaProvider><FontDetailsContent {...props} /></SafeAreaProvider>;
 }
 
-function FontDetailsContent({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite }: FontDetailsProps) {
+function FontDetailsContent({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite, onFileAction }: FontDetailsProps) {
   const { t } = useTranslation();
   const scroll = useRef<ScrollView>(null);
   const styleScroll = useRef<ScrollView>(null);
@@ -141,6 +143,22 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
           </View>}
 
           <SettingsGroup theme={theme}>
+            <View style={settingsLayout.content}>
+              <Text style={[settingsTypography.body,{color:theme.label}]}>{t('fontLocation.title')}</Text>
+              <Text style={[settingsTypography.detail,{color:theme.secondary}]}>{locationLabel(family.faces,selectedFace,t)}</Text>
+              {selectedFace?.location?.cloudConfirmedAtMs && <Text style={[settingsTypography.detail,{color:theme.secondary}]}>{t('fontLocation.lastConfirmed',{date:new Date(selectedFace.location.cloudConfirmedAtMs).toLocaleString()})}</Text>}
+              {selectedFace?.location?.files.map((file) => <View key={file.fingerprint}>
+                <Text style={[settingsTypography.body,{color:theme.label}]}>{file.filename}</Text>
+                {!!file.localSources.length && <Text style={[settingsTypography.detail,{color:theme.secondary}]}>{t('fontLocation.localLibrary')}</Text>}
+                {transferLabel(file,t) && <Text accessibilityLiveRegion="polite" style={[settingsTypography.detail,{color:theme.secondary}]}>{transferLabel(file,t)}</Text>}
+                {file.cloudAvailable && !file.localSources.length && <PanelAction theme={theme} label={t('fontLocation.download')} onPress={() => { void onFileAction(file.fingerprint,'download').catch(() => setError(t('common.operationFailed'))); }} />}
+                {file.cloudAvailable && !!file.localSources.length && <PanelAction theme={theme} label={t('fontLocation.removeDownload')} onPress={() => { void onFileAction(file.fingerprint,'cloudOnly').catch(() => setError(t('common.operationFailed'))); }} />}
+                {!file.cloudAvailable && !file.uploadExcluded && !!file.localSources.length && <PanelAction theme={theme} label={t('cloud.upload')} onPress={() => { void onFileAction(file.fingerprint,'includeUpload').catch(() => setError(t('common.operationFailed'))); }} />}
+                {!!file.localSources.length && <PanelAction theme={theme} label={t(file.uploadExcluded ? 'fontLocation.resumeUpload' : 'fontLocation.keepLocal')} onPress={() => { void onFileAction(file.fingerprint,file.uploadExcluded ? 'includeUpload' : 'excludeUpload').catch(() => setError(t('common.operationFailed'))); }} />}
+              </View>)}
+            </View>
+          </SettingsGroup>
+          <SettingsGroup theme={theme}>
             <View style={styles.previewStage}>
               <View onLayout={(event) => setPreviewWidth(event.nativeEvent.layout.width)}
                 style={[styles.previewContent, { height: previewHeight }]}>
@@ -151,7 +169,7 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
                   onStatus={(event) => setPreviewStatus({ key: faceKey, result: event.nativeEvent })} />}
                 {showFallback ? <View style={styles.previewOverlay} pointerEvents="none">
                   <Text accessibilityLiveRegion="polite" style={[styles.previewFallback, { color: theme.secondary }]}>
-                    {result?.status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t('mobile.previewUnavailable')}
+                    {result?.status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t(selectedFace?.location?.cloudAvailable && !selectedFace.location.localAvailable ? 'fontLocation.previewHint' : 'mobile.previewUnavailable')}
                   </Text>
                 </View> : !result && <View style={styles.previewOverlay} pointerEvents="none">
                   <ActivityIndicator accessibilityLabel={t('preview.loading')} color={theme.secondary} />

@@ -8,8 +8,10 @@ import { formatBytes, settingsLayout, settingsTypography } from './settings-ui';
 import type { Theme } from './ui';
 
 // 云端卡片收起文件明细，侧滑、更多入口与读屏提供相同操作。
-export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen }: {
+export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen, onDetails, canDownload = false }: {
   font: CloudFont; status: string; theme: Theme; disabled: boolean;
+  onDetails?: () => void;
+  canDownload?: boolean;
   onAction: (action: CloudAction) => void; onOpen: (methods: SwipeableMethods) => void;
 }) {
   const { t } = useTranslation();
@@ -23,7 +25,7 @@ export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen 
       Icon: font.localAvailable ? CloudIcon : DownloadSimpleIcon },
     { action: 'delete' as const, label: t('cloud.deleteEverywhere'), Icon: TrashIcon }];
   function execute(action: CloudAction) {
-    if (disabled) return;
+    if (disabled && !(action === 'download' && canDownload)) return;
     swipe.current?.close();
     onAction(action);
   }
@@ -31,38 +33,41 @@ export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen 
     if (open) swipe.current?.close(); else swipe.current?.openRight();
   }
   const name = font.displayName || font.filename;
-  return <Swipeable ref={swipe} enabled={!disabled} enableTrackpadTwoFingerGesture overshootRight={false}
+  return <Swipeable ref={swipe} enabled={!disabled || canDownload} enableTrackpadTwoFingerGesture overshootRight={false}
     containerStyle={styles.swipeCard} onSwipeableWillOpen={() => {
       if (swipe.current) onOpen(swipe.current);
       setOpen(true);
     }} onSwipeableClose={() => setOpen(false)} renderRightActions={() =>
       <View style={styles.actions} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>
-        {actions.map(({ action, label, Icon }) => <Pressable key={action} accessibilityRole="button" accessibilityLabel={label}
-          accessibilityState={{ disabled }} disabled={disabled} onPress={() => execute(action)}
+        {actions.map(({ action, label, Icon }) => {
+          const actionDisabled = disabled && !(action === 'download' && canDownload);
+          return <Pressable key={action} accessibilityRole="button" accessibilityLabel={label}
+          accessibilityState={{ disabled: actionDisabled }} disabled={actionDisabled} onPress={() => execute(action)}
           style={({ pressed }) => [styles.action, { backgroundColor: action === 'delete' ? theme.danger : theme.selection,
-            opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}>
+            opacity: actionDisabled ? 0.4 : pressed ? 0.7 : 1 }]}>
           <Icon size={22} color={action === 'delete' ? theme.onAccent : theme.accent} />
           <Text style={[styles.actionLabel, { color: action === 'delete' ? theme.onAccent : theme.accent }]}>{label}</Text>
-        </Pressable>)}
+        </Pressable>; })}
       </View>}>
     <View style={[styles.card, { backgroundColor: theme.surface }]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${name}, ${formatBytes(font.fileSize)}, ${status}`}
-        accessibilityHint={t('mobile.swipeCloudFont')} accessibilityState={{ disabled }} disabled={disabled}
-        accessibilityActions={disabled ? [] : actions.map(({ action, label }) => ({ name: action, label }))}
+        accessibilityHint={t('mobile.swipeCloudFont')} accessibilityState={{ disabled: font.deleted }} disabled={font.deleted}
+        accessibilityActions={actions.filter(({action}) => !disabled || (action === 'download' && canDownload)).map(({ action, label }) => ({ name: action, label }))}
         onAccessibilityAction={({ nativeEvent }) => {
           const action = actions.find((item) => item.action === nativeEvent.actionName)?.action;
           if (action) execute(action);
-        }} onPress={toggle} onLongPress={() => swipe.current?.openRight()} style={styles.body}>
+        }} onPress={onDetails ?? toggle} onLongPress={() => swipe.current?.openRight()} style={styles.body}>
         <View style={styles.fileIcon}>
           <FileTextIcon size={20} color={theme.accent} />
         </View>
         <View style={styles.info}>
           <Text numberOfLines={1} style={[styles.name, { color: theme.label }]}>{name}</Text>
-          <Text numberOfLines={1} style={[styles.detail, { color: theme.secondary }]}>{formatBytes(font.fileSize)} · {status}</Text>
+          <Text numberOfLines={1} style={[styles.detail, { color: theme.secondary }]}>{t(font.localAvailable ? 'fontLocation.both' : 'fontLocation.cloudOnly')} · {formatBytes(font.fileSize)}</Text>
+          {!!status && <Text accessibilityLiveRegion="polite" style={[styles.detail,{color:theme.secondary}]}>{status}</Text>}
         </View>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.cloudFontActions', { name })}
-        accessibilityState={{ disabled }} disabled={disabled} onPress={toggle}
+        accessibilityState={{ disabled: disabled && !canDownload }} disabled={disabled && !canDownload} onPress={toggle}
         style={({ pressed }) => [styles.more, { opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}>
         <DotsThreeIcon size={24} color={theme.secondary} />
       </Pressable>

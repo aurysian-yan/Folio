@@ -53,6 +53,6 @@ struct SwiftSmoke {
 
     static func query(offset: UInt64, limit: UInt64, scope: QueryScopeDto = .all) -> LibraryQueryDto {
         LibraryQueryDto(text: nil, scope: scope, collectionId: nil, facets: [], allowedFaceIds: nil,
-                        allowedSourcePaths: nil, offset: offset, limit: limit)
+                        allowedSourcePaths: nil, locationFilter: nil, fileFingerprint: nil, offset: offset, limit: limit)
     }
 }

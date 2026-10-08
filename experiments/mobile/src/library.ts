@@ -1,3 +1,4 @@
+import { locallyAvailable } from "../../../shared/font-location.ts";
 import i18n from './i18n/instance.ts';
 
 export interface VariableAxis {
@@ -16,6 +17,7 @@ export interface FontFace {
   sourcePath: string | null;
   faceIndex: number;
   axes: VariableAxis[];
+  location?: import("../../../shared/font-location").FontLocation;
 }
 
 export interface FontFamily {
@@ -25,6 +27,7 @@ export interface FontFamily {
   identityIds: string[];
   matchedFaceIds: string[];
   faces: FontFace[];
+  location?: import("../../../shared/font-location").FontFamilyLocation;
 }
 
 export const facetTitles = {
@@ -84,6 +87,8 @@ export interface LibrarySnapshot {
 
 export type LibraryQuery = LibraryTarget & {
   text: string;
+  locationFilter?: string;
+  fileFingerprint?: string;
   facets?: FacetSelection[];
   offset: number;
   limit: number;
@@ -217,7 +222,9 @@ export function savedConditions(query: { text: string; facets?: FacetSelection[]
 }
 
 export function representativeFace(family: FontFamily) {
-  return family.faces.find((face) => /^(regular|normal|book|常规)$/i.test(face.styleName)) ?? family.faces[0];
+  const local = family.faces.filter(locallyAvailable);
+  const faces = local.length ? local : family.faces;
+  return faces.find((face) => /^(regular|normal|book|常规)$/i.test(face.styleName)) ?? faces[0];
 }
 
 // 桌面新建收藏夹沿用智慧范围的保存条件与临时浏览条件。

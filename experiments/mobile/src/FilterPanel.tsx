@@ -1,3 +1,4 @@
+import { locationFilters } from "../../../shared/font-location";
 import { CheckIcon } from './icons';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -7,8 +8,9 @@ import { PanelAction, PanelSection, panelStyles } from './panel-content';
 import type { Theme } from './ui';
 
 // 筛选直接更新当前查询，候选与计数保持 Rust 语义。
-export function FilterPanel({ visible, theme, options, counts, selected, loading, error, totalMatches, onChange, onClose, onRetry }: {
+export function FilterPanel({ visible, theme, options, counts, selected, loading, error, totalMatches, onChange, onClose, onRetry, locationFilter, onLocationChange }: {
   visible: boolean; theme: Theme; options: FacetOption[]; counts: FacetOption[]; selected: FacetSelection[];
+  locationFilter?: string; onLocationChange?: (filter: string) => void;
   loading: boolean; error: string | null; totalMatches: number;
   onChange: (facets: FacetSelection[]) => void; onClose: () => void; onRetry: () => void;
 }) {
@@ -26,6 +28,9 @@ export function FilterPanel({ visible, theme, options, counts, selected, loading
     <FilterList data={sections} keyExtractor={(section) => section.kind}
       contentContainerStyle={panelStyles.content} keyboardShouldPersistTaps="handled"
       ListHeaderComponent={<View>
+        {onLocationChange && <PanelSection title={t('fontLocation.title')} theme={theme} initiallyExpanded>
+          <View style={styles.options}>{locationFilters.map((filter) => <Pressable key={filter} accessibilityRole="radio" accessibilityState={{selected:filter === locationFilter}} onPress={() => onLocationChange(filter)} style={[styles.chip,{backgroundColor:filter === locationFilter ? theme.accent : theme.raised}]}><Text style={[styles.label,{color:filter === locationFilter ? theme.onAccent : theme.label}]}>{t(`fontLocation.${filter}`)}</Text></Pressable>)}</View>
+        </PanelSection>}
         <View style={[panelStyles.row, { borderColor: theme.border }]}>
           <Text accessibilityLiveRegion="polite" style={[panelStyles.label, { color: theme.secondary }]}>
             {loading ? t('mobile.loadingFiltering') : t('mobile.matchCount', { total: totalMatches })}

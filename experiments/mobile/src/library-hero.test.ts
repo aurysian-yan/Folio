@@ -29,7 +29,7 @@ test('未运行队列也显示仅本地未同步，云端保留与传输分别�
   const hero = createLibraryHero(snapshot, remote, null);
   assert.equal(hero.title, '云端有 1 个字体可下载');
   assert.equal(hero.sync.text, '123PAN · 1 个字体仅在云端');
-  assert.ok(createLibraryHero(local, remote, null).sync.text.includes('1 个本地字体未同步 · 1 个云端字体可下载'));
+  assert.equal(createLibraryHero(local, remote, null).sync.text, '本地有 1 个字体待上传');
 });
 
 test('读取失败不使用旧云端记录，未连接与同步失败分别显示', () => {

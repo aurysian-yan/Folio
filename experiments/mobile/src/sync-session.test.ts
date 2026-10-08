@@ -155,3 +155,16 @@ test('部分写入失败仍读真实快照，快照失败显示可重试状态',
   failed.setActive(true); await settle();
   assert.equal(failed.view.readError, 'cloud.readStatusError'); failed.setActive(false);
 });
+
+test('目录到达后立即刷新云条目，文件任务仍可继续', async () => {
+  const { session, state, counts } = setup();
+  session.setActive(true); await settle();
+  await session.start();
+  state.status.stage = '下载字体';
+  await session.refresh();
+  assert.equal(counts().snapshots, 2);
+  assert.equal(session.view.state?.status.isRunning, true);
+  await session.refresh();
+  assert.equal(counts().snapshots, 2);
+  session.setActive(false);
+});
