@@ -3,6 +3,11 @@ import XCTest
 
 @MainActor
 final class FolioTests: XCTestCase {
+    func testSyncPercentKeepsLiteralPercentSign() {
+        XCTAssertTrue(L.format("cloud.syncingPercent", "34").contains("34%"))
+        XCTAssertTrue(L.format("cloud.syncingCloud", "WebDAV", "34").contains("34%"))
+    }
+
     func testDamagedHeroHasHighestPriority() {
         let snapshot = LibrarySnapshot(
             familyCount: 3,

@@ -40,7 +40,8 @@ function escapeStrings(value) {
 
 // 把 {{name}} 占位符转换为 printf 形式；复数变量 count 使用 %ld。
 function toFormat(value, numericNames = []) {
-  return value.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, name) =>
+  const literal = placeholders(value).length ? value.replace(/%/g, '%%') : value;
+  return literal.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, name) =>
     numericNames.includes(name) ? '%ld' : '%@',
   );
 }
