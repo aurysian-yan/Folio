@@ -2,9 +2,11 @@
 
 #![forbid(unsafe_code)]
 
+mod library;
 #[cfg(test)]
 mod local_dav_tests;
 mod managed;
+pub use library::{managed_directory, unified_library, UnifiedLibrary};
 #[cfg(test)]
 mod tests;
 mod webdav;
@@ -149,6 +151,8 @@ pub enum SyncItemStatus {
     Pending,
     Running,
     Done,
+    Failed,
+    Cancelled,
 }
 
 impl SyncItemStatus {
@@ -157,6 +161,8 @@ impl SyncItemStatus {
             SyncItemStatus::Pending => "等待中",
             SyncItemStatus::Running => "进行中",
             SyncItemStatus::Done => "已完成",
+            SyncItemStatus::Failed => "传输失败",
+            SyncItemStatus::Cancelled => "已取消",
         }
     }
 
@@ -165,6 +171,8 @@ impl SyncItemStatus {
             SyncItemStatus::Pending => "pending",
             SyncItemStatus::Running => "running",
             SyncItemStatus::Done => "done",
+            SyncItemStatus::Failed => "failed",
+            SyncItemStatus::Cancelled => "cancelled",
         }
     }
 }
@@ -196,7 +204,6 @@ impl SyncProgress {
         self.phase = phase;
         self.phase_completed = 0;
         self.phase_total = total;
-        self.items.clear();
     }
 
     fn advance(&mut self) {
@@ -273,6 +280,8 @@ struct RemoteFace {
     revision_id: String,
     display_name: String,
     style_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    details: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -515,24 +524,24 @@ fn cloud_fonts(db: &FolioDatabase) -> Result<Vec<CloudFont>, SyncError> {
             _ => None,
         })
         .collect::<BTreeSet<_>>();
+    let local = db
+        .readable_font_files()?
+        .into_values()
+        .collect::<BTreeSet<_>>();
     db.list_sync_assets()?
         .into_iter()
         .filter(|asset| published.contains(&asset.fingerprint))
         .map(|asset| {
             let remote: RemoteAsset = serde_json::from_str(&asset.remote_payload)?;
             Ok(CloudFont {
-                fingerprint: asset.fingerprint,
+                fingerprint: asset.fingerprint.clone(),
                 display_name: remote
                     .faces
                     .first()
                     .map_or(asset.filename.clone(), |face| face.display_name.clone()),
                 filename: asset.filename,
                 file_size: remote.file_size,
-                cloud_only: asset.cloud_only
-                    || asset
-                        .local_path
-                        .as_ref()
-                        .is_none_or(|path| !Path::new(path).is_file()),
+                cloud_only: !local.contains(&asset.fingerprint),
                 deleted: asset.deleted,
                 local_path: asset.local_path,
                 identity_ids: remote
@@ -558,14 +567,29 @@ pub fn font_sync_summary(
     let excluded = db
         .list_sync_assets()?
         .into_iter()
-        .filter(|asset| asset.deleted || asset.cloud_only)
+        .filter(|asset| {
+            asset.deleted
+                || db
+                    .file_policy(&asset.fingerprint)
+                    .is_ok_and(|policy| policy.upload_excluded)
+        })
         .map(|asset| asset.fingerprint)
         .collect::<BTreeSet<_>>();
+    let root = managed_directory
+        .canonicalize()
+        .unwrap_or_else(|_| managed_directory.to_path_buf());
+    let excluded_sources = db.excluded_file_sources()?;
     let local = db
-        .local_font_fingerprints(managed_directory)?
+        .readable_font_files()?
         .into_iter()
+        .filter(|(path, _)| path.starts_with(&root) && !excluded_sources.contains(path))
+        .map(|(_, fingerprint)| fingerprint)
         .filter(|fingerprint| {
-            !remote.contains(fingerprint.as_str()) && !excluded.contains(fingerprint)
+            !remote.contains(fingerprint.as_str())
+                && !excluded.contains(fingerprint)
+                && db
+                    .file_policy(fingerprint)
+                    .is_ok_and(|policy| !policy.upload_excluded)
         })
         .collect::<BTreeSet<_>>();
     Ok(FontSyncSummary {
@@ -979,8 +1003,127 @@ fn unique_smart_folder_name(
     Err(SyncError::InvalidId)
 }
 
-pub fn set_cloud_only(database_path: impl AsRef<Path>, fingerprint: &str) -> Result<(), SyncError> {
+pub fn automatic_download(database_path: impl AsRef<Path>) -> Result<bool, SyncError> {
     let db = FolioDatabase::open(database_path)?;
+    Ok(db.sync_metadata("automatic_download")?.as_deref() == Some("true"))
+}
+
+pub fn set_automatic_download(
+    database_path: impl AsRef<Path>,
+    enabled: bool,
+) -> Result<(), SyncError> {
+    let db = FolioDatabase::open(database_path)?;
+    db.set_sync_metadata("automatic_download", if enabled { "true" } else { "false" })?;
+    Ok(())
+}
+
+pub fn set_upload_excluded(
+    database_path: impl AsRef<Path>,
+    fingerprint: &str,
+    excluded: bool,
+) -> Result<(), SyncError> {
+    let db = FolioDatabase::open(database_path)?;
+    let mut policy = db.file_policy(fingerprint)?;
+    policy.upload_excluded = excluded;
+    db.save_file_policy(&policy)?;
+    for (path, hash) in db.readable_font_files()? {
+        if hash == fingerprint {
+            db.remember_policy_source(fingerprint, &path)?;
+            db.set_source_upload_exclusion(&path, excluded)?;
+        }
+    }
+    if excluded {
+        for (event, change) in decoded_events(&db)? {
+            if !event.published
+                && matches!(change, Change::FontAdded(ref asset) if asset.fingerprint == fingerprint)
+            {
+                let replacement = Change::FontDeleted {
+                    fingerprint: fingerprint.to_owned(),
+                    observed_adds: Vec::new(),
+                };
+                db.replace_unpublished_sync_event(
+                    &event.id,
+                    &serde_json::to_string(&replacement)?,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn owned_managed_path(db: &FolioDatabase, path: &Path) -> bool {
+    let root = managed_directory(db);
+    match (root.canonicalize(), path.canonicalize()) {
+        (Ok(root), Ok(path)) => path.starts_with(root),
+        _ => path.starts_with(root),
+    }
+}
+
+/// 应用重启后中断的传输进入可重试状态。
+pub fn recover_transfers(database_path: impl AsRef<Path>) -> Result<(), SyncError> {
+    let db = FolioDatabase::open(database_path)?;
+    for policy in db.file_policies()? {
+        if policy.transfer_status.as_deref() == Some("running") {
+            save_transfer(
+                &db,
+                &policy.fingerprint,
+                policy.transfer_action.as_deref().unwrap_or("download"),
+                "failed",
+                Some("interrupted"),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// 合并持久文件任务，目录完成不清除失败、取消和待处理状态。
+pub fn transfer_items(database_path: impl AsRef<Path>) -> Result<Vec<SyncItemProgress>, SyncError> {
+    let db = FolioDatabase::open(database_path)?;
+    let mut items = Vec::new();
+    for policy in db.file_policies()? {
+        let Some(status) = policy.transfer_status.as_deref() else {
+            continue;
+        };
+        let status = match status {
+            "pending" => SyncItemStatus::Pending,
+            "running" => SyncItemStatus::Running,
+            "failed" => SyncItemStatus::Failed,
+            "cancelled" => SyncItemStatus::Cancelled,
+            "done" => SyncItemStatus::Done,
+            _ => continue,
+        };
+        let action = match policy.transfer_action.as_deref() {
+            Some("upload") => SyncItemAction::Upload,
+            Some("download") => SyncItemAction::Download,
+            _ => continue,
+        };
+        items.push(SyncItemProgress {
+            fingerprint: policy.fingerprint,
+            action,
+            status,
+        });
+    }
+    Ok(items)
+}
+
+fn save_transfer(
+    db: &FolioDatabase,
+    fingerprint: &str,
+    action: &str,
+    status: &str,
+    error: Option<&str>,
+) -> Result<(), SyncError> {
+    let mut policy = db.file_policy(fingerprint)?;
+    policy.transfer_action = Some(action.to_owned());
+    policy.transfer_status = Some(status.to_owned());
+    policy.transfer_error = error.map(str::to_owned);
+    db.save_file_policy(&policy)?;
+    Ok(())
+}
+
+pub fn set_cloud_only(database_path: impl AsRef<Path>, fingerprint: &str) -> Result<(), SyncError> {
+    let mut db = FolioDatabase::open(database_path)?;
+    stage_cached_cloud_metadata(&mut db)?;
     let mut asset = db
         .list_sync_assets()?
         .into_iter()
@@ -993,17 +1136,35 @@ pub fn set_cloud_only(database_path: impl AsRef<Path>, fingerprint: &str) -> Res
     {
         return Err(SyncError::InvalidId);
     }
+    if asset.local_path.is_none() {
+        asset.local_path = db
+            .readable_font_files()?
+            .into_iter()
+            .find(|(path, hash)| hash == fingerprint && owned_managed_path(&db, path))
+            .map(|(path, _)| path.to_string_lossy().into_owned());
+    }
     if let Some(path) = &asset.local_path {
+        if !owned_managed_path(&db, Path::new(path)) {
+            return Err(SyncError::InvalidId);
+        }
         if Path::new(path).is_file() {
             let canonical = Path::new(path).canonicalize()?;
-            std::fs::remove_file(path)?;
-            db.remove_source_file(canonical)?;
+            let bytes = std::fs::read(&canonical)?;
+            if folio_core::ContentFingerprint::from_bytes(&bytes).to_hex() == fingerprint {
+                std::fs::remove_file(&canonical)?;
+                db.remove_source_file(canonical)?;
+            }
         } else {
             db.remove_source_file(path)?;
         }
     }
     asset.local_path = None;
     asset.cloud_only = true;
+    let mut policy = db.file_policy(fingerprint)?;
+    policy.download_policy = "cloud".to_owned();
+    policy.transfer_status = None;
+    policy.transfer_error = None;
+    db.save_file_policy(&policy)?;
     db.upsert_sync_asset(&asset)?;
     Ok(())
 }
@@ -1025,6 +1186,9 @@ pub fn mark_cloud_only_for_path(
     };
     asset.local_path = None;
     asset.cloud_only = true;
+    let mut policy = db.file_policy(&asset.fingerprint)?;
+    policy.download_policy = "cloud".to_owned();
+    db.save_file_policy(&policy)?;
     db.upsert_sync_asset(&asset)?;
     Ok(true)
 }
@@ -1039,7 +1203,25 @@ pub fn request_restore(
         .into_iter()
         .find(|asset| asset.fingerprint == fingerprint)
         .ok_or(SyncError::InvalidId)?;
+    if asset.deleted
+        || !cloud_fonts(&db)?
+            .iter()
+            .any(|font| font.fingerprint == fingerprint && !font.deleted)
+    {
+        return Err(SyncError::InvalidId);
+    }
     asset.cloud_only = false;
+    let mut policy = db.file_policy(fingerprint)?;
+    policy.download_policy = "local".to_owned();
+    if !matches!(
+        policy.transfer_status.as_deref(),
+        Some("pending" | "running")
+    ) {
+        policy.transfer_action = Some("download".to_owned());
+        policy.transfer_status = Some("pending".to_owned());
+        policy.transfer_error = None;
+    }
+    db.save_file_policy(&policy)?;
     db.upsert_sync_asset(&asset)?;
     Ok(())
 }
@@ -1057,7 +1239,10 @@ pub fn restore_deleted_font(
     let remote: RemoteAsset = serde_json::from_str(&asset.remote_payload)?;
     stage_change(&mut db, &Change::FontAdded(remote))?;
     asset.deleted = false;
-    asset.cloud_only = false;
+    asset.cloud_only = true;
+    let mut policy = db.file_policy(fingerprint)?;
+    policy.download_policy = "cloud".to_owned();
+    db.save_file_policy(&policy)?;
     db.upsert_sync_asset(&asset)?;
     Ok(())
 }
@@ -1084,17 +1269,7 @@ pub fn delete_everywhere(
         .into_iter()
         .find(|asset| asset.fingerprint == fingerprint)
     {
-        let directory = asset
-            .local_path
-            .as_ref()
-            .and_then(|path| Path::new(path).parent())
-            .map(Path::to_path_buf);
-        if let Some(directory) = directory {
-            move_to_recovery(&directory, &asset)?;
-        }
-        if let Some(path) = &asset.local_path {
-            db.remove_source_file(path)?;
-        }
+        remove_managed_copies(&db, &asset)?;
         asset.local_path = None;
         asset.deleted = true;
         db.upsert_sync_asset(&asset)?;
@@ -1178,6 +1353,10 @@ async fn synchronize_with_client(
     report: &Arc<dyn Fn(SyncProgress) + Send + Sync>,
 ) -> Result<SyncProgress, SyncError> {
     std::fs::create_dir_all(managed_directory)?;
+    db.set_sync_metadata(
+        "managed_directory",
+        &managed_directory.canonicalize()?.to_string_lossy(),
+    )?;
     let mut progress = SyncProgress::default();
 
     progress.set_phase(SyncPhase::Connecting, 4);
@@ -1218,10 +1397,10 @@ async fn synchronize_with_client(
     emit_progress(&mut progress, report);
     stage_user_changes(db)?;
     stage_managed_fonts(db, managed_directory)?;
+    stage_cached_cloud_metadata(db)?;
     progress.advance();
     emit_progress(&mut progress, report);
 
-    publish_local_events(db, remote, cancelled, report, &mut progress).await?;
     let deferred_events =
         receive_remote_events(db, remote, cancelled, report, &mut progress).await?;
     let deferred_fonts = apply_remote_events(
@@ -1233,9 +1412,10 @@ async fn synchronize_with_client(
         &mut progress,
     )
     .await?;
-    // 只有全部下载成功才更新基线与成功时间；部分失败留待下次同步补齐。
-    let deferred = deferred_events + deferred_fonts;
-    if deferred == 0 {
+    publish_local_events(db, remote, cancelled, report, &mut progress).await?;
+    // 目录完成与单文件传输结果独立记录。
+    let _ = deferred_fonts;
+    if deferred_events == 0 {
         db.set_sync_metadata(
             BASELINE_KEY,
             &serde_json::to_string(&event_user_baseline(db)?)?,
@@ -1247,8 +1427,10 @@ async fn synchronize_with_client(
     progress.set_phase(SyncPhase::Finishing, 1);
     progress.advance();
     emit_progress(&mut progress, report);
-    if deferred > 0 {
-        return Err(SyncError::PendingDownloads { count: deferred });
+    if deferred_events > 0 {
+        return Err(SyncError::PendingDownloads {
+            count: deferred_events,
+        });
     }
     Ok(progress)
 }
@@ -1547,6 +1729,7 @@ fn store_online_origin(
 }
 
 fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), SyncError> {
+    db.set_sync_metadata("managed_directory", &directory.to_string_lossy())?;
     let known = decoded_events(db)?;
     let origins = read_online_origins(directory)?;
     let mut staged = BTreeSet::new();
@@ -1555,10 +1738,6 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
         .into_iter()
         .map(|asset| (asset.fingerprint.clone(), asset))
         .collect::<BTreeMap<_, _>>();
-    let tracked_paths = assets
-        .values()
-        .filter_map(|asset| asset.local_path.as_ref().map(PathBuf::from))
-        .collect::<BTreeSet<_>>();
     for entry in std::fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
@@ -1573,10 +1752,9 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
         if !matches!(extension.as_str(), "ttf" | "otf" | "ttc" | "otc") {
             continue;
         }
-        if tracked_paths.contains(&path) {
+        let Ok(parsed) = parse_font_file(&path) else {
             continue;
-        }
-        let parsed = parse_font_file(&path)?;
+        };
         if parsed.faces.is_empty() {
             continue;
         }
@@ -1587,6 +1765,18 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
         {
             continue;
         }
+        for previous in assets.values().filter(|asset| {
+            asset.fingerprint != fingerprint && asset.local_path.as_deref() == path.to_str()
+        }) {
+            let mut previous = previous.clone();
+            previous.local_path = None;
+            db.upsert_sync_asset(&previous)?;
+        }
+        db.remember_policy_source(&fingerprint, &path)?;
+        if db.file_policy(&fingerprint)?.upload_excluded {
+            continue;
+        }
+        let parsed_catalog = folio_core::rebuild_catalog(parsed.faces.clone());
         let filename = path
             .file_name()
             .and_then(|value| value.to_str())
@@ -1601,6 +1791,7 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
                 .faces
                 .into_iter()
                 .map(|face| RemoteFace {
+                    details: Some(serde_json::json!({"familyId":parsed_catalog.faces().find(|item| item.id == face.id).map(|item| item.family_id.to_string()),"faceIndex":face.face_index,"format":face.format,"metadata":face.metadata})),
                     identity_id: face.identity.id.to_string(),
                     revision_id: face.revision.id.to_string(),
                     display_name: face
@@ -1613,6 +1804,10 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
                 .collect(),
             online_origin: origins.get(&filename).cloned(),
         };
+        let metadata_added = assets
+            .get(&fingerprint)
+            .and_then(|asset| serde_json::from_str::<RemoteAsset>(&asset.remote_payload).ok())
+            .is_none_or(|asset| asset.faces.iter().any(|face| face.details.is_none()));
         let origin_added = remote_asset.online_origin.as_ref().is_some_and(|origin| {
             assets
                 .get(&fingerprint)
@@ -1621,7 +1816,7 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
                 .as_ref()
                 != Some(origin)
         });
-        if (asset_add_tags(&known, &fingerprint).is_empty() || origin_added)
+        if (asset_add_tags(&known, &fingerprint).is_empty() || origin_added || metadata_added)
             && staged.insert(fingerprint.clone())
         {
             stage_change(db, &Change::FontAdded(remote_asset.clone()))?;
@@ -1635,6 +1830,46 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
             cloud_only: false,
             deleted: false,
         })?;
+    }
+    Ok(())
+}
+
+// 已有本机副本补齐旧目录属性，仅发布元数据，不重复传输对象。
+fn stage_cached_cloud_metadata(db: &mut FolioDatabase) -> Result<(), SyncError> {
+    let catalog = db.load_cached_catalog()?;
+    let readable = db.readable_font_files()?;
+    let known = decoded_events(db)?;
+    for mut asset in db.list_sync_assets()? {
+        if asset.deleted || asset_add_tags(&known, &asset.fingerprint).is_empty() {
+            continue;
+        }
+        let mut remote: RemoteAsset = serde_json::from_str(&asset.remote_payload)?;
+        let mut changed = false;
+        for member in &mut remote.faces {
+            if member.details.is_some() {
+                continue;
+            }
+            if let Some(face) = catalog
+                .faces()
+                .find(|face| face.revision_id.to_string() == member.revision_id)
+            {
+                if let Some(source) = face
+                    .sources
+                    .iter()
+                    .find(|source| readable.get(source.path()) == Some(&asset.fingerprint))
+                {
+                    member.details = Some(
+                        serde_json::json!({ "familyId": face.family_id.to_string(), "faceIndex":source.face_index(), "format":face.format, "metadata":face.metadata }),
+                    );
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            stage_change(db, &Change::FontAdded(remote.clone()))?;
+            asset.remote_payload = serde_json::to_string(&remote)?;
+            db.upsert_sync_asset(&asset)?;
+        }
     }
     Ok(())
 }
@@ -1711,14 +1946,45 @@ async fn publish_local_events(
                     .get(&asset.fingerprint)
                     .and_then(|record| record.local_path.as_ref())
                 {
-                    let bytes = std::fs::read(path)?;
-                    if ContentFingerprint::from_bytes(&bytes).to_hex() != asset.fingerprint {
-                        return Err(SyncError::InvalidFont);
-                    }
+                    let bytes = match std::fs::read(path) {
+                        Ok(bytes)
+                            if ContentFingerprint::from_bytes(&bytes).to_hex()
+                                == asset.fingerprint =>
+                        {
+                            bytes
+                        }
+                        _ => {
+                            save_transfer(
+                                db,
+                                &asset.fingerprint,
+                                "upload",
+                                "failed",
+                                Some("invalid_font"),
+                            )?;
+                            return Err(SyncError::InvalidFont);
+                        }
+                    };
                     let length = bytes.len() as u64;
+                    save_transfer(db, &asset.fingerprint, "upload", "running", None)?;
                     progress.set_item_status(&asset.fingerprint, SyncItemStatus::Running);
                     emit_progress(progress, report);
-                    run_or_cancel(remote.put(&object_path, bytes), cancelled).await?;
+                    if let Err(error) =
+                        run_or_cancel(remote.put(&object_path, bytes), cancelled).await
+                    {
+                        save_transfer(
+                            db,
+                            &asset.fingerprint,
+                            "upload",
+                            if matches!(error, SyncError::Cancelled) {
+                                "cancelled"
+                            } else {
+                                "failed"
+                            },
+                            Some("upload_failed"),
+                        )?;
+                        return Err(error);
+                    }
+                    save_transfer(db, &asset.fingerprint, "upload", "done", None)?;
                     remote_objects.insert(asset.fingerprint.clone());
                     progress.uploaded_files += 1;
                     progress.uploaded_bytes += length;
@@ -1974,6 +2240,18 @@ async fn apply_remote_events(
         }
         Err(error) => {
             refreshed?;
+            if matches!(error, SyncError::Cancelled) {
+                for policy in db.file_policies()? {
+                    if policy.transfer_action.as_deref() == Some("download")
+                        && matches!(
+                            policy.transfer_status.as_deref(),
+                            Some("running" | "pending")
+                        )
+                    {
+                        save_transfer(db, &policy.fingerprint, "download", "cancelled", None)?;
+                    }
+                }
+            }
             Err(error)
         }
     }
@@ -2035,6 +2313,21 @@ async fn apply_remote_events_inner(
             Change::FontAdded(asset) => {
                 font_assets
                     .entry(asset.fingerprint.clone())
+                    .and_modify(|known| {
+                        if asset
+                            .faces
+                            .iter()
+                            .filter(|face| face.details.is_some())
+                            .count()
+                            > known
+                                .faces
+                                .iter()
+                                .filter(|face| face.details.is_some())
+                                .count()
+                        {
+                            *known = asset.clone();
+                        }
+                    })
                     .or_insert_with(|| asset.clone());
             }
             Change::FontDeleted { .. } => {}
@@ -2193,17 +2486,55 @@ async fn apply_remote_events_inner(
         .map(|asset| asset.fingerprint.clone())
         .collect::<BTreeSet<_>>();
     let mut download_targets = Vec::new();
+    let auto_download = db.sync_metadata("automatic_download")?.as_deref() == Some("true");
     for (fingerprint, remote_asset) in &font_assets {
         if asset_add_tags(&events, fingerprint).is_empty() {
             continue;
         }
         let needs_download = match existing_assets.get(fingerprint) {
-            Some(record) => !record.cloud_only && !local_asset_is_valid(record, remote_asset)?,
-            None => true,
+            Some(record) => {
+                let policy = db.file_policy(fingerprint)?;
+                (policy.transfer_status.as_deref() != Some("cancelled")
+                    && (policy.download_policy == "local"
+                        || (policy.download_policy == "inherit" && auto_download)))
+                    && !local_asset_is_valid(record, remote_asset)?
+            }
+            None => {
+                let policy = db.file_policy(fingerprint)?;
+                policy.transfer_status.as_deref() != Some("cancelled")
+                    && (policy.download_policy == "local"
+                        || (policy.download_policy == "inherit" && auto_download))
+            }
         };
         if needs_download {
             download_targets.push(fingerprint.clone());
         }
+    }
+    for (fingerprint, remote_asset) in &font_assets {
+        let active = !asset_add_tags(&events, fingerprint).is_empty();
+        let mut asset = existing_assets
+            .get(fingerprint)
+            .cloned()
+            .unwrap_or(StoredSyncAsset {
+                fingerprint: fingerprint.clone(),
+                filename: remote_asset.filename.clone(),
+                extension: remote_asset.extension.clone(),
+                local_path: None,
+                remote_payload: String::new(),
+                cloud_only: true,
+                deleted: false,
+            });
+        asset.remote_payload = serde_json::to_string(remote_asset)?;
+        if active {
+            asset.deleted = false;
+        }
+        db.upsert_sync_asset(&asset)?;
+    }
+    if let Ok(elapsed) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        db.set_sync_metadata("last_directory_sync_ms", &elapsed.as_millis().to_string())?;
+    }
+    for fingerprint in &download_targets {
+        save_transfer(db, fingerprint, "download", "pending", None)?;
     }
     progress.set_phase(SyncPhase::Downloading, download_targets.len() as u64);
     progress.items = download_targets
@@ -2226,10 +2557,7 @@ async fn apply_remote_events_inner(
         if !active {
             if let Some(mut asset) = record {
                 if !asset.deleted {
-                    move_to_recovery(directory, &asset)?;
-                    if let Some(path) = &asset.local_path {
-                        db.remove_source_file(path)?;
-                    }
+                    remove_managed_copies(db, &asset)?;
                 }
                 asset.local_path = None;
                 asset.deleted = true;
@@ -2248,25 +2576,45 @@ async fn apply_remote_events_inner(
         });
         asset.remote_payload = serde_json::to_string(remote_asset)?;
         asset.deleted = false;
-        if !asset.cloud_only && !local_asset_is_valid(&asset, remote_asset)? {
+        db.upsert_sync_asset(&asset)?;
+        if download_targets.contains(fingerprint) && !local_asset_is_valid(&asset, remote_asset)? {
+            save_transfer(db, fingerprint, "download", "running", None)?;
             progress.set_item_status(fingerprint, SyncItemStatus::Running);
             emit_progress(progress, report);
             match download_asset(remote, directory, remote_asset, cancelled).await {
                 Ok(path) => {
                     asset.local_path = Some(path.to_string_lossy().into_owned());
+                    asset.cloud_only = false;
+                    save_transfer(db, fingerprint, "download", "done", None)?;
                     progress.downloaded_files += 1;
                     progress.downloaded_bytes += remote_asset.file_size;
                     progress.advance();
                     progress.set_item_status(fingerprint, SyncItemStatus::Done);
                     emit_progress(progress, report);
                 }
-                Err(error) if is_deferrable_download(&error) => {
+                Err(error) if !matches!(error, SyncError::Cancelled) => {
+                    save_transfer(
+                        db,
+                        fingerprint,
+                        "download",
+                        "failed",
+                        Some(match error {
+                            SyncError::InvalidFont => "invalid_font",
+                            SyncError::Authentication => "authentication",
+                            _ => "download_failed",
+                        }),
+                    )?;
+                    progress.set_item_status(fingerprint, SyncItemStatus::Failed);
                     deferred += 1;
                     progress.advance();
                     emit_progress(progress, report);
                     continue;
                 }
-                Err(error) => return Err(error),
+                Err(error) => {
+                    save_transfer(db, fingerprint, "download", "cancelled", None)?;
+                    progress.set_item_status(fingerprint, SyncItemStatus::Cancelled);
+                    return Err(error);
+                }
             }
         }
         db.upsert_sync_asset(&asset)?;
@@ -2355,6 +2703,38 @@ async fn download_asset(
         }
     }
     Ok(destination)
+}
+
+// 删除作用于内容一致的全部托管副本，系统和引用来源继续保留。
+fn remove_managed_copies(db: &FolioDatabase, asset: &StoredSyncAsset) -> Result<(), SyncError> {
+    let mut paths = db
+        .readable_font_files()?
+        .into_iter()
+        .filter(|(path, hash)| hash == &asset.fingerprint && owned_managed_path(db, path))
+        .map(|(path, _)| path)
+        .collect::<BTreeSet<_>>();
+    if let Some(path) = asset
+        .local_path
+        .as_ref()
+        .map(PathBuf::from)
+        .filter(|path| owned_managed_path(db, path))
+    {
+        // 内容更新后的来源不能由旧指纹的删除事件移除。
+        if path.is_file()
+            && parse_font_file(&path)
+                .is_ok_and(|parsed| parsed.fingerprint.to_hex() == asset.fingerprint)
+        {
+            paths.insert(path.canonicalize()?);
+        }
+    }
+    let directory = managed_directory(db);
+    for path in paths {
+        let mut copy = asset.clone();
+        copy.local_path = Some(path.to_string_lossy().into_owned());
+        move_to_recovery(&directory, &copy)?;
+        db.remove_source_file(path)?;
+    }
+    Ok(())
 }
 
 fn move_to_recovery(directory: &Path, asset: &StoredSyncAsset) -> Result<(), SyncError> {

@@ -18,6 +18,7 @@ fn profile() -> SyncProfile {
     }
 }
 async fn exchange(db: &mut FolioDatabase, directory: &Path, remote: &WebDavClient) -> SyncProgress {
+    set_automatic_download(db.path(), true).unwrap();
     let reports = Arc::new(Mutex::new(Vec::new()));
     let values = reports.clone();
     let report: Arc<dyn Fn(SyncProgress) + Send + Sync> =
@@ -395,6 +396,11 @@ async fn cloud_eviction_download_delete_and_recovery_preserve_sources_and_user_s
     restore_deleted_font(b.path(), &fingerprint).unwrap();
     exchange(&mut b, &second, &remote).await;
     exchange(&mut a, &first, &remote).await;
+    assert_eq!(b.load_cached_catalog().unwrap().face_count(), 1);
+    request_restore(b.path(), &fingerprint).unwrap();
+    request_restore(a.path(), &fingerprint).unwrap();
+    exchange(&mut b, &second, &remote).await;
+    exchange(&mut a, &first, &remote).await;
     for db in [&a, &b] {
         assert_eq!(db.load_cached_catalog().unwrap().face_count(), 3);
         assert_eq!(db.list_favorites().unwrap(), vec![ids[1]]);
@@ -429,6 +435,7 @@ async fn cancellation_after_a_download_keeps_real_catalog_and_retry_completes() 
     let mut a = FolioDatabase::open(temporary.path().join("a.sqlite")).unwrap();
     let mut b = FolioDatabase::open(temporary.path().join("b.sqlite")).unwrap();
     exchange(&mut a, &first, &remote).await;
+    set_automatic_download(b.path(), true).unwrap();
     let cancelled = Arc::new(AtomicBool::new(false));
     let signal = cancelled.clone();
     let report: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(move |progress| {
@@ -440,6 +447,12 @@ async fn cancellation_after_a_download_keeps_real_catalog_and_retry_completes() 
         synchronize_with_client(&mut b, &second, &profile(), &remote, &cancelled, &report).await;
     assert!(matches!(result, Err(SyncError::Cancelled)));
     assert_eq!(b.load_cached_catalog().unwrap().face_count(), 1);
+    assert_eq!(exchange(&mut b, &second, &remote).await.downloaded_files, 0);
+    for policy in b.file_policies().unwrap() {
+        if policy.transfer_status.as_deref() == Some("cancelled") {
+            request_restore(b.path(), &policy.fingerprint).unwrap();
+        }
+    }
     assert_eq!(exchange(&mut b, &second, &remote).await.downloaded_files, 1);
     assert_eq!(b.load_cached_catalog().unwrap().face_count(), 2);
     let report: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(|_| {});
@@ -584,4 +597,343 @@ async fn font_revision_decisions_keep_both_or_remove_the_selected_other_version(
         }
         assert!(list_conflicts(b.path()).unwrap().is_empty());
     }
+}
+
+// 默认按需、精确单文件任务与多来源位置在独立双设备目录中验收。
+#[tokio::test]
+async fn on_demand_library_queries_and_file_policies_survive_rebuilds() {
+    let server = DavServer::start();
+    let remote = server.client("p");
+    let temporary = tempfile::tempdir().unwrap();
+    let first = temporary.path().join("a/ManagedFonts");
+    let second = temporary.path().join("b/ManagedFonts");
+    let reference = temporary.path().join("references");
+    for directory in [&first, &second, &reference] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    for name in ["Lato-Regular.ttf", "Lato-Bold.ttf"] {
+        std::fs::copy(sample(name), first.join(name)).unwrap();
+    }
+    let mut a = FolioDatabase::open(temporary.path().join("a/folio.sqlite")).unwrap();
+    let mut b = FolioDatabase::open(temporary.path().join("b/folio.sqlite")).unwrap();
+    let report: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(|_| {});
+    let cancel = AtomicBool::new(false);
+    synchronize_with_client(&mut a, &first, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    let result = synchronize_with_client(&mut b, &second, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    assert_eq!(result.downloaded_files, 0);
+    assert!(b.load_cached_catalog().unwrap().families.is_empty());
+    assert!(!automatic_download(b.path()).unwrap());
+    let library = unified_library(&b, &b.load_cached_catalog().unwrap()).unwrap();
+    assert_eq!(library.recognized_family_count(), 1);
+    assert_eq!(library.catalog.face_count(), 2);
+    let face = library
+        .catalog
+        .faces()
+        .find(|face| face.metadata.subfamily_name.as_deref() == Some("Regular"))
+        .unwrap();
+    let identity = face.identity_id;
+    let id = face.id;
+    let fingerprint = library.locations[&id].files[0].fingerprint.clone();
+    b.set_favorite(identity, true).unwrap();
+    let collection = b.create_collection("按需收藏").unwrap();
+    b.add_collection_members(collection.id, &[identity])
+        .unwrap();
+    let index = library.index(&mut b).unwrap();
+    let query = folio_query::FontQuery {
+        text: Some("Lato".to_owned()),
+        limit: Some(1),
+        ..Default::default()
+    };
+    assert_eq!(
+        index
+            .query_with_location(&query, None, "cloudOnly", None)
+            .unwrap()
+            .total_matches,
+        1
+    );
+    assert_eq!(
+        index
+            .query(&folio_query::FontQuery {
+                scope: folio_query::QueryScope::Favorites,
+                ..Default::default()
+            })
+            .unwrap()
+            .total_matches,
+        1
+    );
+    request_restore(b.path(), &fingerprint).unwrap();
+    request_restore(b.path(), &fingerprint).unwrap();
+    assert_eq!(
+        b.file_policy(&fingerprint)
+            .unwrap()
+            .transfer_status
+            .as_deref(),
+        Some("pending")
+    );
+    let result = synchronize_with_client(&mut b, &second, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    assert_eq!(result.downloaded_files, 1);
+    let library = unified_library(&b, &b.load_cached_catalog().unwrap()).unwrap();
+    assert_eq!(library.catalog.face_count(), 2);
+    assert_eq!(
+        library
+            .locations
+            .values()
+            .filter(|location| location.local_available)
+            .count(),
+        1
+    );
+    let downloaded = library.locations[&id].files[0].local_sources[0]
+        .path
+        .clone();
+    let external = reference.join("same.ttf");
+    std::fs::copy(&downloaded, &external).unwrap();
+    b.add_root(&reference, true).unwrap();
+    b.refresh(RefreshMode::Incremental).unwrap();
+    assert_eq!(
+        unified_library(&b, &b.load_cached_catalog().unwrap())
+            .unwrap()
+            .locations[&id]
+            .files[0]
+            .local_sources
+            .len(),
+        2
+    );
+    let mut asset = b
+        .list_sync_assets()
+        .unwrap()
+        .into_iter()
+        .find(|asset| asset.fingerprint == fingerprint)
+        .unwrap();
+    asset.local_path = None;
+    let mut legacy: RemoteAsset = serde_json::from_str(&asset.remote_payload).unwrap();
+    for face in &mut legacy.faces {
+        face.details = None;
+    }
+    asset.remote_payload = serde_json::to_string(&legacy).unwrap();
+    b.upsert_sync_asset(&asset).unwrap();
+    set_cloud_only(b.path(), &fingerprint).unwrap();
+    let enriched = b
+        .list_sync_assets()
+        .unwrap()
+        .into_iter()
+        .find(|asset| asset.fingerprint == fingerprint)
+        .unwrap();
+    assert!(
+        serde_json::from_str::<RemoteAsset>(&enriched.remote_payload)
+            .unwrap()
+            .faces
+            .iter()
+            .all(|face| face.details.is_some())
+    );
+    assert!(external.is_file());
+    assert!(!Path::new(&downloaded).exists());
+    assert!(
+        !list_cloud_fonts(b.path())
+            .unwrap()
+            .iter()
+            .find(|font| font.fingerprint == fingerprint)
+            .unwrap()
+            .cloud_only
+    );
+    set_automatic_download(b.path(), true).unwrap();
+    let result = synchronize_with_client(&mut b, &second, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    assert_eq!(result.uploaded_files, 0);
+    assert!(!Path::new(&downloaded).exists());
+    b.clear_catalog_cache().unwrap();
+    b.refresh(RefreshMode::Incremental).unwrap();
+    assert_eq!(
+        b.file_policy(&fingerprint).unwrap().download_policy,
+        "cloud"
+    );
+    assert!(
+        unified_library(&b, &b.load_cached_catalog().unwrap())
+            .unwrap()
+            .locations[&id]
+            .local_available
+    );
+    let excluded = first.join("private.ttf");
+    std::fs::copy(sample("Inter-Variable.ttf"), &excluded).unwrap();
+    a.refresh(RefreshMode::Incremental).unwrap();
+    let hash = parse_font_file(&excluded).unwrap().fingerprint.to_hex();
+    let twin = first.join("private-twin.ttf");
+    std::fs::copy(&excluded, &twin).unwrap();
+    a.refresh(RefreshMode::Incremental).unwrap();
+    set_upload_excluded(a.path(), &hash, true).unwrap();
+    synchronize_with_client(&mut a, &first, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    assert!(!list_cloud_fonts(a.path())
+        .unwrap()
+        .iter()
+        .any(|font| font.fingerprint == hash));
+    std::fs::copy(sample("SourceSerif4-Regular.otf"), &excluded).unwrap();
+    a.clear_catalog_cache().unwrap();
+    a.refresh(RefreshMode::Incremental).unwrap();
+    let preview = unified_library(&a, &a.load_cached_catalog().unwrap()).unwrap();
+    assert!(preview
+        .locations
+        .values()
+        .any(|location| location.state == "excluded"));
+    synchronize_with_client(&mut a, &first, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    let changed = parse_font_file(&excluded).unwrap().fingerprint.to_hex();
+    assert!(a.file_policy(&changed).unwrap().upload_excluded);
+    assert!(!list_cloud_fonts(a.path())
+        .unwrap()
+        .iter()
+        .any(|font| font.fingerprint == changed));
+    set_upload_excluded(a.path(), &changed, false).unwrap();
+    synchronize_with_client(&mut a, &first, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    assert!(
+        list_cloud_fonts(a.path())
+            .unwrap()
+            .iter()
+            .any(|font| font.fingerprint == changed),
+        "policy {:?}; readable {:?}",
+        a.file_policy(&changed).unwrap(),
+        a.readable_font_files().unwrap()
+    );
+}
+
+#[tokio::test]
+async fn invalid_download_preserves_cloud_directory_and_individual_retry() {
+    let server = DavServer::start();
+    let remote = server.client("p");
+    let temporary = tempfile::tempdir().unwrap();
+    let first = temporary.path().join("first");
+    let second = temporary.path().join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    let bytes = std::fs::read(sample("Lato-Regular.ttf")).unwrap();
+    std::fs::write(first.join("Lato.ttf"), &bytes).unwrap();
+    let hash = ContentFingerprint::from_bytes(&bytes).to_hex();
+    let mut a = FolioDatabase::open(temporary.path().join("a.sqlite")).unwrap();
+    let mut b = FolioDatabase::open(temporary.path().join("b.sqlite")).unwrap();
+    let report: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(|_| {});
+    let cancel = AtomicBool::new(false);
+    synchronize_with_client(&mut a, &first, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    synchronize_with_client(&mut b, &second, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    request_restore(b.path(), &hash).unwrap();
+    server.replace_object(&hash, vec![0, 1]);
+    synchronize_with_client(&mut b, &second, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    assert_eq!(
+        b.file_policy(&hash).unwrap().transfer_status.as_deref(),
+        Some("failed")
+    );
+    assert!(b.sync_metadata("last_directory_sync_ms").unwrap().is_some());
+    let library = unified_library(&b, &b.load_cached_catalog().unwrap()).unwrap();
+    assert_eq!(library.catalog.face_count(), 1);
+    assert!(!library.locations.values().next().unwrap().local_available);
+    server.replace_object(&hash, bytes);
+    request_restore(b.path(), &hash).unwrap();
+    let result = synchronize_with_client(&mut b, &second, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    assert_eq!(result.downloaded_files, 1);
+    assert_eq!(
+        b.file_policy(&hash).unwrap().transfer_status.as_deref(),
+        Some("done")
+    );
+    assert!(
+        unified_library(&b, &b.load_cached_catalog().unwrap())
+            .unwrap()
+            .locations
+            .values()
+            .next()
+            .unwrap()
+            .local_available
+    );
+}
+
+// 集合按一个文件传输，字族分页与成员定位使用真实索引。
+#[tokio::test]
+async fn collection_members_share_one_download_and_keep_distinct_families() {
+    let server = DavServer::start();
+    let remote = server.client("p");
+    let temporary = tempfile::tempdir().unwrap();
+    let first = temporary.path().join("a/ManagedFonts");
+    let second = temporary.path().join("b/ManagedFonts");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    let fonts = [
+        std::fs::read(sample("Lato-Regular.ttf")).unwrap(),
+        std::fs::read(sample("Inter-Variable.ttf")).unwrap(),
+    ];
+    let mut bytes = b"ttcf\0\x01\0\0".to_vec();
+    bytes.extend_from_slice(&2u32.to_be_bytes());
+    bytes.resize(20, 0);
+    for (index, font) in fonts.iter().enumerate() {
+        let base = bytes.len() as u32;
+        bytes[12 + index * 4..16 + index * 4].copy_from_slice(&base.to_be_bytes());
+        let mut member = font.clone();
+        let count = u16::from_be_bytes(font[4..6].try_into().unwrap()) as usize;
+        for table in 0..count {
+            let record = 12 + table * 16;
+            let offset = u32::from_be_bytes(font[record + 8..record + 12].try_into().unwrap());
+            if &font[record..record + 4] == b"head" {
+                member[offset as usize + 8..offset as usize + 12].fill(0);
+            }
+            member[record + 8..record + 12].copy_from_slice(&(offset + base).to_be_bytes());
+        }
+        bytes.extend(member);
+        bytes.resize(bytes.len().next_multiple_of(4), 0);
+    }
+    std::fs::write(first.join("collection.ttc"), &bytes).unwrap();
+    let hash = ContentFingerprint::from_bytes(&bytes).to_hex();
+    let mut a = FolioDatabase::open(temporary.path().join("a/folio.sqlite")).unwrap();
+    let mut b = FolioDatabase::open(temporary.path().join("b/folio.sqlite")).unwrap();
+    let report: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(|_| {});
+    let cancel = AtomicBool::new(false);
+    synchronize_with_client(&mut a, &first, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    synchronize_with_client(&mut b, &second, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    let library = unified_library(&b, &b.load_cached_catalog().unwrap()).unwrap();
+    assert_eq!(library.recognized_family_count(), 2);
+    let index = library.index(&mut b).unwrap();
+    let query = folio_query::FontQuery {
+        limit: Some(1),
+        ..Default::default()
+    };
+    let page = index
+        .query_with_location(&query, None, "cloudOnly", Some(&hash))
+        .unwrap();
+    assert_eq!(page.total_matches, 2);
+    assert_eq!(page.families.len(), 1);
+    let indexes = library
+        .locations
+        .values()
+        .map(|location| location.files[0].face_index)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(indexes, [0, 1].into_iter().collect());
+    request_restore(b.path(), &hash).unwrap();
+    let result = synchronize_with_client(&mut b, &second, &profile(), &remote, &cancel, &report)
+        .await
+        .unwrap();
+    assert_eq!(result.downloaded_files, 1);
+    let library = unified_library(&b, &b.load_cached_catalog().unwrap()).unwrap();
+    assert_eq!(library.catalog.family_count(), 2);
+    assert!(library
+        .locations
+        .values()
+        .all(|location| location.state == "both"));
+    assert_eq!(list_cloud_fonts(b.path()).unwrap().len(), 1);
 }

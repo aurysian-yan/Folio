@@ -185,7 +185,7 @@ fn local_eviction_and_explicit_global_delete_are_distinct() {
     let path = dir.path().join("folio.sqlite");
     let file = dir.path().join("font.otf");
     std::fs::write(&file, b"font").unwrap();
-    let fingerprint = "ab".repeat(32);
+    let fingerprint = folio_core::ContentFingerprint::from_bytes(b"font").to_hex();
     let payload = serde_json::to_string(&RemoteAsset {
         fingerprint: fingerprint.clone(),
         filename: "font.otf".to_owned(),
@@ -196,6 +196,8 @@ fn local_eviction_and_explicit_global_delete_are_distinct() {
     })
     .unwrap();
     let mut db = FolioDatabase::open(&path).unwrap();
+    db.set_sync_metadata("managed_directory", &dir.path().to_string_lossy())
+        .unwrap();
     db.upsert_sync_asset(&StoredSyncAsset {
         fingerprint: fingerprint.clone(),
         filename: "font.otf".to_owned(),
@@ -241,6 +243,15 @@ fn local_eviction_and_explicit_global_delete_are_distinct() {
             .unwrap()[0]
             .cloud_only
     );
+    // 旧云记录的路径已被更新内容复用时，移除操作保留新文件。
+    std::fs::write(&file, b"updated font").unwrap();
+    let db = FolioDatabase::open(&path).unwrap();
+    let mut asset = db.list_sync_assets().unwrap().remove(0);
+    asset.local_path = Some(file.to_string_lossy().into_owned());
+    db.upsert_sync_asset(&asset).unwrap();
+    drop(db);
+    set_cloud_only(&path, &fingerprint).unwrap();
+    assert_eq!(std::fs::read(&file).unwrap(), b"updated font");
     delete_everywhere(&path, &fingerprint).unwrap();
     let db = FolioDatabase::open(&path).unwrap();
     assert_eq!(db.list_sync_events().unwrap().len(), 2);

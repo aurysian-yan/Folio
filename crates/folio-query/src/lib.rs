@@ -2,8 +2,10 @@
 #![forbid(unsafe_code)]
 
 mod health;
+mod location;
 use folio_core::*;
 pub use health::*;
+pub use location::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -255,6 +257,7 @@ pub struct FontQueryIndex {
     recent: BTreeMap<FontIdentityId, i64>,
     collections: BTreeMap<CollectionId, BTreeSet<FontIdentityId>>,
     health: CatalogHealth,
+    locations: BTreeMap<FontFaceId, FontLocation>,
 }
 impl FontQueryIndex {
     pub fn build(catalog: &Catalog, state: &LibraryStateSnapshot) -> Result<Self, QueryError> {
@@ -272,6 +275,7 @@ impl FontQueryIndex {
             recent: BTreeMap::new(),
             collections: BTreeMap::new(),
             health: health.clone(),
+            locations: BTreeMap::new(),
         };
         let mut face_ids = BTreeSet::new();
         for family in &catalog.families {
@@ -467,6 +471,36 @@ impl FontQueryIndex {
             }
         }
     }
+    pub fn location(&self, id: FontFaceId) -> Option<&FontLocation> {
+        self.locations.get(&id)
+    }
+
+    pub fn set_locations(&mut self, locations: BTreeMap<FontFaceId, FontLocation>) {
+        self.locations = locations;
+    }
+
+    pub fn query_with_location(
+        &self,
+        query: &FontQuery,
+        face_ids: Option<&BTreeSet<FontFaceId>>,
+        filter: &str,
+        fingerprint: Option<&str>,
+    ) -> Result<QueryResult, QueryError> {
+        let allowed = self
+            .documents
+            .iter()
+            .filter(|document| {
+                face_ids.is_none_or(|ids| ids.contains(&document.face))
+                    && self
+                        .locations
+                        .get(&document.face)
+                        .is_none_or(|location| location.matches(filter, fingerprint))
+            })
+            .map(|document| document.face)
+            .collect();
+        self.query_with_faces(query, Some(&allowed))
+    }
+
     pub fn query(&self, query: &FontQuery) -> Result<QueryResult, QueryError> {
         self.query_with_faces(query, None)
     }
@@ -500,6 +534,14 @@ impl FontQueryIndex {
             if face_ids.is_some_and(|ids| !ids.contains(&d.face))
                 || allowed.is_some_and(|ids| !ids.contains(&d.identity))
                 || !d.matches(&query.facets)
+                || (self
+                    .locations
+                    .get(&d.face)
+                    .is_some_and(|location| !location.metadata_complete)
+                    && (!query.facets.categories.is_empty()
+                        || !query.facets.licenses.is_empty()
+                        || !query.facets.features.is_empty()
+                        || query.facets.multiple_variants))
             {
                 continue;
             }
@@ -518,7 +560,12 @@ impl FontQueryIndex {
             item.matched_identity_ids.push(d.identity);
             item.score = item.score.max(score);
             item.last_accessed_at_ns = item.last_accessed_at_ns.max(d.recent);
-            for value in d.facet_values() {
+            for value in d.facet_values().into_iter().filter(|value| {
+                self.locations
+                    .get(&d.face)
+                    .is_none_or(|location| location.metadata_complete)
+                    || matches!(value, FacetValue::State(_))
+            }) {
                 let label = if matches!(value, FacetValue::Foundry(_)) {
                     d.foundry_label.clone()
                 } else {

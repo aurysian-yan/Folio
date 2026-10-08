@@ -448,6 +448,14 @@ pub(crate) mod tests {
     }
 
     impl DavServer {
+        pub(crate) fn replace_object(&self, fingerprint: &str, bytes: Vec<u8>) {
+            self.state
+                .lock()
+                .unwrap()
+                .files
+                .insert(format!("/dav/Folio/v1/objects/{fingerprint}"), bytes);
+        }
+
         pub(crate) fn start() -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             listener.set_nonblocking(true).unwrap();
@@ -878,6 +886,7 @@ pub(crate) mod tests {
         server.state.lock().unwrap().existing_mkcol_forbidden = true;
 
         let mut second = FolioDatabase::open(dir.path().join("second.sqlite")).unwrap();
+        crate::set_automatic_download(second.path(), true).unwrap();
         let second_progress = crate::synchronize_with_client(
             &mut second,
             &second_directory,
@@ -1027,6 +1036,7 @@ pub(crate) mod tests {
         assert!(second.list_sync_assets().unwrap()[0].deleted);
         assert!(!std::path::Path::new(&downloaded).is_file());
         crate::restore_deleted_font(second.path(), &fingerprint).unwrap();
+        crate::request_restore(second.path(), &fingerprint).unwrap();
         crate::synchronize_with_client(
             &mut second,
             &second_directory,
@@ -1528,6 +1538,7 @@ pub(crate) mod tests {
 
         // 下载节点持续拒绝：本轮只报告待重试数量，不中断整体流程。
         let mut second = FolioDatabase::open(dir.path().join("second.sqlite")).unwrap();
+        crate::set_automatic_download(second.path(), true).unwrap();
         server.state.lock().unwrap().forbidden_gets = 1000;
         let result = crate::synchronize_with_client(
             &mut second,
