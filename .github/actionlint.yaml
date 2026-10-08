@@ -1,0 +1,4 @@
+# GitHub 官方标签；校验器内置标签表尚未收录 Xcode 27。
+# 来源：https://github.com/actions/runner-images#available-images
+self-hosted-runner:
+  labels: [xcode-27]

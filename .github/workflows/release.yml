@@ -1,0 +1,191 @@
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/toolchain
+      - run: pnpm --dir experiments/mobile install --frozen-lockfile
+      - id: version
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          IS_TAG: ${{ github.ref_type == 'tag' && github.event_name == 'push' }}
+        run: |
+          if [ "$IS_TAG" = true ]; then
+            VERSION=$(node tools/releases/release.mjs verify "$REF_NAME")
+          else
+            VERSION=$(node tools/releases/release.mjs verify)
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - run: node tools/about/validate.mjs
+      - run: pnpm i18n:validate
+      - run: pnpm --dir apps/desktop-ui typecheck && pnpm --dir apps/desktop-ui lint && pnpm --dir apps/desktop-ui test && pnpm --dir apps/desktop-ui build
+      - run: pnpm --dir experiments/mobile typecheck && pnpm --dir experiments/mobile lint && pnpm --dir experiments/mobile test
+      - run: node --test tools/releases/release.test.mjs
+      - run: cargo test --locked --workspace
+  desktop:
+    needs: validate
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            arch: arm64
+            runner: xcode-27
+          - platform: windows
+            arch: x64
+            target: x86_64-pc-windows-msvc
+            runner: windows-2025
+          - platform: windows
+            arch: arm64
+            target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+          - platform: linux
+            arch: x64
+            target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+          - platform: linux
+            arch: arm64
+            target: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      FOLIO_ADHOC_SIGN: '1'
+      FOLIO_BUILD_NUMBER: ${{ github.run_number }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/toolchain
+      - if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev libfontconfig1-dev libfreetype6-dev patchelf rpm
+      - if: matrix.platform != 'macos'
+        run: rustup target add '${{ matrix.target }}' --toolchain 1.98.1
+      - if: matrix.platform == 'macos'
+        run: |
+          export DEVELOPER_DIR=/Applications/Xcode_27.0.app/Contents/Developer
+          xcodebuild -version | head -1 | grep -E '^Xcode 27\.0$'
+          node tools/about/test-swift.mjs
+          node tools/i18n/test-swift.mjs
+          pnpm manage swiftui build --dmg
+          node tools/releases/check-native.mjs macos apps/macos/.build/DerivedData/Build/Products/Release/Folio.app
+          node tools/releases/release.mjs stage macos arm64 apps/macos/.build release-stage
+      - if: matrix.platform != 'macos'
+        run: |
+          pnpm manage tauri build --platform '${{ matrix.platform }}' --arch '${{ matrix.arch }}'
+          node tools/releases/check-native.mjs '${{ matrix.platform }}' 'apps/desktop-ui/src-tauri/target/${{ matrix.target }}/release' '${{ matrix.arch }}'
+          node tools/releases/release.mjs stage '${{ matrix.platform }}' '${{ matrix.arch }}' 'apps/desktop-ui/src-tauri/target/${{ matrix.target }}/release/bundle' release-stage
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: package-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-stage/*
+          if-no-files-found: error
+          retention-days: 14
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: failed-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            apps/macos/.build/*.dmg
+            apps/desktop-ui/src-tauri/target/*/release/bundle/**
+          retention-days: 7
+  android:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      APP_VARIANT: production
+      FOLIO_BUILD_NUMBER: ${{ github.run_number }}
+      FOLIO_BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+      FOLIO_KEYSTORE_PATH: ${{ github.workspace }}/.release-signing/folio.jks
+      FOLIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      FOLIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      FOLIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/toolchain
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          distribution: temurin
+          java-version: 17.0.19
+      - name: Prepare signing
+        env:
+          FOLIO_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        shell: bash
+        run: node tools/releases/signing.mjs
+      - run: sdkmanager 'ndk;29.0.13846066' 'ndk;27.1.12297006' 'platforms;android-36' 'build-tools;36.0.0'
+      - run: pnpm --dir experiments/mobile install --frozen-lockfile
+      - run: pnpm --dir experiments/mobile bindings kotlin
+      - run: pnpm manage expo build --platform android
+      - run: node tools/releases/check-native.mjs android experiments/mobile/android/app/build/outputs/apk/release
+      - run: node tools/releases/release.mjs stage android universal experiments/mobile/android/app/build/outputs/apk/release release-stage
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: package-android-universal
+          path: release-stage/*
+          if-no-files-found: error
+          retention-days: 14
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: failed-android
+          path: |
+            experiments/mobile/android/app/build/outputs/**
+            experiments/mobile/android/build/reports/**
+          retention-days: 7
+      - if: always()
+        run: rm -rf .release-signing
+  assemble:
+    needs: [validate, desktop, android]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.14.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: package-*
+          path: release-input
+      - run: node tools/releases/release.mjs aggregate release-input release-output
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: complete-release
+          path: release-output/*
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: assemble
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.14.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: complete-release
+          path: release-output
+      - run: node tools/releases/release.mjs publish release-output
+        env:
+          GH_TOKEN: ${{ github.token }}

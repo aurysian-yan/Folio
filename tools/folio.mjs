@@ -494,6 +494,7 @@ function swiftuiBuild(args) {
       '-project', 'Folio.xcodeproj',
       '-scheme', 'Folio',
       '-configuration', 'Release',
+      ...(process.env.FOLIO_ADHOC_SIGN === '1' ? ['CODE_SIGN_IDENTITY=-', 'CODE_SIGN_STYLE=Manual', 'DEVELOPMENT_TEAM=', 'ARCHS=arm64'] : []),
       '-destination', 'platform=macOS',
       '-derivedDataPath', derivedData,
       'build',
@@ -546,7 +547,7 @@ function tauriBuild(args) {
   const target = platform === 'windows' ? WINDOWS_TARGETS[arch] : LINUX_TARGETS[arch];
   if (!target) fail('--arch 仅支持 x64 或 arm64。');
 
-  const tauriArgs = ['exec', 'tauri', 'build', '--target', target];
+  const tauriArgs = ['exec', 'tauri', 'build', '--target', target, '--bundles', platform === 'windows' ? 'nsis' : 'appimage,deb,rpm'];
   if (platform === 'windows') {
     if (HOST !== 'win32') {
       ensureCrossWindowsTools();
@@ -558,6 +559,7 @@ function tauriBuild(args) {
     warn('非本机架构的 Linux 构建需要额外交叉工具链支持。');
   }
 
+  tauriArgs.push('--', '--locked');
   run(PNPM, tauriArgs, { cwd: DESKTOP_DIR });
   log(`\n产物目录：${shorten(join(DESKTOP_DIR, 'src-tauri/target', target, 'release/bundle'))}`);
 }

@@ -6,6 +6,8 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 // APP_VARIANT 显式声明构建身份：development 对应 Debug，production 对应 Release。
 const appVariant = process.env.APP_VARIANT ?? 'development';
 const isDevelopment = appVariant === 'development';
+const ciBuild = process.env.FOLIO_BUILD_NUMBER;
+if (ciBuild && (!/^[1-9]\d*$/.test(ciBuild) || Number(ciBuild) > 2100000000)) throw new Error('无效的发布构建号');
 
 // 版本以 package.json 为唯一来源，供根目录版本管理脚本统一维护。
 const { version } = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8')) as {
@@ -52,6 +54,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     icon: debugAsset(developmentAssets.appIcon, productionAssets.appIcon),
   },
   android: {
+    ...(ciBuild ? { versionCode: Number(ciBuild) } : {}),
     package: isDevelopment ? 'com.folio.mobile.poc.dev' : 'com.folio.mobile.poc',
     predictiveBackGestureEnabled: true,
     permissions: [],
@@ -75,6 +78,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // 把 rustls-platform-verifier 的 Maven 仓库写入根工程，见 plugins/with-rustls-verifier-repo.ts。
     './plugins/with-rustls-verifier-repo',
     './plugins/with-android-dev-network-security',
+    './plugins/with-release-signing',
     'expo-document-picker',
     [
       'expo-build-properties',
