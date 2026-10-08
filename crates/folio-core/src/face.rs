@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::attributes::{
     FontStyle, FontVersion, FontWeight, FontWidth, NamedInstance, VariableAxis,
@@ -24,7 +24,7 @@ use crate::revision::FontRevision;
 use crate::source::FontSource;
 
 /// All metadata Folio extracts from a single face.
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FaceMetadata {
     /// 许可、厂商、覆盖范围及结构化特征。
     pub enrichment: crate::FontEnrichment,

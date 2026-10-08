@@ -80,7 +80,126 @@ fn sequence_after_events(tx: &Transaction<'_>, device_id: &str) -> Result<i64, S
         .unwrap_or(1))
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredFilePolicy {
+    pub fingerprint: String,
+    pub upload_excluded: bool,
+    pub download_policy: String,
+    pub transfer_action: Option<String>,
+    pub transfer_status: Option<String>,
+    pub transfer_error: Option<String>,
+}
+
 impl FolioDatabase {
+    pub fn file_policies(&self) -> Result<Vec<StoredFilePolicy>, StorageError> {
+        let mut statement = self.conn.prepare("SELECT fingerprint,upload_excluded,download_policy,transfer_action,transfer_status,transfer_error FROM font_file_policies")?;
+        let rows = statement.query_map([], |row| {
+            Ok(StoredFilePolicy {
+                fingerprint: row.get(0)?,
+                upload_excluded: row.get(1)?,
+                download_policy: row.get(2)?,
+                transfer_action: row.get(3)?,
+                transfer_status: row.get(4)?,
+                transfer_error: row.get(5)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    pub fn file_policy(&self, fingerprint: &str) -> Result<StoredFilePolicy, StorageError> {
+        Ok(self.conn.query_row(
+            "SELECT upload_excluded,download_policy,transfer_action,transfer_status,transfer_error FROM font_file_policies WHERE fingerprint=?1",
+            [fingerprint], |row| Ok(StoredFilePolicy {
+                fingerprint: fingerprint.to_owned(), upload_excluded: row.get(0)?, download_policy: row.get(1)?,
+                transfer_action: row.get(2)?, transfer_status: row.get(3)?, transfer_error: row.get(4)?,
+            })
+        ).optional()?.unwrap_or(StoredFilePolicy {
+            fingerprint: fingerprint.to_owned(), upload_excluded: false, download_policy: "inherit".to_owned(),
+            transfer_action: None, transfer_status: None, transfer_error: None,
+        }))
+    }
+
+    pub fn save_file_policy(&self, policy: &StoredFilePolicy) -> Result<(), StorageError> {
+        self.conn.execute(
+            "INSERT INTO font_file_policies(fingerprint,upload_excluded,download_policy,transfer_action,transfer_status,transfer_error) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(fingerprint) DO UPDATE SET upload_excluded=excluded.upload_excluded,download_policy=excluded.download_policy,transfer_action=excluded.transfer_action,transfer_status=excluded.transfer_status,transfer_error=excluded.transfer_error",
+            params![policy.fingerprint,policy.upload_excluded,policy.download_policy,policy.transfer_action,policy.transfer_status,policy.transfer_error],
+        )?;
+        Ok(())
+    }
+
+    /// 来源内容变化时继承上传排除，不绑定可重建缓存标识。
+    pub fn remember_policy_source(
+        &self,
+        fingerprint: &str,
+        path: &std::path::Path,
+    ) -> Result<(), StorageError> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let encoded = crate::path_codec::encode_path(&canonical);
+        let excluded: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM font_source_policies WHERE path_platform=?1 AND path_bytes=?2 AND upload_excluded=1)",
+            params![encoded.platform.as_str(),encoded.bytes], |row| row.get(0),
+        )?;
+        let mut policy = self.file_policy(fingerprint)?;
+        policy.upload_excluded |= excluded;
+        self.save_file_policy(&policy)?;
+        self.conn.execute("INSERT INTO font_source_policies(path_platform,path_bytes,display_path,upload_excluded) VALUES(?1,?2,?3,?4) ON CONFLICT(path_platform,path_bytes) DO UPDATE SET upload_excluded=excluded.upload_excluded,display_path=excluded.display_path",params![encoded.platform.as_str(),encoded.bytes,canonical.to_string_lossy(),policy.upload_excluded])?;
+        self.conn.execute(
+            "UPDATE font_file_policies SET source_platform=?2,source_bytes=?3 WHERE fingerprint=?1",
+            params![fingerprint, encoded.platform.as_str(), encoded.bytes],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_source_upload_exclusion(
+        &self,
+        path: &std::path::Path,
+        excluded: bool,
+    ) -> Result<(), StorageError> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let encoded = crate::path_codec::encode_path(&canonical);
+        self.conn.execute("INSERT INTO font_source_policies(path_platform,path_bytes,display_path,upload_excluded) VALUES(?1,?2,?3,?4) ON CONFLICT(path_platform,path_bytes) DO UPDATE SET upload_excluded=excluded.upload_excluded",params![encoded.platform.as_str(),encoded.bytes,canonical.to_string_lossy(),excluded])?;
+        self.conn.execute("UPDATE font_file_policies SET upload_excluded=?3 WHERE source_platform=?1 AND source_bytes=?2",params![encoded.platform.as_str(),encoded.bytes,excluded])?;
+        Ok(())
+    }
+
+    pub fn excluded_file_sources(
+        &self,
+    ) -> Result<std::collections::BTreeSet<std::path::PathBuf>, StorageError> {
+        let mut statement = self.conn.prepare("SELECT path_platform,path_bytes,display_path FROM font_source_policies WHERE upload_excluded=1")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Vec<u8>>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut paths = std::collections::BTreeSet::new();
+        for row in rows {
+            let (platform, bytes, display) = row?;
+            paths.insert(
+                crate::path_codec::decode_path(
+                    crate::path_codec::PathPlatform::parse(&platform)?,
+                    &bytes,
+                    &display,
+                )?
+                .path,
+            );
+        }
+        Ok(paths)
+    }
+
+    pub fn replace_unpublished_sync_event(
+        &self,
+        id: &str,
+        payload: &str,
+    ) -> Result<(), StorageError> {
+        self.conn.execute(
+            "UPDATE sync_events SET payload=?2 WHERE id=?1 AND published=0",
+            params![id, payload],
+        )?;
+        Ok(())
+    }
+
     pub fn sync_metadata(&self, key: &str) -> Result<Option<String>, StorageError> {
         Ok(self
             .conn
@@ -125,6 +244,7 @@ impl FolioDatabase {
         tx.execute("DELETE FROM sync_assets", [])?;
         tx.execute("DELETE FROM sync_remote_cursors", [])?;
         tx.execute("DELETE FROM sync_conflicts", [])?;
+        tx.execute("UPDATE font_file_policies SET transfer_action=NULL,transfer_status=NULL,transfer_error=NULL", [])?;
         tx.execute("DELETE FROM sync_metadata WHERE key IN ('device_id','user_baseline','next_sequence','last_successful_sync_ms')", [])?;
         tx.commit()?;
         Ok(())

@@ -3,7 +3,7 @@
 //! These types deliberately do not expose `skrifa` or `read-fonts` types in
 //! Folio's public API.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::names::LocalizedName;
 
@@ -69,6 +69,16 @@ impl std::fmt::Display for FontWeight {
         } else {
             write!(f, "{}", self.0)
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for FontWeight {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = f32::deserialize(deserializer)?;
+        if !value.is_finite() {
+            return Err(serde::de::Error::custom("invalid weight"));
+        }
+        Ok(Self(value))
     }
 }
 
@@ -147,6 +157,16 @@ impl FontWidth {
     }
 }
 
+impl<'de> Deserialize<'de> for FontWidth {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = f32::deserialize(deserializer)?;
+        if !value.is_finite() || value <= 0.0 {
+            return Err(serde::de::Error::custom("invalid width"));
+        }
+        Ok(Self(value))
+    }
+}
+
 impl Serialize for FontWidth {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_f32(self.0)
@@ -154,7 +174,7 @@ impl Serialize for FontWidth {
 }
 
 /// Style / slant of a face.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FontStyle {
     /// Upright style.
@@ -170,7 +190,7 @@ pub enum FontStyle {
 }
 
 /// Version information declared by the font itself.
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FontVersion {
     /// `head.fontRevision` as a float, e.g. `2.001`.
     pub head_revision: Option<f64>,
@@ -179,7 +199,7 @@ pub struct FontVersion {
 }
 
 /// A variation axis declared in the `fvar` table.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VariableAxis {
     /// Four character axis tag, e.g. `wght`.
     pub tag: String,
@@ -198,7 +218,7 @@ pub struct VariableAxis {
 }
 
 /// One coordinate of a named variation instance.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AxisCoordinate {
     /// Tag of the axis this coordinate belongs to.
     pub axis_tag: String,
@@ -207,7 +227,7 @@ pub struct AxisCoordinate {
 }
 
 /// A named instance declared in the `fvar` table.
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct NamedInstance {
     /// Preferred subfamily name of the instance.
     pub subfamily_name: Option<String>,

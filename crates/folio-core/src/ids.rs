@@ -118,7 +118,7 @@ define_id! {
 }
 
 impl FontFamilyId {
-    pub(crate) fn from_family_key(key: &str) -> Self {
+    pub fn from_family_key(key: &str) -> Self {
         Self(IdDigest::hash(FAMILY_DOMAIN, &[key.as_bytes()]))
     }
 }
@@ -152,7 +152,7 @@ impl FontRevisionId {
 }
 
 impl FontFaceId {
-    pub(crate) fn from_revision(revision_id: FontRevisionId) -> Self {
+    pub fn from_revision(revision_id: FontRevisionId) -> Self {
         Self(IdDigest::hash(FACE_DOMAIN, &[revision_id.as_bytes()]))
     }
 }

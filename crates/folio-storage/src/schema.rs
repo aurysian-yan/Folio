@@ -14,7 +14,7 @@ use rusqlite::{Connection, Transaction};
 use crate::error::StorageError;
 
 /// 当前构建支持的最高 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 9;
+pub const CURRENT_SCHEMA_VERSION: i32 = 11;
 
 /// 将新打开的连接迁移到 [`CURRENT_SCHEMA_VERSION`]。
 pub fn migrate(conn: &mut Connection) -> Result<(), StorageError> {
@@ -61,6 +61,8 @@ fn apply_step(tx: &Transaction<'_>, target: i32) -> Result<(), rusqlite::Error> 
         7 => migrate_to_v7(tx),
         8 => migrate_to_v8(tx),
         9 => migrate_to_v9(tx),
+        10 => migrate_to_v10(tx),
+        11 => migrate_to_v11(tx),
         _ => Ok(()),
     }
 }
@@ -282,4 +284,33 @@ fn migrate_to_v9(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
         ALTER TABLE smart_folders ADD COLUMN color TEXT NOT NULL DEFAULT 'gray';
         "#,
     )
+}
+
+fn migrate_to_v10(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(r#"
+        CREATE TABLE IF NOT EXISTS font_file_policies (
+            fingerprint TEXT PRIMARY KEY NOT NULL,
+            upload_excluded INTEGER NOT NULL DEFAULT 0 CHECK(upload_excluded IN (0,1)),
+            download_policy TEXT NOT NULL DEFAULT 'inherit' CHECK(download_policy IN ('inherit','local','cloud')),
+            source_platform TEXT, source_bytes BLOB,
+            transfer_action TEXT, transfer_status TEXT, transfer_error TEXT
+        );
+        INSERT OR IGNORE INTO font_file_policies(fingerprint,download_policy)
+            SELECT fingerprint,CASE WHEN cloud_only=1 THEN 'cloud' WHEN local_path IS NOT NULL THEN 'local' ELSE 'inherit' END
+            FROM sync_assets;
+        INSERT OR IGNORE INTO sync_metadata(key,value) VALUES('automatic_download','false');
+    "#)
+}
+
+fn migrate_to_v11(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(r#"
+        CREATE TABLE IF NOT EXISTS font_source_policies (
+            path_platform TEXT NOT NULL, path_bytes BLOB NOT NULL, display_path TEXT NOT NULL DEFAULT '',
+            upload_excluded INTEGER NOT NULL DEFAULT 0 CHECK(upload_excluded IN (0,1)),
+            PRIMARY KEY(path_platform,path_bytes)
+        );
+        INSERT OR IGNORE INTO font_source_policies(path_platform,path_bytes,upload_excluded)
+            SELECT source_platform,source_bytes,MAX(upload_excluded) FROM font_file_policies
+            WHERE source_platform IS NOT NULL AND source_bytes IS NOT NULL GROUP BY source_platform,source_bytes;
+    "#)
 }

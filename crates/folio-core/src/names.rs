@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use read_fonts::types::NameId;
 use read_fonts::{FontRef, TableProvider};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use skrifa::string::LocalizedString;
 
 /// Name table identifiers Folio tracks.
@@ -31,7 +31,7 @@ pub(crate) const TRACKED_NAME_IDS: [NameId; 18] = [
 ];
 
 /// Semantic kind of an OpenType name record.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NameKind {
     /// Legacy family name (name ID 1).
@@ -100,7 +100,7 @@ impl NameKind {
 }
 
 /// A decoded, localized name string.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct LocalizedName {
     /// Semantic kind of the name record.
     pub kind: NameKind,
@@ -113,7 +113,7 @@ pub struct LocalizedName {
 }
 
 /// name 表原始的平台、编码与语言标识。
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NameLocale {
     pub platform_id: u16,
     pub encoding_id: u16,

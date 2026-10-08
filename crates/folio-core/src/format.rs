@@ -8,10 +8,10 @@
 //! File extensions are only used for candidate detection. The authoritative
 //! format is always derived from the file's magic bytes.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Container format of a font asset.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FontFormat {
     /// TrueType 风格的 sfnt，也可能只含位图；不推断平台安装能力。

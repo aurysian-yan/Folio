@@ -184,6 +184,53 @@ impl FolioDatabase {
         Ok(rebuild_catalog(faces))
     }
 
+    /// 返回全部可读取来源与缓存指纹；内容已变化的文件不冒用旧指纹。
+    pub fn readable_font_files(
+        &self,
+    ) -> Result<std::collections::BTreeMap<PathBuf, String>, StorageError> {
+        let mut statement = self.conn.prepare("SELECT path_platform,path_bytes,display_path,content_hash,file_size,mtime_ns FROM source_files WHERE status='parsed'")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Vec<u8>>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Vec<u8>>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, Option<i64>>(5)?,
+            ))
+        })?;
+        let mut result = std::collections::BTreeMap::new();
+        for row in rows {
+            let (platform, bytes, display, hash, size, mtime) = row?;
+            let path = crate::path_codec::decode_path(
+                crate::path_codec::PathPlatform::parse(&platform)?,
+                &bytes,
+                &display,
+            )?
+            .path;
+            let Ok(meta) = std::fs::metadata(&path) else {
+                continue;
+            };
+            if !meta.is_file() || meta.len() != size as u64 {
+                continue;
+            }
+            let current_mtime = meta
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|time| time.as_nanos() as i64);
+            if current_mtime != mtime || std::fs::File::open(&path).is_err() {
+                continue;
+            }
+            let digest = crate::root::id_bytes::<32>(&hash, "source_files.content_hash")?;
+            result.insert(
+                path,
+                folio_core::ContentFingerprint::from_digest(digest).to_hex(),
+            );
+        }
+        Ok(result)
+    }
+
     /// 返回指定目录内仍存在的有效字体指纹，不解码字体元数据。
     pub fn local_font_fingerprints(
         &self,

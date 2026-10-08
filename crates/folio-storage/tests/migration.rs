@@ -14,7 +14,7 @@ fn empty_database_migrates_to_current() {
         db.schema_version().expect("version"),
         CURRENT_SCHEMA_VERSION
     );
-    assert_eq!(CURRENT_SCHEMA_VERSION, 9);
+    assert_eq!(CURRENT_SCHEMA_VERSION, 11);
 }
 
 #[test]
@@ -251,4 +251,47 @@ fn negative_schema_version_is_rejected_without_migration() {
             .unwrap(),
         0
     );
+}
+
+#[test]
+fn v9_keeps_cloud_pins_and_local_files_while_defaulting_to_on_demand() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("library.sqlite");
+    let local = dir.path().join("font.ttf");
+    std::fs::write(&local, b"existing file").unwrap();
+    {
+        let db = FolioDatabase::open(&path).unwrap();
+        for (fingerprint, cloud_only, local_path) in [
+            ("cloud", true, None),
+            ("local", false, Some(local.to_string_lossy().into_owned())),
+        ] {
+            db.upsert_sync_asset(&folio_storage::StoredSyncAsset {
+                fingerprint: fingerprint.to_owned(),
+                filename: "font.ttf".to_owned(),
+                extension: "ttf".to_owned(),
+                local_path,
+                remote_payload: "{}".to_owned(),
+                cloud_only,
+                deleted: false,
+            })
+            .unwrap();
+        }
+        db.set_sync_metadata("profile", "existing connection")
+            .unwrap();
+    }
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("DROP TABLE font_file_policies; DELETE FROM sync_metadata WHERE key='automatic_download'; PRAGMA user_version=9;").unwrap();
+    drop(conn);
+    let db = FolioDatabase::open(&path).unwrap();
+    assert_eq!(db.file_policy("cloud").unwrap().download_policy, "cloud");
+    assert_eq!(db.file_policy("local").unwrap().download_policy, "local");
+    assert_eq!(
+        db.sync_metadata("automatic_download").unwrap().as_deref(),
+        Some("false")
+    );
+    assert_eq!(
+        db.sync_metadata("profile").unwrap().as_deref(),
+        Some("existing connection")
+    );
+    assert!(local.is_file());
 }
