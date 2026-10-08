@@ -213,6 +213,8 @@ struct SettingsView: View {
                 TextField(L.text("cloud.remoteDirectory"), text: $draft.remoteDirectory)
                 TextField(L.text("cloud.username"), text: $draft.username)
                 SecureField(L.text("cloud.password"), text: $draft.password)
+                Toggle(L.text("fontLocation.autoDownload"),isOn:Binding(get:{cloud.automaticDownload},set:{cloud.setAutomaticDownload($0)}))
+                Text(L.text("fontLocation.autoDownloadHint")).font(.caption).foregroundStyle(.secondary)
                 Toggle(L.text("cloud.autoSync"), isOn: $draft.automatic)
             } header: {
                 Text(L.text("cloud.connection"))

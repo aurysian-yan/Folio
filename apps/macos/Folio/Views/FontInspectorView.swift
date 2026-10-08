@@ -54,10 +54,39 @@ struct FontInspectorView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     disclosureHeader(L.text("preview.title"), isExpanded: $previewExpanded)
                     if previewExpanded {
-                        InspectorFontPreview(model: model, face: face)
+                        if face.location?.localAvailable != false { InspectorFontPreview(model: model, face: face) }
+                        else { Text(L.text("fontLocation.previewHint")).foregroundStyle(.secondary) }
                     }
                 }
 
+                inspectorDivider
+
+                VStack(alignment:.leading,spacing:10) {
+                    Text(L.text("fontLocation.title")).font(.headline)
+                    Text(family.locationLabel(selected:face)).foregroundStyle(.secondary)
+                    if let date = face.location?.cloudConfirmedAtMs { Text(L.format("fontLocation.lastConfirmed",Date(timeIntervalSince1970:Double(date)/1000).formatted())).font(.caption).foregroundStyle(.secondary) }
+                    ForEach(face.location?.files ?? [],id:\.fingerprint) { file in
+                        Text(file.filename)
+                        ForEach(file.localSources,id:\.path) { source in
+                            let status = model.sourceStatuses[source.path]
+                            let kind = status?.isManagedCopy == true ? "managed" : status?.state == .installed ? "installed" : status?.state == .system ? "system" : "reference"
+                            Text(L.text("fontLocation.source.\(kind)")).font(.caption).foregroundStyle(.secondary)
+                            if (model.selectedSourcePath ?? face.sourcePath) == source.path { Text(L.text("fontLocation.currentPreview")).font(.caption).foregroundStyle(.secondary) }
+                            Button(source.path) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:source.path)]) }.lineLimit(nil)
+                        }
+                        if let state = file.transferStatus, state != "done" { Text(L.text("fontLocation.transfer.\(state)")).font(.caption) }
+                        if file.cloudAvailable && file.localSources.isEmpty { Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) } }
+                        if !file.cloudAvailable && !file.localSources.contains(where: { $0.kind == "managed" }),
+                           let path = file.localSources.first?.path, let source = face.sources.first(where: { $0.path == path }), CloudSyncModel.shared.isConnected {
+                            Button(L.text("cloud.addToCloud")) { model.addSourceToCloud(source) }.disabled(CloudSyncModel.shared.isRunning)
+                        }
+                        if file.localSources.contains(where: { $0.kind == "managed" }) {
+                            if !file.cloudAvailable && !file.uploadExcluded { Button(L.text("cloud.upload")) { CloudSyncModel.shared.excludeUpload(file.fingerprint, excluded:false) } }
+                            if file.cloudAvailable { Button(L.text("fontLocation.removeDownload")) { CloudSyncModel.shared.removeDownload(file.fingerprint) } }
+                            Button(L.text(file.uploadExcluded ? "fontLocation.resumeUpload" : "fontLocation.keepLocal")) { CloudSyncModel.shared.excludeUpload(file.fingerprint,excluded:!file.uploadExcluded) }
+                        }
+                    }
+                }
                 inspectorDivider
 
                 if family.faces.count > 1 {

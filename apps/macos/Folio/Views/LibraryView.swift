@@ -12,7 +12,7 @@ struct LibraryView: View {
 
     var body: some View {
         Group {
-            if model.snapshot.roots.isEmpty, model.cloudOnlyFonts.isEmpty, !model.isLoading {
+            if model.snapshot.roots.isEmpty, model.families.isEmpty, !model.isLoading {
                 emptyLibrary
             } else {
                 gridContent
@@ -29,6 +29,11 @@ struct LibraryView: View {
         .navigationSubtitle(L.plural("library.familyCount", Int(model.totalMatches)))
         .searchable(text: $model.searchText, placement: .toolbar, prompt: L.text("common.search"))
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Picker(L.text("fontLocation.title"),selection:$model.locationFilter) {
+                    ForEach(["all","local","cloudOnly","both","pendingUpload","excluded"],id:\.self) { filter in Text(L.text("fontLocation.\(filter)")).tag(filter) }
+                }
+            }
             if model.selectedDestination == .fontState(.installed) {
                 ToolbarItem(placement: .primaryAction) {
                     Button(model.isSelectingInstalledForCloud ? L.text("macos.cancelSelection") : L.text("library.multiSelect")) {
@@ -129,29 +134,13 @@ struct LibraryView: View {
         ScrollView {
             VStack(spacing: 0) {
                 libraryHeader
-                if model.families.isEmpty, model.cloudOnlyFonts.isEmpty, !model.isLoading {
+                if model.families.isEmpty, !model.isLoading {
                     noResults
                         .frame(minHeight: 260)
                 } else {
                     FontGridView(model: model)
                 }
-                if !model.cloudOnlyFonts.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(L.text("cloud.cloudOnly"))
-                            .font(.headline)
-                        ForEach(model.cloudOnlyFonts, id: \.fingerprint) { font in
-                            HStack {
-                                Image.englishSystemName("icloud")
-                                Text(font.displayName)
-                                Spacer()
-                                Button(L.text("cloud.download")) { CloudSyncModel.shared.restore(font) }
-                            }
-                        }
-                    }
-                    .padding()
-                    .frame(maxWidth: LibraryLayout.titleMaxWidth)
-                    .frame(maxWidth: .infinity)
-                }
+
             }
         }
     }

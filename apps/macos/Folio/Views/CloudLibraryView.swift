@@ -20,6 +20,8 @@ struct CloudLibraryView: View {
         switch item.status {
         case "running": return L.format("cloud.running", action)
         case "done": return L.format("cloud.completed", action)
+        case "failed": return L.text("fontLocation.transfer.failed")
+        case "cancelled": return L.text("fontLocation.transfer.cancelled")
         default: return L.format("cloud.waiting", action)
         }
     }
@@ -64,7 +66,8 @@ struct CloudLibraryView: View {
                     HStack {
                         Image.englishSystemName(font.cloudOnly ? "icloud" : "checkmark.icloud")
                         VStack(alignment: .leading) {
-                            Text(font.displayName)
+                            Button(font.displayName) { model.openCloudFont(font) }
+                            Text(L.text(font.cloudOnly ? "fontLocation.cloudOnly" : "fontLocation.both")).font(.caption).foregroundStyle(.secondary)
                             if let item = cloud.syncItem(for: font.fingerprint) {
                                 Label {
                                     Text(syncItemLabel(item))
@@ -73,17 +76,13 @@ struct CloudLibraryView: View {
                                 }
                                 .font(.caption)
                                 .foregroundStyle(syncItemTint(item))
-                            } else {
-                                Text(font.cloudOnly ? L.text("cloud.cloudOnly") : L.text("cloud.syncedTo"))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
                             }
                         }
                         Spacer()
                         if font.cloudOnly {
                             Button(L.text("cloud.download")) { cloud.restore(font) }
                         } else {
-                            Button(L.text("cloud.keepCloudOnly")) { model.removeCloudFont(font) }
+                            Button(L.text("fontLocation.removeDownload")) { model.removeCloudFont(font) }
                         }
                         Menu {
                             Button(L.text("cloud.deleteEverywhere"), role: .destructive) {
@@ -129,7 +128,7 @@ struct CloudLibraryView: View {
             }
         }
         .confirmationDialog(
-            L.text("cloud.deleteConfirmTitle"),
+            L.text("fontLocation.deleteTitle"),
             isPresented: Binding(
                 get: { pendingDeletion != nil },
                 set: { if !$0 { pendingDeletion = nil } }
@@ -140,7 +139,7 @@ struct CloudLibraryView: View {
                 pendingDeletion = nil
             }
         } message: {
-            Text(L.text("cloud.deleteConfirmMessage"))
+            Text(L.text("fontLocation.deleteHint"))
         }
         .alert(L.text("cloud.library"), isPresented: Binding(
             get: { cloud.errorMessage != nil },

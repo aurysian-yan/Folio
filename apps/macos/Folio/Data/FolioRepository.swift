@@ -94,6 +94,8 @@ actor FolioRepository {
         facets: Set<FacetOption>,
         allowedFaceIDs: Set<FaceID>? = nil,
         allowedSourcePaths: Set<String>? = nil,
+        locationFilter: String = "all",
+        fileFingerprint: String? = nil,
         offset: Int,
         limit: Int
     ) throws -> LibraryPage {
@@ -101,12 +103,13 @@ actor FolioRepository {
             FacetSelectionDto(kind: $0.kind.dto, value: $0.value)
         }
         if case let .smartFolder(id) = destination {
-            let page = try engine.querySmartFolder(
+            let page = try engine.querySmartFolderWithLocation(
                 id: SmartFolderIdDto(value: id.rawValue),
                 text: text.isEmpty ? nil : text,
                 facets: selections,
                 offset: UInt64(max(0, offset)),
-                limit: UInt64(max(1, limit))
+                limit: UInt64(max(1, limit)),
+                locationFilter: locationFilter,fileFingerprint: fileFingerprint
             )
             return LibraryPage(
                 totalMatches: page.totalMatches,
@@ -143,6 +146,7 @@ actor FolioRepository {
                 ids.map { FaceIdDto(value: $0.rawValue) }
             },
             allowedSourcePaths: allowedSourcePaths.map(Array.init),
+            locationFilter: locationFilter,fileFingerprint: fileFingerprint,
             offset: UInt64(max(0, offset)),
             limit: UInt64(max(1, limit))
         ))
@@ -164,7 +168,8 @@ actor FolioRepository {
             matchedFaceIDs: details.faces.map { FaceID(rawValue: $0.id.value) },
             isFavorite: details.isFavorite,
             isVariable: details.faces.contains(where: \.isVariable),
-            manufacturer: details.faces.compactMap(\.manufacturer).first
+            manufacturer: details.faces.compactMap(\.manufacturer).first,
+            location: details.location
         )
     }
 
@@ -213,7 +218,7 @@ actor FolioRepository {
             collectionId: nil,
             facets: [],
             allowedFaceIds: nil,
-            allowedSourcePaths: nil,
+            allowedSourcePaths: nil, locationFilter: nil, fileFingerprint: nil,
             offset: 0,
             limit: 1
         ))
@@ -393,7 +398,8 @@ actor FolioRepository {
             matchedFaceIDs: dto.matchedFaceIds.map { FaceID(rawValue: $0.value) },
             isFavorite: dto.isFavorite,
             isVariable: dto.isVariable,
-            manufacturer: dto.manufacturer
+            manufacturer: dto.manufacturer,
+            location: dto.location
         )
     }
 
@@ -435,7 +441,8 @@ actor FolioRepository {
                     maximum: $0.maxValue,
                     hidden: $0.hidden
                 )
-            }
+            },
+            location: dto.location
         )
     }
 

@@ -25,6 +25,7 @@ final class LibraryViewModel {
     var selectedFacets: Set<FacetOption> = []
     var selectedDestination: SidebarDestination = .allFonts {
         didSet {
+            fileFingerprint = nil
             if selectedDestination != .fontState(.installed) { endInstalledCloudSelection() }
             scheduleQuery(immediate: true)
         }
@@ -56,6 +57,21 @@ final class LibraryViewModel {
             scheduleQuery(immediate: false)
         }
     }
+    var locationFilter = "all" { didSet { fileFingerprint = nil; scheduleQuery(immediate:true) } }
+    private var fileFingerprint: String?
+
+    func openCloudFont(_ font: CloudFontDto) {
+        selectedDestination = .allFonts
+        searchText = ""
+        selectedFacets = []
+        locationFilter = "all"
+        fileFingerprint = font.fingerprint
+        Task {
+            do { try await performQuery(reset:true); if let family = families.first { selectFamily(family) } }
+            catch { present(error) }
+        }
+    }
+
     var previewMode: PreviewTextMode = .pangram
     var customPreviewText = "Sphinx of black quartz, judge my vow."
     var previewSize: Double
@@ -248,12 +264,13 @@ final class LibraryViewModel {
 
     func reloadAfterSync() {
         guard let repository else { return }
+        let retainedCount = families.count
         Task {
             do {
                 isRefreshing = true
                 snapshot = try await repository.refreshLibrary()
                 try await reloadLibrarySources()
-                try await performQuery(reset: true)
+                try await performQuery(reset: true, retainingCount: retainedCount)
                 isRefreshing = false
             } catch {
                 isRefreshing = false
@@ -334,11 +351,29 @@ final class LibraryViewModel {
         }
     }
 
+    func addSourceToCloud(_ source: FontSource) {
+        guard let operations, let repository, CloudSyncModel.shared.isConnected, !CloudSyncModel.shared.isRunning else { return }
+        let urls = [URL(fileURLWithPath: source.path)]
+        lastImportURLs = urls
+        lastImportMode = .copy
+        Task {
+            importOutcomes = await operations.importFiles(urls, mode: .copy)
+            do {
+                snapshot = try await repository.refreshLibrary()
+                try await reloadLibrarySources()
+                try await performQuery(reset: true, retainingCount: families.count)
+            } catch { present(error) }
+            isCloudImportReport = true
+            isImportReportPresented = true
+            if importOutcomes.contains(where: { $0.error == nil }) { CloudSyncModel.shared.syncNow() }
+        }
+    }
+
     func selectFamily(_ family: FamilyCard) {
         selectedFamilyID = family.id
         let face = family.defaultFace
         selectedFaceID = face?.id
-        selectedSourcePath = face?.sources.count == 1 ? face?.sources.first?.path : nil
+        selectedSourcePath = face?.sources.first?.path
         axisValues = face.map { previewSession.axisValuesByFace[$0.id] ?? defaultAxisValues(for: $0) } ?? [:]
         inspectorPresented = true
         guard let repository, let identityID = face?.identityID else { return }
@@ -355,7 +390,7 @@ final class LibraryViewModel {
 
     func selectFace(_ face: FaceSummary) {
         selectedFaceID = face.id
-        selectedSourcePath = face.sources.count == 1 ? face.sources.first?.path : nil
+        selectedSourcePath = face.sources.first?.path
         axisValues = previewSession.axisValuesByFace[face.id] ?? defaultAxisValues(for: face)
         guard let repository else { return }
         Task {
@@ -947,6 +982,7 @@ final class LibraryViewModel {
                     facets: facets,
                     allowedFaceIDs: allowedFaceIDs,
                     allowedSourcePaths: allowedSourcePaths,
+                    locationFilter: self?.locationFilter ?? "all",fileFingerprint:self?.fileFingerprint,
                     offset: offset,
                     limit: limit
                 )
@@ -1054,9 +1090,10 @@ final class LibraryViewModel {
             .replacingOccurrences(of: "'", with: "&#39;")
     }
 
-    private func performQuery(reset: Bool) async throws {
+    private func performQuery(reset: Bool, retainingCount: Int = 0) async throws {
         guard let repository else { return }
         isLoading = reset && families.isEmpty
+        let previousFace = selectedFace
         let offset = reset ? 0 : families.count
         let destination = selectedDestination
         let allowedFaceIDs: Set<FaceID>?
@@ -1074,12 +1111,21 @@ final class LibraryViewModel {
             facets: selectedFacets,
             allowedFaceIDs: allowedFaceIDs,
             allowedSourcePaths: allowedSourcePaths,
+            locationFilter: locationFilter,fileFingerprint:fileFingerprint,
             offset: offset,
             limit: pageSize
         )
+        var visibleFamilies = page.families
+        while reset && visibleFamilies.count < retainingCount && visibleFamilies.count < page.totalMatches {
+            let next = try await repository.query(text: searchText, destination: destination, facets: selectedFacets,
+                allowedFaceIDs: allowedFaceIDs, allowedSourcePaths: allowedSourcePaths,
+                locationFilter: locationFilter, fileFingerprint: fileFingerprint, offset: visibleFamilies.count, limit: pageSize)
+            guard !next.families.isEmpty else { break }
+            visibleFamilies.append(contentsOf: next.families)
+        }
         guard destination == selectedDestination else { return }
         if reset {
-            families = page.families
+            families = visibleFamilies
             facetOptions = page.facets
             cloudOnlyFonts = page.cloudOnlyFonts
         } else {
@@ -1089,6 +1135,12 @@ final class LibraryViewModel {
         totalMatches = page.totalMatches
         if reset {
             loadCarouselTail()
+        }
+        if let previousFace, let family = families.first(where: { $0.faces.contains(where: { $0.id == previousFace.id }) }),
+           let face = family.faces.first(where: { $0.id == previousFace.id }) {
+            selectedFamilyID = family.id
+            selectedFaceID = face.id
+            if !face.sources.contains(where: { $0.path == selectedSourcePath }) { selectedSourcePath = face.sources.first?.path }
         }
         if let selectedFamilyID,
            !families.contains(where: { $0.id == selectedFamilyID }),
@@ -1169,6 +1221,7 @@ final class LibraryViewModel {
                     facets: facets,
                     allowedFaceIDs: allowedFaceIDs,
                     allowedSourcePaths: allowedSourcePaths,
+                    locationFilter: self?.locationFilter ?? "all",fileFingerprint:self?.fileFingerprint,
                     offset: offset,
                     limit: 2
                 )
@@ -1217,12 +1270,12 @@ final class LibraryViewModel {
                 sync = .init(state: .running, text: L.format("cloud.syncingCloud", connectionName, String(status.percent)), action: nil)
             } else if status.errorMessage != nil {
                 sync = .init(state: .error, text: "\(connectionName) \(L.text("cloud.syncIncomplete"))", action: .cloudSettings)
-            } else if !local.isEmpty && remoteCount > 0 {
-                sync = .init(state: .pending, text: L.format("cloud.bothUnsynced", connectionName, String(local.count), String(remoteCount)), action: .cloudSettings)
+            } else if !local.isEmpty && !downloads.isEmpty {
+                sync = .init(state: .pending, text: L.format("cloud.bothUnsynced", connectionName, String(local.count), String(downloads.count)), action: .cloudSettings)
             } else if !local.isEmpty {
-                sync = .init(state: .pending, text: L.format("cloud.localAhead", connectionName), action: .cloudSettings)
+                sync = .init(state: .pending, text: L.plural("cloud.pendingUploads",local.count), action: .cloudSettings)
             } else if !downloads.isEmpty {
-                sync = .init(state: .pending, text: L.format("cloud.remoteAhead", connectionName), action: .cloudFonts)
+                sync = .init(state: .pending, text: L.plural("cloud.pendingDownloads",downloads.count), action: .cloudFonts)
             } else if !conflicts.isEmpty {
                 sync = .init(state: .pending, text: L.format("cloud.conflictsPending", connectionName, String(conflicts.count)), action: .cloudSettings)
             } else if cloudOnlyCount > 0 {

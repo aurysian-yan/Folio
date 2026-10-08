@@ -10,6 +10,7 @@ final class CloudSyncModel {
 
     private(set) var profile: SyncProfileDto?
     private(set) var status: SyncStatusDto?
+    private(set) var automaticDownload = false
     private(set) var fonts: [CloudFontDto] = []
     private(set) var conflicts: [SyncConflictDto] = []
     private(set) var connectionAlias: String?
@@ -257,6 +258,19 @@ final class CloudSyncModel {
         }.value
     }
 
+    func download(_ fingerprint: String) {
+        do { try engine?.restoreCloudFont(fingerprint:fingerprint); reloadState(); libraryGeneration += 1; syncNow() } catch { record(error) }
+    }
+    func removeDownload(_ fingerprint: String) {
+        do { try engine?.setCloudOnly(fingerprint:fingerprint); reloadState(); libraryGeneration += 1 } catch { record(error) }
+    }
+    func excludeUpload(_ fingerprint: String,excluded: Bool) {
+        do { try engine?.setUploadExcluded(fingerprint:fingerprint,excluded:excluded); reloadState(); libraryGeneration += 1; if !excluded { syncNow() } } catch { record(error) }
+    }
+    func setAutomaticDownload(_ enabled: Bool) {
+        do { try engine?.setAutomaticDownload(enabled:enabled); automaticDownload = enabled } catch { record(error) }
+    }
+
     func restore(_ font: CloudFontDto) {
         guard let engine else { return }
         do {
@@ -323,8 +337,16 @@ final class CloudSyncModel {
     }
 
     private func observeRun() async {
+        var previousStage: String?
         while !Task.isCancelled {
-            do { status = try engine?.status() }
+            do {
+                status = try engine?.status()
+                if let status, status.isRunning, ["下载字体", "上传字体"].contains(status.stage), previousStage != status.stage {
+                    libraryGeneration += 1
+                    fonts = try engine?.cloudFonts() ?? []
+                }
+                previousStage = status?.stage
+            }
             catch { stateReadError = true; record(error) }
             guard status?.isRunning == true else {
                 reloadState()
@@ -347,6 +369,7 @@ final class CloudSyncModel {
         guard let engine else { return }
         do {
             status = try engine.status()
+            automaticDownload = try engine.automaticDownload()
             fonts = try engine.cloudFonts()
             conflicts = try engine.conflicts()
             stateLoaded = true

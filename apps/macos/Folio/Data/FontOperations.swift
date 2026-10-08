@@ -124,8 +124,7 @@ actor FontOperations {
 
     func status(for path: String) -> FontSourceStatus {
         let url = URL(fileURLWithPath: path)
-        let managed = ledger.imported.contains { $0.path == path && $0.mode == FontImportMode.copy.rawValue }
-            && url.standardizedFileURL.deletingLastPathComponent() == managedDirectory.standardizedFileURL
+        let managed = url.resolvingSymlinksInPath().deletingLastPathComponent() == managedDirectory.resolvingSymlinksInPath()
         guard manager.fileExists(atPath: path) else {
             return .init(state: .unavailable, isManagedCopy: managed, canDeactivate: false, canUninstall: false)
         }

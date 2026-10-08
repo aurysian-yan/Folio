@@ -170,6 +170,7 @@ struct FaceSummary: Hashable, Identifiable, Sendable {
     let license: String
     let scripts: [String]
     let axes: [VariableAxisModel]
+    var location: FontLocationDto? = nil
 }
 
 struct FamilyCard: Hashable, Identifiable, Sendable {
@@ -181,9 +182,20 @@ struct FamilyCard: Hashable, Identifiable, Sendable {
     var isFavorite: Bool
     let isVariable: Bool
     let manufacturer: String?
+    var location: FontFamilyLocationDto? = nil
 
     var defaultFace: FaceSummary? {
-        faces.first(where: { matchedFaceIDs.contains($0.id) }) ?? faces.first
+        faces.first(where: { matchedFaceIDs.contains($0.id) && $0.location?.localAvailable == true }) ?? faces.first(where: { $0.location?.localAvailable == true }) ?? faces.first(where: { matchedFaceIDs.contains($0.id) }) ?? faces.first
+    }
+}
+
+extension FamilyCard {
+    func locationLabel(selected: FaceSummary? = nil) -> String {
+        let local = location.map { Int($0.localFaceCount) } ?? faces.filter { $0.location?.localAvailable ?? ($0.sourcePath != nil) }.count
+        let total = location.map { Int($0.totalFaceCount) } ?? faces.count
+        if selected == nil, local > 0, local < total { return L.format("fontLocation.partial",String(local),String(total)) }
+        if selected == nil, let location { return L.text("fontLocation.\(location.state)") }
+        return L.text("fontLocation.\((selected ?? defaultFace)?.location?.state ?? "excluded")")
     }
 }
 

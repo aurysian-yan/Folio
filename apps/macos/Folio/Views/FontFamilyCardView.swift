@@ -268,8 +268,27 @@ struct FontFamilyCardView: View {
         }
     }
 
+    private var locationFooterHeight: CGFloat {
+        face?.location?.files.contains(where: { $0.transferStatus != nil && $0.transferStatus != "done" }) == true ? 34 : 18
+    }
+
     @ViewBuilder
     private func cardContent(cardSize: CGSize? = nil) -> some View {
+        let height = (cardSize?.height ?? (presentation == .expanded ? cardHeight : presentation.height)) - locationFooterHeight
+        VStack(spacing: 2) {
+            originalCardContent(cardSize: cardSize.map { CGSize(width:$0.width, height:height) })
+                .frame(height:max(0,height))
+            Text(family.locationLabel(selected:selected ? face : nil)).font(.caption).foregroundStyle(.secondary)
+                .lineLimit(1).help(family.locationLabel(selected:selected ? face : nil))
+            if let file = face?.location?.files.first(where: { $0.transferStatus != nil && $0.transferStatus != "done" }), let state = file.transferStatus {
+                Text(L.text(file.transferAction == "upload" ? "fontLocation.upload" : "fontLocation.download") + " · " + L.text("fontLocation.transfer.\(state)"))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func originalCardContent(cardSize: CGSize? = nil) -> some View {
         switch presentation {
         case .compact:
             VStack(spacing: 0) {
@@ -315,11 +334,14 @@ struct FontFamilyCardView: View {
             VStack(spacing: 0) {
                 preview(alignment: .left)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 42)
+                    .frame(height: max(0, 42 - locationFooterHeight))
                     .padding(.horizontal, 4)
                     .clipped()
                 HStack {
                     familyName
+                    if face?.location?.localAvailable == false, let file = face?.location?.files.first(where: { $0.cloudAvailable }) {
+                        Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) }.help(L.text("fontLocation.previewHint"))
+                    }
                     Spacer(minLength: 8)
                     if selected {
                         faceSelector
@@ -380,11 +402,13 @@ struct FontFamilyCardView: View {
         max(0, (cardSize?.height ?? presentation.height) - 20 - footerHeight)
     }
 
+    @ViewBuilder
     private func preview(
         alignment: NSTextAlignment,
         verticalAlignment: FontPreviewVerticalAlignment = .center,
         lineLimit: Int = 1
     ) -> some View {
+        if face?.location?.localAvailable != false {
         FontPreviewView(
             text: model.previewText,
             face: face,
@@ -395,6 +419,16 @@ struct FontFamilyCardView: View {
             verticalAlignment: verticalAlignment,
             lineLimit: lineLimit
         )
+        } else if presentation == .strip {
+            Color.clear.accessibilityLabel(L.text("fontLocation.previewHint"))
+        } else {
+            VStack {
+                Text(L.text("fontLocation.previewHint")).font(.caption).foregroundStyle(.secondary)
+                if let file = face?.location?.files.first(where: { $0.cloudAvailable }) {
+                    Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) }
+                }
+            }
+        }
     }
 
     private var cardPreviewSize: Double {
