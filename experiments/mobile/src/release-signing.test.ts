@@ -20,6 +20,7 @@ test('Expo 发布签名插件保留开发身份，生产配置幂等且禁止调
     assert.equal(first.modResults.contents,second.modResults.contents);
     assert.match(first.modResults.contents,/signingConfig folioHasSigning \? signingConfigs.folioRelease : null/);
     assert.match(first.modResults.contents,/!folioBuildOnly && !folioHasSigning/);
+    assert.match(first.modResults.contents,/\.signing\/android\.properties/);
     assert.doesNotMatch(first.modResults.contents,/signingConfigs.debug/);
   } finally { if (original === undefined) delete process.env.APP_VARIANT; else process.env.APP_VARIANT = original; }
 });

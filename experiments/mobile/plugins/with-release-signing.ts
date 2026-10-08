@@ -1,9 +1,18 @@
 import { withAppBuildGradle, type ConfigPlugin } from 'expo/config-plugins';
 
 // 生产构建使用固定签名；仅构建模式明确生成未签名 APK。
+// 本地回退到未入库的签名文件，CI 仍以环境变量为唯一来源。
 const signing = `
 def folioBuildOnly = System.getenv('FOLIO_BUILD_ONLY') == '1'
-def folioSigning = ['FOLIO_KEYSTORE_PATH', 'FOLIO_KEYSTORE_PASSWORD', 'FOLIO_KEY_ALIAS', 'FOLIO_KEY_PASSWORD'].collectEntries { key -> [(key): System.getenv(key)] }
+def folioSigningFile = file('../../.signing/android.properties')
+def folioSigningProps = new Properties()
+if (folioSigningFile.isFile()) folioSigningFile.withReader('UTF-8') { reader -> folioSigningProps.load(reader) }
+def folioSigning = [
+    'FOLIO_KEYSTORE_PATH': System.getenv('FOLIO_KEYSTORE_PATH') ?: folioSigningProps.getProperty('storeFile'),
+    'FOLIO_KEYSTORE_PASSWORD': System.getenv('FOLIO_KEYSTORE_PASSWORD') ?: folioSigningProps.getProperty('storePassword'),
+    'FOLIO_KEY_ALIAS': System.getenv('FOLIO_KEY_ALIAS') ?: folioSigningProps.getProperty('keyAlias'),
+    'FOLIO_KEY_PASSWORD': System.getenv('FOLIO_KEY_PASSWORD') ?: folioSigningProps.getProperty('keyPassword')
+]
 def folioHasSigning = folioSigning.values().every { it != null && !it.isEmpty() } && file(folioSigning.FOLIO_KEYSTORE_PATH ?: '').isFile()
 def folioReleaseRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
 if (folioReleaseRequested && !folioBuildOnly && !folioHasSigning) {

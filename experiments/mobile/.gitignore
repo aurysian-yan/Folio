@@ -1,5 +1,6 @@
 .expo/
 .build/
+.signing/
 /android/
 /ios/
 samples/

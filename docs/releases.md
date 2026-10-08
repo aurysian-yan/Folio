@@ -101,6 +101,11 @@ runner 上交叉打包。Node、pnpm、Rust、Java、NDK 与 Xcode 固定版本�
 此前使用调试密钥安装的正式身份 APK 与新发布密钥不兼容，不能原位升级；迁移前
 先通过应用导出或云同步保留资料。
 
+本地验证正式构建时，可将同样的四项写入未入库的
+`experiments/mobile/.signing/android.properties`：`storeFile` 填 keystore 绝对路径，
+其余为 `storePassword`、`keyAlias`、`keyPassword`。Gradle 优先读取环境变量，缺失时
+才回退到该文件；目录已被忽略，不得提交。CI 始终只使用 Actions Secrets，读取行为不变。
+
 ## 未公证与未签名桌面包
 
 macOS DMG 使用本地签名，暂不提交 Apple 公证。将应用拖入「应用程序」后，
