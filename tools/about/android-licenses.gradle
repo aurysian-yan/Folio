@@ -1,0 +1,19 @@
+// 导出实际解析的 Android 运行依赖，预编译 Expo 模块由 npm 目录覆盖。
+allprojects { project ->
+    afterEvaluate {
+        if (project.path == ':app') {
+            tasks.register('folioLicenseCoordinates') {
+                doLast {
+                    configurations.releaseRuntimeClasspath.incoming.resolutionResult.allComponents.each { component ->
+                        if (component.moduleVersion != null && !component.id.toString().startsWith('project ')) {
+                            def coordinate = component.moduleVersion.toString()
+                            if (!coordinate.startsWith('expo.modules.') && !coordinate.startsWith('host.exp.exponent:expo.modules.')) {
+                                println('FOLIO_COORD:' + coordinate)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

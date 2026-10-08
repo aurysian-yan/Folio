@@ -77,6 +77,7 @@ export function SegmentedTabs<Key extends string>({
             id={`${tabIdPrefix}-${item.id}`}
             type="button"
             role="tab"
+            title={item.title}
             aria-selected={selectedKey === item.id}
             aria-controls={panelId}
             tabIndex={selectedKey === item.id ? 0 : -1}

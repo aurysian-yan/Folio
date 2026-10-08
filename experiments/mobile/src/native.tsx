@@ -12,7 +12,7 @@ interface MaterialBridge {
   materialPalette(seed: string, dark: boolean): MaterialRoles;
 }
 
-const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & { copyText(text: string): Promise<void> }>('FolioNative');
+const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
 export const cloudSync = createSyncClient(nativeModule);
 export const syncSession = new ForegroundSyncSession(cloudSync, () => nativeModule.snapshot());
 export const library = createLibraryClient(nativeModule, (action, kind) => syncSession.mutate(action, kind));
@@ -43,3 +43,5 @@ interface PreviewProps extends ViewProps {
 }
 
 export const NativeFontPreview = requireNativeViewManager<PreviewProps>('FolioNative');
+
+export const getAboutInfo = () => nativeModule.aboutInfo();

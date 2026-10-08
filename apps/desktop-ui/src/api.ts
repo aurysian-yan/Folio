@@ -91,8 +91,8 @@ export function convertSmartFolderToCollection(request: { id: string; name: stri
   return invoke("convert_smart_folder_to_collection", { request });
 }
 
-export function openSettings(): Promise<void> {
-  return invoke("open_settings");
+export function openSettings(page?: string): Promise<void> {
+  return page ? invoke("open_settings", { page }) : invoke("open_settings");
 }
 
 export function quitApp(): Promise<void> {
@@ -168,3 +168,7 @@ export function setAutomaticDownload(automaticDownload: boolean): Promise<void> 
 export function deleteCloudFont(fingerprint: string): Promise<void> {
   return invoke("delete_cloud_font", { fingerprint });
 }
+
+export function getAboutInfo(): Promise<import("../../../shared/about/update").AppInfo> { return invoke("about_info"); }
+export function requestRelease(url: string): Promise<import("../../../shared/about/update").HttpResult> { return invoke("request_release", { url }); }
+export function openAboutLink(url: string): Promise<void> { return invoke("open_about_link", { url }); }

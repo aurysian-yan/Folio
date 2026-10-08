@@ -1,0 +1,6 @@
+{
+  "apps/macos/Folio/Assets.xcassets/BrandLogo.imageset/BrandLogo.svg": "0aa08208cfac73f603a2bd413140c5589f9d4e1eae287adbf9aa2569a0ef97bd",
+  "fixtures/fonts/Inter-Variable.ttf": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+  "fixtures/fonts/SourceSerif4-Regular.otf": "edf160d0d584deee8a3bb2c3371b2a7624ca63580fbe02c57c1f4c91e84d8787",
+  "apps/desktop-ui/src/assets/fonts/JetBrainsMono-Variable.ttf": "662a196d58f1183bf2d77428b6d5283fe3f45161ab021bea4036bc98e5cac016"
+}

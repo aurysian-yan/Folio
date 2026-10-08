@@ -6,6 +6,7 @@ const scrollAreas = [
   ".font-grid",
   ".inspector-inner",
   ".settings-page",
+  ".about-license-scroll",
   ".facet-groups",
   ".favorite-editor-body",
   ".cloud-pane",

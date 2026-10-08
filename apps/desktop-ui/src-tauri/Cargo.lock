@@ -1348,6 +1348,7 @@ dependencies = [
  "keyring",
  "pathfinder_geometry",
  "png 0.17.16",
+ "reqwest",
  "serde",
  "serde_json",
  "skrifa",

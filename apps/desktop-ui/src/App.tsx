@@ -61,6 +61,8 @@ import { createLibraryHero, type HeroAction } from "./library-hero";
 import { currentPreviewStyle } from "./font-preview";
 import {
   Fragment,
+  lazy,
+  Suspense,
   type ButtonHTMLAttributes,
   type KeyboardEvent,
   type MouseEvent,
@@ -133,6 +135,8 @@ type LibraryScope =
   | "fontState"
   | "fontHealth"
   | "cloudFonts";
+const AboutView = lazy(() => import("./AboutView").then((module) => ({ default: module.AboutView })));
+
 type SettingsPage =
   | "cloud"
   | "storage"
@@ -694,7 +698,16 @@ export default function App() {
   const [windowActionError, setWindowActionError] = useState<string | null>(
     null,
   );
-  const [settingsPage, setSettingsPage] = useState<SettingsPage>("cloud");
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => new URLSearchParams(location.search).get("page") === "about" ? "about" : "cloud");
+  useEffect(() => {
+    if (!settingsWindow) return;
+    let active = true;
+    let cleanup: (() => void) | undefined;
+    void listen<string>("settings:navigate", ({ payload }) => {
+      if (active && settingsPages.some((page) => page.id === payload)) setSettingsPage(payload as SettingsPage);
+    }).then((unlisten) => { if (active) cleanup = unlisten; else unlisten(); });
+    return () => { active = false; cleanup?.(); };
+  }, [settingsWindow]);
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const searchCapsuleRef = useRef<HTMLDivElement>(null);
@@ -1866,7 +1879,7 @@ export default function App() {
       items: [
         {
           label: t("desktop.about"),
-          action: () => settingsWindow ? setSettingsPage("about") : void openSettings(),
+          action: () => settingsWindow ? setSettingsPage("about") : void openSettings("about"),
         },
       ],
     },
@@ -2617,7 +2630,7 @@ export default function App() {
                 </section>
               </>
             ) : (
-              <p>{t("macos.aboutSubtitle")}</p>
+              <Suspense fallback={null}><AboutView /></Suspense>
             )}
           </article>
         </section>

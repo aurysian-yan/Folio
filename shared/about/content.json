@@ -1,0 +1,58 @@
+{
+  "repository": "aurysian-yan/Folio",
+  "links": [
+    {
+      "key": "source",
+      "url": "https://github.com/aurysian-yan/Folio"
+    },
+    {
+      "key": "guide",
+      "url": "https://github.com/aurysian-yan/Folio#readme"
+    },
+    {
+      "key": "issues",
+      "url": "https://github.com/aurysian-yan/Folio/issues"
+    },
+    {
+      "key": "releases",
+      "url": "https://github.com/aurysian-yan/Folio/releases"
+    }
+  ],
+  "credits": [
+    {
+      "name": "NexioSchedule",
+      "key": "nexio",
+      "url": "https://github.com/HaoZai000/NexioSchedule"
+    },
+    {
+      "name": "Kyant0",
+      "key": "kyant",
+      "url": "https://github.com/Kyant0"
+    },
+    {
+      "name": "MeiloX",
+      "key": "meilox",
+      "url": "https://github.com/NEORUAA/MeiloX"
+    },
+    {
+      "name": "Claralight Design",
+      "key": "claralight",
+      "url": "https://github.com/ClaralightDesign/react"
+    },
+    {
+      "name": "Inter",
+      "key": "inter",
+      "url": "https://github.com/rsms/inter"
+    },
+    {
+      "name": "Source Serif 4",
+      "key": "serif",
+      "url": "https://github.com/adobe-fonts/source-serif"
+    },
+    {
+      "name": "JetBrains Mono",
+      "key": "mono",
+      "url": "https://github.com/JetBrains/JetBrainsMono"
+    }
+  ]
+}

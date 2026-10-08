@@ -60,6 +60,7 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
   // 先更新当前步骤的退场方向，再挂载下一步骤。
   useLayoutEffect(() => {
     if (!nextStep) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 导航退场方向必须先同步，再挂载下一步骤。
     setStep(nextStep);
     setNextStep(null);
   }, [nextStep]);

@@ -23,3 +23,9 @@ fi
 
 mkdir -p "$OUTPUT_DIRECTORY"
 "$NODE_EXECUTABLE" "$REPOSITORY_ROOT/tools/i18n/build.mjs" --out "$OUTPUT_DIRECTORY"
+
+# 将三端共用关于资料随应用打包，许可全文可离线阅读。
+mkdir -p "$OUTPUT_DIRECTORY/About"
+for RESOURCE in content glyphs licenses; do
+    cp "$REPOSITORY_ROOT/shared/about/$RESOURCE.json" "$OUTPUT_DIRECTORY/About/"
+done

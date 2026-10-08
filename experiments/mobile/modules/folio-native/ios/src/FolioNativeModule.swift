@@ -97,6 +97,11 @@ public final class FolioNativeModule: Module {
 
     public func definition() -> ModuleDefinition {
         Name("FolioNative")
+        Function("aboutInfo") { () -> [String: String] in
+            ["version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+             "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+             "platform": "ios", "arch": "arm64"]
+        }
 
         AsyncFunction("initialize") { () throws -> [String: Any] in
             if self.engine == nil {

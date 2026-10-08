@@ -74,6 +74,14 @@ struct SettingsView: View {
             .onAppear {
                 cloud.start()
                 loadDraft()
+                if UserDefaults.standard.string(forKey: "settings.requestedPage") == "about" {
+                    selection = .about
+                    UserDefaults.standard.removeObject(forKey: "settings.requestedPage")
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FolioShowAbout"))) { _ in
+                selection = .about
+                UserDefaults.standard.removeObject(forKey: "settings.requestedPage")
             }
             .onChange(of: selection) { _, section in
                 if section == .storage { loadStorageUsage() }
@@ -192,7 +200,7 @@ struct SettingsView: View {
         case .theme: themeForm
         case .cards: cardsForm
         case .storage: storageForm
-        case .about: AboutView()
+        case .about: AboutView(isActive: selection == .about)
         }
     }
 

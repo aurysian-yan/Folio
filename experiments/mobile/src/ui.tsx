@@ -123,6 +123,7 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
     return () => { mounted = false; subscription.remove(); };
   }, []);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 禁用控件时立即清除原生按压状态。
     if (disabled) setPressed(false);
     if (disabled || reduceMotion) {
       pressScale.stopAnimation(); pressScale.setValue(1);

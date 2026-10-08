@@ -1,3 +1,4 @@
+mod about;
 mod library;
 mod preview;
 
@@ -932,9 +933,11 @@ fn require_sync_window(window: &WebviewWindow) -> Result<(), String> {
 
 // 必须为 async：创建窗口需回主线程执行，同步命令在主线程内会自锁。
 #[tauri::command]
-async fn open_settings(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+async fn open_settings(window: WebviewWindow, app: tauri::AppHandle, page: Option<String>) -> Result<(), String> {
     require_main_window(&window)?;
+    let page = page.filter(|page| ["cloud", "storage", "importing", "display", "font-cards", "shortcuts", "about"].contains(&page.as_str()));
     if let Some(window) = app.get_webview_window("settings") {
+        if let Some(page) = &page { window.emit("settings:navigate", page).map_err(|error| error.to_string())?; }
         window.show().map_err(|error| error.to_string())?;
         window.set_focus().map_err(|error| error.to_string())?;
         return Ok(());
@@ -943,7 +946,7 @@ async fn open_settings(window: WebviewWindow, app: tauri::AppHandle) -> Result<(
     let window = WebviewWindowBuilder::new(
         &app,
         "settings",
-        WebviewUrl::App("index.html?window=settings".into()),
+        WebviewUrl::App(format!("index.html?window=settings{}", page.map(|page| format!("&page={page}")).unwrap_or_default()).into()),
     )
     .title("Folio 设置")
     .inner_size(840.0, 640.0)
@@ -1072,6 +1075,9 @@ pub fn run() {
             list_sync_conflicts,
             resolve_sync_conflict,
             open_settings,
+            about::about_info,
+            about::request_release,
+            about::open_about_link,
             quit_app,
         ])
         .build(tauri::generate_context!())
