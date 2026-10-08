@@ -57,13 +57,13 @@ export function createLibraryHero(input: HeroInput, t: HeroTranslate): HeroPrese
   const connection = input.connectionName || (profile ? heroConnectionName(profile, t) : t("navigation.cloud"));
   const cloudReady = input.cloudLoaded && !input.cloudReadError && !!profile;
   // 存放位置与传输任务独立；首次同步前的本地文件也按指纹去重。
-  const uploads = new Set(status?.items.filter((item) => item.action === "upload" && item.status !== "done").map((item) => item.fingerprint));
-  const downloads = new Set(status?.items.filter((item) => item.action === "download" && item.status !== "done").map((item) => item.fingerprint));
+  const uploads = new Set(status?.items.filter((item) => item.action === "upload" && ["pending", "running"].includes(item.status)).map((item) => item.fingerprint));
+  const downloads = new Set(status?.items.filter((item) => item.action === "download" && ["pending", "running"].includes(item.status)).map((item) => item.fingerprint));
   const unsynced = new Set([...(snapshot?.syncSummary?.localOnlyFingerprints ?? []), ...uploads]);
   const cloudOnly = new Set(fonts.filter((font) => font.cloudOnly && !font.deleted).map((font) => font.fingerprint));
   const cloudOnlyCount = Math.max(cloudOnly.size, snapshot?.syncSummary?.cloudOnlyCount ?? 0);
   const remoteCount = Math.max(new Set([...cloudOnly, ...downloads]).size, cloudOnlyCount);
-  const sync = syncPresentation(input, connection, unsynced.size, downloads.size, cloudOnlyCount, remoteCount, t);
+  const sync = syncPresentation(input, connection, unsynced.size, downloads.size, cloudOnlyCount, t);
   const base = { subtitle: summary, sync };
 
   if (snapshot && snapshot.health.damagedFiles > 0) {
@@ -100,7 +100,7 @@ export function createLibraryHero(input: HeroInput, t: HeroTranslate): HeroPrese
     subtitle: snapshot ? t("library.summaryDamaged", { damaged: snapshot.health.damagedFiles, variable: snapshot.variableFamilyCount, recent: snapshot.recentCount }) : t("library.loadingList") };
 }
 
-function syncPresentation(input: HeroInput, connection: string, uploads: number, downloads: number, cloudOnly: number, remote: number, t: HeroTranslate): HeroPresentation["sync"] {
+function syncPresentation(input: HeroInput, connection: string, uploads: number, downloads: number, cloudOnly: number, t: HeroTranslate): HeroPresentation["sync"] {
   const { profile, status, cloudLoaded } = input;
   if (!cloudLoaded) return { state: "checking", text: t("common.loading") };
   if (input.cloudReadError) return { state: "error", text: t("cloud.readStatusError"), action: "cloudSettings" };
@@ -108,9 +108,9 @@ function syncPresentation(input: HeroInput, connection: string, uploads: number,
   if (!status) return { state: "checking", text: t("cloud.readingCloud", { connection }) };
   if (status.running) return { state: "running", text: t("cloud.syncingCloud", { connection, percent: Math.round(Math.min(100, Math.max(0, status.percent))) }) };
   if (status.error) return { state: "error", text: `${connection} ${t("cloud.syncIncomplete")}`, action: "cloudSettings" };
-  if (uploads > 0 && remote > 0) return { state: "pending", text: t("cloud.bothUnsynced", { connection, uploads, downloads: remote }), action: "cloudSettings" };
-  if (uploads > 0) return { state: "pending", text: t("cloud.localAhead", { connection }), action: "cloudSettings" };
-  if (downloads > 0) return { state: "pending", text: t("cloud.remoteAhead", { connection }), action: "cloudFonts" };
+  if (uploads > 0 && downloads > 0) return { state: "pending", text: t("cloud.bothUnsynced", { connection, uploads, downloads }), action: "cloudSettings" };
+  if (uploads > 0) return { state: "pending", text: t("cloud.pendingUploads", { count: uploads }), action: "cloudSettings" };
+  if (downloads > 0) return { state: "pending", text: t("cloud.pendingDownloads", { count: downloads }), action: "cloudFonts" };
   if (input.conflicts.length > 0) return { state: "pending", text: t("cloud.conflictsPending", { connection, count: input.conflicts.length }), action: "cloudSettings" };
   if (cloudOnly > 0) return { state: "connected", text: t("cloud.cloudOnlySummary", { connection, count: cloudOnly }), action: "cloudFonts" };
   if (input.snapshot?.syncSummary && status.percent === 100 && status.stage === "已同步") return { state: "synced", text: t("cloud.librarySyncedTo", { connection }) };
