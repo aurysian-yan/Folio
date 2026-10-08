@@ -76,7 +76,7 @@ function stringsdictFile(plurals) {
     lines.push('    <key>count</key>');
     lines.push('    <dict>');
     lines.push('      <key>NSStringFormatSpecTypeKey</key>');
-    lines.push('      <string>NSStringFormatSpecTypePlural</string>');
+    lines.push('      <string>NSStringPluralRuleType</string>');
     lines.push('      <key>NSStringFormatValueTypeKey</key>');
     lines.push('      <string>ld</string>');
     for (const [category, value] of entry.forms) {
@@ -124,7 +124,7 @@ for (const [localeName, locale] of Object.entries(locales)) {
     }
     plurals.push({
       key,
-      format: toFormat(other, ['count']).replace(/%ld/g, '%#@count@'),
+      format: '%#@count@',
       forms: [...forms.entries()],
     });
   }
