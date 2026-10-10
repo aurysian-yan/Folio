@@ -180,7 +180,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
           {([{ scope: 'all' }, { scope: 'recent' }, { scope: 'favorites' }] as LibraryTarget[]).map((value) => <Pressable key={value.scope}
             accessibilityRole="radio" disabled={busy} accessibilityState={{ checked: targetKey(target) === targetKey(value), disabled: busy }} onPress={() => select(value)}
             style={({ pressed }) => [styles.scopeCard, { backgroundColor: targetKey(target) === targetKey(value) ? theme.selection : theme.surface,
-              borderColor: targetKey(target) === targetKey(value) ? theme.accent : theme.border, opacity: pressed ? 0.6 : 1 }]}>
+              opacity: pressed ? 0.6 : 1 }]}>
             {value.scope === 'all' ? <TextAaIcon size={24} color={theme.accent} /> : value.scope === 'recent' ? <ClockIcon size={24} color={theme.accent} /> : <StarIcon size={24} color={theme.accent} />}
             <Text style={[panelStyles.label, { color: theme.label }]}>{value.scope === 'all' ? t('mobile.allFonts') : value.scope === 'recent' ? t('macos.recentVisits') : t('mobile.starredCollections')}</Text>
             {(value.scope === 'all' || value.scope === 'recent') && <Text style={[styles.count, { color: theme.secondary }]}>{(value.scope === 'recent' ? snapshot?.recentCount : snapshot?.familyCount) ?? 0}</Text>}
@@ -225,7 +225,7 @@ function FolderCard({ folder, checked, busy, theme, onSelect, onEdit, onDelete, 
       <PanelAction label={t('common.edit')} theme={theme} systemImage="pencil" disabled={busy} onPress={onEdit} />
       <PanelAction label={t('common.delete')} theme={theme} primary destructive systemImage="trash" disabled={busy} onPress={onDelete} />
     </View>}>
-    <View style={[styles.folderCard, { backgroundColor: checked ? theme.selection : theme.surface, borderColor: checked ? theme.accent : theme.border }]}>
+    <View style={[styles.folderCard, { backgroundColor: checked ? theme.selection : theme.surface }]}>
       <Pressable accessibilityRole="radio" disabled={busy} accessibilityState={{ checked, disabled: busy }}
         accessibilityLabel={t(folder.kind === 'smart' ? 'mobile.smartFolderCount' : 'mobile.collectionCount',
           { name: folder.name, count: folder.kind === 'smart' ? folder.matchCount : folder.memberCount })}
@@ -257,11 +257,11 @@ const styles = StyleSheet.create({
   confirmation: { gap: 12 }, confirmTitle: { fontSize: 18, fontWeight: '600' },
   confirmActions: { paddingVertical: 16, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 },
   scopeOptions: { gap: 8 },
-  scopeCard: { minHeight: 64, padding: 16, borderRadius: 24, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  scopeCard: { minHeight: 64, padding: 16, borderRadius: 24, flexDirection: 'row', alignItems: 'center', gap: 12 },
   folderHeading: { marginTop: 8 }, folderRow: { paddingBottom: 8 },
   emptyFolders: { paddingVertical: 12 }, saveCurrent: { paddingBottom: 12 },
   swipeCard: { borderRadius: 24 }, swipeActions: { flexDirection: 'row', alignItems: 'center', paddingLeft: 8, gap: 8 },
-  folderCard: { paddingRight: 8, minHeight: 64, borderWidth: StyleSheet.hairlineWidth, borderRadius: 24, flexDirection: 'row', alignItems: 'center' },
+  folderCard: { paddingRight: 8, minHeight: 64, borderRadius: 24, flexDirection: 'row', alignItems: 'center' },
   folderSelect: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
   smartLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   count: { fontSize: 14, fontVariant: ['tabular-nums'] },
@@ -295,7 +295,7 @@ export function FamilyCollectionsPanel({ visible, family, snapshot, collectionId
       {message && <Text accessibilityLiveRegion="polite" style={[panelStyles.section, { color: theme.secondary }]}>{message}</Text>}
       {error && <Text accessibilityRole="alert" style={[panelStyles.section, { color: theme.danger }]}>{error}</Text>}
       <PanelSection title={t('collection.collections')} theme={theme}>
-        {snapshot?.collections.map((collection) => <View key={collection.id} style={[styles.scopeCard, { backgroundColor: theme.raised, borderColor: theme.border }]}>
+        {snapshot?.collections.map((collection) => <View key={collection.id} style={[styles.scopeCard, { backgroundColor: theme.raised }]}>
           <CollectionSymbol icon={collection.icon} color={collectionColorValue(collection.color)} />
           <Text style={[panelStyles.label, { color: theme.label }]}>{collection.name}</Text>
           <PanelAction label={t('collection.add')} theme={theme} systemImage="plus" disabled={busy} onPress={() => { void change(collection, true); }} />

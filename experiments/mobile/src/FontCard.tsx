@@ -5,6 +5,7 @@ import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-n
 import { representativeFace, type FontFamily } from './library';
 import { NativeFontPreview, type PreviewStatus } from './native';
 import { usePreferences } from './settings';
+import { settingsLayout } from './settings-ui';
 import type { Theme } from './ui';
 import { StarIcon } from './icons';
 
@@ -30,8 +31,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
     <Pressable accessibilityRole={onOpen ? 'button' : undefined} accessible={!!onOpen}
       accessibilityLabel={onOpen ? [family.isFavorite ? t('mobile.viewDetailsFavorite', { name: family.displayName }) : `${family.displayName} · ${t('mobile.viewDetails')}`, locationText, ...transfers.map((item) => item.text)].join(' · ') : undefined}
       disabled={!onOpen} onPress={onOpen} style={[styles.card, compact ? styles.listCard : styles.gridCard,
-        { backgroundColor: compact ? theme.listCardSurface : theme.surface, borderColor: theme.border }]}>
-      {compact && <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.outline, { borderColor: theme.listCardBorder }]} />}
+        { backgroundColor: compact ? theme.listCardSurface : theme.surface }]}>
       <View pointerEvents="none" style={[styles.preview, compact && styles.listPreview]}>
         {sampleText !== undefined ? (
           <Text adjustsFontSizeToFit={!compact} style={[styles.sample, {
@@ -70,10 +70,9 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
 });
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 16, borderWidth: 1, padding: 10, overflow: 'hidden' },
+  card: { ...settingsLayout.card, padding: 10 },
   gridCard: { flex: 1, aspectRatio: 1 },
-  listCard: { minHeight: 84, borderWidth: 0 },
-  outline: { borderWidth: 1, borderRadius: 16 },
+  listCard: { minHeight: 84 },
   preview: { flex: 1, minHeight: 48, justifyContent: 'center', marginBottom: 4 },
   listPreview: { flex: 0, minHeight: 42, height: 42, marginBottom: 0, marginHorizontal: 4 },
   nativePreview: { width: '100%', flex: 1 },

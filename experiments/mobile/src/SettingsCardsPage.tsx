@@ -29,7 +29,7 @@ export function SettingsCardsPage({ theme, onClose }: { theme: Theme; onClose: (
   return <SettingsPage title={t('settings.cards')} theme={theme} onClose={onClose}>
     <View style={styles.previewSection}>
       <Text style={[styles.previewTitle, { color: theme.secondary }]}>{t('mobile.settings.cardPreview')}</Text>
-      <View style={[styles.previewArea, { borderColor: theme.border }]}>
+      <View style={styles.previewArea}>
         <View key={preferences.defaultViewMode} style={compact ? styles.listCard : styles.previewCard}>
           <FontCard family={sampleFamily} mode={preferences.defaultViewMode} theme={theme}
             sampleText={t('mobile.settings.previewSample')} />
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   previewSection: { gap: 8 },
   previewTitle: { ...settingsTypography.section, ...settingsLayout.section },
   previewArea: { ...settingsLayout.card, ...settingsLayout.formControls, height: 240,
-    borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+    alignItems: 'center', justifyContent: 'center' },
   previewCard: { width: '50%', maxWidth: 200, aspectRatio: 1 },
   listCard: { width: '100%' },
 });
