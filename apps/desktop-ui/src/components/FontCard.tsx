@@ -1,4 +1,4 @@
-import { locallyAvailable, locationLabel, transferLabel } from "../../../../shared/font-location";
+import { locallyAvailable, locationAvailability, locationLabel, transferLabel } from "../../../../shared/font-location";
 import { Button, Card, Separator, Toolbar } from "@heroui/react";
 import { CaretLeftIcon, CaretRightIcon, CopySimpleIcon, StarIcon } from "@phosphor-icons/react";
 import { memo, useEffect, useEffectEvent, useId, useState } from "react";
@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { currentPreviewStyle, previewStyles } from "../font-preview";
 import type { FamilyDto } from "../types";
 import { FontPreview } from "./FontPreview";
+import { FontLocationIcons } from "./FontLocationIcons";
 
 export type ViewMode = "compact" | "large" | "list" | "expanded";
 
@@ -32,6 +33,9 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
   const previewHintId = useId();
   const styles = previewStyles(family);
   const style = currentPreviewStyle(family, selected ? styleKey : null);
+  const location = locationAvailability(family.faces, selected ? style?.face : undefined, family.location);
+  const locationText = locationLabel(family.faces, selected ? style?.face : undefined, t, family.location);
+  const transfers = style?.face.location?.files.filter((file) => transferLabel(file, t)) ?? [];
   const index = styles.findIndex((entry) => entry.key === style?.key);
   const [hovered, setHovered] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
@@ -77,7 +81,7 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
     onPointerLeave={() => setHovered(false)}
     onPointerCancel={() => setHovered(false)}
     onPointerDown={() => setHovered(false)}>
-    <Button variant="ghost" className="font-card-select" aria-label={t("desktop.selectFamily", { name: family.displayName })} aria-pressed={selected} onPress={() => { setHovered(false); onSelect(family); }}>
+    <Button variant="ghost" className="font-card-select" aria-label={t("desktop.selectFamily", { name: family.displayName })} aria-description={locationText} aria-pressed={selected} onPress={() => { setHovered(false); onSelect(family); }}>
       <span className="sr-only">{t("desktop.selectFamily", { name: family.displayName })}</span>
     </Button>
     <div className="font-card-preview-area">
@@ -87,12 +91,11 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
         {mode !== "list" && downloadButton}
       </div>}
     </div>
-    <div className="font-card-location">
-      <span title={locationLabel(family.faces, selected ? style?.face : undefined, t, family.location)}>{locationLabel(family.faces, selected ? style?.face : undefined, t, family.location)}</span>
-      {style?.face.location?.files.map((file) => transferLabel(file,t) && <span key={file.fingerprint} role="status">{transferLabel(file,t)}</span>)}
-    </div>
+    {transfers.length > 0 && <div className="font-card-location">
+      {transfers.map((file) => <span key={file.fingerprint} role="status">{transferLabel(file,t)}</span>)}
+    </div>}
     <Card.Content className="font-card-content">
-      <Card.Title title={family.displayName}>{family.displayName}</Card.Title>
+      <div className="font-card-name"><Card.Title title={family.displayName}>{family.displayName}</Card.Title><FontLocationIcons {...location} /></div>
       {mode === "list" && downloadButton}
       {mode === "expanded" ? <div className="font-card-footer-row">{showMetadata && metadata}{selector}</div>
         : selected ? selector : showMetadata && metadata}

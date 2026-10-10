@@ -1,4 +1,4 @@
-import { locationLabel, transferLabel } from "../../../shared/font-location";
+import { locationAvailability, locationLabel, transferLabel } from "../../../shared/font-location";
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -8,6 +8,7 @@ import { usePreferences } from './settings';
 import { settingsLayout } from './settings-ui';
 import type { Theme } from './ui';
 import { StarIcon } from './icons';
+import { FontLocationIcons } from './FontLocationIcons';
 
 export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sampleText }: {
   family: FontFamily;
@@ -25,6 +26,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
   const status = previewStatus?.key === previewKey ? previewStatus.status : null;
   const compact = mode === 'list';
   const locationText = locationLabel(family.faces,undefined,t,family.location);
+  const location = locationAvailability(family.faces, undefined, family.location);
   const transfers = face?.location?.files.map((file) => ({ fingerprint: file.fingerprint, text: transferLabel(file,t) })).filter((item) => item.text) ?? [];
 
   return (
@@ -52,10 +54,12 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
           </Text>
         )}
       </View>
-      <Text style={[styles.detail, { color: theme.secondary }]}>{locationText}</Text>
       {transfers.map((item) => <Text key={item.fingerprint} accessibilityLiveRegion="polite" style={[styles.detail, { color: theme.secondary }]}>{item.text}</Text>)}
       {preferences.showCardMetadata && <View pointerEvents="none" style={[styles.metadata, compact && styles.listMetadata]}>
-        <Text numberOfLines={1} style={[styles.name, { color: theme.label }, compact && styles.listName]}>{family.displayName}</Text>
+        <View style={[styles.nameRow, compact && styles.listNameRow]}>
+          <Text numberOfLines={1} style={[styles.name, { color: theme.label }, compact && styles.listName]}>{family.displayName}</Text>
+          <FontLocationIcons {...location} color={theme.secondary} />
+        </View>
         <View style={styles.details}>
           {family.isFavorite && preferences.showFavoriteBadge && <StarIcon size={12} weight="fill" color={theme.accent} />}
           <Text style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
@@ -81,8 +85,10 @@ const styles = StyleSheet.create({
   listUnavailable: { textAlign: 'left' },
   metadata: { gap: 2, alignItems: 'center' },
   listMetadata: { flexDirection: 'row', justifyContent: 'space-between', gap: 5, paddingHorizontal: 4, minHeight: 22 },
-  name: { fontSize: 14, fontWeight: '500', lineHeight: 18, textAlign: 'center', maxWidth: '100%' },
-  listName: { flex: 1, fontSize: 15, lineHeight: 22, textAlign: 'left' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, maxWidth: '100%', minWidth: 0 },
+  listNameRow: { flex: 1, justifyContent: 'flex-start' },
+  name: { flexShrink: 1, fontSize: 14, fontWeight: '500', lineHeight: 18, textAlign: 'center', minWidth: 0 },
+  listName: { fontSize: 15, lineHeight: 22, textAlign: 'left' },
   details: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 16 },
   detail: { fontSize: 12, lineHeight: 16 },
   listDetail: { lineHeight: 22, fontWeight: '500', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },

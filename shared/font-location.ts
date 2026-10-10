@@ -28,6 +28,13 @@ export interface FontFileLocation {
 export const locationFilters = ['all', 'local', 'cloudOnly', 'both', 'pendingUpload', 'excluded'] as const;
 type LocatedFace = { location?: FontLocation; sources?: unknown[]; sourcePath?: string | null };
 export function locallyAvailable(face: LocatedFace) { return face.location?.localAvailable ?? !!(face.sourcePath || face.sources?.length); }
+export function locationAvailability(faces: LocatedFace[], selected?: LocatedFace, family?: FontFamilyLocation) {
+  const visibleFaces = selected ? [selected] : faces;
+  return {
+    local: !selected && family ? family.localFaceCount > 0 : visibleFaces.some(locallyAvailable),
+    cloud: visibleFaces.some((face) => face.location?.cloudAvailable === true),
+  };
+}
 export function locationLabel(faces: LocatedFace[], selected: LocatedFace | undefined, t: (key: string, values?: Record<string, number>) => string, family?: FontFamilyLocation) {
   const local = family?.localFaceCount ?? faces.filter(locallyAvailable).length;
   const total = family?.totalFaceCount ?? faces.length;

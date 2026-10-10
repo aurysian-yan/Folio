@@ -64,10 +64,13 @@ struct CloudLibraryView: View {
             Section(L.text("cloud.library")) {
                 ForEach(visibleFonts, id: \.fingerprint) { font in
                     HStack {
-                        Image.englishSystemName(font.cloudOnly ? "icloud" : "checkmark.icloud")
                         VStack(alignment: .leading) {
-                            Button(font.displayName) { model.openCloudFont(font) }
-                            Text(L.text(font.cloudOnly ? "fontLocation.cloudOnly" : "fontLocation.both")).font(.caption).foregroundStyle(.secondary)
+                            HStack(spacing: 4) {
+                                Button { model.openCloudFont(font) } label: {
+                                    Text(font.displayName).lineLimit(1)
+                                }
+                                FontLocationIcons(local: font.localPath != nil, cloud: true)
+                            }
                             if let item = cloud.syncItem(for: font.fingerprint) {
                                 Label {
                                     Text(syncItemLabel(item))
@@ -100,7 +103,10 @@ struct CloudLibraryView: View {
                 Section(L.text("cloud.recentlyDeleted")) {
                     ForEach(deleted, id: \.fingerprint) { font in
                         HStack {
-                            Text(font.displayName)
+                            HStack(spacing: 4) {
+                                Text(font.displayName).lineLimit(1)
+                                FontLocationIcons(local: font.localPath != nil, cloud: false)
+                            }
                             Spacer()
                             Button(L.text("cloud.restore")) { cloud.restoreDeleted(font) }
                         }

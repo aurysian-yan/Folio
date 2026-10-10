@@ -1,11 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { locationLabel, locallyAvailable, transferLabel, type FontLocation } from '../../../shared/font-location.ts';
+import { locationAvailability, locationLabel, locallyAvailable, transferLabel, type FontLocation } from '../../../shared/font-location.ts';
 import i18n from './i18n/instance.ts';
 
 const local: FontLocation = { state: 'both', localAvailable: true, cloudAvailable: true,
   cloudConfirmedAtMs: 1, metadataComplete: true, files: [] };
 const cloud: FontLocation = { ...local, state: 'cloudOnly', localAvailable: false };
+
+test('位置图标按实际可用性显示，字族合并位置，选中字款单独判断', () => {
+  const localOnly = { location: { ...local, state: 'pendingUpload' as const, cloudAvailable: false } };
+  const cloudOnly = { location: cloud, sourcePath: '/stale.ttf' };
+  assert.deepEqual(locationAvailability([localOnly]), { local: true, cloud: false });
+  assert.deepEqual(locationAvailability([cloudOnly]), { local: false, cloud: true });
+  assert.deepEqual(locationAvailability([{ location: local }]), { local: true, cloud: true });
+  assert.deepEqual(locationAvailability([localOnly, cloudOnly]), { local: true, cloud: true });
+  assert.deepEqual(locationAvailability([localOnly, cloudOnly], cloudOnly), { local: false, cloud: true });
+  assert.deepEqual(locationAvailability([{ sourcePath: '/local.ttf' }]), { local: true, cloud: false });
+  assert.deepEqual(locationAvailability([]), { local: false, cloud: false });
+});
 
 test('字族显示部分在本机，选中字款后使用该字款的实际位置', () => {
   const faces = [{ location: local }, { location: cloud }];

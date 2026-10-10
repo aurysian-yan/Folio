@@ -269,17 +269,15 @@ struct FontFamilyCardView: View {
     }
 
     private var locationFooterHeight: CGFloat {
-        face?.location?.files.contains(where: { $0.transferStatus != nil && $0.transferStatus != "done" }) == true ? 34 : 18
+        face?.location?.files.contains(where: { $0.transferStatus != nil && $0.transferStatus != "done" }) == true ? 18 : 0
     }
 
     @ViewBuilder
     private func cardContent(cardSize: CGSize? = nil) -> some View {
         let height = (cardSize?.height ?? (presentation == .expanded ? cardHeight : presentation.height)) - locationFooterHeight
-        VStack(spacing: 2) {
+        VStack(spacing: locationFooterHeight > 0 ? 2 : 0) {
             originalCardContent(cardSize: cardSize.map { CGSize(width:$0.width, height:height) })
                 .frame(height:max(0,height))
-            Text(family.locationLabel(selected:selected ? face : nil)).font(.caption).foregroundStyle(.secondary)
-                .lineLimit(1).help(family.locationLabel(selected:selected ? face : nil))
             if let file = face?.location?.files.first(where: { $0.transferStatus != nil && $0.transferStatus != "done" }), let state = file.transferStatus {
                 Text(L.text(file.transferAction == "upload" ? "fontLocation.upload" : "fontLocation.download") + " · " + L.text("fontLocation.transfer.\(state)"))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -465,12 +463,18 @@ struct FontFamilyCardView: View {
     }
 
     private var familyName: some View {
-        Text(family.displayName)
-            .font(.system(
-                size: presentation.familyFontSize,
-                weight: selected && presentation != .expanded ? .semibold : .medium
-            ))
-            .lineLimit(1)
+        let location = family.locationAvailability(selected: selected ? face : nil)
+        return HStack(spacing: 4) {
+            Text(family.displayName)
+                .font(.system(
+                    size: presentation.familyFontSize,
+                    weight: selected && presentation != .expanded ? .semibold : .medium
+                ))
+                .lineLimit(1)
+            FontLocationIcons(local: location.local, cloud: location.cloud)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(family.displayName + " · " + family.locationLabel(selected: selected ? face : nil))
     }
 
     private var familyMetadata: some View {
@@ -576,6 +580,29 @@ struct FontFamilyCardView: View {
             }
             select()
         }
+    }
+}
+
+struct FontLocationIcons: View {
+    let local: Bool
+    let cloud: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if local {
+                Image.englishSystemName("internaldrive.fill")
+                    .accessibilityLabel(L.text("fontLocation.local"))
+                    .help(L.text("fontLocation.local"))
+            }
+            if cloud {
+                Image.englishSystemName("icloud.fill")
+                    .accessibilityLabel(L.text("navigation.cloud"))
+                    .help(L.text("navigation.cloud"))
+            }
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(.secondary)
+        .fixedSize()
     }
 }
 

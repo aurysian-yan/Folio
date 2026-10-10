@@ -6,6 +6,7 @@ import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/R
 import type { CloudAction, CloudFont } from './sync';
 import { formatBytes, settingsLayout, settingsTypography } from './settings-ui';
 import type { Theme } from './ui';
+import { FontLocationIcons } from './FontLocationIcons';
 
 // 云端卡片收起文件明细，侧滑、更多入口与读屏提供相同操作。
 export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen, onDetails, canDownload = false }: {
@@ -50,7 +51,7 @@ export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen,
         </Pressable>; })}
       </View>}>
     <View style={[styles.card, { backgroundColor: theme.surface }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${name}, ${formatBytes(font.fileSize)}, ${status}`}
+      <Pressable accessibilityRole="button" accessibilityLabel={`${name}, ${t(font.deleted ? 'cloud.recentlyDeleted' : font.localAvailable ? 'fontLocation.both' : 'fontLocation.cloudOnly')}, ${formatBytes(font.fileSize)}, ${status}`}
         accessibilityHint={t('mobile.swipeCloudFont')} accessibilityState={{ disabled: font.deleted }} disabled={font.deleted}
         accessibilityActions={actions.filter(({action}) => !disabled || (action === 'download' && canDownload)).map(({ action, label }) => ({ name: action, label }))}
         onAccessibilityAction={({ nativeEvent }) => {
@@ -61,8 +62,11 @@ export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen,
           <FileTextIcon size={20} color={theme.accent} />
         </View>
         <View style={styles.info}>
-          <Text numberOfLines={1} style={[styles.name, { color: theme.label }]}>{name}</Text>
-          <Text numberOfLines={1} style={[styles.detail, { color: theme.secondary }]}>{t(font.localAvailable ? 'fontLocation.both' : 'fontLocation.cloudOnly')} · {formatBytes(font.fileSize)}</Text>
+          <View style={styles.nameRow}>
+            <Text numberOfLines={1} style={[styles.name, { color: theme.label }]}>{name}</Text>
+            <FontLocationIcons local={font.localAvailable} cloud={!font.deleted} color={theme.secondary} />
+          </View>
+          <Text numberOfLines={1} style={[styles.detail, { color: theme.secondary }]}>{formatBytes(font.fileSize)}</Text>
           {!!status && <Text accessibilityLiveRegion="polite" style={[styles.detail,{color:theme.secondary}]}>{status}</Text>}
         </View>
       </Pressable>
@@ -81,7 +85,8 @@ const styles = StyleSheet.create({
   body: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   fileIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1, minWidth: 0, gap: 4 },
-  name: { ...settingsTypography.body },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
+  name: { ...settingsTypography.body, flexShrink: 1, minWidth: 0 },
   detail: { ...settingsTypography.detail, fontVariant: ['tabular-nums'] },
   more: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   actions: { ...settingsLayout.controls, flexDirection: 'row', gap: 8 },

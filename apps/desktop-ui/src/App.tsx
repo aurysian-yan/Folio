@@ -56,6 +56,7 @@ import { appendLibraryPage, LibraryPageRequests } from "./library-paging";
 import { startMetric } from "./performance-metrics";
 import { useAppScrollbars } from "./scrollbars";
 import { FontPreview } from "./components/FontPreview";
+import { FontLocationIcons } from "./components/FontLocationIcons";
 import { LibraryHero } from "./components/LibraryHero";
 import { createLibraryHero, type HeroAction } from "./library-hero";
 import { currentPreviewStyle } from "./font-preview";
@@ -2559,14 +2560,13 @@ export default function App() {
                     <div className="sync-font-list">
                       {cloudFonts.map((font) => (
                         <div key={font.fingerprint}>
-                          <strong>{font.displayName}</strong>
+                          <div className="cloud-font-name-row">
+                            <strong className="cloud-font-name">{font.displayName}</strong>
+                            <FontLocationIcons local={!!font.localPath} cloud={!font.deleted} />
+                          </div>
                           <span>
-                            {font.deleted
-                              ? t("desktop.deleted")
-                              : font.cloudOnly
-                                ? t("cloud.cloudOnly")
-                                : t("cloud.syncedTo")}{" "}
-                            · {formatFileSize(font.fileSize)}
+                            {font.deleted && <>{t("desktop.deleted")} · </>}
+                            {formatFileSize(font.fileSize)}
                           </span>
                           {(font.deleted || font.cloudOnly) && (
                             <Button
@@ -3572,15 +3572,17 @@ function CloudFontsPane({
             );
             return (
               <li key={font.fingerprint}>
-                <Button variant="ghost" isDisabled={font.deleted} onPress={() => onOpen(font)}>{font.displayName}</Button>
+                <div className="cloud-font-name-row">
+                  <Button className="cloud-font-name" variant="ghost" isDisabled={font.deleted} onPress={() => onOpen(font)}>{font.displayName}</Button>
+                  <FontLocationIcons local={!!font.localPath} cloud={!font.deleted} />
+                </div>
                 <span className="cloud-font-meta">
-                  <span>{t(font.deleted ? "cloud.recentlyDeleted" : font.cloudOnly ? "fontLocation.cloudOnly" : "fontLocation.both")}</span>
+                  {font.deleted && <span>{t("cloud.recentlyDeleted")} · </span>}
                   {item && (
                     <span className={`cloud-font-sync ${item.status}`}>
                       {describeSyncItem(item)}
                     </span>
-                  )}{" "}
-                  · {formatFileSize(font.fileSize)}
+                  )}{item && " · "}{formatFileSize(font.fileSize)}
                 </span>
                 {(font.deleted || font.cloudOnly) && (
                   <Button

@@ -1141,7 +1141,7 @@ body {
     color: var(--text-muted);
     font-size: 11px;
 }
-/* 位置和任务独立占行，卡片保持既有尺寸与预览布局。 */
+/* 传输任务独立占行，位置图标紧随字体名。 */
 .font-card-location {
     position: relative;
     z-index: 2;
@@ -1193,8 +1193,35 @@ body {
     padding: 0 !important;
     pointer-events: none;
 }
-.font-card [data-slot="card-title"] {
+.font-card-name,
+.cloud-font-name-row {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--spacing);
+}
+.font-card-name {
+    justify-content: center;
     width: 100%;
+}
+.font-location-icons {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--spacing);
+    color: var(--text-muted);
+    font-size: 13px;
+}
+.font-location-icons > span {
+    display: inline-flex;
+}
+.font-location-icons svg {
+    width: 1em;
+    height: 1em;
+}
+.font-card [data-slot="card-title"] {
+    flex: 0 1 auto;
     min-width: 0;
     margin: 0;
     overflow: hidden;
@@ -1307,9 +1334,13 @@ body {
 }
 .mode-large .font-card [data-slot="card-title"],
 .mode-list .font-card [data-slot="card-title"] {
-    flex: 1;
     font-size: 15px;
     text-align: left;
+}
+.mode-large .font-card-name,
+.mode-list .font-card-name {
+    flex: 1;
+    justify-content: flex-start;
 }
 .mode-large .font-card-metadata,
 .mode-list .font-card-metadata {
@@ -1341,6 +1372,9 @@ body {
     font-size: 17px;
     font-weight: 500;
     text-align: left;
+}
+.mode-expanded .font-card-name {
+    justify-content: flex-start;
 }
 .font-card-footer-row {
     display: flex;
@@ -3153,11 +3187,15 @@ body {
     background: var(--surface-raised);
 }
 .cloud-font-name {
+    min-width: 0;
     overflow: hidden;
     font-size: 13px;
     font-weight: 550;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+.cloud-font-name-row {
+    flex: 1;
 }
 .cloud-font-meta {
     flex: 0 0 auto;

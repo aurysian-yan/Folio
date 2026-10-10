@@ -40,6 +40,7 @@ export const CloudArrowDownIcon = symbol('icloud.and.arrow.down');
 export const CloudArrowUpIcon = symbol('icloud.and.arrow.up');
 export const CloudCheckIcon = symbol('checkmark.icloud');
 export const HardDrivesIcon = symbol('externaldrive.badge.icloud');
+export const HardDriveIcon = symbol('internaldrive', 'internaldrive.fill');
 export const LassoIcon = symbol('lasso.badge.sparkles');
 export const StethoscopeIcon = symbol('stethoscope');
 export const TrayArrowUpIcon = symbol('tray.and.arrow.up');

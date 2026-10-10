@@ -21,8 +21,12 @@ struct LibraryListView: View {
             .width(min: 110, ideal: 160)
 
             TableColumn(L.text("font.family")) { family in
-                Text(family.displayName)
-                    .lineLimit(1)
+                let location = family.locationAvailability()
+                HStack(spacing: 4) {
+                    Text(family.displayName)
+                        .lineLimit(1)
+                    FontLocationIcons(local: location.local, cloud: location.cloud)
+                }
             }
             .width(min: 120, ideal: 180)
 

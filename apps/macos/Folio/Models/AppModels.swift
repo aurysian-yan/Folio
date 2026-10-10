@@ -190,6 +190,15 @@ struct FamilyCard: Hashable, Identifiable, Sendable {
 }
 
 extension FamilyCard {
+    func locationAvailability(selected: FaceSummary? = nil) -> (local: Bool, cloud: Bool) {
+        let visibleFaces = selected.map { [$0] } ?? faces
+        let local = selected == nil ? location.map { $0.localFaceCount > 0 } : nil
+        return (
+            local: local ?? visibleFaces.contains { $0.location?.localAvailable ?? ($0.sourcePath != nil || !$0.sources.isEmpty) },
+            cloud: visibleFaces.contains { $0.location?.cloudAvailable == true }
+        )
+    }
+
     func locationLabel(selected: FaceSummary? = nil) -> String {
         let local = location.map { Int($0.localFaceCount) } ?? faces.filter { $0.location?.localAvailable ?? ($0.sourcePath != nil) }.count
         let total = location.map { Int($0.totalFaceCount) } ?? faces.count
