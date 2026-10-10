@@ -73,17 +73,21 @@ export function PanelBody(props: LibraryPanelProps) {
   </SafeAreaProvider>;
 }
 
-export function PanelContent({ title, theme, onClose, children, busy, closeLabel, headerAction }: LibraryPanelProps) {
+export function PanelHeader({ title, theme, onClose, busy, closeLabel, headerAction }: Omit<LibraryPanelProps, 'children' | 'visible'>) {
   const { t } = useTranslation();
+  return <View style={[panelStyles.header, panelStyles.topBar]}>
+    <IconButton label={closeLabel ?? t('common.close')} theme={theme} onPress={onClose} disabled={busy} systemImage="xmark">
+      <XIcon size={20} color={theme.secondary} />
+    </IconButton>
+    <Text accessibilityRole="header" style={[panelStyles.title, { color: theme.label }]}>{title}</Text>
+    {headerAction ?? <View style={panelStyles.headerSpacer} />}
+  </View>;
+}
+
+export function PanelContent({ children, hideHeader = false, ...props }: LibraryPanelProps & { hideHeader?: boolean }) {
   return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     accessibilityViewIsModal style={panelStyles.screen}>
-    <View style={[panelStyles.header, panelStyles.topBar]}>
-      <IconButton label={closeLabel ?? t('common.close')} theme={theme} onPress={onClose} disabled={busy} systemImage="xmark">
-        <XIcon size={20} color={theme.secondary} />
-      </IconButton>
-      <Text accessibilityRole="header" style={[panelStyles.title, { color: theme.label }]}>{title}</Text>
-      {headerAction ?? <View style={panelStyles.headerSpacer} />}
-    </View>
+    {!hideHeader && <PanelHeader {...props} />}
     {children}
   </KeyboardAvoidingView>;
 }

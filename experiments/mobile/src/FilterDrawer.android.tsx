@@ -2,10 +2,12 @@ import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList, BottomSheetHandl
   type BottomSheetHandleProps } from '@gorhom/bottom-sheet';
 import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, StyleSheet, type FlatListProps } from 'react-native';
+import { Modal, StyleSheet, useWindowDimensions, type FlatListProps } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PanelContent, type LibraryPanelProps } from './panel-content';
+import { PanelContent, PanelHeader, type LibraryPanelProps } from './panel-content';
+import { screenCornerRadius } from './native';
+import { settingsLayout } from './settings-ui';
 
 const snapPoints = ['100%'];
 
@@ -22,11 +24,16 @@ export function FilterDrawer(props: LibraryPanelProps) {
   const sheet = useRef<BottomSheet>(null);
   const inset = useSafeAreaInsets();
   const { t } = useTranslation();
-  const close = () => { if (!props.busy) sheet.current?.close(); };
+  // 窗口尺寸变化时重新读取圆角，兼容旋转与分屏。
+  useWindowDimensions();
+  const close = useCallback(() => { if (!props.busy) sheet.current?.close(); }, [props.busy]);
+  // 顶部操作区放在拖动柄层，避免正文遮罩裁切按钮阴影。
   const handle = useCallback((handleProps: BottomSheetHandleProps) =>
-    <BottomSheetHandle {...handleProps} accessibilityLabel={t('desktop.filterDrawerHandle')}
+    <><BottomSheetHandle {...handleProps} accessibilityLabel={t('desktop.filterDrawerHandle')}
       accessibilityHint={t('mobile.dragCloseFilterPanel')}
-      indicatorStyle={{ backgroundColor: props.theme.secondary }} />, [props.theme.secondary, t]);
+      indicatorStyle={{ backgroundColor: props.theme.secondary }} />
+      <SafeAreaView edges={['left', 'right']}><PanelHeader {...props} onClose={close} /></SafeAreaView>
+    </>, [close, props, t]);
   const backdrop = useCallback((backdropProps: BottomSheetBackdropProps) =>
     <BottomSheetBackdrop {...backdropProps} appearsOnIndex={0} disappearsOnIndex={-1}
       opacity={1} pressBehavior={props.busy ? 'none' : 'close'}
@@ -34,6 +41,7 @@ export function FilterDrawer(props: LibraryPanelProps) {
       style={[backdropProps.style, { backgroundColor: props.theme.scrim }]} />,
   [props.busy, props.theme.scrim, t]);
   if (!props.visible) return null;
+  const borderRadius = Math.min(42, Math.max(settingsLayout.card.borderRadius + 8, screenCornerRadius()));
 
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent
     onRequestClose={close}>
@@ -43,9 +51,9 @@ export function FilterDrawer(props: LibraryPanelProps) {
           enableDynamicSizing={false} enablePanDownToClose={!props.busy}
           enableContentPanningGesture={!props.busy} enableHandlePanningGesture={!props.busy}
           backdropComponent={backdrop} handleComponent={handle} onClose={props.onClose} accessible={false}
-          backgroundStyle={{ backgroundColor: props.theme.background }}>
+          backgroundStyle={{ backgroundColor: props.theme.background, borderTopLeftRadius: borderRadius, borderTopRightRadius: borderRadius }}>
           <SafeAreaView edges={['left', 'right']} style={styles.screen}>
-            <PanelContent {...props} onClose={close} />
+            <PanelContent {...props} onClose={close} hideHeader />
           </SafeAreaView>
         </BottomSheet>
       </GestureHandlerRootView>

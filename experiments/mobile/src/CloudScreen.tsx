@@ -29,7 +29,7 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
   const provider = !readError && state?.profile
     ? webdavPresets.find((preset) => preset.id === matchingWebdavPreset(state.profile!.serverUrl)) : undefined;
   const [section, setSection] = useState('fonts');
-  const openSwipe = useRef<SwipeableMethods | null>(null);
+  const openSwipe = useRef<{ key: string; methods: SwipeableMethods } | null>(null);
   const disabled = busy || controller.blocked || !!readError || !state?.profile || !state.credentialAvailable;
   const syncLabel = readError ? t(readError) : !state ? t('mobile.sync.reading') : !state.profile ? t('cloud.notConnected')
     : status?.isRunning ? t('cloud.syncingPercent', { percent: status.percent }) : t(phaseKey(status?.phase));
@@ -68,7 +68,7 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
     scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
     contentContainerStyle={[styles.content, { paddingTop: header.contentTop,
       paddingBottom: header.contentBottom }]} data={readError ? [] : state?.fonts.filter((font) => font.deleted === (section === 'deleted')) ?? []}
-    onScrollBeginDrag={() => openSwipe.current?.close()}
+    onScrollBeginDrag={() => openSwipe.current?.methods.close()}
     keyExtractor={(font) => font.fingerprint}
     ListHeaderComponent={<View style={styles.header}>
       <PageTitle {...header} title={t('mobile.cloudFonts')} theme={theme} />
@@ -129,7 +129,7 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
       <CloudPanelTabs label={t('mobile.cloudFonts')} value={section} theme={theme} disabled={false}
         options={[{ value: 'fonts', label: t('cloud.cloudFiles'), systemImage: 'cloud' },
           { value: 'deleted', label: t('cloud.recentlyDeleted'), systemImage: 'trash' }]} onChange={(value) => {
-            openSwipe.current?.close(); setSection(value);
+            openSwipe.current?.methods.close(); setSection(value);
           }} />
     </View>}
     ListEmptyComponent={!readError && state ? <SettingsNote theme={theme}>{t(section === 'deleted' ? 'cloud.deletedEmpty'
@@ -141,8 +141,9 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
           : progress.status === 'running' ? 'cloud.running' : 'cloud.waiting', { action })
           : item.deleted ? t('cloud.recentlyDeleted') : ''}
         onAction={(next) => fontAction(item, next)} onOpen={(methods) => {
-          if (openSwipe.current !== methods) openSwipe.current?.close();
-          openSwipe.current = methods;
+          // 控制对象会随渲染重建，使用卡片身份避免收起自身。
+          if (openSwipe.current?.key !== item.fingerprint) openSwipe.current?.methods.close();
+          openSwipe.current = { key: item.fingerprint, methods };
         }} />;
     }} />
     </NavigationBackdrop>

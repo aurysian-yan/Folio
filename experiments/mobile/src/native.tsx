@@ -12,7 +12,11 @@ interface MaterialBridge {
   materialPalette(seed: string, dark: boolean, followWallpaper: boolean): MaterialRoles;
 }
 
-const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
+interface AndroidWindowBridge {
+  screenCornerRadius(): number;
+}
+
+const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & AndroidWindowBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
 export const cloudSync = createSyncClient(nativeModule);
 export const syncSession = new ForegroundSyncSession(cloudSync, () => nativeModule.snapshot());
 export const library = createLibraryClient(nativeModule, (action, kind) => syncSession.mutate(action, kind));
@@ -20,6 +24,7 @@ export const storage = createStorageClient(nativeModule);
 export const copyText = (text: string) => nativeModule.copyText(text);
 export const wallpaperSeed = () => nativeModule.wallpaperSeed();
 export const materialPalette = (seed: string, dark: boolean, followWallpaper = false) => nativeModule.materialPalette(seed, dark, followWallpaper);
+export const screenCornerRadius = () => nativeModule.screenCornerRadius();
 
 export interface PreviewSelection {
   sourcePath: string;

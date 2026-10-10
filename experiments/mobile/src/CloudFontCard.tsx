@@ -7,6 +7,7 @@ import type { CloudAction, CloudFont } from './sync';
 import { formatBytes, settingsLayout, settingsTypography } from './settings-ui';
 import type { Theme } from './ui';
 import { FontLocationIcons } from './FontLocationIcons';
+import { SwipeCardAction, swipeCardGesture, swipeCardStyles } from './SwipeCardAction';
 
 // 云端卡片收起文件明细，侧滑、更多入口与读屏提供相同操作。
 export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen, onDetails, canDownload = false }: {
@@ -34,21 +35,17 @@ export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen,
     if (open) swipe.current?.close(); else swipe.current?.openRight();
   }
   const name = font.displayName || font.filename;
-  return <Swipeable ref={swipe} enabled={!disabled || canDownload} enableTrackpadTwoFingerGesture overshootRight={false}
-    containerStyle={styles.swipeCard} onSwipeableWillOpen={() => {
+  return <Swipeable ref={swipe} enabled={!disabled || canDownload} {...swipeCardGesture}
+    containerStyle={swipeCardStyles.container} onSwipeableWillOpen={() => {
       if (swipe.current) onOpen(swipe.current);
       setOpen(true);
     }} onSwipeableClose={() => setOpen(false)} renderRightActions={() =>
-      <View style={styles.actions} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>
+      <View style={swipeCardStyles.actions} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>
         {actions.map(({ action, label, Icon }) => {
           const actionDisabled = disabled && !(action === 'download' && canDownload);
-          return <Pressable key={action} accessibilityRole="button" accessibilityLabel={label}
-          accessibilityState={{ disabled: actionDisabled }} disabled={actionDisabled} onPress={() => execute(action)}
-          style={({ pressed }) => [styles.action, { backgroundColor: action === 'delete' ? theme.danger : theme.selection,
-            opacity: actionDisabled ? 0.4 : pressed ? 0.7 : 1 }]}>
-          <Icon size={22} color={action === 'delete' ? theme.onAccent : theme.accent} />
-          <Text style={[styles.actionLabel, { color: action === 'delete' ? theme.onAccent : theme.accent }]}>{label}</Text>
-        </Pressable>; })}
+          return <SwipeCardAction key={action} label={label} Icon={Icon} theme={theme} destructive={action === 'delete'}
+            disabled={actionDisabled} onPress={() => execute(action)} />;
+        })}
       </View>}>
     <View style={[styles.card, { backgroundColor: theme.surface }]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${name}, ${t(font.deleted ? 'cloud.recentlyDeleted' : font.localAvailable ? 'fontLocation.both' : 'fontLocation.cloudOnly')}, ${formatBytes(font.fileSize)}, ${status}`}
@@ -80,7 +77,6 @@ export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen,
 }
 
 const styles = StyleSheet.create({
-  swipeCard: { ...settingsLayout.card },
   card: { ...settingsLayout.card, minHeight: 80, flexDirection: 'row', alignItems: 'center', paddingRight: 8 },
   body: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   fileIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
@@ -89,7 +85,4 @@ const styles = StyleSheet.create({
   name: { ...settingsTypography.body, flexShrink: 1, minWidth: 0 },
   detail: { ...settingsTypography.detail, fontVariant: ['tabular-nums'] },
   more: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  actions: { ...settingsLayout.controls, flexDirection: 'row', gap: 8 },
-  action: { ...settingsLayout.control, width: 88, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 8 },
-  actionLabel: { fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });

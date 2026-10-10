@@ -1,4 +1,4 @@
-import { CheckIcon, ClockIcon, DotsThreeIcon, PlusIcon, SparkleIcon, StarIcon, TextAaIcon } from './icons';
+import { CheckIcon, ClockIcon, DotsThreeIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, StarIcon, TextAaIcon, TrashIcon } from './icons';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -9,6 +9,7 @@ import { FilterDrawer, FilterList } from './FilterDrawer';
 import { LibraryPanel } from './LibraryPanel';
 import { PanelTabs } from './PanelTabs';
 import { SmartConditionsEditor } from './SmartConditionsEditor';
+import { SwipeCardAction, swipeCardGesture, swipeCardStyles } from './SwipeCardAction';
 import { library } from './native';
 import { PanelAction, PanelSection, panelStyles } from './panel-content';
 import { hasSmartConditions, mergeSmartConditions, targetKey, type CollectionInput, type FontCollection, type FontFamily,
@@ -17,6 +18,7 @@ import { IconButton, type Theme } from './ui';
 
 type Folder = (FontCollection & { kind: 'manual' }) | (SmartFolder & { kind: 'smart' });
 type FolderEditor = { collection: Folder | null; input: CollectionInput; query: SmartConditions };
+const drawerCardRadius = 18;
 
 // 手动与智慧收藏夹混排，编辑器按条件自动判断类型。
 export function CollectionsPanel({ visible, theme, target, snapshot, currentConditions, libraryVersion, onSelect, onSnapshot, onClose }: {
@@ -30,7 +32,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteFromList, setDeleteFromList] = useState(false);
-  const openSwipe = useRef<SwipeableMethods | null>(null);
+  const openSwipe = useRef<{ key: string; methods: SwipeableMethods } | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
   ];
   function close() {
     if (pending.current) return;
-    openSwipe.current?.close(); setEditor(null); setDeleting(false); setConfirming(false); setError(null); onClose();
+    openSwipe.current?.methods.close(); setEditor(null); setDeleting(false); setConfirming(false); setError(null); onClose();
   }
   function cancelEditor() {
     if (pending.current) return;
@@ -49,7 +51,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
   }
   async function edit(collection: Folder | null) {
     if (pending.current) return;
-    openSwipe.current?.close(); setError(null); setDeleting(false); setDeleteFromList(false); setConfirming(false); setTab('general');
+    openSwipe.current?.methods.close(); setError(null); setDeleting(false); setDeleteFromList(false); setConfirming(false); setTab('general');
     pending.current = true; setBusy(true);
     try {
       let query: SmartConditions = collection ? { text: '', facets: [] }
@@ -65,7 +67,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
   }
   function requestDelete(collection: Folder) {
     if (pending.current) return;
-    openSwipe.current?.close(); setError(null); setConfirming(false); setDeleting(true); setDeleteFromList(true);
+    openSwipe.current?.methods.close(); setError(null); setConfirming(false); setDeleting(true); setDeleteFromList(true);
     setEditor({ collection, input: { name: collection.name, icon: collection.icon, color: collection.color }, query: { text: '', facets: [] } });
   }
   function cancelConfirmation() {
@@ -175,7 +177,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
       contentContainerStyle={panelStyles.content} keyboardShouldPersistTaps="handled"
       ListHeaderComponent={<View>
         {error && <Text accessibilityRole="alert" style={[panelStyles.section, { color: theme.danger }]}>{error}</Text>}
-        <Text accessibilityRole="header" style={[panelStyles.section, { color: theme.secondary }]}>{t('navigation.local')}</Text>
+        <Text accessibilityRole="header" style={[panelStyles.section, styles.sectionHeading, { color: theme.secondary }]}>{t('navigation.local')}</Text>
         <View style={styles.scopeOptions}>
           {([{ scope: 'all' }, { scope: 'recent' }, { scope: 'favorites' }] as LibraryTarget[]).map((value) => <Pressable key={value.scope}
             accessibilityRole="radio" disabled={busy} accessibilityState={{ checked: targetKey(target) === targetKey(value), disabled: busy }} onPress={() => select(value)}
@@ -187,7 +189,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
             {targetKey(target) === targetKey(value) && <CheckIcon size={20} color={theme.accent} />}
           </Pressable>)}
         </View>
-        <Text accessibilityRole="header" style={[panelStyles.section, styles.folderHeading, { color: theme.secondary }]}>{t('collection.collections')}</Text>
+        <Text accessibilityRole="header" style={[panelStyles.section, styles.sectionHeading, styles.folderHeading, { color: theme.secondary }]}>{t('collection.collections')}</Text>
         {(hasSmartConditions(currentConditions) || target.scope === 'smart') && <View style={styles.saveCurrent}>
           <PanelAction label={t('smartCollection.saveCurrent')} theme={theme} systemImage="sparkles"
             disabled={!snapshot || busy} onPress={() => { void edit(null); }} />
@@ -202,8 +204,10 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
         return <View style={styles.folderRow}>
           <FolderCard folder={folder} checked={checked} busy={busy} theme={theme} onSelect={() => select(value)}
             onEdit={() => { void edit(folder); }} onDelete={() => requestDelete(folder)} onOpen={(methods) => {
-              if (openSwipe.current !== methods) openSwipe.current?.close();
-              openSwipe.current = methods;
+              // 控制对象会随渲染重建，使用卡片身份避免收起自身。
+              const key = targetKey(value);
+              if (openSwipe.current?.key !== key) openSwipe.current?.methods.close();
+              openSwipe.current = { key, methods };
             }} />
         </View>;
       }} />
@@ -218,12 +222,12 @@ function FolderCard({ folder, checked, busy, theme, onSelect, onEdit, onDelete, 
   const { t } = useTranslation();
   const swipe = useRef<SwipeableMethods>(null);
   const [open, setOpen] = useState(false);
-  return <Swipeable ref={swipe} enabled={!busy} enableTrackpadTwoFingerGesture overshootRight={false}
-    containerStyle={styles.swipeCard} onSwipeableWillOpen={() => { if (swipe.current) onOpen(swipe.current); setOpen(true); }}
-    onSwipeableClose={() => setOpen(false)} renderRightActions={() => <View style={[styles.swipeActions, { backgroundColor: theme.surface }]}
+  return <Swipeable ref={swipe} enabled={!busy} {...swipeCardGesture}
+    containerStyle={[swipeCardStyles.container, styles.folderShape]} onSwipeableWillOpen={() => { if (swipe.current) onOpen(swipe.current); setOpen(true); }}
+    onSwipeableClose={() => setOpen(false)} renderRightActions={() => <View style={swipeCardStyles.actions}
       accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>
-      <PanelAction label={t('common.edit')} theme={theme} systemImage="pencil" disabled={busy} onPress={onEdit} />
-      <PanelAction label={t('common.delete')} theme={theme} primary destructive systemImage="trash" disabled={busy} onPress={onDelete} />
+      <SwipeCardAction label={t('common.edit')} theme={theme} Icon={PencilSimpleIcon} disabled={busy} cornerRadius={drawerCardRadius} onPress={onEdit} />
+      <SwipeCardAction label={t('common.delete')} theme={theme} destructive Icon={TrashIcon} disabled={busy} cornerRadius={drawerCardRadius} onPress={onDelete} />
     </View>}>
     <View style={[styles.folderCard, { backgroundColor: checked ? theme.selection : theme.surface }]}>
       <Pressable accessibilityRole="radio" disabled={busy} accessibilityState={{ checked, disabled: busy }}
@@ -234,7 +238,7 @@ function FolderCard({ folder, checked, busy, theme, onSelect, onEdit, onDelete, 
         onAccessibilityAction={({ nativeEvent }) => { if (!busy) { if (nativeEvent.actionName === 'edit') onEdit(); else if (nativeEvent.actionName === 'delete') onDelete(); } }}
         onPress={() => { if (open) swipe.current?.close(); else onSelect(); }} onLongPress={() => swipe.current?.openRight()}
         style={({ pressed }) => [styles.folderSelect, { opacity: pressed ? 0.6 : 1 }]}>
-        <CollectionSymbol icon={folder.icon} color={collectionColorValue(folder.color)} />
+        <CollectionSymbol icon={folder.icon} color={collectionColorValue(folder.color)} size={24} />
         <View style={styles.spacer}>
           <Text numberOfLines={1} style={[panelStyles.label, { flex: 0, color: theme.label }]}>{folder.name}</Text>
           {folder.kind === 'smart' && <View style={styles.smartLabel}><SparkleIcon size={14} color={theme.secondary} />
@@ -244,10 +248,12 @@ function FolderCard({ folder, checked, busy, theme, onSelect, onEdit, onDelete, 
         <Text style={[styles.count, { color: theme.secondary }]}>{folder.kind === 'smart' ? folder.matchCount : folder.memberCount}</Text>
         {checked && <CheckIcon size={20} color={theme.accent} />}
       </Pressable>
-      <IconButton label={`${folder.name}，${t('desktop.collectionActions')}`} theme={theme} disabled={busy} systemImage="ellipsis"
+      <Pressable accessibilityRole="button" accessibilityLabel={`${folder.name}，${t('desktop.collectionActions')}`}
+        accessibilityState={{ disabled: busy }} disabled={busy} hitSlop={12}
+        style={({ pressed }) => [styles.folderMore, { opacity: busy ? 0.4 : pressed ? 0.6 : 1 }]}
         onPress={() => { if (open) swipe.current?.close(); else swipe.current?.openRight(); }}>
-        <DotsThreeIcon size={24} color={theme.accent} />
-      </IconButton>
+        <DotsThreeIcon size={20} color={theme.accent} />
+      </Pressable>
     </View>
   </Swipeable>;
 }
@@ -257,12 +263,14 @@ const styles = StyleSheet.create({
   confirmation: { gap: 12 }, confirmTitle: { fontSize: 18, fontWeight: '600' },
   confirmActions: { paddingVertical: 16, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 },
   scopeOptions: { gap: 8 },
-  scopeCard: { minHeight: 64, padding: 16, borderRadius: 24, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  sectionHeading: { paddingHorizontal: 16 },
+  scopeCard: { minHeight: 64, padding: 16, borderRadius: drawerCardRadius, flexDirection: 'row', alignItems: 'center', gap: 12 },
   folderHeading: { marginTop: 8 }, folderRow: { paddingBottom: 8 },
   emptyFolders: { paddingVertical: 12 }, saveCurrent: { paddingBottom: 12 },
-  swipeCard: { borderRadius: 24 }, swipeActions: { flexDirection: 'row', alignItems: 'center', paddingLeft: 8, gap: 8 },
-  folderCard: { paddingRight: 8, minHeight: 64, borderRadius: 24, flexDirection: 'row', alignItems: 'center' },
-  folderSelect: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12 },
+  folderShape: { borderRadius: drawerCardRadius },
+  folderCard: { paddingHorizontal: 16, minHeight: 64, borderRadius: drawerCardRadius, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  folderSelect: { flex: 1, minHeight: 64, flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 12 },
+  folderMore: { width: 20, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   smartLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   count: { fontSize: 14, fontVariant: ['tabular-nums'] },
   icon: { borderRadius: 12 }, swatch: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },

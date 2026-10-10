@@ -185,7 +185,9 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
     return () => cancelAnimation(pressShadowProgress);
   }, [buttonPressed, reduceMotion, pressShadowProgress]);
   const restingSurface = primary ? theme.accent : withAlpha(theme.buttonSurface, theme.buttonSurfaceOpacity);
-  const pressedSurface = withAlpha(theme.buttonPressed, theme.buttonSurfaceOpacity);
+  const pressedSurface = primary && !theme.dark
+    ? interpolateColor(0.16, [0, 1], [theme.accent, themes.light.onAccent], 'RGB', { gamma: 1 })
+    : withAlpha(theme.buttonPressed, theme.buttonSurfaceOpacity);
   const feedbackStyle = useAnimatedStyle(() => ({
     backgroundColor: Platform.OS === 'android'
       ? interpolateColor(pressShadowProgress.value, [0, 1], [restingSurface, pressedSurface])
@@ -229,7 +231,7 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
         <View pointerEvents="none" style={styles.iconContent}>
           {buttonPressed ? Children.map(children, (child) =>
             isValidElement<{ color?: string }>(child) && 'color' in child.props
-              ? cloneElement(child, { color: theme.buttonPressedLabel }) : child) : children}
+              ? cloneElement(child, { color: primary && !theme.dark ? theme.onAccent : theme.buttonPressedLabel }) : child) : children}
         </View>
       </AnimatedPressable>
     </Animated.View>

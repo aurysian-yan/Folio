@@ -4,6 +4,8 @@ import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
+import android.view.RoundedCorner
 import com.folio.poc.ffi.SmartFolderIdDto
 import com.folio.poc.ffi.CollectionIdDto
 import com.folio.poc.ffi.FolioEngine
@@ -99,6 +101,17 @@ class FolioNativeModule : Module() {
         Function("wallpaperSeed") { FolioMaterialColors.wallpaperSeed(context()) }
         Function("materialPalette") { seed: String, dark: Boolean, followWallpaper: Boolean ->
             FolioMaterialColors.scheme(context(), seed, dark, followWallpaper)
+        }
+
+        // 屏幕顶部圆角按当前窗口方向读取，并转换为 dp。
+        Function("screenCornerRadius") {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) 0.0
+            else {
+                val insets = appContext.currentActivity?.windowManager?.currentWindowMetrics?.windowInsets
+                val radius = listOf(RoundedCorner.POSITION_TOP_LEFT, RoundedCorner.POSITION_TOP_RIGHT)
+                    .mapNotNull { insets?.getRoundedCorner(it)?.radius }.maxOrNull() ?: 0
+                radius.toDouble() / context().resources.displayMetrics.density
+            }
         }
 
         AsyncFunction("initialize") { promise: Promise ->
