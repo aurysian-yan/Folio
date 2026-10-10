@@ -16,6 +16,9 @@ test('Material3 角色映射到卡片、背景、文字与强调色', () => {
   assert.equal(light.surface, roles.surface);
   assert.equal(light.listCardSurface, roles.surface);
   assert.equal(light.tab, roles.surface);
+  assert.equal(light.buttonSurface, roles.surface);
+  assert.equal(light.buttonSurfaceOpacity, 0.9);
+  assert.equal(light.buttonPressed, roles.surface);
   assert.equal(light.raised, roles.surfaceContainerHigh);
   assert.equal(light.label, roles.onSurface);
   assert.equal(light.secondary, roles.onSurfaceVariant);
@@ -29,6 +32,9 @@ test('Material3 角色映射到卡片、背景、文字与强调色', () => {
   assert.equal(dark.surface, roles.surfaceContainer);
   assert.equal(dark.listCardSurface, roles.surfaceContainerHigh);
   assert.equal(dark.tab, roles.surfaceContainerHigh);
+  assert.equal(dark.buttonSurface, roles.surfaceContainer);
+  assert.equal(dark.buttonSurfaceOpacity, 0.9);
+  assert.equal(dark.buttonPressed, roles.surfaceContainer);
 });
 
 test('选中态透明度随浅深色变化', () => {

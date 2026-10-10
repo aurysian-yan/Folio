@@ -40,6 +40,7 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
     var dark by mutableStateOf(false)
     var triggerIcon by mutableStateOf("caret")
     var triggerSurface by mutableStateOf(false)
+    var shadowProgress by mutableStateOf(0f)
     var colors by mutableStateOf<FolioViewMenuColors?>(null)
     var labels by mutableStateOf<FolioPresetMenuLabels?>(null)
     var items by mutableStateOf(emptyList<FolioNavigationItem>())
@@ -72,6 +73,7 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
                         }
                     }, modifier = Modifier.fillMaxSize(),
                     triggerBackdrop = if (triggerSurface) backdrop else EmptyNavigationBackdrop,
+                    shadowProgress = shadowProgress,
                     onPressedChange = { triggerPressed = it },
                     showTriggerSurface = triggerSurface) { progress ->
                     if (isActionsTrigger) {

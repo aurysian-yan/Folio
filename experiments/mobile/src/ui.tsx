@@ -22,7 +22,7 @@ export const themes = {
     backButtonBorder: '#E4E4E4',
     selection: 'rgba(240, 104, 53, 0.2)', tab: '#F7F7F7', activeTab: '#E6E6E6',
     switchTrack: '#D8D8DC', switchThumb: '#FFFFFF',
-    buttonPressed: '#FFFFFF', buttonPressedLabel: '#1A1A1A',
+    buttonSurface: '#F7F7F7', buttonSurfaceOpacity: 1, buttonPressed: '#FFFFFF', buttonPressedLabel: '#1A1A1A',
     listCardSurface: '#D8D8D8', listCardBorder: 'rgba(0, 0, 0, 0.1)',
     scrim: 'rgba(0, 0, 0, 0.16)', shadow: '#000000', danger: '#C62828',
   },
@@ -34,7 +34,7 @@ export const themes = {
     backButtonBorder: '#38383A',
     selection: 'rgba(255, 135, 88, 0.25)', tab: '#202020', activeTab: '#38383A',
     switchTrack: '#606064', switchThumb: '#FFFFFF',
-    buttonPressed: '#38383A', buttonPressedLabel: '#F2F2F2',
+    buttonSurface: '#202020', buttonSurfaceOpacity: 1, buttonPressed: '#38383A', buttonPressedLabel: '#F2F2F2',
     listCardSurface: '#242424', listCardBorder: 'rgba(255, 255, 255, 0.1)',
     scrim: 'rgba(0, 0, 0, 0.48)', shadow: '#000000', danger: '#FF8A80',
   },
@@ -46,12 +46,12 @@ export type Theme = typeof themes.light;
 const androidColors = {
   light: {
     background: '#F3F3F3', surface: '#FFFFFF', raised: '#EDEDED', label: '#000000',
-    secondary: '#666666', backButtonBorder: '#CCCCCC',
+    secondary: '#666666', backButtonBorder: '#CCCCCC', buttonSurface: '#FFFFFF',
     listCardSurface: '#FFFFFF', listCardBorder: 'rgba(0, 0, 0, 0.06)',
   },
   dark: {
     background: '#000000', surface: '#242424', raised: '#303030', label: '#F4F4F4',
-    secondary: '#929292', muted: '#8C8C8C', border: '#363636',
+    secondary: '#929292', muted: '#8C8C8C', border: '#363636', backButtonBorder: '#363636',
     listCardSurface: '#242424', listCardBorder: 'rgba(255, 255, 255, 0.08)',
   },
 };
@@ -117,7 +117,6 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
   const [dragging, setDragging] = useState(false);
   const draggingRef = useRef(false);
   const draggable = Platform.OS === 'android' && systemImage === 'chevron.left';
-  const lightBackButton = draggable && !theme.dark;
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
     let mounted = true;
@@ -185,7 +184,12 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
     });
     return () => cancelAnimation(pressShadowProgress);
   }, [buttonPressed, reduceMotion, pressShadowProgress]);
-  const shadowStyle = useAnimatedStyle(() => ({
+  const restingSurface = primary ? theme.accent : withAlpha(theme.buttonSurface, theme.buttonSurfaceOpacity);
+  const pressedSurface = withAlpha(theme.buttonPressed, theme.buttonSurfaceOpacity);
+  const feedbackStyle = useAnimatedStyle(() => ({
+    backgroundColor: Platform.OS === 'android'
+      ? interpolateColor(pressShadowProgress.value, [0, 1], [restingSurface, pressedSurface])
+      : buttonPressed ? theme.buttonPressed : primary ? theme.accent : theme.buttonSurface,
     boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 32,
       color: interpolateColor(pressShadowProgress.value, [0, 1], [shadowColor, pressedShadowColor]) }],
   }));
@@ -219,11 +223,9 @@ export function IconButton({ label, onPress, children, theme, disabled, busy, se
         disabled={disabled} onPress={onPress} onPressIn={() => { setPressed(true); animatePress(true); }}
         onPressOut={() => { setPressed(false); if (!draggingRef.current) animatePress(false); }} hitSlop={8}
         style={[styles.iconButton, {
-          backgroundColor: buttonPressed ? theme.buttonPressed
-            : primary ? theme.accent : lightBackButton ? theme.surface : theme.tab,
-          borderColor: primary ? theme.accent : lightBackButton ? theme.backButtonBorder : theme.border,
+          borderColor: primary ? theme.accent : Platform.OS === 'android' ? theme.backButtonBorder : theme.border,
           opacity: disabled ? 0.4 : 1,
-        }, style, shadowStyle]}>
+        }, style, feedbackStyle]}>
         <View pointerEvents="none" style={styles.iconContent}>
           {buttonPressed ? Children.map(children, (child) =>
             isValidElement<{ color?: string }>(child) && 'color' in child.props

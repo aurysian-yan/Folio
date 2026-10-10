@@ -19,24 +19,29 @@
 
 ## 角色映射
 
-原生返回以下角色，`src/material-theme.ts` 将其映射到现有 `Theme` token
-（不新增主题字段）：
+原生返回以下角色，`src/material-theme.ts` 将其映射到 `Theme` token：
 
 | Material3 角色 | Folio token |
 | --- | --- |
 | `primary` | `accent`、`selection` 基底 |
 | `onPrimary` | `onAccent` |
 | `primaryContainer` | `activeTab` |
-| `surface` | `background` |
-| `surfaceContainer` | `surface`（设置卡片等） |
-| `surfaceContainerHigh` | `raised`、`tab`、`listCardSurface` |
-| `surfaceContainerHighest` | `buttonPressed`、`switchTrack` |
+| `surface` | 深色 `background`；浅色 `surface`、`tab`、`listCardSurface`、`buttonSurface`、`buttonPressed` |
+| `surfaceContainer` | 浅色 `background`；深色 `surface`（设置卡片等）、`buttonSurface`、`buttonPressed` |
+| `surfaceContainerHigh` | `raised`；深色 `tab`、`listCardSurface` |
+| `surfaceContainerHighest` | `switchTrack` |
 | `onSurface` | `label`、`buttonPressedLabel` |
 | `onSurfaceVariant` | `secondary`、`muted` |
 | `outlineVariant` | `border`、`backButtonBorder`、`listCardBorder` |
 | `error` | `danger` |
 
 英雄态语义色、`scrim`、`shadow` 与开关拨片保持既有语义，不参与映射。
+
+安卓图标按钮统一使用 `buttonSurface` 与 `buttonPressed` 表示常态和按压
+底色，描边沿用 `backButtonBorder`，宽度与返回按钮一致。按钮底色独立于
+`tab`，不会改变底部导航、搜索框和卡片配色。开启 MD3 后，按钮始终使用
+卡片前景底色，`buttonSurfaceOpacity` 为 0.9，仅背景半透明；滚动、标题
+折叠和按压均不改变底色，图标与描边保持清晰。
 
 ## 原生接口
 

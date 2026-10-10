@@ -17,7 +17,7 @@ interface NativeAndroidHeaderProps extends ViewProps {
   filterCount: number;
   shadowProgress: number;
   labels: { search: string; searchPlaceholder: string; clearSearch: string; filter: string; importFonts: string; loadingImport: string; viewOptions: string; viewMode: string; gridView: string; listView: string; expanded: string; collapsed: string };
-  colors: Pick<AndroidHeaderProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'raised' | 'shadow' | 'buttonPressed' | 'buttonPressedLabel'>;
+  colors: Pick<AndroidHeaderProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'backButtonBorder' | 'raised' | 'shadow' | 'buttonSurface' | 'buttonSurfaceOpacity' | 'buttonPressed' | 'buttonPressedLabel'>;
   onModeChange: (event: NativeSyntheticEvent<{ mode: 'grid' | 'list' }>) => void;
   onExpandedChange: (event: NativeSyntheticEvent<{ expanded: boolean }>) => void;
   onImport: () => void;
@@ -46,14 +46,14 @@ export function AndroidHeaderControls({ sourceId, theme, mode, active, width, re
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
   // 搜索框、顶栏图标与菜单面板统一使用当前主题色，覆盖 Material3 配色。
-  const { label, secondary, muted, tab, border, accent, surface: raised, shadow, buttonPressed, buttonPressedLabel } = theme;
+  const { label, secondary, muted, tab, border, backButtonBorder, accent, surface: raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
   return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
     ready={ready} importing={importing} importBlocked={importBlocked} searchOpen={searchOpen} searchText={searchText}
     labels={{ search: t('mobile.searchFonts'), searchPlaceholder: t('mobile.searchPlaceholder'), clearSearch: t('mobile.clearSearch'),
       filter: filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'),
       importFonts: t('import.importFonts'), loadingImport: t('mobile.loadingImport'), viewOptions: t('libraryView.viewOptions'), viewMode: t('mobile.viewMode'),
       gridView: t('mobile.gridView'), listView: t('mobile.listView'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
-    colors={{ label, secondary, muted, accent, tab, border, raised, shadow, buttonPressed, buttonPressedLabel }} shadowProgress={shadowProgress} style={[styles.header, { width }]}
+    colors={{ label, secondary, muted, accent, tab, border, backButtonBorder, raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }} shadowProgress={shadowProgress} style={[styles.header, { width }]}
     onImport={onImport} onFilter={onFilter} filterCount={filterCount}
     onSearchTextChange={({ nativeEvent }) => onSearchTextChange(nativeEvent.text)}
     onExpandedChange={({ nativeEvent }) => { if (nativeEvent.expanded) Keyboard.dismiss(); }}

@@ -5,6 +5,7 @@ import android.content.res.ColorStateList
 import android.os.Build
 import android.widget.ProgressBar
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -50,9 +51,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp as lerpColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.platform.ComposeView
@@ -120,8 +125,11 @@ class FolioViewMenuColors : Record {
     @Field var accent: String = ""
     @Field var tab: String = ""
     @Field var border: String = ""
+    @Field var backButtonBorder: String = "#E4E4E4"
     @Field var raised: String = ""
     @Field var shadow: String = "#000000"
+    @Field var buttonSurface: String = "#F7F7F7"
+    @Field var buttonSurfaceOpacity: Float = 1f
     @Field var buttonPressed: String = "#FFFFFF"
     @Field var buttonPressedLabel: String = "#1A1A1A"
 }
@@ -262,6 +270,9 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
     val pressed = enabled && (touchPressed || drag.isPressed)
     val motionEnabled = (animationScope.coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f) > 0f
     LaunchedEffect(pressed) { onPressedChange(pressed) }
+    // 按住与松开共用颜色过渡，减少动态效果时直接切换。
+    val surfaceProgress = animateFloatAsState(if (pressed) 1f else 0f,
+        animationSpec = tween(if (motionEnabled) 220 else 0), label = "buttonSurface")
     val shape = ContinuousCapsule()
     return drawWithContent { backdrop.contentVersion; drawContent() }
         .drawBackdrop(backdrop = backdrop, shape = { shape }, highlight = null,
@@ -275,7 +286,6 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
                 vibrancy()
                 blur(if (dark) 12.dp.toPx() else 16.dp.toPx())
             },
-            onDrawBehind = { if (showSurface) drawRect(colors.tab.menuColor()) },
             layerBlock = {
                 val offset = if (motionEnabled && enabled) drag.offset else Offset.Zero
                 val pressed = if (motionEnabled && enabled) drag.pressProgress.coerceIn(-0.35f, 1.35f) else 0f
@@ -291,11 +301,18 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
             },
             onDrawSurface = {
                 if (showSurface) {
-                    if (pressed) drawRect(colors.buttonPressed.menuColor())
-                    else drawRect(colors.tab.menuColor().copy(alpha = if (Build.VERSION.SDK_INT >= 31) 0.70f else 0.96f))
+                    drawRect(lerpColor(colors.buttonSurface.menuColor(), colors.buttonPressed.menuColor(), surfaceProgress.value)
+                        .copy(alpha = colors.buttonSurfaceOpacity.coerceIn(0f, 1f)))
+                }
+            },
+            onDrawFront = {
+                // 保留返回按钮的 1.2 物理像素描边，避免整数取整加粗。
+                if (showSurface) inset(0.6f) {
+                    drawOutline(shape.createOutline(size, layoutDirection, this),
+                        colors.backButtonBorder.menuColor(), style = Stroke(1.2f))
                 }
             })
-        .then(if (showSurface) Modifier.glassOutline(shape, colors) else Modifier.clip(shape))
+        .clip(shape)
         .then(if (enabled) drag.gestureModifier else Modifier)
         .clickable(enabled = enabled, interactionSource = interactionSource,
             indication = null, role = Role.Button, onClick = onClick)

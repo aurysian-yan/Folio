@@ -20,7 +20,7 @@ function withAlpha(hex: string, alpha: number) {
   return `rgba(${(value >> 16) & 0xff}, ${(value >> 8) & 0xff}, ${value & 0xff}, ${alpha})`;
 }
 
-// 把 Material3 角色映射到既有语义 token，不新增主题字段。
+// 把 Material3 角色映射到界面语义色。
 export function materialThemeOverrides(roles: MaterialRoles, dark: boolean): Partial<Theme> {
   return {
     accent: roles.primary,
@@ -36,7 +36,9 @@ export function materialThemeOverrides(roles: MaterialRoles, dark: boolean): Par
     backButtonBorder: roles.outlineVariant,
     tab: dark ? roles.surfaceContainerHigh : roles.surface,
     activeTab: roles.primaryContainer,
-    buttonPressed: roles.surfaceContainerHighest,
+    buttonSurface: dark ? roles.surfaceContainer : roles.surface,
+    buttonSurfaceOpacity: 0.9,
+    buttonPressed: dark ? roles.surfaceContainer : roles.surface,
     buttonPressedLabel: roles.onSurface,
     switchTrack: roles.surfaceContainerHighest,
     listCardSurface: dark ? roles.surfaceContainerHigh : roles.surface,
