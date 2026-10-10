@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 
 // 移动端偏好：外观、字体卡片与导入行为，统一持久化到设备本地。
 export type AppearanceMode = 'system';
-export type AccentId = 'folio' | 'blue' | 'green' | 'purple' | 'wallpaper';
+export type AccentId = 'folio' | 'blue' | 'green' | 'purple' | 'yellow' | 'pink' | 'cyan' | 'wallpaper';
 export type LibraryMode = 'grid' | 'list';
 
 export interface Preferences {
@@ -32,7 +32,7 @@ export const defaultPreferences: Preferences = {
 export const previewScaleOptions = [18, 24, 30] as const;
 
 const storageKey = 'folio.mobile.preferences.v1';
-const accentValues: readonly AccentId[] = ['folio', 'blue', 'green', 'purple', 'wallpaper'];
+const accentValues: readonly AccentId[] = ['folio', 'blue', 'green', 'purple', 'yellow', 'pink', 'cyan', 'wallpaper'];
 const viewModeValues: readonly LibraryMode[] = ['grid', 'list'];
 
 function pick<T extends string>(values: readonly T[], value: unknown, fallback: T): T {

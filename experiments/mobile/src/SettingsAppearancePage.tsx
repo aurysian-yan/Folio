@@ -23,6 +23,9 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
     { id: 'blue', label: t('mobile.settings.accentBlue') },
     { id: 'green', label: t('mobile.settings.accentGreen') },
     { id: 'purple', label: t('mobile.settings.accentPurple') },
+    { id: 'yellow', label: t('color.yellow') },
+    { id: 'pink', label: t('color.pink') },
+    { id: 'cyan', label: t('color.cyan') },
     ...(wallpaperAccent ? [{ id: 'wallpaper' as AccentId, label: t('mobile.settings.accentWallpaper') }] : []),
   ];
 
@@ -75,8 +78,8 @@ const styles = StyleSheet.create({
   title: { ...settingsTypography.body },
   detail: { ...settingsTypography.detail },
   modeValue: { fontSize: 14, lineHeight: 20 },
-  swatches: { flexDirection: 'row', flexWrap: 'wrap', padding: settingsLayout.section.paddingHorizontal, gap: 12 },
-  swatchOption: { flex: 1, minWidth: 56, alignItems: 'center', gap: 8 },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', padding: settingsLayout.section.paddingHorizontal, rowGap: 12 },
+  swatchOption: { width: '25%', alignItems: 'center', gap: 8 },
   swatchOutline: { padding: 4, borderRadius: 26, borderWidth: 2 },
   swatch: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   swatchLabel: { ...settingsTypography.detail, textAlign: 'center' },

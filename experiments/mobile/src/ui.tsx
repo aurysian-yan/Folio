@@ -63,6 +63,9 @@ export const accentPresets: Record<FixedAccentId, { light: string; dark: string 
   blue: { light: '#0A84FF', dark: '#4CA6FF' },
   green: { light: '#2FA84F', dark: '#4CD07A' },
   purple: { light: '#8E5CF7', dark: '#B18CFF' },
+  yellow: { light: '#B88400', dark: '#FFD45C' },
+  pink: { light: '#E5216E', dark: '#FF77A8' },
+  cyan: { light: '#008C9E', dark: '#4CD9E8' },
 };
 
 function withAlpha(hex: string, alpha: number) {
