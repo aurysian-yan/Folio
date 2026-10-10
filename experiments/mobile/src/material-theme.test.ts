@@ -35,6 +35,11 @@ test('Material3 角色映射到卡片、背景、文字与强调色', () => {
   assert.equal(dark.buttonSurface, roles.surfaceContainer);
   assert.equal(dark.buttonSurfaceOpacity, 0.9);
   assert.equal(dark.buttonPressed, roles.surfaceContainer);
+  for (const theme of [light, dark]) {
+    for (const key of ['heroNormal', 'heroDamaged', 'heroUpdate', 'heroCloud', 'heroConflict'] as const) {
+      assert.equal(theme[key], roles.primary);
+    }
+  }
 });
 
 test('选中态透明度随浅深色变化', () => {

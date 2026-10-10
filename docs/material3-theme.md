@@ -23,7 +23,7 @@
 
 | Material3 角色 | Folio token |
 | --- | --- |
-| `primary` | `accent`、`selection` 基底 |
+| `primary` | `accent`、`selection` 基底、全部 `hero*` 图标色 |
 | `onPrimary` | `onAccent` |
 | `primaryContainer` | `activeTab` |
 | `surface` | 深色 `background`；浅色 `surface`、`tab`、`listCardSurface`、`buttonSurface`、`buttonPressed` |
@@ -35,7 +35,8 @@
 | `outlineVariant` | `border`、`backButtonBorder`、`listCardBorder` |
 | `error` | `danger` |
 
-英雄态语义色、`scrim`、`shadow` 与开关拨片保持既有语义，不参与映射。
+开启 MD3 后，主页 Hero 各状态的图标统一使用强调色；关闭时保留既有状态色。
+`scrim`、`shadow` 与开关拨片保持既有语义，不参与映射。
 
 安卓图标按钮统一使用 `buttonSurface` 与 `buttonPressed` 表示常态和按压
 底色，描边沿用 `backButtonBorder`，宽度与返回按钮一致。按钮底色独立于

@@ -25,6 +25,11 @@ export function materialThemeOverrides(roles: MaterialRoles, dark: boolean): Par
   return {
     accent: roles.primary,
     onAccent: roles.onPrimary,
+    heroNormal: roles.primary,
+    heroDamaged: roles.primary,
+    heroUpdate: roles.primary,
+    heroCloud: roles.primary,
+    heroConflict: roles.primary,
     // 浅色页面使用带色容器底，卡片保持接近白色；深色沿用原有层次。
     background: dark ? roles.surface : roles.surfaceContainer,
     surface: dark ? roles.surfaceContainer : roles.surface,
