@@ -18,7 +18,8 @@ android {
     versionCode 1
     versionName '0.1.0'
     minSdkVersion 28
-    testInstrumentationRunner project.findProperty('folioSyncTarget') ? 'com.folio.poc.FolioLiveSyncInstrumentation' : 'com.folio.poc.FolioSyncInstrumentation'
+    testInstrumentationRunner project.findProperty('folioSwitchTest') ? 'com.folio.poc.FolioSwitchRefractionInstrumentation' :
+      project.findProperty('folioSyncTarget') ? 'com.folio.poc.FolioLiveSyncInstrumentation' : 'com.folio.poc.FolioSyncInstrumentation'
     consumerProguardFiles 'consumer-rules.pro'
   }
   sourceSets.main.java.srcDirs += 'generated'

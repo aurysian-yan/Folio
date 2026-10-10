@@ -21,9 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -53,9 +51,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.internal.clipOutline
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.capsule.ContinuousCapsule
@@ -135,12 +131,13 @@ private fun GlassToggle(label: String, checked: Boolean, enabled: Boolean, dark:
     }
     val backdrop = rememberLayerBackdrop()
     val shape = ContinuousCapsule()
-    val sampleClipPath = remember { Path() }
     val density = LocalDensity.current
     val travel = with(density) { 20.dp.toPx() }
     val press = if (motionEnabled) animation.pressProgress.coerceIn(0f, 1f) else 0f
     val dragStretch = if (motionEnabled) animation.dragStretch * press else 0f
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val fraction = animation.value.coerceIn(0f, 1f)
+    val thumbTranslation = travel * ((if (isLtr) fraction else 1f - fraction) - 0.5f)
     val touchSlop = LocalViewConfiguration.current.touchSlop
 
     Box(Modifier.fillMaxSize().toggleable(checked, remember { MutableInteractionSource() }, indication = null,
@@ -154,36 +151,21 @@ private fun GlassToggle(label: String, checked: Boolean, enabled: Boolean, dark:
         // 玻璃只采样底色和轨道，避免将拨片自身重复折射。
         Box(Modifier.fillMaxSize().layerBackdrop(backdrop).background(surface), contentAlignment = Alignment.Center) {
             Box(Modifier.size(56.dp, 26.dp)
-                .background(lerp(track, accent, animation.value.coerceIn(0f, 1f)), shape))
+                .background(lerp(track, accent, fraction), shape))
         }
         Box(Modifier.size(56.dp, 26.dp).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
             // 白色长拨片按住后扩展成玻璃，轮廓始终按实际宽高生成。
             Box(Modifier.requiredSize(32.dp + 20.dp * press + 8.dp * dragStretch,
                 22.dp + 14.dp * press - 3.dp * dragStretch).graphicsLayer {
-                val fraction = animation.value.coerceIn(0f, 1f)
-                translationX = travel * ((if (isLtr) fraction else 1f - fraction) - 0.5f)
+                translationX = thumbTranslation
             }.drawBackdrop(backdrop, shape = { shape }, downsampleScale = 1f, effects = {
-                blur(0.5.dp.toPx() * press)
-                // 反向折射将轨道压入透镜中央，上下保留透明玻璃的底色。
-                lens(18.dp.toPx() * press, 14.dp.toPx() * press, depthEffect = true, inverseRefraction = true)
-            }, highlight = { Highlight.Default.copy(alpha = 0.65f * press) },
-                shadow = { Shadow(radius = 2.dp + 6.dp * press, color = Color.Black.copy(alpha = if (dark) 0.36f else 0.16f)) },
-                innerShadow = { InnerShadow(radius = 2.dp, offset = DpOffset(0.dp, 1.dp),
-                    color = Color.Black.copy(alpha = if (dark) 0.18f else 0.1f), alpha = press) },
-                onDrawBackdrop = { drawBackdrop ->
-                    // 只折射拨片附近的轨道，关闭态的透镜端部保持完整。
-                    drawRect(surface)
-                    val sampleSize = Size(44.dp.toPx(), 26.dp.toPx())
-                    val insetX = (size.width - sampleSize.width) / 2f
-                    val insetY = (size.height - sampleSize.height) / 2f
-                    val canvas = drawContext.canvas
-                    canvas.save()
-                    canvas.translate(insetX, insetY)
-                    canvas.clipOutline(shape.createOutline(sampleSize, layoutDirection, this), sampleClipPath)
-                    canvas.translate(-insetX, -insetY)
-                    drawBackdrop()
-                    canvas.restore()
-                },
+                blur(0.35.dp.toPx() * press)
+                switchRefraction(press, thumbTranslation)
+            }, highlight = { Highlight.Default.copy(alpha = 0.35f * press) },
+                shadow = { Shadow(radius = 2.dp + 2.dp * press,
+                    color = Color.Black.copy(alpha = if (dark) 0.36f - 0.08f * press else 0.16f - 0.04f * press)) },
+                innerShadow = { InnerShadow(radius = 1.dp, offset = DpOffset(0.dp, 0.5.dp),
+                    color = Color.Black.copy(alpha = if (dark) 0.1f else 0.06f), alpha = press) },
                 onDrawSurface = { drawRect(thumb.copy(alpha = 1f - press)) }))
         }
         Box(Modifier.fillMaxSize().clearAndSetSemantics {}
