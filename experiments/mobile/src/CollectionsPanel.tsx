@@ -1,13 +1,15 @@
 import { CheckIcon, ClockIcon, DotsThreeIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, StarIcon, TextAaIcon, TrashIcon } from './icons';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { useSharedValue } from 'react-native-reanimated';
 import { collectionColors, collectionIcons, CollectionSymbol, collectionColorValue } from './collection-style';
 import { CollectionEditorDialog } from './CollectionEditorDialog';
-import { FilterDrawer, FilterList } from './FilterDrawer';
+import { FilterDrawer, FilterList, FilterScrollView, FilterTextInput } from './FilterDrawer';
 import { LibraryPanel } from './LibraryPanel';
 import { PanelTabs } from './PanelTabs';
+import { CloudPanelTabs } from './CloudPanelTabs';
 import { SmartConditionsEditor } from './SmartConditionsEditor';
 import { SwipeCardAction, swipeCardGesture, swipeCardStyles } from './SwipeCardAction';
 import { library } from './native';
@@ -19,6 +21,13 @@ import { IconButton, type Theme } from './ui';
 type Folder = (FontCollection & { kind: 'manual' }) | (SmartFolder & { kind: 'smart' });
 type FolderEditor = { collection: Folder | null; input: CollectionInput; query: SmartConditions };
 const drawerCardRadius = 18;
+const EditorPanel = Platform.OS === 'android' ? FilterDrawer : CollectionEditorDialog;
+const EditorTabs = Platform.OS === 'android' ? CloudPanelTabs : PanelTabs;
+
+function choiceRows<T>(items: readonly T[], columns: number) {
+  return Array.from({ length: Math.ceil(items.length / columns) }, (_, row) =>
+    Array.from({ length: columns }, (_, column) => items[row * columns + column]));
+}
 
 // 手动与智慧收藏夹混排，编辑器按条件自动判断类型。
 export function CollectionsPanel({ visible, theme, target, snapshot, currentConditions, libraryVersion, onSelect, onSnapshot, onClose }: {
@@ -28,6 +37,10 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
 }) {
   const { t } = useTranslation();
   const [editor, setEditor] = useState<FolderEditor | null>(null);
+  const stackIndex = useSharedValue(-1);
+  const [choicesWidth, setChoicesWidth] = useState(0);
+  // 按实际可用宽度均分整列，保留末行的列对齐。
+  const choiceColumns = Math.max(1, Math.floor((choicesWidth + panelStyles.choices.gap) / (44 + panelStyles.choices.gap)));
   const [tab, setTab] = useState<'general' | 'filters'>('general');
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -108,14 +121,24 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
   }
   function select(value: LibraryTarget) { if (!pending.current) { onSelect(value); close(); } }
   const colorLabel = collectionColors.find((item) => item.key === editor?.input.color)?.label ?? t('color.gray');
+  const editorTabs = <View style={styles.tabs}>
+    <EditorTabs label={t('collection.settings')} value={tab} disabled={busy} theme={theme}
+      options={[{ value: 'general', label: t('collection.general'), systemImage: 'folder' },
+        { value: 'filters', label: t('filters.conditions'), systemImage: 'line.3.horizontal.decrease' }]}
+      onChange={(value) => { if (value === 'general' || value === 'filters') setTab(value); }} />
+  </View>;
 
-  if (editor) return <CollectionEditorDialog visible={visible} title={deleting ? t('collection.delete') : confirming
+  const editorPanel = editor ? <EditorPanel visible={visible} title={deleting ? t('collection.delete') : confirming
     ? t(isSmart ? 'smartCollection.convertToSmartTitle' : 'smartCollection.convertToManualTitle') : editor.collection ? t('collection.edit') : t('collection.new')}
-    theme={theme} busy={busy} closeLabel={t('common.cancel')} onClose={confirming || deleting ? cancelConfirmation : cancelEditor}
+    theme={theme} busy={busy} nested={Platform.OS === 'android'} stackIndex={stackIndex} backButton={Platform.OS === 'android'} closeLabel={Platform.OS === 'android'
+      ? t(confirming || (deleting && !deleteFromList) ? 'mobile.backToEditing' : 'mobile.backToLibrary') : t('common.cancel')}
+    onBack={Platform.OS === 'android' && (confirming || deleting) ? cancelConfirmation : undefined}
+    onClose={Platform.OS === 'android' ? cancelEditor : confirming || deleting ? cancelConfirmation : cancelEditor}
+    headerAccessory={Platform.OS === 'android' && !confirming && !deleting ? editorTabs : undefined}
     headerAction={!confirming && !deleting ? <IconButton label={busy ? t('mobile.saving') : t(editor.collection ? 'common.save' : 'common.create')}
       theme={theme} primary systemImage="checkmark" disabled={busy || !editor.input.name.trim()} busy={busy}
       onPress={() => { void save(); }}><CheckIcon size={20} color={theme.onAccent} /></IconButton> : undefined}>
-    {confirming || deleting ? <ScrollView contentContainerStyle={panelStyles.content}>
+    {confirming || deleting ? <FilterScrollView contentContainerStyle={panelStyles.content}>
       <View style={[panelStyles.card, styles.confirmation, { backgroundColor: theme.surface }]}>
         <CollectionSymbol icon={editor.input.icon} color={collectionColorValue(editor.input.color)} />
         <Text style={[styles.confirmTitle, { color: theme.label }]}>{deleting ? t('collection.deleteConfirmTitle', { name: editor.input.name }) : editor.input.name}</Text>
@@ -128,49 +151,56 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
         <PanelAction label={deleting ? t('collection.delete') : t('common.confirm')} theme={theme} primary destructive={deleting} disabled={busy}
           systemImage={deleting ? 'trash' : 'checkmark'} onPress={() => { void save(deleting, true); }} />
       </View>
-    </ScrollView> : <>
-      <View style={styles.tabs}>
-        <PanelTabs label={t('collection.settings')} value={tab} disabled={busy} theme={theme}
-          options={[{ value: 'general', label: t('collection.general'), systemImage: 'folder' },
-            { value: 'filters', label: t('filters.conditions'), systemImage: 'line.3.horizontal.decrease' }]}
-          onChange={(value) => { if (value === 'general' || value === 'filters') setTab(value); }} />
-      </View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={panelStyles.content}>
+    </FilterScrollView> : <>
+      {Platform.OS !== 'android' && editorTabs}
+      <FilterScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={panelStyles.content}>
         {tab === 'general' ? <View>
           <View style={[panelStyles.card, { backgroundColor: theme.surface }]}>
             <Text style={[panelStyles.section, { color: theme.secondary }]}>{t('collection.name')}</Text>
-            <TextInput accessibilityLabel={t('collection.name')} value={editor.input.name} editable={!busy}
+            <FilterTextInput accessibilityLabel={t('collection.name')} value={editor.input.name} editable={!busy}
               placeholder={t('collection.namePlaceholder')} placeholderTextColor={theme.muted} autoCorrect={false}
               style={[panelStyles.input, { color: theme.label, borderColor: theme.border, backgroundColor: theme.raised }]}
               onChangeText={(name) => updateInput({ name })} returnKeyType="done" onSubmitEditing={() => { if (editor.input.name.trim()) void save(); }} />
           </View>
           <PanelSection title={t('common.icon')} theme={theme}>
-            <View accessibilityRole="radiogroup" style={panelStyles.choices}>
-              {collectionIcons.map(({ key, label, Icon }) => <Pressable key={key} accessibilityRole="radio" accessibilityLabel={label}
-                accessibilityState={{ checked: editor.input.icon === key, disabled: busy }} disabled={busy} onPress={() => updateInput({ icon: key })}
-                style={({ pressed }) => [panelStyles.choice, styles.icon, { backgroundColor: editor.input.icon === key ? theme.selection : theme.raised,
-                  borderColor: editor.input.icon === key ? theme.accent : theme.border, opacity: pressed ? 0.6 : 1 }]}>
-                <Icon size={20} color={editor.input.icon === key ? theme.accent : theme.label} />
-              </Pressable>)}
+            <View accessibilityRole="radiogroup" style={styles.choices} onLayout={({ nativeEvent }) => setChoicesWidth(nativeEvent.layout.width)}>
+              {choiceRows(collectionIcons, choiceColumns).map((row, rowIndex) => <View key={rowIndex} style={styles.choiceRow}>
+                {row.map((item, column) => <View key={item?.key ?? `empty-${column}`} style={styles.choiceCell}>
+                  {item && <Pressable accessibilityRole="radio" accessibilityLabel={item.label}
+                    accessibilityState={{ checked: editor.input.icon === item.key, disabled: busy }} disabled={busy} onPress={() => updateInput({ icon: item.key })}
+                    style={({ pressed }) => [panelStyles.choice, styles.choiceButton, styles.icon, { backgroundColor: editor.input.icon === item.key ? theme.selection : theme.raised,
+                      borderColor: editor.input.icon === item.key ? theme.accent : theme.border, opacity: pressed ? 0.6 : 1 }]}>
+                    <item.Icon size={20} color={editor.input.icon === item.key ? theme.accent : theme.label} />
+                  </Pressable>}
+                </View>)}
+              </View>)}
             </View>
           </PanelSection>
           <PanelSection title={t('common.color')} theme={theme} action={<Text style={[panelStyles.detail, { color: theme.secondary }]}>{colorLabel}</Text>}>
-            <View accessibilityRole="radiogroup" style={panelStyles.choices}>
-              {collectionColors.map(({ key, label }) => <Pressable key={key} accessibilityRole="radio" accessibilityLabel={label}
-                accessibilityState={{ checked: editor.input.color === key, disabled: busy }} disabled={busy} onPress={() => updateInput({ color: key })}
-                style={[styles.swatch, { backgroundColor: collectionColorValue(key), borderColor: editor.input.color === key ? theme.label : theme.border }]}>
-                {editor.input.color === key && <CheckIcon size={20} color={theme.onAccent} />}
-              </Pressable>)}
+            <View accessibilityRole="radiogroup" style={styles.choices} onLayout={({ nativeEvent }) => setChoicesWidth(nativeEvent.layout.width)}>
+              {choiceRows(collectionColors, choiceColumns).map((row, rowIndex) => <View key={rowIndex} style={styles.choiceRow}>
+                {row.map((item, column) => <View key={item?.key ?? `empty-${column}`} style={styles.choiceCell}>
+                  {item && <Pressable accessibilityRole="radio" accessibilityLabel={item.label}
+                    accessibilityState={{ checked: editor.input.color === item.key, disabled: busy }} disabled={busy} onPress={() => updateInput({ color: item.key })}
+                    style={[styles.choiceButton, styles.swatch, { backgroundColor: collectionColorValue(item.key),
+                      borderColor: editor.input.color === item.key ? theme.label : theme.border }]}>
+                    {editor.input.color === item.key && <CheckIcon size={20} color={theme.onAccent} />}
+                  </Pressable>}
+                </View>)}
+              </View>)}
             </View>
           </PanelSection>
         </View> : <SmartConditionsEditor value={editor.query} theme={theme} version={libraryVersion} disabled={busy}
           onChange={(query) => setEditor({ ...editor, query })} />}
-      </ScrollView>
-      {error && <Text accessibilityRole="alert" style={[panelStyles.section, styles.error, { color: theme.danger }]}>{error}</Text>}
+        {error && <Text accessibilityRole="alert" style={[panelStyles.section, { color: theme.danger }]}>{error}</Text>}
+      </FilterScrollView>
     </>}
-  </CollectionEditorDialog>;
+  </EditorPanel> : null;
 
-  return <FilterDrawer visible={visible} title={t('library.title')} theme={theme} busy={busy} onClose={close}
+  if (editor && Platform.OS !== 'android') return editorPanel;
+
+  return <><FilterDrawer visible={visible} title={t('library.title')} theme={theme} busy={busy} onClose={close}
+    stackIndex={stackIndex}
     headerAction={<IconButton label={t('collection.new')} theme={theme} primary systemImage="plus" disabled={!snapshot || busy}
       onPress={() => { void edit(null); }}><PlusIcon size={20} color={theme.onAccent} /></IconButton>}>
     <FilterList data={folders} keyExtractor={(folder) => `${folder.kind}:${folder.id}`}
@@ -211,7 +241,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
             }} />
         </View>;
       }} />
-  </FilterDrawer>;
+  </FilterDrawer>{editorPanel}</>;
 }
 
 // 卡片侧滑复用 Gesture Handler，更多入口和读屏动作提供等价操作。
@@ -259,7 +289,7 @@ function FolderCard({ folder, checked, busy, theme, onSelect, onEdit, onDelete, 
 }
 
 const styles = StyleSheet.create({
-  tabs: { paddingHorizontal: 16, paddingBottom: 8 }, spacer: { flex: 1 }, error: { paddingHorizontal: 16 },
+  tabs: { paddingHorizontal: 16, paddingBottom: 8 }, spacer: { flex: 1 },
   confirmation: { gap: 12 }, confirmTitle: { fontSize: 18, fontWeight: '600' },
   confirmActions: { paddingVertical: 16, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 },
   scopeOptions: { gap: 8 },
@@ -273,7 +303,10 @@ const styles = StyleSheet.create({
   folderMore: { width: 20, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   smartLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   count: { fontSize: 14, fontVariant: ['tabular-nums'] },
-  icon: { borderRadius: 12 }, swatch: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  choices: { gap: panelStyles.choices.gap, paddingVertical: panelStyles.choices.paddingVertical },
+  choiceRow: { flexDirection: 'row', gap: panelStyles.choices.gap },
+  choiceCell: { flex: 1, minWidth: 0 }, choiceButton: { width: '100%', aspectRatio: 1 },
+  icon: { borderRadius: 12, alignItems: 'center' }, swatch: { borderRadius: '50%', borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });
 
 // 字体成员操作使用完整身份集合，重复加入保持幂等。

@@ -90,7 +90,7 @@ class FolioNavigationModule : Module() {
             Prop("items") { view: FolioLiquidTabsView, value: List<FolioNavigationItem> ->
                 val ids = value.map { it.id }.toSet()
                 if ((value.size == 4 && ids == setOf("local", "search", "cloud", "settings"))
-                    || (value.size == 2 && ids == setOf("fonts", "deleted"))) {
+                    || (value.size == 2 && ids.size == 2 && ids.none { it.isBlank() })) {
                     view.items = value
                 }
             }

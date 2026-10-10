@@ -1,9 +1,10 @@
-import { CaretDownIcon, CaretUpIcon, CheckIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, TrashIcon, XIcon } from './icons';
+import { CaretDownIcon, CaretLeftIcon, CaretUpIcon, CheckIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, TrashIcon, XIcon } from './icons';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import type { SharedValue } from 'react-native-reanimated';
 import { NativeActionButton, usesNativeControls } from './native-controls';
 import { IconButton, type Theme } from './ui';
 
@@ -15,10 +16,15 @@ export interface LibraryPanelProps {
   title: string;
   theme: Theme;
   onClose: () => void;
+  onBack?: () => void;
   children: ReactNode;
   busy?: boolean;
   closeLabel?: string;
+  backButton?: boolean;
+  nested?: boolean;
+  stackIndex?: SharedValue<number>;
   headerAction?: ReactNode;
+  headerAccessory?: ReactNode;
 }
 
 // 面板沿用现有导入明细的间距与语义主题。
@@ -73,11 +79,11 @@ export function PanelBody(props: LibraryPanelProps) {
   </SafeAreaProvider>;
 }
 
-export function PanelHeader({ title, theme, onClose, busy, closeLabel, headerAction }: Omit<LibraryPanelProps, 'children' | 'visible'>) {
+export function PanelHeader({ title, theme, onClose, onBack, busy, closeLabel, headerAction, backButton = false }: Omit<LibraryPanelProps, 'children' | 'visible'>) {
   const { t } = useTranslation();
   return <View style={[panelStyles.header, panelStyles.topBar]}>
-    <IconButton label={closeLabel ?? t('common.close')} theme={theme} onPress={onClose} disabled={busy} systemImage="xmark">
-      <XIcon size={20} color={theme.secondary} />
+    <IconButton label={closeLabel ?? t('common.close')} theme={theme} onPress={onBack ?? onClose} disabled={busy} systemImage={backButton ? 'chevron.left' : 'xmark'}>
+      {backButton ? <CaretLeftIcon size={20} color={theme.secondary} /> : <XIcon size={20} color={theme.secondary} />}
     </IconButton>
     <Text accessibilityRole="header" style={[panelStyles.title, { color: theme.label }]}>{title}</Text>
     {headerAction ?? <View style={panelStyles.headerSpacer} />}
