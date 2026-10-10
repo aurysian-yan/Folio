@@ -31,15 +31,15 @@ export function formatBytes(bytes: number) {
 }
 
 // 二级设置页统一使用滚动标题、返回工具栏与分组卡片。
-export function SettingsPage({ ref, title, theme, onClose, children, backdropSourceId, backLabel }: {
-  ref?: Ref<SettingsPageHandle>; title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string; backLabel?: string;
+export function SettingsPage({ ref, title, theme, onClose, children, background, backdropSourceId, backLabel }: {
+  ref?: Ref<SettingsPageHandle>; title: string; theme: Theme; onClose: () => void; children: ReactNode; background?: ReactNode; backdropSourceId?: string; backLabel?: string;
 }) {
   return <SafeAreaProvider><SettingsPageContent title={title} theme={theme} onClose={onClose}
-    pageRef={ref} backdropSourceId={backdropSourceId} backLabel={backLabel}>{children}</SettingsPageContent></SafeAreaProvider>;
+    pageRef={ref} background={background} backdropSourceId={backdropSourceId} backLabel={backLabel}>{children}</SettingsPageContent></SafeAreaProvider>;
 }
 
-function SettingsPageContent({ pageRef, title, theme, onClose, children, backdropSourceId, backLabel }: {
-  pageRef?: Ref<SettingsPageHandle>; title: string; theme: Theme; onClose: () => void; children: ReactNode; backdropSourceId?: string; backLabel?: string;
+function SettingsPageContent({ pageRef, title, theme, onClose, children, background, backdropSourceId, backLabel }: {
+  pageRef?: Ref<SettingsPageHandle>; title: string; theme: Theme; onClose: () => void; children: ReactNode; background?: ReactNode; backdropSourceId?: string; backLabel?: string;
 }) {
   const { t } = useTranslation();
   const scrollView = useRef<ScrollView>(null);
@@ -61,6 +61,7 @@ function SettingsPageContent({ pageRef, title, theme, onClose, children, backdro
           </IconButton>
         } />
         <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
+          {background}
           <Animated.ScrollView ref={scrollView} {...header.snapScrollProps} onScroll={header.onScroll} scrollEventThrottle={16}
             onLayout={(event) => { scrollSize.current.viewport = event.nativeEvent.layout.height; resetScrollIfContentFits(); }}
             onContentSizeChange={(_width, height) => { scrollSize.current.content = height; resetScrollIfContentFits(); }}

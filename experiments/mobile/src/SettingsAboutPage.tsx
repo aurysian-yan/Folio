@@ -25,14 +25,15 @@ function Wordmark({ frame, color, reduced, specimen = false }: { frame: number; 
     })));
     animation.start(); return () => animation.stop();
   }, [frame, opacities, reduced]);
-  return <Svg width="100%" height="100%" viewBox={specimen ? '0 0 1024 700' : `0 0 ${canvas.width} ${canvas.height}`} accessible={false}>
+  return <Svg width="100%" height="100%" viewBox={specimen ? '0 0 1024 700' : `0 0 ${canvas.width} ${canvas.height}`}
+    preserveAspectRatio={specimen ? 'xMidYMin slice' : 'xMidYMid meet'} accessible={false}>
     {glyphs.map((glyph, index) => <AnimatedG key={glyph.name} opacity={opacities[index]}>
       {specimen ? <>
-        <G transform={`translate(-740 -150) scale(${2.4 * 1024 / glyph.width})`}>{glyph.paths.map((path, p) => <Path key={p} d={path} fill="none" stroke={color} strokeWidth={0.6} />)}</G>
-        <G transform={`translate(710 560) scale(${1.7 * 1024 / glyph.width})`}>{glyph.paths.map((path, p) => <Path key={p} d={path} fill="none" stroke={color} strokeWidth={0.6} />)}</G>
+        <G transform={`translate(-740 -150) scale(${2.4 * 1024 / glyph.width})`}>{glyph.paths.map((path, p) => <Path key={p} d={path} fill="none" stroke={color} strokeWidth={1.4} />)}</G>
+        <G transform={`translate(710 560) scale(${1.7 * 1024 / glyph.width})`}>{glyph.paths.map((path, p) => <Path key={p} d={path} fill="none" stroke={color} strokeWidth={1.4} />)}</G>
       </> : glyph.paths.map((path, p) => <Path key={p} d={path} fill={color} />)}
     </AnimatedG>)}
-    {specimen && <Path d="M0 144h140 M884 144h140 M0 556h100 M924 556h100 M96 128v32 M928 540v32" fill="none" stroke={color} />}
+    {specimen && <Path d="M0 144h140 M884 144h140 M0 556h100 M924 556h100 M96 128v32 M928 540v32" fill="none" stroke={color} strokeWidth={1.25} />}
   </Svg>;
 }
 export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: () => void }) {
@@ -72,11 +73,12 @@ export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: (
   const entries = licenses.entries.filter((entry) => entry.platforms.includes(Platform.OS === 'ios' ? 'ios' : 'android')
     && `${entry.name} ${entry.version} ${licenseLabel(entry.license)}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   return <>
-    <SettingsPage title={t('settings.about')} theme={theme} onClose={onClose}>
-      <View style={styles.home}>
+    <SettingsPage title={t('settings.about')} theme={theme} onClose={onClose} background={
         <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.specimen}>
           <Wordmark frame={frame} color={theme.label} reduced={reduced} specimen />
         </View>
+    }>
+      <View style={styles.home}>
         <View style={styles.hero}>
           <Pressable style={styles.logo} accessibilityRole="button" accessibilityLabel={t('about.logoLabel')} accessibilityHint={t('about.logoHint')}
             accessibilityValue={{ text: t('about.logoVariant', { current: frame + 1, total: glyphs.length }) }}
@@ -84,7 +86,6 @@ export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: (
             onAccessibilityAction={({ nativeEvent }) => { if (nativeEvent.actionName === 'next') variation.current?.activate(); }}>
             <Wordmark frame={frame} color={theme.label} reduced={reduced} />
           </Pressable>
-          <Text style={[settingsTypography.body, { color: theme.label, textAlign: 'center' }]}>{t('about.tagline')}</Text>
           <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{app ? t('macos.versionWithBuild', { version: app.version, build: app.build }) : t('common.unknownVersion')}</Text>
           <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{app ? t('about.platform', { platform: t(`about.platformNames.${app.platform}`), arch: app.arch }) : ''}</Text>
         </View>
@@ -141,7 +142,7 @@ const styles = StyleSheet.create({
   home: { width: '100%', maxWidth: 720, alignSelf: 'center', gap: 24 },
   hero: { alignItems: 'center', gap: 12, paddingVertical: 32 },
   logo: { width: 192, height: 72 },
-  specimen: { ...StyleSheet.absoluteFill, opacity: 0.06 },
+  specimen: { ...StyleSheet.absoluteFill, opacity: 0.14 },
   reader: { flex: 1 },
   readerToolbar: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
   readerTitle: { flex: 1 },

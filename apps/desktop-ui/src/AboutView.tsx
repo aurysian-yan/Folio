@@ -48,14 +48,16 @@ export function AboutView() {
   const entries = licenses.entries.filter((entry) => (!app || entry.platforms.includes(app.platform))
     && `${entry.name} ${entry.version} ${licenseLabel(entry.license)}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   return <div className="about-home">
-    <svg className="about-specimen" viewBox="0 0 1024 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <svg className="about-specimen" viewBox="0 0 1024 700" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
       {glyphs.map((glyph, index) => <g key={glyph.name} className="about-glyph-layer" opacity={frame === index ? 1 : 0}>
-        <g transform={`translate(-740 -150) scale(${2.4 * 1024 / glyph.width})`} fill="none" stroke="currentColor" strokeWidth="0.6">{glyph.paths.map((path, p) => <path key={p} d={path} />)}</g>
-        <g transform={`translate(710 560) scale(${1.7 * 1024 / glyph.width})`} fill="none" stroke="currentColor" strokeWidth="0.6">{glyph.paths.map((path, p) => <path key={p} d={path} />)}</g>
+        <g transform={`translate(-740 -150) scale(${2.4 * 1024 / glyph.width})`} fill="none" stroke="currentColor" strokeWidth="1.4">{glyph.paths.map((path, p) => <path key={p} d={path} />)}</g>
+        <g transform={`translate(710 560) scale(${1.7 * 1024 / glyph.width})`} fill="none" stroke="currentColor" strokeWidth="1.4">{glyph.paths.map((path, p) => <path key={p} d={path} />)}</g>
       </g>)}
-      <path d="M0 144h140 M884 144h140 M0 556h100 M924 556h100 M96 128v32 M928 540v32" fill="none" stroke="currentColor" />
+      <path d="M0 144h140 M884 144h140 M0 556h100 M924 556h100 M96 128v32 M928 540v32" fill="none" stroke="currentColor" strokeWidth="1.25" />
     </svg>
-    <div className="relative flex flex-col gap-6">
+    <article id="settings-panel" className="settings-page relative" role="tabpanel" aria-labelledby="settings-tab-about" tabIndex={0}>
+    <h1>{t('settings.about')}</h1>
+    <div className="flex flex-col gap-6">
       <header className="flex flex-col items-center gap-3 py-8 text-center">
         <Button variant="ghost" className="about-wordmark" aria-label={t('about.logoLabel')} aria-description={t('about.logoHint')}
           onPress={() => variation.current?.activate()}>
@@ -65,7 +67,6 @@ export function AboutView() {
           </svg>)}
         </Button>
         <span className="sr-only" role="status">{t('about.logoVariant', { current: frame + 1, total: glyphs.length })}</span>
-        <p className="about-tagline">{t('about.tagline')}</p>
         <p className="tabular-nums">{app ? t('macos.versionWithBuild', { version: app.version, build: app.build }) : t('common.unknownVersion')}</p>
         {app && <p>{t('about.platform', { platform: t(`about.platformNames.${app.platform}`), arch: app.arch })}</p>}
         <Button size="sm" variant="secondary" isDisabled={!app || update.status === 'checking'} onPress={() => void check()}>
@@ -100,6 +101,7 @@ export function AboutView() {
       {linkError && <p role="alert">{t('about.failed')}</p>}
       <footer className="py-4 text-center text-xs text-muted">{t('about.copyright')}</footer>
     </div>
+    </article>
     <Modal isOpen={reader} onOpenChange={(value) => { setReader(value); if (!value) { setSelected(undefined); setQuery(''); listPosition.current = 0; } }}>
       <Modal.Backdrop><Modal.Container placement="center"><Modal.Dialog className="w-full max-w-2xl" aria-label={t('about.licenses')}>
         <Modal.Header><h2>{t('about.licenses')}</h2></Modal.Header>

@@ -2188,6 +2188,9 @@ export default function App() {
 
       {settingsWindow ? (
         <section className="settings-content" aria-label={t("common.settings")}>
+          {settingsPage === "about" ? (
+            <Suspense fallback={null}><AboutView /></Suspense>
+          ) : (
           <article
             id="settings-panel"
             className="settings-page"
@@ -2629,10 +2632,9 @@ export default function App() {
                 )}
                 </section>
               </>
-            ) : (
-              <Suspense fallback={null}><AboutView /></Suspense>
-            )}
+            ) : null}
           </article>
+          )}
         </section>
       ) : (
         <div

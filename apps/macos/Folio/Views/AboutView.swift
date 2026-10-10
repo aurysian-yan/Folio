@@ -159,7 +159,6 @@ struct AboutView: View {
                     .accessibilityHint(L.text("about.logoHint"))
                     .accessibilityValue(L.format("about.logoVariant", String(frame + 1), String(AboutResources.glyphs.count)))
                     .accessibilityAction(named: Text(L.text("about.nextVariation")), activate)
-                    Text(L.text("about.tagline")).font(.body)
                     Text(L.format("macos.versionWithBuild", version, build)).monospacedDigit().foregroundStyle(.secondary)
                     Text(L.format("about.platform", "macOS", arch)).font(.caption).foregroundStyle(.secondary)
                     Button(L.text(status == "checking" ? "about.checking" : "about.check"), action: checkUpdate).disabled(status == "checking")
@@ -209,21 +208,21 @@ struct AboutView: View {
             .padding(32)
             .frame(maxWidth: 800)
             .frame(maxWidth: .infinity)
-            .background {
-                GeometryReader { geometry in
-                    ZStack {
-                        ForEach(AboutResources.glyphs.indices, id: \.self) { index in
-                            GlyphShape(glyph: AboutResources.glyphs[index]).stroke(.primary, lineWidth: 0.5)
-                                .frame(width: geometry.size.width * 2.4,
-                                       height: geometry.size.width * 2.4 * AboutResources.glyphs[index].height / AboutResources.glyphs[index].width)
-                                .offset(x: -geometry.size.width * 1.5, y: -100).opacity(frame == index ? 0.06 : 0)
-                        }
-                        Path { path in
-                            path.move(to: CGPoint(x: 0, y: 120)); path.addLine(to: CGPoint(x: 64, y: 120))
-                            path.move(to: CGPoint(x: geometry.size.width - 64, y: 480)); path.addLine(to: CGPoint(x: geometry.size.width, y: 480))
-                        }.stroke(.primary.opacity(0.06), lineWidth: 1)
-                    }.clipped().allowsHitTesting(false).accessibilityHidden(true)
-                }
+        }
+        .background(alignment: .top) {
+            GeometryReader { geometry in
+                ZStack(alignment: .topLeading) {
+                    ForEach(AboutResources.glyphs.indices, id: \.self) { index in
+                        GlyphShape(glyph: AboutResources.glyphs[index]).stroke(.primary, lineWidth: 1.25)
+                            .frame(width: geometry.size.width * 2.4,
+                                   height: geometry.size.width * 2.4 * AboutResources.glyphs[index].height / AboutResources.glyphs[index].width)
+                            .offset(x: -geometry.size.width * 1.5, y: -100).opacity(frame == index ? 0.14 : 0)
+                    }
+                    Path { path in
+                        path.move(to: CGPoint(x: 0, y: 120)); path.addLine(to: CGPoint(x: 64, y: 120))
+                        path.move(to: CGPoint(x: geometry.size.width - 64, y: 480)); path.addLine(to: CGPoint(x: geometry.size.width, y: 480))
+                    }.stroke(.primary.opacity(0.14), lineWidth: 1.25)
+                }.clipped().allowsHitTesting(false).accessibilityHidden(true)
             }
         }
         .animation(reducedMotion ? nil : .easeInOut(duration: 0.15), value: frame)

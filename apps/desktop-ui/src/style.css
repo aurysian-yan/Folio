@@ -3166,11 +3166,10 @@ body {
 }
 
 /* 关于首页的字形标本与离线许可阅读。 */
-.about-home { position: relative; isolation: isolate; }
-.about-specimen { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--text); opacity: .06; pointer-events: none; z-index: -1; }
+.about-home { position: relative; isolation: isolate; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.about-specimen { position: fixed; inset: 0; width: 100%; height: 100%; color: var(--text); opacity: .14; pointer-events: none; z-index: -1; }
 .about-wordmark { position: relative; width: 12rem; height: 4.5rem; color: var(--text); }
 .about-glyph-layer { transition: opacity 150ms ease; }
-.settings-page .about-tagline { font-size: 1rem; color: var(--text); }
 .about-license-scroll { max-height: 50svh; overflow: auto; }
 .about-license-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: .875rem; line-height: 1.6; margin-block: 1rem; }
 @media (prefers-reduced-motion: reduce) { .about-glyph-layer { transition: none; } }
