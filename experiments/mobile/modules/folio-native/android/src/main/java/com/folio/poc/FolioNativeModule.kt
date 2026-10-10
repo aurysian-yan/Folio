@@ -97,7 +97,9 @@ class FolioNativeModule : Module() {
 
         // 外观主题：壁纸种子与 Material3 语义色，由外观页与主题派生同步读取。
         Function("wallpaperSeed") { FolioMaterialColors.wallpaperSeed(context()) }
-        Function("materialPalette") { seed: String, dark: Boolean -> FolioMaterialColors.scheme(seed, dark) }
+        Function("materialPalette") { seed: String, dark: Boolean, followWallpaper: Boolean ->
+            FolioMaterialColors.scheme(context(), seed, dark, followWallpaper)
+        }
 
         AsyncFunction("initialize") { promise: Promise ->
             perform(promise) {

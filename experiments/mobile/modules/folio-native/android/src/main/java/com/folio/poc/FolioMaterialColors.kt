@@ -19,7 +19,10 @@ object FolioMaterialColors {
     @RequiresApi(Build.VERSION_CODES.S)
     private fun systemAccent(context: Context): Int = context.getColor(android.R.color.system_accent1_500)
 
-    fun scheme(seed: String, dark: Boolean): Map<String, String> {
+    fun scheme(context: Context, seed: String, dark: Boolean, followWallpaper: Boolean): Map<String, String> {
+        if (followWallpaper && !dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return systemLightScheme(context)
+        }
         val scheme = SchemeTonalSpot(Hct.fromInt(parseHex(seed)), dark, 0.0)
         return mapOf(
             "primary" to toHex(scheme.primary),
@@ -35,6 +38,22 @@ object FolioMaterialColors {
             "error" to toHex(scheme.error),
         )
     }
+
+    // 壁纸浅色直接复用系统语义色，避免从强调色重建后丢失中性色的色相与饱和度。
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun systemLightScheme(context: Context): Map<String, String> = mapOf(
+        "primary" to android.R.color.system_primary_light,
+        "onPrimary" to android.R.color.system_on_primary_light,
+        "primaryContainer" to android.R.color.system_primary_container_light,
+        "surface" to android.R.color.system_surface_bright_light,
+        "surfaceContainer" to android.R.color.system_surface_container_light,
+        "surfaceContainerHigh" to android.R.color.system_surface_container_high_light,
+        "surfaceContainerHighest" to android.R.color.system_surface_container_highest_light,
+        "onSurface" to android.R.color.system_on_surface_light,
+        "onSurfaceVariant" to android.R.color.system_on_surface_variant_light,
+        "outlineVariant" to android.R.color.system_outline_variant_light,
+        "error" to android.R.color.system_error_light,
+    ).mapValues { (_, resource) -> toHex(context.getColor(resource)) }
 
     private fun parseHex(value: String): Int = try {
         (value.removePrefix("#").toLong(16) or 0xFF000000L).toInt()

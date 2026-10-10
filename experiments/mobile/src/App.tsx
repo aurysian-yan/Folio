@@ -462,7 +462,7 @@ function MobileApp() {
   const theme = useMemo(() => {
     if (Platform.OS !== 'android') return createTheme(dark, preferences.accent);
     const materialRoles = preferences.materialTheme
-      ? materialPalette(resolveAccentColor(preferences.accent, dark, wallpaperAccent ?? undefined), dark)
+      ? materialPalette(resolveAccentColor(preferences.accent, dark, wallpaperAccent ?? undefined), dark, preferences.accent === 'wallpaper')
       : undefined;
     return createTheme(dark, preferences.accent, { materialRoles, wallpaperAccent: wallpaperAccent ?? undefined });
   }, [dark, preferences.accent, preferences.materialTheme, wallpaperAccent]);

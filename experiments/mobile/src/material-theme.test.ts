@@ -12,8 +12,10 @@ test('Material3 角色映射到卡片、背景、文字与强调色', () => {
   const light = materialThemeOverrides(roles, false);
   assert.equal(light.accent, roles.primary);
   assert.equal(light.onAccent, roles.onPrimary);
-  assert.equal(light.background, roles.surface);
-  assert.equal(light.surface, roles.surfaceContainer);
+  assert.equal(light.background, roles.surfaceContainer);
+  assert.equal(light.surface, roles.surface);
+  assert.equal(light.listCardSurface, roles.surface);
+  assert.equal(light.tab, roles.surface);
   assert.equal(light.raised, roles.surfaceContainerHigh);
   assert.equal(light.label, roles.onSurface);
   assert.equal(light.secondary, roles.onSurfaceVariant);
@@ -21,6 +23,12 @@ test('Material3 角色映射到卡片、背景、文字与强调色', () => {
   assert.equal(light.border, roles.outlineVariant);
   assert.equal(light.activeTab, roles.primaryContainer);
   assert.equal(light.danger, roles.error);
+
+  const dark = materialThemeOverrides(roles, true);
+  assert.equal(dark.background, roles.surface);
+  assert.equal(dark.surface, roles.surfaceContainer);
+  assert.equal(dark.listCardSurface, roles.surfaceContainerHigh);
+  assert.equal(dark.tab, roles.surfaceContainerHigh);
 });
 
 test('选中态透明度随浅深色变化', () => {

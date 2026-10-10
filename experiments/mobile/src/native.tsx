@@ -9,7 +9,7 @@ import { createStorageClient, type StorageBridge } from './storage';
 // 安卓外观主题桥接：壁纸种子与 Material3 语义色。
 interface MaterialBridge {
   wallpaperSeed(): string | null;
-  materialPalette(seed: string, dark: boolean): MaterialRoles;
+  materialPalette(seed: string, dark: boolean, followWallpaper: boolean): MaterialRoles;
 }
 
 const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
@@ -19,7 +19,7 @@ export const library = createLibraryClient(nativeModule, (action, kind) => syncS
 export const storage = createStorageClient(nativeModule);
 export const copyText = (text: string) => nativeModule.copyText(text);
 export const wallpaperSeed = () => nativeModule.wallpaperSeed();
-export const materialPalette = (seed: string, dark: boolean) => nativeModule.materialPalette(seed, dark);
+export const materialPalette = (seed: string, dark: boolean, followWallpaper = false) => nativeModule.materialPalette(seed, dark, followWallpaper);
 
 export interface PreviewSelection {
   sourcePath: string;
