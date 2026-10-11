@@ -3224,6 +3224,7 @@ body {
 .character-map-heading h1 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .character-map-page { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: calc(var(--spacing) * 4); color: var(--foreground); }
 .character-map-sidebar { height: 100%; min-height: 0; }
+.inspector-rail > .character-map-sidebar { padding: calc(var(--spacing) * 4); }
 .sidebar > .character-map-sidebar { width: var(--left-content-width); }
 .character-map-controls { display: flex; flex-direction: column; gap: calc(var(--spacing) * 4); margin-block: calc(var(--spacing) * 4); }
 .character-map-controls .select { min-width: 0; max-width: 100%; }
@@ -3240,7 +3241,7 @@ body {
 .character-map-panels { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 20rem); gap: calc(var(--spacing) * 6); }
 .character-map-grid { --character-cell-size: 6rem; overflow: auto; min-height: 0; }
 .character-map-cell { height: var(--character-cell-size); width: 100%; padding: calc(var(--spacing) * 2); }
-.character-map-detail { overflow: auto; min-height: 0; }
+.character-map-detail { height: 100%; overflow: auto; min-height: 0; }
 @media (max-width: 48rem) {
   .character-map-panels { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
 }

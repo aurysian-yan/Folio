@@ -148,19 +148,69 @@ struct CharacterMapInspectorView: View {
     let model: LibraryViewModel
     @Bindable var state: CharacterMapState
     var body: some View {
-        ScrollView {
+        GeometryReader { geometry in
+            ScrollView {
+                inspectorContent
+                    .padding()
+                    .frame(minHeight: geometry.size.height, alignment: .top)
+            }
+        }
+    }
+
+    private var inspectorContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
             if let info = state.info, let selected = state.selected, state.page != nil {
-                VStack(alignment: .leading) {
+                GeometryReader { preview in
                     CharacterGlyphView(model: model, handle: info.handle, entry: selected, axes: model.axisValues, size: 512, compact: false)
-                        .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit)
-                    LabeledContent(L.text("characterMap.codepoint"), value: selected.label)
-                    LabeledContent(L.text("characterMap.glyphId"), value: String(selected.glyphId))
-                    LabeledContent(L.text("filters.script"), value: selected.script)
-                    Button(L.text("characterMap.copyCharacter")) { state.copy(selected.text) }
-                    Button(L.text("characterMap.copyCodepoint")) { state.copy(selected.label) }
-                    Text(state.copyStatus).foregroundStyle(.secondary)
-                }.padding()
-            } else { Text(L.text("characterMap.selectCharacter")).padding() }
+                        .frame(width: min(preview.size.width, preview.size.height), height: min(preview.size.width, preview.size.height))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(minHeight: 128, maxHeight: .infinity)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(selected.label).monospaced()
+                            Text(selected.script).foregroundStyle(.secondary)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(selected.label).monospaced()
+                            Text(selected.script).foregroundStyle(.secondary)
+                        }
+                    }
+                    Text("\(L.text("characterMap.glyphId")) \(selected.glyphId)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .font(.callout)
+                .textSelection(.enabled)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L.format("characterMap.characterLabel", selected.label, String(selected.glyphId), selected.script))
+
+                HStack(alignment: .top) {
+                    Button { state.copy(selected.text) } label: {
+                        VStack(spacing: 4) {
+                            Image.englishSystemName("doc.on.doc").font(.title3)
+                            Text(L.text("characterMap.copyCharacter")).font(.caption)
+                        }.frame(maxWidth: .infinity)
+                    }
+                    Button { state.copy(selected.label) } label: {
+                        VStack(spacing: 4) {
+                            Image.englishSystemName("number").font(.title3)
+                            Text(L.text("characterMap.copyCodepoint")).font(.caption)
+                        }.frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .fixedSize(horizontal: false, vertical: true)
+
+                if !state.copyStatus.isEmpty {
+                    Text(state.copyStatus).font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text(L.text("characterMap.selectCharacter"))
+                    .font(.callout).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
     }
 }

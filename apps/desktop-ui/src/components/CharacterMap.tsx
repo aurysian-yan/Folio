@@ -1,4 +1,5 @@
-import { Button, Card, Input, Label, ListBox, SearchField, Select } from '@heroui/react';
+import { Button, Card, Input, Label, ListBox, SearchField, Select, Toolbar } from '@heroui/react';
+import { CopyIcon, HashIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -129,18 +130,32 @@ function CharacterMapContent({ session, info, axes, rightHost, onCountChange }: 
     try { await navigator.clipboard.writeText(value); setCopyStatus(t('common.copied')); }
     catch { setCopyStatus(t('characterMap.error.copyFailed')); }
   }
-  const detail = <aside className="character-map-detail flex flex-col gap-4" aria-label={t('characterMap.title')}>
+  const detail = <aside className="character-map-detail flex w-full flex-col gap-4" aria-label={t('characterMap.title')}>
         {selected && page ? <>
-          <GlyphPreview key={`${selected.glyphId}:${JSON.stringify(axes)}:${foreground}`} session={session} entry={selected} axes={axes} foreground={foreground} size={512} />
-          <dl className="grid grid-cols-2 gap-2">
-            <dt>{t('characterMap.codepoint')}</dt><dd>{codepointLabel(selected.codepoint)}</dd>
-            <dt>{t('characterMap.glyphId')}</dt><dd>{selected.glyphId}</dd>
-            <dt>{t('filters.script')}</dt><dd>{selected.script}</dd>
-          </dl>
-          <Button onPress={() => void copy(characterText(selected))}>{t('characterMap.copyCharacter')}</Button>
-          <Button variant="secondary" onPress={() => void copy(codepointLabel(selected.codepoint))}>{t('characterMap.copyCodepoint')}</Button>
-          <p role="status">{copyStatus}</p>
-        </> : <p>{t('characterMap.selectCharacter')}</p>}
+          <div className="relative min-h-32 flex-1">
+            <GlyphPreview key={`${selected.glyphId}:${JSON.stringify(axes)}:${foreground}`} session={session} entry={selected} axes={axes} foreground={foreground} size={512} />
+          </div>
+          <footer className="flex shrink-0 flex-col gap-4">
+            <dl className="flex min-w-0 flex-col gap-1 text-sm">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <dt className="sr-only">{t('characterMap.codepoint')}</dt><dd className="font-mono">{codepointLabel(selected.codepoint)}</dd>
+                <dt className="sr-only">{t('filters.script')}</dt><dd className="min-w-0 break-words text-muted">{selected.script}</dd>
+              </div>
+              <div className="flex flex-wrap gap-x-2 text-xs text-muted">
+                <dt>{t('characterMap.glyphId')}</dt><dd className="font-mono">{selected.glyphId}</dd>
+              </div>
+            </dl>
+            <Toolbar className="grid grid-cols-2 gap-2" aria-label={t('characterMap.title')}>
+              <Button size="sm" variant="ghost" className="h-auto min-w-0 flex-col gap-1 py-2 whitespace-normal" onPress={() => void copy(characterText(selected))}>
+                <CopyIcon className="size-5" aria-hidden="true" />{t('characterMap.copyCharacter')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-auto min-w-0 flex-col gap-1 py-2 whitespace-normal" onPress={() => void copy(codepointLabel(selected.codepoint))}>
+                <HashIcon className="size-5" aria-hidden="true" />{t('characterMap.copyCodepoint')}
+              </Button>
+            </Toolbar>
+            <p className="empty:hidden text-xs text-muted" role="status">{copyStatus}</p>
+          </footer>
+        </> : <p className="flex flex-1 items-center justify-center text-sm text-muted">{t('characterMap.selectCharacter')}</p>}
       </aside>;
   return <div ref={root} className="character-map-content">
     {rightHost && createPortal(detail, rightHost)}
@@ -247,8 +262,8 @@ function GlyphPreview({ session, entry, axes, foreground, size }: { session: Cha
       .catch((cause) => { if (current) setImage({ glyphId: entry.glyphId, status: 'error', dataUrl: null, error: characterMapError(cause) }); });
     return () => { current = false; };
   }, [session, entry.glyphId, axes, foreground, size, retry]);
-  return <div className="flex aspect-square w-full flex-col items-center justify-center" aria-live="polite">
-    {image?.dataUrl && <img src={image.dataUrl} alt={codepointLabel(entry.codepoint)} className="max-h-full w-full object-contain" />}
+  return <div className="absolute inset-0 flex flex-col items-center justify-center" aria-live="polite">
+    {image?.dataUrl && <img src={image.dataUrl} alt={codepointLabel(entry.codepoint)} className="h-full min-h-0 w-full object-contain" />}
     {image?.status === 'empty' && <p>{t('characterMap.blankGlyph')}</p>}
     {image?.status === 'error' && <><p role="alert">{t(image.error ?? 'characterMap.error.renderFailed')}</p><Button variant="secondary" onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button></>}
     {!image && <p>{t('common.loading')}</p>}
