@@ -10,6 +10,8 @@ import type { Theme } from './ui';
 import { StarIcon } from './icons';
 import { FontLocationIcons } from './FontLocationIcons';
 
+export const fontCardSurfaceStyle = { ...settingsLayout.card, padding: 10 };
+
 export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sampleText }: {
   family: FontFamily;
   mode: 'grid' | 'list';
@@ -74,7 +76,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
 });
 
 const styles = StyleSheet.create({
-  card: { ...settingsLayout.card, padding: 10 },
+  card: fontCardSurfaceStyle,
   gridCard: { flex: 1, aspectRatio: 1 },
   listCard: { minHeight: 84 },
   preview: { flex: 1, minHeight: 48, justifyContent: 'center', marginBottom: 4 },

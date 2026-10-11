@@ -77,8 +77,18 @@ final class CharacterMapState {
     var source: String { model.selectedSource?.path ?? model.selectedFace?.sourcePath ?? "" }
     var selectionKey: String { "\(model.selectedFace?.id.rawValue ?? "")|\(model.selectedFace?.revisionID ?? "")|\(source)|\(retry)" }
     var info: CharacterInfo? { opened?.key == selectionKey ? opened?.info : nil }
-    var queryKey: String { "\(info?.handle ?? "")|\(search)|\(script)|\(offset)|\(queryRetry)" }
+    var queryKey: String { "\(info?.handle ?? "")|\(search)|\(script)" }
+    var requestKey: String { "\(queryKey)|\(offset)|\(queryRetry)" }
     var page: CharacterPage? { result?.key == queryKey ? result?.page : nil }
+
+    var count: Int? { page?.total ?? info?.count }
+    var canLoadMore: Bool {
+        guard let page else { return false }
+        return page.entries.count > offset && page.entries.count < page.total && queryFailure?.key != requestKey
+    }
+    func loadMore() {
+        if canLoadMore { offset = page?.entries.count ?? 0 }
+    }
 
     func copy(_ value: String) {
         NSPasteboard.general.clearContents()
@@ -91,19 +101,20 @@ struct CharacterMapView: View {
     @Bindable var state: CharacterMapState
 
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 0) {
             if let failure = state.failure, failure.key == state.selectionKey {
-                Text(L.text(failure.message))
-                Button(L.text("common.retry")) { state.retry += 1 }
-                ForEach((model.selectedFace?.location?.files ?? []).filter { $0.cloudAvailable && $0.localSources.isEmpty }, id: \.fingerprint) { file in
-                    Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) }
-                }
-                Spacer()
+                VStack(alignment: .leading) {
+                    Text(L.text(failure.message))
+                    Button(L.text("common.retry")) { state.retry += 1 }
+                    ForEach((model.selectedFace?.location?.files ?? []).filter { $0.cloudAvailable && $0.localSources.isEmpty }, id: \.fingerprint) { file in
+                        Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) }
+                    }
+                    Spacer()
+                }.padding()
             } else if let info = state.info {
                 CharacterMapContent(model: model, info: info, axes: model.axisValues, state: state).id(info.handle)
             } else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
         }
-        .padding()
         .task(id: state.selectionKey) {
             let key = state.selectionKey
             state.opened = nil
@@ -162,32 +173,40 @@ private struct CharacterMapContent: View {
     @FocusState private var gridFocused: Bool
 
     var body: some View {
-        VStack {
-            Text(L.plural("characterMap.count", state.page?.total ?? info.count))
-            if let queryFailure = state.queryFailure, queryFailure.key == state.queryKey {
-                HStack { Text(L.text(queryFailure.message)); Button(L.text("common.retry")) { state.queryRetry += 1 } }
+        VStack(spacing: 0) {
+            if let queryFailure = state.queryFailure, queryFailure.key == state.requestKey {
+                HStack { Text(L.text(queryFailure.message)); Button(L.text("common.retry")) { state.queryRetry += 1 } }.padding()
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))]) {
-                        ForEach(state.page?.entries ?? []) { entry in
-                            Button { state.selected = entry } label: {
-                                VStack {
-                                    CharacterGlyphView(model: model, handle: info.handle, entry: entry, axes: axes, size: 128, compact: true)
-                                        .frame(width: 64, height: 64)
-                                    Text(entry.label).font(.caption)
-                                }.frame(maxWidth: .infinity)
+                    VStack {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))]) {
+                            ForEach(state.page?.entries ?? []) { entry in
+                                Button { state.selected = entry } label: {
+                                    VStack {
+                                        CharacterGlyphView(model: model, handle: info.handle, entry: entry, axes: axes, size: 128, compact: true)
+                                            .frame(width: 64, height: 64)
+                                        Text(entry.label).font(.caption).foregroundStyle(.secondary)
+                                    }.frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.plain)
+                                .modifier(FontCardSurface(highlighted: state.selected?.id == entry.id))
+                                .focusEffectDisabled()
+                                .accessibilityLabel(L.format("characterMap.characterLabel", entry.label, String(entry.glyphId), entry.script))
+                                .accessibilityAddTraits(state.selected?.id == entry.id ? .isSelected : [])
+                                .id(entry.id)
+                                .onAppear {
+                                    if entry.id == state.page?.entries.last?.id { state.loadMore() }
+                                }
                             }
-                            .buttonStyle(.bordered)
-                            .tint(state.selected?.id == entry.id ? .accentColor : .secondary)
-                            .accessibilityLabel(L.format("characterMap.characterLabel", entry.label, String(entry.glyphId), entry.script))
-                            .accessibilityAddTraits(state.selected?.id == entry.id ? .isSelected : [])
-                            .id(entry.id)
                         }
-                    }
-                    if state.page?.entries.isEmpty == true { Text(L.text("characterMap.empty")) }
+                        if state.page?.entries.isEmpty == true { Text(L.text("characterMap.empty")) }
+                        if state.page == nil || state.page?.entries.count == state.offset {
+                            if state.queryFailure?.key != state.requestKey { ProgressView() }
+                        }
+                    }.padding()
                 }
-                .focusable().focused($gridFocused)
+                .focusable().focusEffectDisabled().focused($gridFocused)
                 .onMoveCommand { direction in
                     guard let entries = state.page?.entries, !entries.isEmpty else { return }
                     let index = entries.firstIndex(where: { $0.id == state.selected?.id }) ?? 0
@@ -195,23 +214,23 @@ private struct CharacterMapContent: View {
                     let next = entries[min(entries.count - 1, max(0, index + delta))]
                     state.selected = next; proxy.scrollTo(next.id)
                 }
-            }.frame(minWidth: 320)
-            HStack {
-                Button(L.text("characterMap.previousPage")) { state.offset = max(0, state.offset - 256) }.disabled(state.offset == 0)
-                Text(L.format("characterMap.page", String(state.offset / 256 + 1), String(max(1, ((state.page?.total ?? 0) + 255) / 256))))
-                Button(L.text("characterMap.nextPage")) { state.offset += 256 }.disabled(state.page == nil || state.offset + 256 >= (state.page?.total ?? 0))
-            }
+            }.frame(minWidth: 320).id(state.queryKey)
         }
-        .task(id: state.queryKey) {
+        .task(id: state.requestKey) {
             let key = state.queryKey
+            let requestKey = state.requestKey
+            let offset = state.offset
             do {
                 try await Task.sleep(for: .milliseconds(120))
-                let query = CharacterQuery(handle: info.handle, text: state.search, script: state.script.isEmpty ? nil : state.script, offset: state.offset)
+                let query = CharacterQuery(handle: info.handle, text: state.search, script: state.script.isEmpty ? nil : state.script, offset: offset)
                 let page = try characterDecode(CharacterPage.self, await model.characterMapQuery(characterJSON(query)))
                 try Task.checkCancellation()
-                state.result = (key, page); state.selected = page.entries.first
+                guard state.requestKey == requestKey else { return }
+                let entries = offset > 0 ? Array((state.page?.entries ?? []).prefix(offset)) + page.entries : page.entries
+                state.result = (key, CharacterPage(entries: entries, total: page.total))
+                if offset == 0 { state.selected = page.entries.first }
             } catch is CancellationError { }
-            catch { if !Task.isCancelled { state.queryFailure = (key, characterError(error)) } }
+            catch { if !Task.isCancelled { state.queryFailure = (requestKey, characterError(error)) } }
         }
     }
 

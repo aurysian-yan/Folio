@@ -13,10 +13,11 @@ import { adjustableAxes, axisStep, defaultAxisValues, formatAxisValue } from './
 import { SettingsGroup, settingsLayout, settingsTypography } from './settings-ui';
 import { IconButton, type Theme } from './ui';
 import { CaretLeftIcon } from './icons';
-import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
+import { PageHeader, usePageHeader } from './PageHeader';
 import { NavigationBackdrop } from './bottom-navigation';
 import { NativeScrollContainer } from './native-controls';
 import { CharacterMapChoice } from './CharacterMapChoice';
+import { fontCardSurfaceStyle } from './FontCard';
 
 export function CharacterMap({ family, initialFace, initialAxes, theme, onClose, onDownload, deferClose }: {
   family: FontFamily; initialFace: FontFace; initialAxes: Record<string, number>; theme: Theme;
@@ -52,8 +53,6 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
   const active = loaded?.key === selectionKey ? loaded : null;
   const error = failure?.key === selectionKey ? failure.message : null;
   const controls = <>
-    <PageTitle {...header} title={t('characterMap.title')} theme={theme} style={settingsLayout.pageTitle} />
-    <Text style={[settingsLayout.section, settingsTypography.detail, { color: theme.secondary }]}>{family.displayName}</Text>
     <SettingsGroup theme={theme}>
       <ChoiceRow sourceId={header.sourceId} label={t('font.styles')} theme={theme} value={face.id} options={family.faces.map((item) => ({ value: item.id, label: item.styleName }))} onChange={(id) => {
         const next = family.faces.find((item) => item.id === id);
@@ -77,13 +76,13 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
   return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <CharacterMapContent key={selectionKey} session={active?.session ?? null} info={active?.info ?? null} axes={axes} theme={theme}
-        header={header} controls={controls} list={list} failureContent={failureContent} onClose={onClose} />
+        title={family.displayName} header={header} controls={controls} list={list} failureContent={failureContent} onClose={onClose} />
     </KeyboardAvoidingView>
   </SafeAreaView>;
 }
 
-function CharacterMapContent({ session, info, axes, theme, header, controls, list, failureContent, onClose }: {
-  session: CharacterMapSession | null; info: CharacterMapInfo | null; axes: Record<string, number>; theme: Theme;
+function CharacterMapContent({ session, info, axes, theme, header, controls, list, failureContent, onClose, title }: {
+  title: string; session: CharacterMapSession | null; info: CharacterMapInfo | null; axes: Record<string, number>; theme: Theme;
   header: ReturnType<typeof usePageHeader>; controls: ReactNode; list: RefObject<FlatList<CharacterEntry> | null>;
   failureContent: ReactNode; onClose: () => void;
 }) {
@@ -92,10 +91,7 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
   const wide = width >= 768;
   const gridWidth = wide ? width * 0.65 : width;
   const columns = Math.max(2, Math.floor(gridWidth / 80));
-  const headerHeight = useRef(0);
-  const pageScroll = useRef(false);
-  const scrollFrame = useRef(0);
-  useEffect(() => () => cancelAnimationFrame(scrollFrame.current), []);
+  const cellWidth = gridWidth / columns;
   const [search, setSearch] = useState('');
   const [script, setScript] = useState('');
   const [offset, setOffset] = useState(0);
@@ -104,7 +100,8 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
   const [selected, setSelected] = useState<CharacterEntry | null>(null);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 24 });
-  const queryKey = JSON.stringify([info?.handle, search, script, offset, retry]);
+  const queryKey = JSON.stringify([info?.handle, search, script]);
+  const requestKey = JSON.stringify([queryKey, offset, retry]);
   const page = result?.key === queryKey ? result.page : null;
   const foreground = useMemo(() => characterForeground(theme.label), [theme.label]);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<CharacterEntry>[] }) => {
@@ -117,16 +114,13 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
     const timer = setTimeout(() => {
       session.query({ text: search, script: script || null, offset, limit: characterPageSize }).then((value) => {
         if (current) {
-          setResult({ key: queryKey, page: value }); setSelected(value.entries[0] ?? null); setVisibleRange({ start: 0, end: 24 });
-          if (pageScroll.current) {
-            pageScroll.current = false;
-            scrollFrame.current = requestAnimationFrame(() => list.current?.scrollToOffset({ offset: headerHeight.current, animated: false }));
-          }
+          setResult((previous) => ({ key: queryKey, page: { ...value, entries: offset > 0 && previous?.key === queryKey ? [...previous.page.entries.slice(0, offset), ...value.entries] : value.entries } }));
+          if (offset === 0) { setSelected(value.entries[0] ?? null); setVisibleRange({ start: 0, end: 24 }); }
         }
-      }).catch((cause) => { if (current) setFailure({ key: queryKey, message: characterMapError(cause) }); });
+      }).catch((cause) => { if (current) setFailure({ key: requestKey, message: characterMapError(cause) }); });
     }, 120);
     return () => { current = false; clearTimeout(timer); };
-  }, [session, queryKey, search, script, offset, list]);
+  }, [session, queryKey, requestKey, search, script, offset]);
   const visible = useMemo(() => page?.entries.slice(Math.max(0, visibleRange.start - columns), visibleRange.end + columns) ?? [], [page, visibleRange, columns]);
   const renderKey = JSON.stringify([queryKey, axes, foreground, visible.map((entry) => entry.glyphId)]);
   const [images, setImages] = useState<{ key: string; values: CharacterGlyph[] } | null>(null);
@@ -135,43 +129,52 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
     const glyphIds = [...new Set(visible.map((entry) => entry.glyphId))];
     if (!session || !glyphIds.length) return;
     session.render({ glyphIds, axes, foreground, size: 128 }).then((values) => { if (current) setImages({ key: renderKey, values }); })
-      .catch((cause) => { if (current) setFailure({ key: queryKey, message: characterMapError(cause) }); });
+      .catch((cause) => { if (current) setFailure({ key: requestKey, message: characterMapError(cause) }); });
     return () => { current = false; };
-  }, [session, renderKey, queryKey, visible, axes, foreground]);
+  }, [session, renderKey, requestKey, visible, axes, foreground]);
   const byGlyph = useMemo(() => new Map((images?.key === renderKey ? images.values : []).map((image) => [image.glyphId, image])), [images, renderKey]);
-  const error = failure?.key === queryKey ? failure.message : null;
-  const listHeader = <View onLayout={({ nativeEvent }) => { headerHeight.current = nativeEvent.layout.height; }}>
+  const error = failure?.key === requestKey ? failure.message : null;
+  const loading = !page || page.entries.length === offset;
+  const loadMore = () => {
+    if (page && !loading && !error && page.entries.length < page.total) setOffset(page.entries.length);
+  };
+  const listHeader = <View>
     {controls}
     {info && <View style={settingsLayout.content}>
-      <TextInput value={search} onChangeText={(value) => { setSearch(value); setOffset(0); }} accessibilityLabel={t('characterMap.search')}
+      <TextInput value={search} onChangeText={(value) => { header.restoreTitle(); setSearch(value); setOffset(0); }} accessibilityLabel={t('characterMap.search')}
         placeholder={t('characterMap.search')} placeholderTextColor={theme.secondary} autoCapitalize="none" autoCorrect={false}
         style={[styles.search, settingsTypography.body, { color: theme.label, backgroundColor: theme.surface, borderColor: theme.border }]} />
       <ChoiceRow sourceId={header.sourceId} label={t('filters.script')} theme={theme} value={script} options={[{ value: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ value: item.name, label: `${item.name} (${item.count})` }))]}
-        onChange={(value) => { setScript(value); setOffset(0); }} />
-      <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('characterMap.count', { count: page?.total ?? info.count })}</Text>
+        onChange={(value) => { header.restoreTitle(); setScript(value); setOffset(0); }} />
       {error && <View><Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(error)}</Text><PanelAction label={t('common.retry')} theme={theme} onPress={() => setRetry((value) => value + 1)} /></View>}
     </View>}
     {failureContent}
   </View>;
   return <NativeScrollContainer hasHeader onInsetsChange={header.onInsetsChange} style={styles.screen}>
-    <PageHeader {...header} title={t('characterMap.title')} theme={theme} style={styles.header} leading={
+    <PageHeader {...header} theme={theme} style={styles.header}>
       <IconButton theme={theme} label={t('common.back')} systemImage="chevron.left" onPress={onClose}>
         <CaretLeftIcon size={20} color={theme.label} />
       </IconButton>
-    } />
+      <View style={styles.screen}>
+        <Text numberOfLines={1} accessibilityRole="header" style={[settingsTypography.body, { color: theme.label, fontWeight: '600' }]}>{title}</Text>
+        <Text numberOfLines={1} accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary }]}>{info ? t('characterMap.count', { count: page?.total ?? info.count }) : t('common.loading')}</Text>
+      </View>
+    </PageHeader>
     <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
     <View style={[styles.screen, wide && styles.wide]}>
       <Animated.FlatList ref={list} key={columns} style={styles.grid}
-        ListHeaderComponent={listHeader} {...header.snapScrollProps} onScroll={header.onScroll} scrollEventThrottle={16}
+        ListHeaderComponent={listHeader} onScroll={header.onScroll} scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
         scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
-        contentContainerStyle={{ paddingTop: header.contentTop, paddingBottom: 16 }} keyboardDismissMode="on-drag" data={page?.entries ?? []} numColumns={columns} keyExtractor={(entry) => String(entry.codepoint)}
+        contentContainerStyle={{ paddingTop: header.contentTop, paddingBottom: header.contentBottom }} keyboardDismissMode="on-drag" data={page?.entries ?? []} numColumns={columns} keyExtractor={(entry) => String(entry.codepoint)}
         extraData={[byGlyph, selected, theme]} initialNumToRender={columns * 4} maxToRenderPerBatch={columns * 4} windowSize={3}
         onViewableItemsChanged={onViewableItemsChanged} keyboardShouldPersistTaps="handled"
+        onEndReached={loadMore} onEndReachedThreshold={0.5}
+        ListFooterComponent={page && loading && !error ? <ActivityIndicator color={theme.accent} /> : null}
         ListEmptyComponent={page ? <Text style={[settingsLayout.content, { color: theme.secondary }]}>{t('characterMap.empty')}</Text> : !error && !failureContent ? <ActivityIndicator color={theme.accent} /> : null}
         renderItem={({ item }) => {
           const image = byGlyph.get(item.glyphId);
-          return <Pressable style={[styles.cell, { backgroundColor: selected?.codepoint === item.codepoint ? theme.raised : theme.background }]}
+          return <Pressable style={[styles.cell, { width: cellWidth, backgroundColor: theme.surface, borderColor: selected?.codepoint === item.codepoint ? theme.accent : 'transparent' }]}
             accessibilityRole="button" accessibilityState={{ selected: selected?.codepoint === item.codepoint }}
             accessibilityLabel={t('characterMap.characterLabel', { codepoint: codepointLabel(item.codepoint), glyphId: item.glyphId, script: item.script })}
             onPress={() => setSelected(item)}>
@@ -181,11 +184,6 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
           </Pressable>;
         }} />
       {session && selected && page && <CharacterDetail key={`${selected.codepoint}:${JSON.stringify(axes)}:${foreground}`} session={session} entry={selected} axes={axes} foreground={foreground} theme={theme} wide={wide} topInset={wide ? header.contentTop : 0} maxHeight={height * (wide ? 0.7 : 0.3)} />}
-    </View>
-    <View style={[settingsLayout.content, styles.pager, { paddingBottom: header.contentBottom }]}>
-      <PanelAction label={t('characterMap.previousPage')} theme={theme} disabled={offset === 0} onPress={() => { pageScroll.current = true; setOffset(Math.max(0, offset - characterPageSize)); }} />
-      <Text style={{ color: theme.secondary }}>{t('characterMap.page', { page: Math.floor(offset / characterPageSize) + 1, pages: Math.max(1, Math.ceil((page?.total ?? 0) / characterPageSize)) })}</Text>
-      <PanelAction label={t('characterMap.nextPage')} theme={theme} disabled={!page || offset + characterPageSize >= page.total} onPress={() => { pageScroll.current = true; setOffset(offset + characterPageSize); }} />
     </View>
     </NavigationBackdrop>
   </NativeScrollContainer>;
@@ -239,7 +237,8 @@ function ChoiceRow({ label, options, value, onChange, theme, sourceId }: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 }, header: { paddingHorizontal: 16 }, wide: { flexDirection: 'row' },
-  grid: { flex: 1 }, cell: { flex: 1, height: 96, alignItems: 'center', justifyContent: 'center' }, cellImage: { width: 64, height: 64 },
+  grid: { flex: 1 },
+  cell: { ...fontCardSurfaceStyle, padding: 0, height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 3 }, cellImage: { width: 64, height: 64 },
   detailWide: { width: '35%' }, detailRow: { flexDirection: 'row', alignItems: 'center' },
   phoneImage: { width: 112, height: 112 }, largeImage: { width: '100%', aspectRatio: 1 }, image: { width: '100%', height: '100%' },
   pager: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

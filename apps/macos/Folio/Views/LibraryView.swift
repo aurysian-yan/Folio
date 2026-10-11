@@ -38,8 +38,10 @@ struct LibraryView: View {
                 }
             }
         }
-        .navigationTitle(model.characterMap.map { "\($0.family.displayName) · \(L.text("characterMap.title"))" } ?? "Folio")
-        .navigationSubtitle(model.characterMap == nil ? L.plural("library.familyCount", Int(model.totalMatches)) : "")
+        .navigationTitle(model.characterMap?.family.displayName ?? "Folio")
+        .navigationSubtitle(model.characterMap.map { state in
+            state.count.map { L.plural("characterMap.count", $0) } ?? L.text("common.loading")
+        } ?? L.plural("library.familyCount", Int(model.totalMatches)))
         .searchable(text: Binding(get: { model.characterMap?.search ?? model.searchText }, set: {
             if let state = model.characterMap { state.search = $0 } else { model.searchText = $0 }
         }), placement: .toolbar, prompt: L.text(model.characterMap == nil ? "common.search" : "characterMap.search"))

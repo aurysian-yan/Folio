@@ -3239,7 +3239,7 @@ body {
 .character-map-content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--spacing) * 4); }
 .character-map-panels { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 20rem); gap: calc(var(--spacing) * 6); }
 .character-map-grid { --character-cell-size: 6rem; overflow: auto; min-height: 0; }
-.character-map-cell { height: var(--character-cell-size); width: 100%; display: flex; flex-direction: column; gap: 0; }
+.character-map-cell { height: var(--character-cell-size); width: 100%; padding: calc(var(--spacing) * 2); }
 .character-map-detail { overflow: auto; min-height: 0; }
 @media (max-width: 48rem) {
   .character-map-panels { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }

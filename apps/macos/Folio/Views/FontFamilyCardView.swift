@@ -45,6 +45,36 @@ enum FontCardPresentation: Hashable, Sendable {
     }
 }
 
+// 字体与字符卡片共用材质、轮廓和选中效果。
+struct FontCardSurface: ViewModifier {
+    @Environment(\.folioThemeColor) private var themeColor
+    let highlighted: Bool
+    var expanded = false
+    var backgroundColor: Color?
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 16, style: .continuous) }
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                shape.fill(.thickMaterial)
+                shape.fill(Color(nsColor: .controlBackgroundColor).opacity(expanded ? 0.72 : 0.58))
+                if let backgroundColor { shape.fill(backgroundColor) }
+                if highlighted, !expanded {
+                    LinearGradient(
+                        stops: [.init(color: .clear, location: 0.53125), .init(color: themeColor.opacity(0.4), location: 1)],
+                        startPoint: .top, endPoint: .bottom
+                    ).clipShape(shape)
+                }
+            }
+            .clipShape(shape)
+            .overlay {
+                shape.stroke(highlighted && !expanded ? themeColor : Color.primary.opacity(expanded ? 0.08 : 0.1),
+                    lineWidth: highlighted && !expanded ? 3 : 1)
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
 struct FontFamilyCardView: View {
     @Bindable var model: LibraryViewModel
     @Environment(\.folioThemeColor) private var themeColor
@@ -111,37 +141,7 @@ struct FontFamilyCardView: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             sizedCardContent
-                .background {
-                    cardShape.fill(.thickMaterial)
-                    cardShape.fill(
-                        Color(nsColor: .controlBackgroundColor)
-                            .opacity(presentation == .expanded ? 0.72 : 0.58)
-                    )
-                    if let cardBackgroundColor = model.cardBackgroundColor {
-                        cardShape.fill(cardBackgroundColor)
-                    }
-                    if highlighted, presentation != .expanded {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .clear, location: 0.53125),
-                                .init(color: themeColor.opacity(0.4), location: 1),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .clipShape(cardShape)
-                    }
-                }
-                .clipShape(cardShape)
-                .overlay {
-                    cardShape.stroke(
-                        highlighted && presentation != .expanded
-                            ? themeColor
-                            : Color.primary.opacity(presentation == .expanded ? 0.08 : 0.1),
-                        lineWidth: highlighted && presentation != .expanded ? 3 : 1
-                    )
-                    .allowsHitTesting(false)
-                }
+                .modifier(FontCardSurface(highlighted: highlighted, expanded: presentation == .expanded, backgroundColor: model.cardBackgroundColor))
 
             if selected, !model.isSelectingInstalledForCloud, presentation != .expanded {
                 cardActions

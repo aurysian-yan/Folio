@@ -38,6 +38,40 @@ final class FolioTests: XCTestCase {
         XCTAssertFalse(model.inspectorPresented)
     }
 
+    func testCharacterMapContinuousLoadingPreservesSelectionAndResetsFilters() {
+        let family = FamilyCard(id: FamilyID(rawValue: "continuous"), displayName: "Continuous", faces: [], identityIDs: [],
+            matchedFaceIDs: [], isFavorite: false, isVariable: false, manufacturer: nil)
+        let model = LibraryViewModel()
+        let state = CharacterMapState(model: model, family: family, inspectorPresented: false)
+        state.opened = (state.selectionKey, CharacterInfo(handle: "continuous", count: 600, scripts: []))
+        let entries = (0..<600).map { CharacterEntry(codepoint: UInt32($0 + 32), glyphId: UInt32($0 + 1), script: "Common") }
+        state.result = (state.queryKey, CharacterPage(entries: Array(entries.prefix(256)), total: 600))
+        state.selected = entries[1]
+        state.loadMore()
+        state.loadMore()
+        XCTAssertEqual(state.offset, 256)
+        XCTAssertEqual(state.page?.entries.count, 256)
+        XCTAssertEqual(state.count, 600)
+        XCTAssertEqual(state.selected, entries[1])
+        state.queryFailure = (state.requestKey, "characterMap.error.sourceUnavailable")
+        XCTAssertFalse(state.canLoadMore)
+        state.queryRetry += 1
+        XCTAssertFalse(state.canLoadMore)
+        state.result = (state.queryKey, CharacterPage(entries: Array(entries.prefix(512)), total: 600))
+        state.loadMore()
+        XCTAssertEqual(state.offset, 512)
+        state.result = (state.queryKey, CharacterPage(entries: entries, total: 600))
+        XCTAssertFalse(state.canLoadMore)
+        state.search = "😀"
+        XCTAssertEqual(state.offset, 0)
+        XCTAssertNil(state.page)
+        state.result = (state.queryKey, CharacterPage(entries: [], total: 0))
+        XCTAssertEqual(state.count, 0)
+        XCTAssertFalse(state.canLoadMore)
+        state.script = "Latin"
+        XCTAssertNil(state.page)
+    }
+
     func testSyncPercentKeepsLiteralPercentSign() {
         XCTAssertTrue(L.format("cloud.syncingPercent", "34").contains("34%"))
         XCTAssertTrue(L.format("cloud.syncingCloud", "WebDAV", "34").contains("34%"))
