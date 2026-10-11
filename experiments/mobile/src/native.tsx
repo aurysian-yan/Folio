@@ -1,4 +1,5 @@
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
+import { createCharacterMapClient, type CharacterMapBridge } from '../../../shared/character-map';
 import type { NativeSyntheticEvent, ViewProps } from 'react-native';
 import { createLibraryClient, type LibraryBridge } from './library';
 import type { MaterialRoles } from './material-theme';
@@ -16,7 +17,8 @@ interface AndroidWindowBridge {
   screenCornerRadius(): number;
 }
 
-const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & AndroidWindowBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
+const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & AndroidWindowBridge & CharacterMapBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
+export const characterMap = createCharacterMapClient(nativeModule);
 export const cloudSync = createSyncClient(nativeModule);
 export const syncSession = new ForegroundSyncSession(cloudSync, () => nativeModule.snapshot());
 export const library = createLibraryClient(nativeModule, (action, kind) => syncSession.mutate(action, kind));

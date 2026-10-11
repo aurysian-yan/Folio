@@ -40,7 +40,8 @@
     "operationFailed": "无法完成操作",
     "indexOfTotal": "第 {{index}} 个，共 {{total}} 个",
     "widthPixels": "{{width}} 像素",
-    "copied": "已复制"
+    "copied": "已复制",
+    "back": "返回"
   },
   "language": {
     "title": "界面语言",
@@ -947,5 +948,34 @@
     },
     "nextVariation": "切换字标",
     "logoVariant": "字标 {{current}} / {{total}}"
+  },
+  "characterMap": {
+    "title": "字符表",
+    "open": "查看字符表",
+    "search": "输入字符或 U+ 码位",
+    "allScripts": "全部脚本",
+    "codepoint": "Unicode 码位",
+    "glyphId": "Glyph ID",
+    "copyCharacter": "复制字符",
+    "copyCodepoint": "复制码位",
+    "selectCharacter": "选择字符以查看详情",
+    "empty": "没有匹配的字符",
+    "count": "{{count}} 个字符",
+    "page": "第 {{page}} 页，共 {{pages}} 页",
+    "previousPage": "上一页",
+    "nextPage": "下一页",
+    "characterLabel": "{{codepoint}}，Glyph {{glyphId}}，{{script}}",
+    "blankGlyph": "空白字形",
+    "error": {
+      "sourceUnavailable": "字体文件不可用，请下载字体或重新选择来源。",
+      "staleSource": "字体文件已变化，请重新读取字符表。",
+      "invalidFont": "无法读取此字体的字符表。",
+      "invalidQuery": "请输入单个字符或有效的 U+ 码位。",
+      "invalidAxes": "变量轴设置不可用，请重新选择字款。",
+      "sessionClosed": "字符表已关闭，请重新打开。",
+      "renderFailed": "无法显示字形，请重试。",
+      "copyFailed": "无法复制，请重试。",
+      "notDownloaded": "字体尚未下载，请先下载字体。"
+    }
   }
 }

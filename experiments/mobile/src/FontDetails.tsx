@@ -15,6 +15,8 @@ import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
 import { FontActionsMenu } from './FontActionsMenu';
 import { SettingsGroup, settingsLayout, settingsTypography } from './settings-ui';
 import { DetailSlider } from './DetailSlider';
+import { CharacterMap } from './CharacterMap';
+import { FontNavigation } from './FontNavigation';
 import { adjustableAxes, axisStep, defaultAxisValues, detailPreviewSize, formatAxisValue, stepFaceId } from './font-details';
 
 interface FontDetailsProps {
@@ -37,10 +39,15 @@ const axisLabelKeys: Record<string, string> = {
 
 // 字体详情复用设置页的分组、文字尺度与滚动导航。
 export function FontDetails(props: FontDetailsProps) {
-  return <SafeAreaProvider><FontDetailsContent {...props} /></SafeAreaProvider>;
+  const [target, setTarget] = useState<{ face: FontFace; axes: Record<string, number> } | null>(null);
+  const [visible, setVisible] = useState(false);
+  return <SafeAreaProvider><FontNavigation theme={props.theme} visible={visible} onDismissed={() => { setVisible(false); setTarget(null); }}
+    detail={target && <CharacterMap family={props.family} initialFace={target.face} initialAxes={target.axes} theme={props.theme} onClose={() => setVisible(false)} onDownload={(fingerprint) => props.onFileAction(fingerprint, 'download')} />}>
+    <FontDetailsContent {...props} onOpenCharacterMap={(face, axes) => { setTarget({ face, axes }); setVisible(true); }} />
+  </FontNavigation></SafeAreaProvider>;
 }
 
-function FontDetailsContent({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite, onFileAction }: FontDetailsProps) {
+function FontDetailsContent({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite, onFileAction, onOpenCharacterMap }: FontDetailsProps & { onOpenCharacterMap: (face: FontFace, axes: Record<string, number>) => void }) {
   const { t } = useTranslation();
   const scroll = useRef<ScrollView>(null);
   const styleScroll = useRef<ScrollView>(null);
@@ -142,6 +149,7 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
             {!!error && <Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{error}</Text>}
           </View>}
 
+          {selectedFace && <PanelAction label={t('characterMap.open')} theme={theme} onPress={() => onOpenCharacterMap(selectedFace, axisValues)} />}
           <SettingsGroup theme={theme}>
             <View style={settingsLayout.content}>
               <Text style={[settingsTypography.body,{color:theme.label}]}>{t('fontLocation.title')}</Text>

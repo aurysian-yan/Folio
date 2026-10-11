@@ -31,6 +31,7 @@ struct StorageUsageDto {
 struct AppState {
     library: Arc<Mutex<LibraryService>>,
     previews: Arc<preview::PreviewService>,
+    character_maps: Arc<folio_render::CharacterMapService>,
     database_path: PathBuf,
     managed_directory: PathBuf,
     sync_status: Arc<Mutex<SyncStatusDto>>,
@@ -53,6 +54,81 @@ struct SyncStatusDto {
     published_events: u64,
     items: Vec<SyncItemDto>,
     error: Option<String>,
+}
+
+#[tauri::command]
+async fn open_character_map(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    request: String,
+) -> Result<String, String> {
+    require_main_window(&window)?;
+    let request: folio_render::OpenCharacterMap =
+        serde_json::from_str(&request).map_err(|_| "characterMap.error.invalidQuery".to_owned())?;
+    let face_id = request.face_id.clone();
+    let face = with_library(&state, move |library| library.character_map_face(&face_id)).await?;
+    let service = Arc::clone(&state.character_maps);
+    tauri::async_runtime::spawn_blocking(move || {
+        serde_json::to_string(
+            &service
+                .open(&face, &request)
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|_| "characterMap.error.renderFailed".to_owned())
+    })
+    .await
+    .map_err(|_| "characterMap.error.renderFailed".to_owned())?
+}
+
+#[tauri::command]
+async fn query_character_map(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    request: String,
+) -> Result<String, String> {
+    require_main_window(&window)?;
+    let request =
+        serde_json::from_str(&request).map_err(|_| "characterMap.error.invalidQuery".to_owned())?;
+    let service = Arc::clone(&state.character_maps);
+    tauri::async_runtime::spawn_blocking(move || {
+        serde_json::to_string(&service.query(&request).map_err(|error| error.to_string())?)
+            .map_err(|_| "characterMap.error.renderFailed".to_owned())
+    })
+    .await
+    .map_err(|_| "characterMap.error.renderFailed".to_owned())?
+}
+
+#[tauri::command]
+async fn render_character_map(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    request: String,
+) -> Result<String, String> {
+    require_main_window(&window)?;
+    let request =
+        serde_json::from_str(&request).map_err(|_| "characterMap.error.invalidQuery".to_owned())?;
+    let service = Arc::clone(&state.character_maps);
+    tauri::async_runtime::spawn_blocking(move || {
+        serde_json::to_string(
+            &service
+                .render(&request)
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|_| "characterMap.error.renderFailed".to_owned())
+    })
+    .await
+    .map_err(|_| "characterMap.error.renderFailed".to_owned())?
+}
+
+#[tauri::command]
+fn close_character_map(
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    handle: String,
+) -> Result<(), String> {
+    require_main_window(&window)?;
+    state.character_maps.close(&handle);
+    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1023,6 +1099,7 @@ pub fn run() {
             app.manage(AppState {
                 library: Arc::new(Mutex::new(library)),
                 previews: Arc::new(preview::PreviewService::default()),
+                character_maps: Arc::new(folio_render::CharacterMapService::default()),
                 database_path,
                 managed_directory,
                 sync_status: Arc::new(Mutex::new(SyncStatusDto::default())),
@@ -1037,6 +1114,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            open_character_map,
+            query_character_map,
+            render_character_map,
+            close_character_map,
             query_library,
             refresh_library,
             add_library_root,

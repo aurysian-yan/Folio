@@ -24,6 +24,7 @@ execFileSync('swiftc', ['-I', generated, '-I', libraries, '-L', libraries, '-lZI
   join(project, 'modules/folio-native/ios/src/FolioSyncCredentials.swift'),
   join(project, 'tests/SwiftSyncSmoke.swift'),
   join(project, 'tests/SwiftLibrarySmoke.swift'),
+  join(project, 'tests/SwiftCharacterMapSmoke.swift'),
   join(project, 'tests/SwiftImportSmoke.swift'), join(project, 'tests/SwiftSmoke.swift'), '-o', output],
 { cwd: project, stdio: 'inherit' });
 execFileSync(output, [join(project, 'samples')], {

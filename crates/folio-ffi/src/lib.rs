@@ -1146,6 +1146,7 @@ struct EngineState {
 #[derive(uniffi::Object)]
 pub struct FolioEngine {
     state: Mutex<EngineState>,
+    character_maps: folio_render::CharacterMapService,
 }
 
 #[uniffi::export]
@@ -1161,6 +1162,7 @@ impl FolioEngine {
             .map_err(FolioFfiError::operation)?;
         let index = FontQueryIndex::build(&catalog, &state).map_err(FolioFfiError::operation)?;
         Ok(Arc::new(Self {
+            character_maps: folio_render::CharacterMapService::default(),
             state: Mutex::new(EngineState {
                 database,
                 catalog,
@@ -1178,6 +1180,54 @@ impl FolioEngine {
             .map_err(FolioFfiError::operation)?;
         rebuild_index(&mut state)?;
         snapshot(&mut state)
+    }
+
+    // JSON 契约由三个客户端共用，锁内只取得已登记字款。
+    pub fn open_character_map(&self, request: String) -> Result<String, FolioFfiError> {
+        let request: folio_render::OpenCharacterMap = serde_json::from_str(&request)
+            .map_err(|_| FolioFfiError::operation("characterMap.error.invalidQuery"))?;
+        let face = self
+            .lock()?
+            .catalog
+            .faces()
+            .find(|face| face.id.to_string() == request.face_id)
+            .cloned()
+            .ok_or_else(|| FolioFfiError::operation("characterMap.error.staleSource"))?;
+        serde_json::to_string(
+            &self
+                .character_maps
+                .open(&face, &request)
+                .map_err(FolioFfiError::operation)?,
+        )
+        .map_err(FolioFfiError::operation)
+    }
+
+    pub fn query_character_map(&self, request: String) -> Result<String, FolioFfiError> {
+        let request = serde_json::from_str(&request)
+            .map_err(|_| FolioFfiError::operation("characterMap.error.invalidQuery"))?;
+        serde_json::to_string(
+            &self
+                .character_maps
+                .query(&request)
+                .map_err(FolioFfiError::operation)?,
+        )
+        .map_err(FolioFfiError::operation)
+    }
+
+    pub fn render_character_map(&self, request: String) -> Result<String, FolioFfiError> {
+        let request = serde_json::from_str(&request)
+            .map_err(|_| FolioFfiError::operation("characterMap.error.invalidQuery"))?;
+        serde_json::to_string(
+            &self
+                .character_maps
+                .render(&request)
+                .map_err(FolioFfiError::operation)?,
+        )
+        .map_err(FolioFfiError::operation)
+    }
+
+    pub fn close_character_map(&self, handle: String) {
+        self.character_maps.close(&handle);
     }
 
     pub fn refresh_library(&self) -> Result<RefreshOutcomeDto, FolioFfiError> {
@@ -2520,6 +2570,39 @@ fn root_dto(root: &folio_storage::LibraryRoot) -> RootDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn character_map_bridge_rejects_invalid_requests_and_unknown_faces() {
+        let directory = tempfile::tempdir().unwrap();
+        let engine = FolioEngine::open(
+            directory
+                .path()
+                .join("folio.sqlite")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .unwrap();
+        for request in ["{", "{}"] {
+            assert!(engine
+                .open_character_map(request.into())
+                .unwrap_err()
+                .to_string()
+                .contains("characterMap.error.invalidQuery"));
+        }
+        let unknown = serde_json::json!({"faceId": "missing", "revisionId": "missing", "sourcePath": "/missing.ttf"});
+        assert!(engine
+            .open_character_map(unknown.to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("characterMap.error.staleSource"));
+        let query = serde_json::json!({"handle": "closed"});
+        assert!(engine
+            .query_character_map(query.to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("characterMap.error.sessionClosed"));
+        engine.close_character_map("closed".into());
+    }
 
     #[test]
     fn storage_maintenance_waits_for_sync_and_refresh() {

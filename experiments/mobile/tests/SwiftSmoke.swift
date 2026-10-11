@@ -31,6 +31,7 @@ struct SwiftSmoke {
         let faces = all.families.flatMap(\.faces)
         precondition(faces.contains { $0.faceIndex == 1 && $0.sourcePath?.hasSuffix(".ttc") == true })
         precondition(faces.contains { !$0.axes.isEmpty })
+        try SwiftCharacterMapSmoke.run(engine: engine, faces: faces)
         let family = all.families[0]
         try engine.setFavorite(identityIds: family.identityIds, favorite: true)
         let reopened = try FolioEngine.open(databasePath: database)

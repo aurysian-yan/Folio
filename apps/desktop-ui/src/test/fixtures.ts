@@ -3,7 +3,7 @@ import type { FamilyDto } from "../types";
 export function family(id: string): FamilyDto {
   return {
     id, displayName: `字体 ${id}`, matchedFaceIds: [id], isFavorite: false, isCollectionMember: false, collectionIds: [], isVariable: false,
-    faces: [{ id, identityId: id, styleName: "Regular", postscriptName: null, format: "TrueType", isVariable: false, weight: 400, width: 1,
+    faces: [{ id, revisionId: "fixture-revision", identityId: id, styleName: "Regular", postscriptName: null, format: "TrueType", isVariable: false, weight: 400, width: 1,
       variableAxes: [], namedInstances: [], sources: [], location: {state:"excluded",localAvailable:true,cloudAvailable:false,cloudConfirmedAtMs:null,metadataComplete:true,files:[]} }],
   };
 }

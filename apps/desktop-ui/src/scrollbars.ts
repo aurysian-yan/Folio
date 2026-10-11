@@ -2,6 +2,8 @@ import { OverlayScrollbars } from "overlayscrollbars";
 import { useLayoutEffect } from "react";
 
 const scrollAreas = [
+  ".character-map-grid",
+  ".character-map-detail",
   ".sidebar-scroll",
   ".font-grid",
   ".inspector-inner",

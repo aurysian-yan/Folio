@@ -40,7 +40,8 @@
     "operationFailed": "Couldn't complete the action",
     "indexOfTotal": "{{index}} of {{total}}",
     "widthPixels": "{{width}} px",
-    "copied": "Copied"
+    "copied": "Copied",
+    "back": "Back"
   },
   "language": {
     "title": "Language",
@@ -960,5 +961,35 @@
     },
     "nextVariation": "Next wordmark",
     "logoVariant": "Wordmark {{current}} of {{total}}"
+  },
+  "characterMap": {
+    "title": "Character Map",
+    "open": "Open Character Map",
+    "search": "Enter a character or U+ code point",
+    "allScripts": "All scripts",
+    "codepoint": "Unicode code point",
+    "glyphId": "Glyph ID",
+    "copyCharacter": "Copy character",
+    "copyCodepoint": "Copy code point",
+    "selectCharacter": "Select a character to view details",
+    "empty": "No matching characters",
+    "count_one": "{{count}} character",
+    "count_other": "{{count}} characters",
+    "page": "Page {{page}} of {{pages}}",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "characterLabel": "{{codepoint}}, Glyph {{glyphId}}, {{script}}",
+    "blankGlyph": "Blank glyph",
+    "error": {
+      "sourceUnavailable": "The font file is unavailable. Download the font or select another source.",
+      "staleSource": "The font file has changed. Reload the character map.",
+      "invalidFont": "The character map could not be read.",
+      "invalidQuery": "Enter a single character or a valid U+ code point.",
+      "invalidAxes": "The variation settings are unavailable. Select the style again.",
+      "sessionClosed": "The character map has closed. Open it again.",
+      "renderFailed": "The glyph could not be displayed. Try again.",
+      "copyFailed": "Could not copy. Try again.",
+      "notDownloaded": "This font has not been downloaded. Download it to view its characters."
+    }
   }
 }

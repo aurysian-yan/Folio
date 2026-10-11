@@ -4,6 +4,7 @@ import SwiftUI
 struct FontInspectorView: View {
     @Bindable var model: LibraryViewModel
 
+    @State private var characterMapPresented = false
     @State private var previewExpanded = true
     @State private var axesExpanded = true
     @State private var copyExpanded = true
@@ -24,6 +25,11 @@ struct FontInspectorView: View {
                 } description: {
                     Text(L.text("inspector.selectFamilyHint"))
                 }
+            }
+        }
+        .sheet(isPresented: $characterMapPresented) {
+            if let family = model.selectedFamily, let face = model.selectedFace {
+                CharacterMapView(model: model, family: family, face: face)
             }
         }
         .confirmationDialog(destructiveDialogTitle, isPresented: $destructiveActionsPresented) {
@@ -59,6 +65,7 @@ struct FontInspectorView: View {
                     }
                 }
 
+                Button(L.text("characterMap.open")) { characterMapPresented = true }
                 inspectorDivider
 
                 VStack(alignment:.leading,spacing:10) {

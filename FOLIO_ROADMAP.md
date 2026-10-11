@@ -15,7 +15,7 @@
 | macOS 字体导入、启用、安装 | PARTIAL | `FontOperations.swift` 与 `LibraryViewModel.swift` 已有复制/引用、批量结果和重试、CoreText 会话注册及持久注册、Finder 打开入口。属于已实现路径，不应重做 Phase 3C；仍需针对当前版本做真实文件、权限、失败恢复和卸载边界的回归。 |
 | WebDAV / 123PAN | PARTIAL | `folio-sync` 已有 WebDAV v1 事件/对象、上传下载、取消/重试、续传、云端占位与冲突；macOS、Tauri 均有连接与同步入口。123PAN 使用 WebDAV，不是独立协议。[v7 迁移报告](docs/sync-migration-v7-report.md) 记录单设备连接修复及一次成功同步，**双设备、断网恢复、冲突处理和 123PAN 实网矩阵仍未验收**。现有协议足以启动移动 PoC，不足以宣布移动同步可交付。 |
 | Tauri / Windows baseline | PARTIAL | `apps/desktop-ui` 已有完整 React 页面、四种浏览样式、分页/预览、收藏/智慧收藏夹、同步设置；`src-tauri` 直接使用 Rust crates，并有 Windows 默认目录、渲染和命令。旧文档的“只有依赖基线”已失效。尚无完整 Explorer 批量导入、Windows 字体启用/安装流程及本轮 Windows 打包/运行验收；Linux 更未实测。 |
-| Character Map | NOT STARTED | Core 已观察 `cmap` 以统计脚本、桌面端也用其做预览采样，但没有面向产品的码点/Glyph ID 枚举、分页、检索接口或字符表页面；不能把预览采样算作字符表。 |
+| Character Map | PARTIAL | Core 字符映射、`folio-render` 共享渲染与 UniFFI/Tauri/Expo 四项会话接口已收尾，格式、快照与分页测试通过。各端 UI 原型保留，桌面二级导航和右侧栏复用待调整，移动详情下三级页面及目标设备验收继续单列；见 [字符表验证记录](docs/character-map-validation.md)。 |
 | Android / iOS | PARTIAL（隔离 PoC） | `experiments/mobile` 已建立 RN/Expo、UniFFI 本地模块、导入/查询与原生预览基础；双端 Rust 打包、Android APK 和 arm64 iOS Simulator App 构建已通过，见 [验证记录](experiments/mobile/VALIDATION.md)。未交付正式移动客户端、`DocumentsProvider` 或 File Provider；架构 go/no-go 与实机验收仍待完成。 |
 | 在线字体 | PARTIAL | `folio-online`、macOS 在线浏览与下载已有实现；旧 README 仍称未实现。镜像可用性、来源许可和跨平台范围需另验。 |
 
@@ -83,14 +83,14 @@ PoC 放在独立临时工程或隔离工作区，使用固定许可测试字体�
 - **Acceptance Criteria：**真实 Windows 上完成导入→浏览/预览→收藏→同步→恢复→字体操作；重复项和失败不会静默覆盖或丢失；重启后状态一致。
 - **Explicitly Out of Scope：**Linux 完成声明、跨平台字符表、Cover Flow、移动端。
 
-### C. Character Map 共享契约与桌面页面
+### C. Character Map 共享契约与全平台页面
 
-- **Goal：**在移动正式页面增加之前定义一次正确的字符映射接口；不再排在 Android 完成之后。
-- **Scope：**Rust 按具体来源及 collection face index 枚举 Unicode scalar/Glyph ID/脚本，稳定分页与 U+ 检索；UniFFI/Tauri 同义暴露；macOS/Windows 页面与准确 Face 渲染、复制、离线/损坏状态。
+- **Goal：**使用同一字符映射与渲染契约，覆盖 macOS、Windows、Linux、Android、iOS/iPadOS；移动页面继续留在现有隔离工程，不改变生产架构决策。
+- **Scope：**Rust 按实际字体字节及 collection face index 枚举 Unicode scalar/Glyph ID/脚本，稳定分页、单字符/U+ 精确检索及脚本筛选；独立 `folio-render` 提供轮廓、变量、COLR v0/v1、CBDT/CBLC、sbix、EBDT/EBLC、内嵌 SVG 渲染；UniFFI/Tauri/Expo 同义暴露只读快照；桌面双击字体卡片进入二级字符表并复用一级页面右侧栏，移动从字体详情进入三级页面，继承字款、来源及轴值，显示放大字形并复制字符或码位。
 - **Dependencies：**稳定的 Face/source/axes 契约；B 的 Windows 本地文件与预览闭环。Rust 接口设计可先于 B 并行开始。
-- **Deliverables：**共享接口、两端页面与 TTF/OTF/TTC/变量字体测试矩阵。
-- **Acceptance Criteria：**非零 TTC 成员、大型 cmap、变量轴和不可读来源的结果正确；返回库时保留查询、分页和选择；键盘/读屏可用，不静默换相似字体。
-- **Explicitly Out of Scope：**未编码 glyph、复杂连字塑形、WOFF/WOFF2、Linux 实机验收。
+- **Deliverables：**共享接口、全部平台页面、固定版本渲染依赖、格式与生命周期测试，以及 [实施和验证记录](docs/character-map-validation.md)。本轮核心收尾，UI 导航调整暂停；当前状态为 PARTIAL，缺少设备的验收不能以主机编译替代。
+- **Acceptance Criteria：**非零 TTC/OTC 成员、大型 cmap、非 BMP、私用区、组合和空白字符正确；彩色与位图保留颜色、透明度及定位；快照固定来源和 revision，关闭或切换后不回写旧结果；网格虚拟化、图片缓存不超过 32 MiB；返回库时保留查询、分页、滚动和选择；浅深色、键盘、读屏、安全区域及减少动态效果通过目标平台验证。
+- **Explicitly Out of Scope：**未编码 glyph、连字/ZWJ/变体序列、WOFF/WOFF2、Unicode 名称检索、调色板编辑、字形导出、数据库迁移与同步协议变更。
 
 ### D. 移动架构 PoC 与决策
 
@@ -107,7 +107,7 @@ PoC 放在独立临时工程或隔离工作区，使用固定许可测试字体�
 
 - **Goal：**先交付 Android 的随身字体库，再在经 PoC 验证的共享层上推进 iOS；若 D 选择双原生，则按同一业务契约分别实施。
 - **Scope：**Library/Card/Grid、查询/搜索/手动与智慧收藏夹、真实 Face 预览与变量轴、离线副本、WebDAV/123PAN、导入/导出；Android `DocumentsProvider`、SAF/USB；iOS Files/Share。平台导航和控件按 D 的 ADR 处理。
-- **Dependencies：**A 的双设备同步验收、D 的移动架构结论、C 的字符表接口契约（首版页面可排后）。
+- **Dependencies：**A 的双设备同步验收、D 的移动架构结论、C 的字符表接口契约；字符表移动页面已在隔离工程接入，生产交付仍依赖 D 的决策。
 - **Deliverables：**Android 实机首版、iOS/iPadOS 实机首版、平台文件互操作与同步验收报告。
 - **Acceptance Criteria：**Android 标准 Picker 与目标 ROM/调用方验证 URI 权限、云端按需下载和断网行为；iOS Files/Share 可用；两端真实文件与同步结果一致。iOS File Provider 仅在产品需求确认后单独验收，不能以 Files 导出冒充云端 Provider。
 - **Explicitly Out of Scope：**Android 系统级字体安装承诺、未验证的 MIUIX/玻璃效果、两端像素一致。
@@ -115,7 +115,7 @@ PoC 放在独立临时工程或隔离工作区，使用固定许可测试字体�
 ### F. 后续增强与 Linux/v2
 
 - **Goal：**按实际使用数据完善体验并扩展格式/平台。
-- **Scope：**大卡片内的 Cover Flow presentation、macOS 目录 watcher/热重载、桌面性能与可访问性 polish；Linux 复用 Tauri 页面并做 WebKitGTK/fontconfig/打包实测；WOFF/WOFF2 管理与预览另立格式验收。字符表移动页面可在 E 后接入。
+- **Scope：**大卡片内的 Cover Flow presentation、macOS 目录 watcher/热重载、桌面性能与可访问性 polish；Linux 复用 Tauri 页面并做 WebKitGTK/fontconfig/打包实测；WOFF/WOFF2 管理与预览另立格式验收。字符表全平台接入与验收归阶段 C。
 - **Dependencies：**前述核心工作流稳定；Linux/格式各有独立样本与运行环境。
 - **Deliverables：**逐项独立 ADR/验收，不把不同增强捆为一个不可拆阶段。
 - **Acceptance Criteria：**Cover Flow 不改变四种顶层模式且共享选择/分页状态；Linux 在目标发行版实测；WOFF/WOFF2 清楚区分可管理、可预览与可系统安装。

@@ -621,6 +621,8 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
 
     func addLibraryRoot(path: String) throws  -> RootDto
 
+    func closeCharacterMap(handle: String)
+
     func convertCollectionToSmartFolder(id: CollectionIdDto, name: String, query: SmartFolderQueryDto, icon: String, color: String) throws  -> SmartFolderIdDto
 
     func convertSmartFolderToCollection(id: SmartFolderIdDto, name: String, icon: String, color: String) throws  -> CollectionDto
@@ -645,6 +647,10 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
 
     func loadCachedLibrary() throws  -> LibrarySnapshotDto
 
+    func openCharacterMap(request: String) throws  -> String
+
+    func queryCharacterMap(request: String) throws  -> String
+
     func queryLibrary(query: LibraryQueryDto) throws  -> LibraryPageDto
 
     func queryLocalLibrary(query: LibraryQueryDto) throws  -> LibraryPageDto
@@ -660,6 +666,8 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
     func removeLibraryRoot(id: RootIdDto) throws
 
     func renameCollection(id: CollectionIdDto, name: String) throws
+
+    func renderCharacterMap(request: String) throws  -> String
 
     func setCollectionMembers(collectionId: CollectionIdDto, identityIds: [IdentityIdDto], member: Bool) throws
 
@@ -754,6 +762,15 @@ open func addLibraryRoot(path: String)throws  -> RootDto  {
         FfiConverterString.lower(path),uniffiCallStatus
     )
 })
+}
+
+open func closeCharacterMap(handle: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_close_character_map(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(handle),uniffiCallStatus
+    )
+}
 }
 
 open func convertCollectionToSmartFolder(id: CollectionIdDto, name: String, query: SmartFolderQueryDto, icon: String, color: String)throws  -> SmartFolderIdDto  {
@@ -885,6 +902,26 @@ open func loadCachedLibrary()throws  -> LibrarySnapshotDto  {
 })
 }
 
+open func openCharacterMap(request: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_open_character_map(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(request),uniffiCallStatus
+    )
+})
+}
+
+open func queryCharacterMap(request: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_query_character_map(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(request),uniffiCallStatus
+    )
+})
+}
+
 open func queryLibrary(query: LibraryQueryDto)throws  -> LibraryPageDto  {
     return try  FfiConverterTypeLibraryPageDto_lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
         uniffiCallStatus in
@@ -970,6 +1007,16 @@ open func renameCollection(id: CollectionIdDto, name: String)throws   {try rustC
         FfiConverterString.lower(name),uniffiCallStatus
     )
 }
+}
+
+open func renderCharacterMap(request: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_render_character_map(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(request),uniffiCallStatus
+    )
+})
 }
 
 open func setCollectionMembers(collectionId: CollectionIdDto, identityIds: [IdentityIdDto], member: Bool)throws   {try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
@@ -5403,6 +5450,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_add_library_root() != 56225) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_close_character_map() != 54900) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_convert_collection_to_smart_folder() != 3046) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5439,6 +5489,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_folio_ffi_checksum_method_folioengine_load_cached_library() != 16021) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_folio_ffi_checksum_method_folioengine_open_character_map() != 45756) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_query_character_map() != 64749) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_folio_ffi_checksum_method_folioengine_query_library() != 13886) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5461,6 +5517,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_rename_collection() != 12286) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_render_character_map() != 59869) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_set_collection_members() != 654) {

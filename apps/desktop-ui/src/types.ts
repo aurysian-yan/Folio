@@ -5,6 +5,7 @@ export interface SourceDto {
 
 export interface FaceDto {
   id: string;
+  revisionId: string;
   identityId: string;
   styleName: string;
   postscriptName: string | null;

@@ -84,13 +84,26 @@ class FolioPreviewSelection : Record {
 
 class FolioNativeModule : Module() {
     private val executor = Executors.newSingleThreadExecutor()
-    private var engine: FolioEngine? = null
+    private val characterExecutor = Executors.newSingleThreadExecutor()
+    @Volatile private var engine: FolioEngine? = null
     private var sync: FolioSync? = null
     private val lifecycleLock = Any()
     private var foreground = true
 
     override fun definition() = ModuleDefinition {
         Name("FolioNative")
+        AsyncFunction("openCharacterMap") { request: String, promise: Promise ->
+            performCharacterMap(promise) { requireEngine().openCharacterMap(request) }
+        }
+        AsyncFunction("queryCharacterMap") { request: String, promise: Promise ->
+            performCharacterMap(promise) { requireEngine().queryCharacterMap(request) }
+        }
+        AsyncFunction("renderCharacterMap") { request: String, promise: Promise ->
+            performCharacterMap(promise) { requireEngine().renderCharacterMap(request) }
+        }
+        AsyncFunction("closeCharacterMap") { handle: String, promise: Promise ->
+            perform(promise) { requireEngine().closeCharacterMap(handle); true }
+        }
         Function("aboutInfo") {
             val info = context().packageManager.getPackageInfo(context().packageName, 0)
             mapOf("version" to (info.versionName ?: ""), "build" to info.longVersionCode.toString(),
@@ -348,6 +361,7 @@ class FolioNativeModule : Module() {
         }
 
         OnDestroy {
+            characterExecutor.shutdown()
             executor.execute {
                 sync?.cancel()
                 sync?.destroy()
@@ -452,6 +466,20 @@ class FolioNativeModule : Module() {
             }
         } catch (error: RejectedExecutionException) {
             promise.reject("ERR_FOLIO_NOT_READY", "字体库尚未就绪。", error)
+        }
+    }
+
+    private fun performCharacterMap(promise: Promise, action: () -> Any?) {
+        try {
+            characterExecutor.execute {
+                try { promise.resolve(action()) }
+                catch (error: Exception) {
+                    val detail = if (error is com.folio.poc.ffi.FolioFfiException.Operation) error.detail else "characterMap.error.renderFailed"
+                    promise.reject("ERR_FOLIO_CHARACTER_MAP", detail, null)
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            promise.reject("ERR_FOLIO_CHARACTER_MAP", "characterMap.error.sessionClosed", null)
         }
     }
 }

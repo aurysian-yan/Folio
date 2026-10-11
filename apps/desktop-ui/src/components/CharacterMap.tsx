@@ -1,0 +1,240 @@
+import { Button, Input, Label, ListBox, Modal, SearchField, Select } from '@heroui/react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { CharacterMapSession, characterMapError, characterPageSize, characterText, codepointLabel,
+  type CharacterEntry, type CharacterGlyph, type CharacterMapInfo, type CharacterPage } from '../../../../shared/character-map';
+import { characterMap } from '../api';
+import { previewStyles, type PreviewStyle } from '../font-preview';
+import type { FamilyDto } from '../types';
+import { ClaralightSlider } from './ClaralightSlider';
+
+export function CharacterMap({ family, initialStyle, onClose, onDownload }: {
+  family: FamilyDto; initialStyle: PreviewStyle; onClose: () => void; onDownload: (fingerprint: string) => void;
+}) {
+  const { t } = useTranslation();
+  const styles = previewStyles(family);
+  const [style, setStyle] = useState(initialStyle);
+  const face = family.faces.find((face) => face.id === style.face.id) ?? style.face;
+  const sources = face.sources;
+  const [sourcePath, setSource] = useState(sources[0]?.path ?? '');
+  const source = sourcePath || sources[0]?.path || '';
+  const [axes, setAxes] = useState(initialStyle.coordinates);
+  const [retry, setRetry] = useState(0);
+  const [loaded, setLoaded] = useState<{ key: string; session: CharacterMapSession; info: CharacterMapInfo } | null>(null);
+  const [error, setError] = useState<{ key: string; message: string } | null>(null);
+  const selectionKey = JSON.stringify([style.face.id, face.revisionId, source, retry]);
+  const active = loaded?.key === selectionKey ? loaded : null;
+  useEffect(() => {
+    let current = true;
+    const session = new CharacterMapSession(characterMap);
+    const opening = !source && face.location?.cloudAvailable ? Promise.reject(new Error('characterMap.error.notDownloaded')) : session.open({ faceId: style.face.id, revisionId: face.revisionId, sourcePath: source });
+    opening.then((info) => {
+      if (current && info) setLoaded({ key: selectionKey, session, info });
+    }).catch((cause) => { if (current) setError({ key: selectionKey, message: characterMapError(cause) }); });
+    return () => { current = false; session.close(); };
+  }, [selectionKey, style.face.id, face.revisionId, source, face.location?.cloudAvailable]);
+  const failure = error?.key === selectionKey ? error.message : null;
+  return <Modal isOpen onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Modal.Backdrop>
+      <Modal.Container className="character-map-container">
+        <Modal.Dialog className="character-map-dialog" aria-label={t('characterMap.title')}>
+          <header className="flex flex-wrap items-center gap-4">
+            <Button variant="secondary" onPress={onClose}>{t('common.back')}</Button>
+            <h1 className="text-lg font-semibold">{family.displayName} · {t('characterMap.title')}</h1>
+          </header>
+          <div className="flex flex-wrap items-center gap-4">
+            <MapSelect label={t('font.styles')} value={style.key} options={styles.map((item) => ({ id: item.key, label: item.name }))} onChange={(key) => {
+              const next = styles.find((item) => item.key === key)!;
+              setStyle(next); setSource(next.face.sources[0]?.path ?? ''); setAxes(next.coordinates);
+            }} />
+            {sources.length > 0 && <MapSelect label={t('inspector.source')} value={source} options={sources.map((item) => ({ id: item.path, label: item.path }))} onChange={setSource} />}
+          </div>
+          {face.variableAxes.length > 0 && <div className="flex flex-wrap gap-6">
+            {face.variableAxes.filter((axis) => axis.maxValue > axis.minValue).map((axis) => <label key={axis.tag} className="flex min-w-40 flex-1 items-center gap-4">
+              <span>{axis.tag} {axes[axis.tag] ?? axis.defaultValue}</span>
+              <ClaralightSlider aria-label={axis.tag} className="flex-1" min={axis.minValue} max={axis.maxValue}
+                step={(axis.maxValue - axis.minValue) / 1000} value={axes[axis.tag] ?? axis.defaultValue}
+                onValueChange={(value) => setAxes((values) => ({ ...values, [axis.tag]: value }))} />
+            </label>)}
+          </div>}
+          {failure ? <div role="alert" className="flex flex-wrap items-center gap-4"><p>{t(failure)}</p>
+            <Button onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button>
+            {face.location?.files.filter((file) => file.cloudAvailable && !file.localSources.length).map((file) =>
+              <Button key={file.fingerprint} onPress={() => onDownload(file.fingerprint)}>{t('fontLocation.download')}</Button>)}
+          </div> : active ? <CharacterMapContent key={active.info.handle} session={active.session} info={active.info} axes={axes} /> : <p role="status">{t('common.loading')}</p>}
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  </Modal>;
+}
+
+function CharacterMapContent({ session, info, axes }: { session: CharacterMapSession; info: CharacterMapInfo; axes: Record<string, number> }) {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState('');
+  const [script, setScript] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [retry, setRetry] = useState(0);
+  const queryKey = JSON.stringify([search, script, offset, retry]);
+  const [result, setResult] = useState<{ key: string; page: CharacterPage } | null>(null);
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
+  const [selected, setSelected] = useState<CharacterEntry | null>(null);
+  const [copyStatus, setCopyStatus] = useState('');
+  const [foreground, setForeground] = useState<[number, number, number, number]>([0, 0, 0, 255]);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let current = true;
+    const timer = window.setTimeout(() => {
+      session.query({ text: search, script: script || null, offset, limit: characterPageSize }).then((page) => {
+        if (current) { setResult({ key: queryKey, page }); setSelected(page.entries[0] ?? null); }
+      }).catch((cause) => { if (current) setFailure({ key: queryKey, message: characterMapError(cause) }); });
+    }, 120);
+    return () => { current = false; clearTimeout(timer); };
+  }, [session, queryKey, search, script, offset]);
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (!root.current) return;
+      const canvas = document.createElement('canvas'); canvas.width = 1; canvas.height = 1;
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.fillStyle = getComputedStyle(root.current).color; context.fillRect(0, 0, 1, 1);
+      const rgba = Array.from(context.getImageData(0, 0, 1, 1).data) as [number, number, number, number];
+      setForeground((previous) => previous.every((value, index) => value === rgba[index]) ? previous : rgba);
+    };
+    measure();
+    const observer = new MutationObserver(measure);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] });
+    const media = matchMedia('(prefers-color-scheme: dark)'); media.addEventListener('change', measure);
+    return () => { observer.disconnect(); media.removeEventListener('change', measure); };
+  }, []);
+  const page = result?.key === queryKey ? result.page : null;
+  const error = failure?.key === queryKey ? failure.message : null;
+  async function copy(value: string) {
+    try { await navigator.clipboard.writeText(value); setCopyStatus(t('common.copied')); }
+    catch { setCopyStatus(t('characterMap.error.copyFailed')); }
+  }
+  return <div ref={root} className="character-map-content">
+    <div className="flex flex-wrap items-center gap-4">
+      <SearchField aria-label={t('characterMap.search')} value={search} onChange={(value) => { setSearch(value); setOffset(0); }}>
+        <Input placeholder={t('characterMap.search')} />
+      </SearchField>
+      <MapSelect label={t('filters.script')} value={script} options={[{ id: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ id: item.name, label: `${item.name} (${item.count})` }))]}
+        onChange={(value) => { setScript(value); setOffset(0); }} />
+      <span role="status">{t('characterMap.count', { count: page?.total ?? info.count })}</span>
+    </div>
+    {error && <div role="alert" className="flex items-center gap-4"><p>{t(error)}</p><Button onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button></div>}
+    <div className="character-map-panels">
+      {page ? <CharacterGrid key={queryKey} entries={page.entries} selected={selected} onSelect={setSelected} session={session} axes={axes} foreground={foreground} /> : <p role="status">{!error && t('common.loading')}</p>}
+      <aside className="character-map-detail flex flex-col gap-4" aria-label={t('characterMap.title')}>
+        {selected && page ? <>
+          <GlyphPreview key={`${selected.glyphId}:${JSON.stringify(axes)}:${foreground}`} session={session} entry={selected} axes={axes} foreground={foreground} size={512} />
+          <dl className="grid grid-cols-2 gap-2">
+            <dt>{t('characterMap.codepoint')}</dt><dd>{codepointLabel(selected.codepoint)}</dd>
+            <dt>{t('characterMap.glyphId')}</dt><dd>{selected.glyphId}</dd>
+            <dt>{t('filters.script')}</dt><dd>{selected.script}</dd>
+          </dl>
+          <Button onPress={() => void copy(characterText(selected))}>{t('characterMap.copyCharacter')}</Button>
+          <Button variant="secondary" onPress={() => void copy(codepointLabel(selected.codepoint))}>{t('characterMap.copyCodepoint')}</Button>
+          <p role="status">{copyStatus}</p>
+        </> : <p>{t('characterMap.selectCharacter')}</p>}
+      </aside>
+    </div>
+    <footer className="flex flex-wrap items-center gap-4">
+      <Button variant="secondary" isDisabled={offset === 0} onPress={() => setOffset(Math.max(0, offset - characterPageSize))}>{t('characterMap.previousPage')}</Button>
+      <span>{t('characterMap.page', { page: Math.floor(offset / characterPageSize) + 1, pages: Math.max(1, Math.ceil((page?.total ?? 0) / characterPageSize)) })}</span>
+      <Button variant="secondary" isDisabled={!page || offset + characterPageSize >= page.total} onPress={() => setOffset(offset + characterPageSize)}>{t('characterMap.nextPage')}</Button>
+    </footer>
+  </div>;
+}
+
+function CharacterGrid({ entries, selected, onSelect, session, axes, foreground }: {
+  entries: CharacterEntry[]; selected: CharacterEntry | null; onSelect: (entry: CharacterEntry) => void;
+  session: CharacterMapSession; axes: Record<string, number>; foreground: [number, number, number, number];
+}) {
+  const { t } = useTranslation();
+  const root = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState({ width: 0, height: 0, top: 0, stride: 96 });
+  const columns = Math.max(1, Math.floor(viewport.width / viewport.stride));
+  const first = Math.max(0, Math.floor(viewport.top / viewport.stride) - 1);
+  const last = Math.min(Math.ceil(entries.length / columns), Math.ceil((viewport.top + viewport.height) / viewport.stride) + 1);
+  const visible = useMemo(() => entries.slice(first * columns, last * columns), [entries, first, last, columns]);
+  const [images, setImages] = useState<{ key: string; values: CharacterGlyph[] } | null>(null);
+  const renderKey = JSON.stringify([axes, foreground, visible.map((entry) => entry.glyphId)]);
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    const measure = () => {
+      const cell = element.querySelector<HTMLElement>('.character-map-cell');
+      setViewport((value) => ({ ...value, width: element.clientWidth, height: element.clientHeight,
+        stride: cell ? parseFloat(getComputedStyle(cell).height) || 96 : 96 }));
+    };
+    measure(); const observer = new ResizeObserver(measure); observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    let current = true;
+    const glyphIds = [...new Set(visible.map((entry) => entry.glyphId))];
+    if (!glyphIds.length) return;
+    session.render({ glyphIds, axes, foreground, size: 128 }).then((values) => { if (current) setImages({ key: renderKey, values }); })
+      .catch((cause) => { if (current) setImages({ key: renderKey, values: glyphIds.map((glyphId) => ({ glyphId, status: 'error', dataUrl: null, error: characterMapError(cause) })) }); });
+    return () => { current = false; };
+  }, [session, renderKey, axes, foreground, visible]);
+  const byGlyph = useMemo(() => new Map((images?.key === renderKey ? images.values : []).map((value) => [value.glyphId, value])), [images, renderKey]);
+  function move(event: KeyboardEvent<HTMLDivElement>) {
+    const index = entries.findIndex((entry) => entry.codepoint === selected?.codepoint);
+    const delta: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns, Home: -entries.length, End: entries.length };
+    if (!(event.key in delta) || !entries.length) return;
+    event.preventDefault();
+    const next = Math.max(0, Math.min(entries.length - 1, index + delta[event.key]!));
+    onSelect(entries[next]!);
+    const element = root.current;
+    if (!element) return;
+    const top = Math.floor(next / columns) * viewport.stride;
+    if (top < element.scrollTop) element.scrollTop = top;
+    if (top + viewport.stride > element.scrollTop + element.clientHeight) element.scrollTop = top + viewport.stride - element.clientHeight;
+    setViewport((value) => ({ ...value, top: element.scrollTop }));
+    requestAnimationFrame(() => element.querySelector<HTMLElement>(`[data-codepoint="${entries[next]!.codepoint}"]`)?.focus());
+  }
+  return <div ref={root} className="character-map-grid" role="group" aria-label={t('characterMap.title')} onKeyDown={move}
+    onScroll={(event) => { const top = event.currentTarget.scrollTop; setViewport((value) => ({ ...value, top })); }}>
+    {!entries.length && <p>{t('characterMap.empty')}</p>}
+    <div style={{ height: Math.ceil(entries.length / columns) * viewport.stride, position: 'relative' }}>
+      <div style={{ position: 'absolute', top: first * viewport.stride, width: '100%', display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+        {visible.map((entry) => {
+          const image = byGlyph.get(entry.glyphId);
+          return <Button key={entry.codepoint} data-codepoint={entry.codepoint} className="character-map-cell" variant={selected?.codepoint === entry.codepoint ? 'secondary' : 'ghost'}
+            aria-label={t('characterMap.characterLabel', { codepoint: codepointLabel(entry.codepoint), glyphId: entry.glyphId, script: entry.script })}
+            aria-pressed={selected?.codepoint === entry.codepoint} excludeFromTabOrder={selected?.codepoint !== entry.codepoint} onPress={() => onSelect(entry)}>
+            {image?.dataUrl && <img src={image.dataUrl} alt="" className="h-16 w-16" />}
+            <span className="text-xs">{codepointLabel(entry.codepoint)}</span>
+            {image?.status === 'error' && <span className="sr-only">{t(image.error ?? 'characterMap.error.renderFailed')}</span>}
+          </Button>;
+        })}
+      </div>
+    </div>
+  </div>;
+}
+
+function GlyphPreview({ session, entry, axes, foreground, size }: { session: CharacterMapSession; entry: CharacterEntry; axes: Record<string, number>; foreground: [number, number, number, number]; size: number }) {
+  const { t } = useTranslation();
+  const [image, setImage] = useState<CharacterGlyph | null>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let current = true;
+    session.render({ glyphIds: [entry.glyphId], axes, foreground, size }).then((values) => { if (current) setImage(values[0] ?? null); })
+      .catch((cause) => { if (current) setImage({ glyphId: entry.glyphId, status: 'error', dataUrl: null, error: characterMapError(cause) }); });
+    return () => { current = false; };
+  }, [session, entry.glyphId, axes, foreground, size, retry]);
+  return <div className="flex aspect-square w-full flex-col items-center justify-center" aria-live="polite">
+    {image?.dataUrl && <img src={image.dataUrl} alt={codepointLabel(entry.codepoint)} className="max-h-full w-full object-contain" />}
+    {image?.status === 'empty' && <p>{t('characterMap.blankGlyph')}</p>}
+    {image?.status === 'error' && <><p role="alert">{t(image.error ?? 'characterMap.error.renderFailed')}</p><Button variant="secondary" onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button></>}
+    {!image && <p>{t('common.loading')}</p>}
+  </div>;
+}
+
+function MapSelect({ label, value, options, onChange }: { label: string; value: string; options: { id: string; label: string }[]; onChange: (value: string) => void }) {
+  return <Select aria-label={label} selectedKey={value || '__all__'} onSelectionChange={(key) => { if (key != null) onChange(key === '__all__' ? '' : String(key)); }}>
+    <Label>{label}</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+    <Select.Popover><ListBox>{options.map((option) => <ListBox.Item key={option.id || '__all__'} id={option.id || '__all__'} textValue={option.label}>{option.label}</ListBox.Item>)}</ListBox></Select.Popover>
+  </Select>;
+}

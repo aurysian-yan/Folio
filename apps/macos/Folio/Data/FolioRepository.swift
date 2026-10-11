@@ -4,6 +4,24 @@ import Foundation
 actor FolioRepository {
     private let engine: FolioEngine
 
+    // 字符映射和绘制离开仓库 actor，避免阻塞字体库操作。
+    func openCharacterMap(_ request: String) async throws -> String {
+        let engine = engine
+        return try await Task.detached { try engine.openCharacterMap(request: request) }.value
+    }
+
+    func queryCharacterMap(_ request: String) async throws -> String {
+        let engine = engine
+        return try await Task.detached { try engine.queryCharacterMap(request: request) }.value
+    }
+
+    func renderCharacterMap(_ request: String) async throws -> String {
+        let engine = engine
+        return try await Task.detached { try engine.renderCharacterMap(request: request) }.value
+    }
+
+    func closeCharacterMap(_ handle: String) { engine.closeCharacterMap(handle: handle) }
+
     init(databaseURL: URL? = nil) throws {
         let manager = FileManager.default
         let path: URL

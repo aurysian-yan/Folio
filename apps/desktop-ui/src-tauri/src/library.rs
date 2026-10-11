@@ -146,6 +146,7 @@ pub struct SourceDto {
 #[serde(rename_all = "camelCase")]
 pub struct FaceDto {
     pub id: String,
+    pub revision_id: String,
     pub identity_id: String,
     pub style_name: String,
     pub postscript_name: Option<String>,
@@ -787,6 +788,14 @@ impl LibraryService {
             .get(face_id)
             .cloned()
             .ok_or_else(|| LibraryError::Message("字体已不在当前目录中".to_owned()))
+    }
+
+    pub fn character_map_face(&self, face_id: &str) -> Result<FontFace, LibraryError> {
+        self.catalog
+            .faces()
+            .find(|face| face.id.to_string() == face_id)
+            .cloned()
+            .ok_or_else(|| LibraryError::Message("characterMap.error.staleSource".into()))
     }
 
     pub fn set_favorites(
@@ -1490,6 +1499,7 @@ fn face_dto(face: &FontFace) -> FaceDto {
     FaceDto {
         location: None,
         id: face.id.to_string(),
+        revision_id: face.revision_id.to_string(),
         identity_id: face.identity_id.to_string(),
         style_name: face.display_subfamily(),
         postscript_name: face.metadata.postscript_name.clone(),

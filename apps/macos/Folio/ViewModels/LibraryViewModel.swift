@@ -112,6 +112,23 @@ final class LibraryViewModel {
     private let pageSize = 120
     @ObservationIgnored private let previewSession = FontPreviewSession.shared
     private var repository: FolioRepository?
+
+    func characterMapOpen(_ request: String) async throws -> String {
+        guard let repository else { throw NSError(domain: "characterMap.error.sourceUnavailable", code: 1) }
+        return try await repository.openCharacterMap(request)
+    }
+
+    func characterMapQuery(_ request: String) async throws -> String {
+        guard let repository else { throw NSError(domain: "characterMap.error.sessionClosed", code: 1) }
+        return try await repository.queryCharacterMap(request)
+    }
+
+    func characterMapRender(_ request: String) async throws -> String {
+        guard let repository else { throw NSError(domain: "characterMap.error.sessionClosed", code: 1) }
+        return try await repository.renderCharacterMap(request)
+    }
+
+    func characterMapClose(_ handle: String) async { await repository?.closeCharacterMap(handle) }
     private var operations: FontOperations?
     private var libraryFaceSources: [LibraryFaceSources] = []
     private var faceIDsByState: [FontOperationState: Set<FaceID>] = [:]

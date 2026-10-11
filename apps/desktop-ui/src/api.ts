@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { createCharacterMapClient } from "../../../shared/character-map";
 import { decodePreviewFont } from "./preview-packet";
 import { invalidatePreviewCache } from "./preview-cache-events";
 import { startMetric } from "./performance-metrics";
@@ -17,6 +18,13 @@ export interface QueryRequest {
   locationFilter?: string;
   fileFingerprint?: string;
 }
+
+export const characterMap = createCharacterMapClient({
+  openCharacterMap: (request) => invoke("open_character_map", { request }),
+  queryCharacterMap: (request) => invoke("query_character_map", { request }),
+  renderCharacterMap: (request) => invoke("render_character_map", { request }),
+  closeCharacterMap: (handle) => invoke("close_character_map", { handle }),
+});
 
 export async function queryLibrary(request: QueryRequest): Promise<LibraryPageDto> {
   const finish = startMetric("query-library");

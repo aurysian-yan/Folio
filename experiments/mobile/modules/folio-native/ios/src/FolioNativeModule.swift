@@ -90,6 +90,7 @@ enum FolioPaths {
 
 public final class FolioNativeModule: Module {
     private let queue = DispatchQueue(label: "com.folio.mobile.poc.library", qos: .userInitiated)
+    private let characterQueue = DispatchQueue(label: "com.folio.mobile.character-map", qos: .userInitiated)
     private var engine: FolioEngine?
     private var sync: FolioSync?
     private let lifecycleLock = NSLock()
@@ -97,6 +98,18 @@ public final class FolioNativeModule: Module {
 
     public func definition() -> ModuleDefinition {
         Name("FolioNative")
+        AsyncFunction("openCharacterMap") { (request: String) throws -> String in
+            try self.requireEngine().openCharacterMap(request: request)
+        }.runOnQueue(characterQueue)
+        AsyncFunction("queryCharacterMap") { (request: String) throws -> String in
+            try self.requireEngine().queryCharacterMap(request: request)
+        }.runOnQueue(characterQueue)
+        AsyncFunction("renderCharacterMap") { (request: String) throws -> String in
+            try self.requireEngine().renderCharacterMap(request: request)
+        }.runOnQueue(characterQueue)
+        AsyncFunction("closeCharacterMap") { (handle: String) throws in
+            try self.requireEngine().closeCharacterMap(handle: handle)
+        }.runOnQueue(queue)
         Function("aboutInfo") { () -> [String: String] in
             ["version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
              "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
@@ -107,7 +120,8 @@ public final class FolioNativeModule: Module {
             if self.engine == nil {
                 let root = try FolioPaths.root()
                 try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-                self.engine = try FolioEngine.open(databasePath: root.appendingPathComponent("folio.sqlite").path)
+                let engine = try FolioEngine.open(databasePath: root.appendingPathComponent("folio.sqlite").path)
+                self.lifecycleLock.lock(); self.engine = engine; self.lifecycleLock.unlock()
             }
             let engine = try self.requireEngine()
             try self.syncEngine().prepareManagedSources()
@@ -329,7 +343,7 @@ public final class FolioNativeModule: Module {
         }.runOnQueue(.main)
 
         OnDestroy {
-            self.queue.async { self.sync?.cancel(); self.sync = nil; self.engine = nil }
+            self.queue.async { self.sync?.cancel(); self.sync = nil; self.lifecycleLock.lock(); self.engine = nil; self.lifecycleLock.unlock() }
         }
 
         View(FolioFontPreview.self) {
@@ -351,6 +365,8 @@ public final class FolioNativeModule: Module {
     }
 
     private func requireEngine() throws -> FolioEngine {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         guard let engine else {
             throw Exception(name: "FolioNotReady", description: "字体库尚未就绪。", code: "ERR_FOLIO_NOT_READY")
         }

@@ -147,6 +147,14 @@ pub struct FontFace {
 }
 
 impl FontFace {
+    /// 以完整字体字节和集合成员核验已登记修订，不重复解析字符映射。
+    pub fn matches_revision_data(&self, data: &[u8], face_index: u32) -> bool {
+        let fingerprint = crate::ContentFingerprint::from_bytes(data);
+        let discriminator = data.starts_with(b"ttcf").then_some(face_index);
+        FontRevisionId::from_parts(self.identity_id, &fingerprint, discriminator)
+            == self.revision_id
+    }
+
     /// The name to display for this face inside its family.
     pub fn display_subfamily(&self) -> String {
         if let Some(subfamily) = &self.metadata.subfamily_name {

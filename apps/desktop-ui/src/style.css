@@ -145,10 +145,10 @@ body {
 }
 
 /* 初始化前隐藏原生滚动条，所有滚动区域使用同一主题。 */
-:where(.sidebar-scroll, .font-grid, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop) {
+:where(.sidebar-scroll, .font-grid, .character-map-grid, .character-map-detail, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop) {
     scrollbar-width: none;
 }
-:where(.sidebar-scroll, .font-grid, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop)::-webkit-scrollbar {
+:where(.sidebar-scroll, .font-grid, .character-map-grid, .character-map-detail, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop)::-webkit-scrollbar {
     display: none;
 }
 .os-theme-folio {
@@ -3211,3 +3211,15 @@ body {
 .about-license-scroll { max-height: 50svh; overflow: auto; }
 .about-license-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: .875rem; line-height: 1.6; margin-block: 1rem; }
 @media (prefers-reduced-motion: reduce) { .about-glyph-layer { transition: none; } }
+
+/* 字符表的页面布局与虚拟网格共用主题和滚动容器。 */
+.character-map-container { width: 100%; height: 100%; max-width: none; padding: 0; }
+.character-map-dialog { width: 100%; height: 100%; max-width: none; max-height: none; display: flex; flex-direction: column; gap: calc(var(--spacing) * 4); padding: calc(var(--spacing) * 6); background: var(--overlay); color: var(--foreground); }
+.character-map-content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--spacing) * 4); }
+.character-map-panels { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 20rem); gap: calc(var(--spacing) * 6); }
+.character-map-grid { --character-cell-size: 6rem; overflow: auto; min-height: 0; }
+.character-map-cell { height: var(--character-cell-size); width: 100%; display: flex; flex-direction: column; gap: 0; }
+.character-map-detail { overflow: auto; min-height: 0; }
+@media (max-width: 48rem) {
+  .character-map-panels { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+}

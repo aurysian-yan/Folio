@@ -6,7 +6,7 @@ Windows 与 Linux 的 React 界面统一使用 OverlayScrollbars `2.16.0`，依�
 
 `src/scrollbars.ts` 在主窗口和设置窗口挂载时初始化滚动条。现有滚动元素同时作为目标和视口，不生成内容包装层，保留原有的 `scrollTop`、滚动事件、焦点定位与 React Aria 行为。主列表的 Hero、虚拟卡片和自动分页继续共用同一视口。
 
-覆盖主列表、左右侧栏、设置页、筛选组、收藏夹编辑器、云字体页，以及 HeroUI 的 Select、Dropdown、ColorPicker 和可滚动 Modal。通过 DOM 观察器接管新打开的 Portal；滚动区域移除后销毁实例，窗口卸载时统一清理。普通卡片追加不重新扫描滚动区域。
+覆盖主列表、左右侧栏、设置页、筛选组、收藏夹编辑器、云字体页、字符表网格与详情区，以及 HeroUI 的 Select、Dropdown、ColorPicker 和可滚动 Modal。通过 DOM 观察器接管新打开的 Portal；滚动区域移除后销毁实例，窗口卸载时统一清理。普通卡片追加不重新扫描滚动区域。
 
 新增滚动区域时，同时更新 `scrollbars.ts` 的区域选择器和 `style.css` 的初始化前滚动条隐藏选择器。不得只隐藏原生滚动条而不初始化 OverlayScrollbars。
 

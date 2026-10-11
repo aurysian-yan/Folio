@@ -1,3 +1,4 @@
+import { CharacterMap } from "./components/CharacterMap";
 import { locallyAvailable, locationFilters, locationLabel, transferLabel } from "../../../shared/font-location";
 import { removeCloudDownload, setFontUploadExcluded, revealFontSource, getAutomaticDownload, setAutomaticDownload, deleteCloudFont } from "./api";
 import {
@@ -733,6 +734,7 @@ export default function App() {
   const [automaticDownload, updateAutomaticDownload] = useState(false);
   const [page, setPage] = useState<LibraryPageDto | null>(null);
   const [selected, setSelected] = useState<FamilyDto | null>(null);
+  const [characterMapTarget, setCharacterMapTarget] = useState<{ family: FamilyDto; style: NonNullable<ReturnType<typeof currentPreviewStyle>> } | null>(null);
   const [selectedStyleKey, setSelectedStyleKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -3065,6 +3067,7 @@ export default function App() {
               {selected ? (
                 <Inspector
                   family={selected}
+                  onOpenCharacterMap={(style) => setCharacterMapTarget({ family: selected, style })}
                   onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
                   onFileAction={(fingerprint,action) => void changeFile(fingerprint,action)}
                   styleKey={selectedStyleKey}
@@ -3123,6 +3126,8 @@ export default function App() {
           onSave={saveFavoriteFolder}
         />
       )}
+
+      {characterMapTarget && <CharacterMap family={page?.families.find((family) => family.id === characterMapTarget.family.id) ?? characterMapTarget.family} initialStyle={characterMapTarget.style} onClose={() => setCharacterMapTarget(null)} onDownload={(fingerprint) => void downloadFontFile(fingerprint)} />}
 
       {settingsWindow && confirmRebuild && (
         <Modal isOpen onOpenChange={(open) => { if (!open) setConfirmRebuild(false); }}>
@@ -3726,8 +3731,10 @@ function Inspector({
   onClose,
   onDownload,
   onFileAction,
+  onOpenCharacterMap,
 }: {
   family: FamilyDto;
+  onOpenCharacterMap: (style: NonNullable<ReturnType<typeof currentPreviewStyle>>) => void;
   styleKey: string | null;
   previewText: string;
   previewSize: number;
@@ -3766,6 +3773,7 @@ function Inspector({
       <p className="inspector-style">
         {style?.name ?? t("font.regular")} <span>·</span> {face?.format ?? t("font.font")} <span>·</span> {t("macos.stylesCount", { count: family.faces.length })}
       </p>
+      {style && <Button variant="secondary" onPress={() => onOpenCharacterMap(style)}>{t("characterMap.open")}</Button>}
       <details className="inspector-section" open>
         <summary>{t("common.preview")}</summary>
         <div className="inspector-preview" style={{ backgroundColor: backgroundColor ?? undefined }}>

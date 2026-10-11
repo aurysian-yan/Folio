@@ -29,6 +29,7 @@
 
 mod attributes;
 mod catalog;
+mod character_map;
 mod classification;
 mod error;
 mod face;
@@ -47,6 +48,10 @@ pub use attributes::{
     AxisCoordinate, FontStyle, FontVersion, FontWeight, FontWidth, NamedInstance, VariableAxis,
 };
 pub use catalog::Catalog;
+pub use character_map::{
+    parse_character_search, CharacterEntry, CharacterMapError, CharacterMapIndex, CharacterPage,
+    CharacterScript,
+};
 pub use classification::{classify_names, FontClassification};
 pub use error::{FontError, ParserError, ScanError};
 pub use face::{FaceMetadata, FaceProblem, FaceProblemKind, FontFace, ParsedFace, ParsedFontFile};
