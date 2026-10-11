@@ -10,7 +10,7 @@ import { FontLocationIcons } from "./FontLocationIcons";
 
 export type ViewMode = "compact" | "large" | "list" | "expanded";
 
-export const FontCard = memo(function FontCard({ family, mode, selected, styleKey, previewText, previewSize, textColor, backgroundColor, showMetadata, selectOnHover, hoverDelay, onSelect, onStyleChange, onFavorite, onDownload, position, total }: {
+export const FontCard = memo(function FontCard({ family, mode, selected, styleKey, previewText, previewSize, textColor, backgroundColor, showMetadata, selectOnHover, hoverDelay, onSelect, onOpenCharacterMap, onStyleChange, onFavorite, onDownload, position, total }: {
   family: FamilyDto;
   mode: ViewMode;
   selected: boolean;
@@ -23,6 +23,7 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
   selectOnHover: boolean;
   hoverDelay: number;
   onSelect: (family: FamilyDto) => void;
+  onOpenCharacterMap?: (family: FamilyDto) => void;
   onStyleChange: (key: string) => void;
   onFavorite: (family: FamilyDto) => void;
   onDownload?: (fingerprint: string) => void;
@@ -77,11 +78,16 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
   return <Card className={`font-card${selected ? " selected" : ""}`} variant="secondary" data-mode={mode} data-family-id={family.id}
     style={{ backgroundColor: backgroundColor ?? undefined }}
     role="listitem" aria-posinset={position} aria-setsize={total}
+    onDoubleClick={(event) => {
+      const control = (event.target as HTMLElement).closest('button, input, select, a');
+      if (control && !control.classList.contains('font-card-select')) return;
+      event.preventDefault(); setHovered(false); onOpenCharacterMap?.(family);
+    }}
     onPointerEnter={(event) => setHovered(event.pointerType === "mouse")}
     onPointerLeave={() => setHovered(false)}
     onPointerCancel={() => setHovered(false)}
     onPointerDown={() => setHovered(false)}>
-    <Button variant="ghost" className="font-card-select" aria-label={t("desktop.selectFamily", { name: family.displayName })} aria-description={locationText} aria-pressed={selected} onPress={() => { setHovered(false); onSelect(family); }}>
+    <Button variant="ghost" className="font-card-select" onFocus={() => { if (!selected) { setHovered(false); onSelect(family); } }} aria-label={t("desktop.selectFamily", { name: family.displayName })} aria-description={locationText} aria-pressed={selected} onKeyDown={(event) => { if (event.key === "Enter" && onOpenCharacterMap) { event.preventDefault(); setHovered(false); onOpenCharacterMap(family); } }} onPress={() => { setHovered(false); onSelect(family); }}>
       <span className="sr-only">{t("desktop.selectFamily", { name: family.displayName })}</span>
     </Button>
     <div className="font-card-preview-area">

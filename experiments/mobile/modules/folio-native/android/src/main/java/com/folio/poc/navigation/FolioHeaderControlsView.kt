@@ -8,6 +8,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -500,7 +502,9 @@ internal fun FolioGlassMenu(
                     .padding(margin)) {
                     val fraction = progress.value.coerceIn(0f, 1f)
                     val shape = ContinuousRoundedRectangle(HeaderButtonHeight / 2)
-                    Column(Modifier.width(menuWidth)
+                    // 长字款和脚本列表在原玻璃外壳内滚动，避免超出窗口。
+                    val maximumHeight = (LocalConfiguration.current.screenHeightDp.dp - margin * 2 - 32.dp).coerceAtLeast(HeaderButtonHeight)
+                    Column(Modifier.width(menuWidth).heightIn(max = maximumHeight)
                         .drawWithContent { backdrop.contentVersion; drawContent() }
                         .drawBackdrop(backdrop = backdrop, shape = { shape },
                             effects = {
@@ -537,6 +541,7 @@ internal fun FolioGlassMenu(
                         .selectableGroup()
                         .semantics { paneTitle = title }
                         .then(if (expanded) Modifier else Modifier.clearAndSetSemantics {})
+                        .verticalScroll(rememberScrollState())
                         .padding(vertical = 6.dp)) {
                         BasicText(title, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             style = TextStyle(color = colors.secondary.menuColor(), fontSize = 12.sp))

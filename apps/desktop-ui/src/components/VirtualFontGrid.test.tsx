@@ -143,3 +143,15 @@ it("Hero 共用滚动区域，其高度计入预取和键盘定位，更新高�
   rerender(<VirtualFontGrid {...props} families={families.slice(0, 120)} header={<h1>字体库</h1>} mode="list" onLoadMore={onLoadMore} />);
   expect(scroll.scrollTop).toBe(0);
 });
+
+it("卡片双击与回车打开字符表，字款和收藏按钮不触发打开", () => {
+  const onOpenCharacterMap = vi.fn();
+  const { getByRole, container } = render(<VirtualFontGrid {...props} families={families.slice(0, 1)} total={1} selectedId="0" onOpenCharacterMap={onOpenCharacterMap} />);
+  const select = getByRole('button', { name: '选择 字体 0' });
+  fireEvent.doubleClick(select);
+  fireEvent.keyDown(select, { key: 'Enter' });
+  expect(onOpenCharacterMap).toHaveBeenCalledTimes(2);
+  fireEvent.doubleClick(getByRole('button', { name: '下一个样式' }));
+  fireEvent.doubleClick(container.querySelector('.font-card-action.is-favorite') ?? container.querySelector('.font-card-actions button:last-child')!);
+  expect(onOpenCharacterMap).toHaveBeenCalledTimes(2);
+});

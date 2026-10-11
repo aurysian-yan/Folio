@@ -8,7 +8,7 @@ import { ClaralightSlider } from "./ClaralightSlider";
 import { FontCard } from "./FontCard";
 
 type CardProps = ComponentProps<typeof FontCard>;
-type Props = Pick<CardProps, "previewText" | "previewSize" | "textColor" | "backgroundColor" | "showMetadata" | "selectOnHover" | "hoverDelay" | "onSelect" | "onStyleChange" | "onFavorite"> & {
+type Props = Pick<CardProps, "previewText" | "previewSize" | "textColor" | "backgroundColor" | "showMetadata" | "selectOnHover" | "hoverDelay" | "onSelect" | "onOpenCharacterMap" | "onStyleChange" | "onFavorite"> & {
   families: FamilyDto[];
   selectedId?: string;
   styleKey: string | null;

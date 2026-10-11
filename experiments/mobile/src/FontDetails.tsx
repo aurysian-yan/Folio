@@ -13,7 +13,7 @@ import { NavigationBackdrop } from './bottom-navigation';
 import { NativeScrollContainer } from './native-controls';
 import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
 import { FontActionsMenu } from './FontActionsMenu';
-import { SettingsGroup, settingsLayout, settingsTypography } from './settings-ui';
+import { SettingsGroup, SettingsNavRow, settingsLayout, settingsTypography } from './settings-ui';
 import { DetailSlider } from './DetailSlider';
 import { CharacterMap } from './CharacterMap';
 import { FontNavigation } from './FontNavigation';
@@ -41,9 +41,36 @@ const axisLabelKeys: Record<string, string> = {
 export function FontDetails(props: FontDetailsProps) {
   const [target, setTarget] = useState<{ face: FontFace; axes: Record<string, number> } | null>(null);
   const [visible, setVisible] = useState(false);
-  return <SafeAreaProvider><FontNavigation theme={props.theme} visible={visible} onDismissed={() => { setVisible(false); setTarget(null); }}
-    detail={target && <CharacterMap family={props.family} initialFace={target.face} initialAxes={target.axes} theme={props.theme} onClose={() => setVisible(false)} onDownload={(fingerprint) => props.onFileAction(fingerprint, 'download')} />}>
-    <FontDetailsContent {...props} onOpenCharacterMap={(face, axes) => { setTarget({ face, axes }); setVisible(true); }} />
+  const navigating = useRef(false);
+  const exiting = useRef(false);
+  const deferredCloses = useRef(new Set<() => void>());
+  useEffect(() => {
+    const sessions = deferredCloses.current;
+    return () => { exiting.current = false; for (const close of sessions) close(); sessions.clear(); };
+  }, []);
+  const finishNavigation = () => {
+    for (const close of deferredCloses.current) close();
+    deferredCloses.current.clear();
+    exiting.current = false;
+    navigating.current = false;
+    setVisible(false);
+    setTarget(null);
+  };
+  return <SafeAreaProvider><FontNavigation theme={props.theme} visible={visible} onDismissed={finishNavigation}
+    detail={target && <CharacterMap family={props.family} initialFace={target.face} initialAxes={target.axes} theme={props.theme}
+      onClose={() => { exiting.current = true; setVisible(false); }}
+      deferClose={(close) => {
+        if (!exiting.current) return false;
+        deferredCloses.current.add(close);
+        return true;
+      }}
+      onDownload={(fingerprint) => props.onFileAction(fingerprint, 'download')} />}>
+    <FontDetailsContent {...props} onOpenCharacterMap={(face, axes) => {
+      if (navigating.current) return;
+      navigating.current = true;
+      setTarget({ face, axes });
+      setVisible(true);
+    }} />
   </FontNavigation></SafeAreaProvider>;
 }
 
@@ -149,7 +176,6 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
             {!!error && <Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{error}</Text>}
           </View>}
 
-          {selectedFace && <PanelAction label={t('characterMap.open')} theme={theme} onPress={() => onOpenCharacterMap(selectedFace, axisValues)} />}
           <SettingsGroup theme={theme}>
             <View style={settingsLayout.content}>
               <Text style={[settingsTypography.body,{color:theme.label}]}>{t('fontLocation.title')}</Text>
@@ -247,6 +273,10 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
               </> : <CopyIcon size={20} color={theme.secondary} />}
             </Pressable>)}
           </SettingsGroup>
+          {selectedFace && <SettingsGroup theme={theme}>
+            <SettingsNavRow title={t('characterMap.title')} theme={theme} last
+              onPress={() => onOpenCharacterMap(selectedFace, axisValues)} />
+          </SettingsGroup>}
         </Animated.ScrollView>
       </NavigationBackdrop>
       <FamilyCollectionsPanel visible={collectionsOpen} family={family} snapshot={snapshot} collectionId={collectionId}

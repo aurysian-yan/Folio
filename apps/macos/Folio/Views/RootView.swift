@@ -4,7 +4,9 @@ struct RootView: View {
     @State private var model = LibraryViewModel()
     @State private var cloud = CloudSyncModel.shared
     @State private var sidebarPage = SidebarPage.navigation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @State private var characterMapColumnVisibility: NavigationSplitViewVisibility?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage(AppPreferences.libraryViewMode) private var preferredViewMode =
         LibraryViewMode.compactGrid.rawValue
@@ -32,8 +34,15 @@ struct RootView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(model: model, selectedPage: $sidebarPage)
-                .navigationSplitViewColumnWidth(240)
+            ZStack {
+                SidebarView(model: model, selectedPage: $sidebarPage)
+                    .opacity(model.characterMap == nil ? 1 : 0)
+                    .allowsHitTesting(model.characterMap == nil)
+                    .accessibilityHidden(model.characterMap != nil)
+                if model.characterMap != nil { FontInspectorView(model: model).transition(.opacity) }
+            }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.characterMap != nil)
+            .navigationSplitViewColumnWidth(240)
         } detail: {
             if model.selectedDestination == .onlineFonts {
                 OnlineFontsView(model: model)
@@ -44,8 +53,22 @@ struct RootView: View {
             }
         }
         .inspector(isPresented: $model.inspectorPresented) {
-            FontInspectorView(model: model)
+            Group {
+                if let state = model.characterMap { CharacterMapInspectorView(model: model, state: state) }
+                else { FontInspectorView(model: model) }
+            }
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.characterMap != nil)
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 340)
+        }
+        .onChange(of: model.characterMap != nil) { _, isOpen in
+            if isOpen {
+                characterMapColumnVisibility = columnVisibility
+                columnVisibility = .all
+            }
+            else if let previous = characterMapColumnVisibility {
+                columnVisibility = previous
+                characterMapColumnVisibility = nil
+            }
         }
         .background {
             GeometryReader { proxy in

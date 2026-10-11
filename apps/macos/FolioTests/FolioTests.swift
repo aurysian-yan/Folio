@@ -3,6 +3,41 @@ import XCTest
 
 @MainActor
 final class FolioTests: XCTestCase {
+    func testCharacterMapLocksFamilyAndRestoresParentSelection() {
+        func family(_ id: String) -> FamilyCard {
+            let face = FaceSummary(id: FaceID(rawValue: id), identityID: IdentityID(rawValue: id), revisionID: "revision",
+                styleName: "Regular", postScriptName: nil, fullName: nil, format: "TrueType", isVariable: false,
+                weight: 400, width: 1, sourcePath: "/fonts/\(id).ttf", sources: [], faceIndex: 0, fileSize: 0,
+                version: nil, manufacturer: nil, designer: nil, copyright: nil, category: "", license: "", scripts: [], axes: [])
+            return FamilyCard(id: FamilyID(rawValue: id), displayName: id, faces: [face], identityIDs: [face.identityID],
+                matchedFaceIDs: [face.id], isFavorite: false, isVariable: false, manufacturer: nil)
+        }
+        let first = family("character-map-first")
+        let second = family("character-map-second")
+        let model = LibraryViewModel()
+        model.families = [first, second]
+        model.selectFamily(first)
+        model.selectedSourcePath = "/fonts/alternate.ttf"
+        model.axisValues = ["wght": 500]
+        model.inspectorPresented = false
+        model.openCharacterMap()
+        XCTAssertTrue(model.inspectorPresented)
+        let state = model.characterMap
+        model.openCharacterMap(second)
+        model.selectFamily(second)
+        XCTAssertTrue(state === model.characterMap)
+        XCTAssertEqual(model.selectedFamilyID, first.id)
+        model.axisValues = ["wght": 700]
+        model.selectedSourcePath = "/fonts/changed.ttf"
+        model.inspectorPresented = true
+        model.closeCharacterMap()
+        XCTAssertNil(model.characterMap)
+        XCTAssertEqual(model.selectedFaceID, first.defaultFace?.id)
+        XCTAssertEqual(model.selectedSourcePath, "/fonts/alternate.ttf")
+        XCTAssertEqual(model.axisValues, ["wght": 500])
+        XCTAssertFalse(model.inspectorPresented)
+    }
+
     func testSyncPercentKeepsLiteralPercentSign() {
         XCTAssertTrue(L.format("cloud.syncingPercent", "34").contains("34%"))
         XCTAssertTrue(L.format("cloud.syncingCloud", "WebDAV", "34").contains("34%"))

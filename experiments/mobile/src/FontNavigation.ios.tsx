@@ -1,10 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, StyleSheet } from 'react-native';
 import { ScreenStack, ScreenStackItem } from 'react-native-screens';
 import type { FontNavigationProps } from './FontNavigation';
 
 // UIKit 导航栈提供系统侧滑、取消手势与页面转场。
 export function FontNavigation({ children, detail, visible, theme, onDismissed }: FontNavigationProps) {
+  const stackId = useId();
+  const dismissed = useRef(false);
+  useLayoutEffect(() => { if (visible) dismissed.current = false; }, [visible]);
+  const finishDismissal = () => {
+    if (dismissed.current) return;
+    dismissed.current = true;
+    onDismissed();
+  };
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
     let mounted = true;
@@ -14,15 +22,15 @@ export function FontNavigation({ children, detail, visible, theme, onDismissed }
   }, []);
 
   return <ScreenStack style={styles.stack} onFinishTransitioning={() => {
-    if (!visible && detail) onDismissed();
+    if (!visible && detail) finishDismissal();
   }}>
-    <ScreenStackItem screenId="library" activityState={2} headerConfig={{ hidden: true }} style={StyleSheet.absoluteFill}
+    <ScreenStackItem screenId={`${stackId}-root`} activityState={2} headerConfig={{ hidden: true }} style={StyleSheet.absoluteFill}
       contentStyle={{ backgroundColor: theme.background }}>
       {children}
     </ScreenStackItem>
-    {visible && detail && <ScreenStackItem screenId="font-details" activityState={2} style={StyleSheet.absoluteFill}
+    {visible && detail && <ScreenStackItem screenId={`${stackId}-detail`} activityState={2} style={StyleSheet.absoluteFill}
       headerConfig={{ hidden: true }} stackPresentation="push" gestureEnabled
-      stackAnimation={reduceMotion ? 'none' : 'default'} onDismissed={onDismissed}
+      stackAnimation={reduceMotion ? 'none' : 'default'} onDismissed={finishDismissal}
       contentStyle={{ backgroundColor: theme.background }}>
       {detail}
     </ScreenStackItem>}

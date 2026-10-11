@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Observation
 
 private struct CharacterSelection: Encodable {
     let faceId: String
@@ -7,14 +8,14 @@ private struct CharacterSelection: Encodable {
     let sourcePath: String
 }
 
-private struct CharacterInfo: Decodable {
+struct CharacterInfo: Decodable {
     struct Script: Decodable { let name: String; let count: Int }
     let handle: String
     let count: Int
     let scripts: [Script]
 }
 
-private struct CharacterEntry: Decodable, Identifiable, Hashable {
+struct CharacterEntry: Decodable, Identifiable, Hashable {
     let codepoint: UInt32
     let glyphId: UInt32
     let script: String
@@ -23,7 +24,7 @@ private struct CharacterEntry: Decodable, Identifiable, Hashable {
     var text: String { Unicode.Scalar(codepoint).map(String.init) ?? "" }
 }
 
-private struct CharacterPage: Decodable { let entries: [CharacterEntry]; let total: Int }
+struct CharacterPage: Decodable { let entries: [CharacterEntry]; let total: Int }
 private struct CharacterQuery: Encodable {
     let handle: String; let text: String; let script: String?; let offset: Int; let limit = 256
 }
@@ -44,93 +45,111 @@ private func characterError(_ error: Error) -> String {
     return keys.map { "characterMap.error.\($0)" }.first(where: text.contains) ?? "characterMap.error.renderFailed"
 }
 
-struct CharacterMapView: View {
-    let model: LibraryViewModel
+// 页面会话与两侧检查器共享选择状态。
+@MainActor @Observable
+final class CharacterMapState {
     let family: FamilyCard
-    @Environment(\.dismiss) private var dismiss
-    @State private var face: FaceSummary
-    @State private var source: String
-    @State private var axes: [String: Double]
-    @State private var retry = 0
-    @State private var opened: (key: String, info: CharacterInfo)?
-    @State private var failure: (key: String, message: String)?
+    let initialFaceID: FaceID?
+    let initialSourcePath: String?
+    let initialAxes: [String: Double]
+    let initialInspectorPresented: Bool
+    @ObservationIgnored unowned let model: LibraryViewModel
+    var retry = 0
+    var opened: (key: String, info: CharacterInfo)?
+    var failure: (key: String, message: String)?
+    var search = "" { didSet { offset = 0 } }
+    var script = "" { didSet { offset = 0 } }
+    var offset = 0
+    var queryRetry = 0
+    var result: (key: String, page: CharacterPage)?
+    var queryFailure: (key: String, message: String)?
+    var selected: CharacterEntry?
+    var copyStatus = ""
 
-    init(model: LibraryViewModel, family: FamilyCard, face: FaceSummary) {
+    init(model: LibraryViewModel, family: FamilyCard, inspectorPresented: Bool) {
         self.model = model
         self.family = family
-        _face = State(initialValue: face)
-        _source = State(initialValue: model.selectedSource?.path ?? face.sourcePath ?? face.sources.first?.path ?? "")
-        _axes = State(initialValue: model.axisValues)
+        initialFaceID = model.selectedFaceID
+        initialSourcePath = model.selectedSourcePath
+        initialAxes = model.axisValues
+        initialInspectorPresented = inspectorPresented
     }
+    var source: String { model.selectedSource?.path ?? model.selectedFace?.sourcePath ?? "" }
+    var selectionKey: String { "\(model.selectedFace?.id.rawValue ?? "")|\(model.selectedFace?.revisionID ?? "")|\(source)|\(retry)" }
+    var info: CharacterInfo? { opened?.key == selectionKey ? opened?.info : nil }
+    var queryKey: String { "\(info?.handle ?? "")|\(search)|\(script)|\(offset)|\(queryRetry)" }
+    var page: CharacterPage? { result?.key == queryKey ? result?.page : nil }
 
-    private var currentFace: FaceSummary { family.faces.first(where: { $0.id == face.id }) ?? face }
-    private var currentSource: String { source.isEmpty ? currentFace.sourcePath ?? currentFace.sources.first?.path ?? "" : source }
-    private var selectionKey: String { "\(currentFace.id.rawValue)|\(currentFace.revisionID)|\(currentSource)|\(retry)" }
+    func copy(_ value: String) {
+        NSPasteboard.general.clearContents()
+        copyStatus = L.text(NSPasteboard.general.setString(value, forType: .string) ? "common.copied" : "characterMap.error.copyFailed")
+    }
+}
+
+struct CharacterMapView: View {
+    let model: LibraryViewModel
+    @Bindable var state: CharacterMapState
 
     var body: some View {
         VStack(alignment: .leading) {
-            HStack {
-                Button(L.text("common.back")) { dismiss() }.keyboardShortcut(.cancelAction)
-                Text("\(family.displayName) · \(L.text("characterMap.title"))").font(.headline)
-                Spacer()
-            }
-            HStack {
-                Picker(L.text("font.styles"), selection: Binding(get: { face.id }, set: { id in
-                    guard let next = family.faces.first(where: { $0.id == id }) else { return }
-                    face = next; source = next.sourcePath ?? next.sources.first?.path ?? ""
-                    axes = Dictionary(uniqueKeysWithValues: next.axes.map { ($0.tag, $0.defaultValue) })
-                })) {
-                    ForEach(family.faces) { Text($0.styleName).tag($0.id) }
-                }
-                if !currentFace.sources.isEmpty {
-                    Picker(L.text("inspector.source"), selection: Binding(get: { currentSource }, set: { source = $0 })) {
-                        ForEach(currentFace.sources, id: \.path) { Text($0.path).tag($0.path) }
-                    }
-                }
-            }
-            if !face.axes.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack {
-                        ForEach(face.axes.filter { $0.maximum > $0.minimum }) { axis in
-                            VStack(alignment: .leading) {
-                                Text("\(axis.name) \((axes[axis.tag] ?? axis.defaultValue).formatted())")
-                                Slider(value: Binding(get: { axes[axis.tag] ?? axis.defaultValue }, set: { axes[axis.tag] = $0 }), in: axis.minimum...axis.maximum)
-                                    .accessibilityLabel(axis.name)
-                            }.frame(minWidth: 180)
-                        }
-                    }
-                }
-            }
-            if let failure, failure.key == selectionKey {
-                Text(L.text(failure.message)).accessibilityAddTraits(.isStaticText)
-                Button(L.text("common.retry")) { retry += 1 }
-                ForEach((currentFace.location?.files ?? []).filter { $0.cloudAvailable && $0.localSources.isEmpty }, id: \.fingerprint) { file in
+            if let failure = state.failure, failure.key == state.selectionKey {
+                Text(L.text(failure.message))
+                Button(L.text("common.retry")) { state.retry += 1 }
+                ForEach((model.selectedFace?.location?.files ?? []).filter { $0.cloudAvailable && $0.localSources.isEmpty }, id: \.fingerprint) { file in
                     Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) }
                 }
                 Spacer()
-            } else if let opened, opened.key == selectionKey {
-                CharacterMapContent(model: model, info: opened.info, axes: axes).id(opened.info.handle)
+            } else if let info = state.info {
+                CharacterMapContent(model: model, info: info, axes: model.axisValues, state: state).id(info.handle)
             } else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
         }
         .padding()
-        .frame(minWidth: 680, idealWidth: 900, minHeight: 560, idealHeight: 720)
-        .task(id: selectionKey) {
-            let key = selectionKey
+        .task(id: state.selectionKey) {
+            let key = state.selectionKey
+            state.opened = nil
+            state.result = nil
+            state.selected = nil
+            state.offset = 0
+            state.script = ""
+            state.copyStatus = ""
             var handle: String?
             do {
-                if currentSource.isEmpty && currentFace.location?.cloudAvailable == true {
+                if state.source.isEmpty && model.selectedFace?.location?.cloudAvailable == true {
                     throw NSError(domain: "characterMap.error.notDownloaded", code: 1)
                 }
-                let request = CharacterSelection(faceId: currentFace.id.rawValue, revisionId: currentFace.revisionID, sourcePath: currentSource)
+                guard let face = model.selectedFace else {
+                    throw NSError(domain: "characterMap.error.sourceUnavailable", code: 1)
+                }
+                let request = CharacterSelection(faceId: face.id.rawValue, revisionId: face.revisionID, sourcePath: state.source)
                 let info = try characterDecode(CharacterInfo.self, await model.characterMapOpen(characterJSON(request)))
                 handle = info.handle
                 try Task.checkCancellation()
-                opened = (key, info)
-                // 会话随页面任务存活；字款、来源切换和关闭统一取消。
+                state.opened = (key, info)
                 while !Task.isCancelled { try await Task.sleep(for: .seconds(60)) }
             } catch is CancellationError { }
-            catch { if !Task.isCancelled { failure = (key, characterError(error)) } }
+            catch { if !Task.isCancelled { state.failure = (key, characterError(error)) } }
             if let handle { await model.characterMapClose(handle) }
+        }
+    }
+}
+
+struct CharacterMapInspectorView: View {
+    let model: LibraryViewModel
+    @Bindable var state: CharacterMapState
+    var body: some View {
+        ScrollView {
+            if let info = state.info, let selected = state.selected, state.page != nil {
+                VStack(alignment: .leading) {
+                    CharacterGlyphView(model: model, handle: info.handle, entry: selected, axes: model.axisValues, size: 512, compact: false)
+                        .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit)
+                    LabeledContent(L.text("characterMap.codepoint"), value: selected.label)
+                    LabeledContent(L.text("characterMap.glyphId"), value: String(selected.glyphId))
+                    LabeledContent(L.text("filters.script"), value: selected.script)
+                    Button(L.text("characterMap.copyCharacter")) { state.copy(selected.text) }
+                    Button(L.text("characterMap.copyCodepoint")) { state.copy(selected.label) }
+                    Text(state.copyStatus).foregroundStyle(.secondary)
+                }.padding()
+            } else { Text(L.text("characterMap.selectCharacter")).padding() }
         }
     }
 }
@@ -139,100 +158,63 @@ private struct CharacterMapContent: View {
     let model: LibraryViewModel
     let info: CharacterInfo
     let axes: [String: Double]
-    @State private var search = ""
-    @State private var script = ""
-    @State private var offset = 0
-    @State private var retry = 0
-    @State private var result: (key: String, page: CharacterPage)?
-    @State private var failure: (key: String, message: String)?
-    @State private var selected: CharacterEntry?
-    @State private var copyStatus = ""
+    @Bindable var state: CharacterMapState
     @FocusState private var gridFocused: Bool
-    private var queryKey: String { "\(search)|\(script)|\(offset)|\(retry)" }
-    private var page: CharacterPage? { result?.key == queryKey ? result?.page : nil }
 
     var body: some View {
         VStack {
-            HStack {
-                TextField(L.text("characterMap.search"), text: $search).textFieldStyle(.roundedBorder)
-                    .onChange(of: search) { offset = 0 }
-                Picker(L.text("filters.script"), selection: $script) {
-                    Text(L.text("characterMap.allScripts")).tag("")
-                    ForEach(info.scripts, id: \.name) { Text("\($0.name) (\($0.count))").tag($0.name) }
-                }.onChange(of: script) { offset = 0 }
-                Text(L.plural("characterMap.count", page?.total ?? info.count))
+            Text(L.plural("characterMap.count", state.page?.total ?? info.count))
+            if let queryFailure = state.queryFailure, queryFailure.key == state.queryKey {
+                HStack { Text(L.text(queryFailure.message)); Button(L.text("common.retry")) { state.queryRetry += 1 } }
             }
-            if let failure, failure.key == queryKey {
-                HStack { Text(L.text(failure.message)); Button(L.text("common.retry")) { retry += 1 } }
-            }
-            HSplitView {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))]) {
-                            ForEach(page?.entries ?? []) { entry in
-                                Button { selected = entry } label: {
-                                    VStack {
-                                        CharacterGlyphView(model: model, handle: info.handle, entry: entry, axes: axes, size: 128, compact: true)
-                                            .frame(width: 64, height: 64)
-                                        Text(entry.label).font(.caption)
-                                    }.frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(selected?.id == entry.id ? .accentColor : .secondary)
-                                .accessibilityLabel(L.format("characterMap.characterLabel", entry.label, String(entry.glyphId), entry.script))
-                                .accessibilityAddTraits(selected?.id == entry.id ? .isSelected : [])
-                                .id(entry.id)
-                            }
-                        }
-                        if page?.entries.isEmpty == true { Text(L.text("characterMap.empty")) }
-                    }
-                    .focusable().focused($gridFocused)
-                    .onMoveCommand { direction in
-                        guard let entries = page?.entries, !entries.isEmpty else { return }
-                        let index = entries.firstIndex(where: { $0.id == selected?.id }) ?? 0
-                        let delta = direction == .left || direction == .up ? -1 : 1
-                        let next = entries[min(entries.count - 1, max(0, index + delta))]
-                        selected = next; proxy.scrollTo(next.id)
-                    }
-                }.frame(minWidth: 320)
+            ScrollViewReader { proxy in
                 ScrollView {
-                    if let selected, page != nil {
-                        VStack(alignment: .leading) {
-                            CharacterGlyphView(model: model, handle: info.handle, entry: selected, axes: axes, size: 512, compact: false)
-                                .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit)
-                            LabeledContent(L.text("characterMap.codepoint"), value: selected.label)
-                            LabeledContent(L.text("characterMap.glyphId"), value: String(selected.glyphId))
-                            LabeledContent(L.text("filters.script"), value: selected.script)
-                            Button(L.text("characterMap.copyCharacter")) { copy(selected.text) }
-                            Button(L.text("characterMap.copyCodepoint")) { copy(selected.label) }
-                            Text(copyStatus).foregroundStyle(.secondary)
-                        }.padding()
-                    } else { Text(L.text("characterMap.selectCharacter")) }
-                }.frame(minWidth: 240, idealWidth: 300)
-            }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))]) {
+                        ForEach(state.page?.entries ?? []) { entry in
+                            Button { state.selected = entry } label: {
+                                VStack {
+                                    CharacterGlyphView(model: model, handle: info.handle, entry: entry, axes: axes, size: 128, compact: true)
+                                        .frame(width: 64, height: 64)
+                                    Text(entry.label).font(.caption)
+                                }.frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(state.selected?.id == entry.id ? .accentColor : .secondary)
+                            .accessibilityLabel(L.format("characterMap.characterLabel", entry.label, String(entry.glyphId), entry.script))
+                            .accessibilityAddTraits(state.selected?.id == entry.id ? .isSelected : [])
+                            .id(entry.id)
+                        }
+                    }
+                    if state.page?.entries.isEmpty == true { Text(L.text("characterMap.empty")) }
+                }
+                .focusable().focused($gridFocused)
+                .onMoveCommand { direction in
+                    guard let entries = state.page?.entries, !entries.isEmpty else { return }
+                    let index = entries.firstIndex(where: { $0.id == state.selected?.id }) ?? 0
+                    let delta = direction == .left || direction == .up ? -1 : 1
+                    let next = entries[min(entries.count - 1, max(0, index + delta))]
+                    state.selected = next; proxy.scrollTo(next.id)
+                }
+            }.frame(minWidth: 320)
             HStack {
-                Button(L.text("characterMap.previousPage")) { offset = max(0, offset - 256) }.disabled(offset == 0)
-                Text(L.format("characterMap.page", String(offset / 256 + 1), String(max(1, ((page?.total ?? 0) + 255) / 256))))
-                Button(L.text("characterMap.nextPage")) { offset += 256 }.disabled(page == nil || offset + 256 >= (page?.total ?? 0))
+                Button(L.text("characterMap.previousPage")) { state.offset = max(0, state.offset - 256) }.disabled(state.offset == 0)
+                Text(L.format("characterMap.page", String(state.offset / 256 + 1), String(max(1, ((state.page?.total ?? 0) + 255) / 256))))
+                Button(L.text("characterMap.nextPage")) { state.offset += 256 }.disabled(state.page == nil || state.offset + 256 >= (state.page?.total ?? 0))
             }
         }
-        .task(id: queryKey) {
-            let key = queryKey
+        .task(id: state.queryKey) {
+            let key = state.queryKey
             do {
                 try await Task.sleep(for: .milliseconds(120))
-                let query = CharacterQuery(handle: info.handle, text: search, script: script.isEmpty ? nil : script, offset: offset)
+                let query = CharacterQuery(handle: info.handle, text: state.search, script: state.script.isEmpty ? nil : state.script, offset: state.offset)
                 let page = try characterDecode(CharacterPage.self, await model.characterMapQuery(characterJSON(query)))
                 try Task.checkCancellation()
-                result = (key, page); selected = page.entries.first
+                state.result = (key, page); state.selected = page.entries.first
             } catch is CancellationError { }
-            catch { if !Task.isCancelled { failure = (key, characterError(error)) } }
+            catch { if !Task.isCancelled { state.queryFailure = (key, characterError(error)) } }
         }
     }
 
-    private func copy(_ value: String) {
-        NSPasteboard.general.clearContents()
-        copyStatus = L.text(NSPasteboard.general.setString(value, forType: .string) ? "common.copied" : "characterMap.error.copyFailed")
-    }
 }
 
 private struct CharacterGlyphView: View {

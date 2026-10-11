@@ -68,8 +68,8 @@ struct SidebarView: View {
         .environment(\.appearsActive, true)
         .navigationTitle("Folio")
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                sidebarPagePicker
+            if model.characterMap == nil {
+                ToolbarItem(placement: .automatic) { sidebarPagePicker }
             }
         }
         .onAppear {

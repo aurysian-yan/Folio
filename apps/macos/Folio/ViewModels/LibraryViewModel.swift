@@ -81,6 +81,23 @@ final class LibraryViewModel {
     private(set) var previewSizeCommitGeneration = 0
     var previewColor = Color.primary
     var cardBackgroundColor: Color?
+    var characterMap: CharacterMapState?
+    func openCharacterMap(_ family: FamilyCard? = nil) {
+        guard characterMap == nil, !isSelectingInstalledForCloud else { return }
+        let previousInspector = inspectorPresented
+        if let family, selectedFamilyID != family.id { selectFamily(family) }
+        guard let selectedFamily, selectedFace != nil else { return }
+        characterMap = CharacterMapState(model: self, family: selectedFamily, inspectorPresented: previousInspector)
+        inspectorPresented = true
+    }
+    func closeCharacterMap() {
+        guard let state = characterMap else { return }
+        selectedFaceID = state.initialFaceID
+        selectedSourcePath = state.initialSourcePath
+        axisValues = state.initialAxes
+        inspectorPresented = state.initialInspectorPresented
+        characterMap = nil
+    }
     var inspectorPresented = true
     var isLoading = true
     var isRefreshing = false
@@ -387,6 +404,7 @@ final class LibraryViewModel {
     }
 
     func selectFamily(_ family: FamilyCard) {
+        guard characterMap == nil else { return }
         selectedFamilyID = family.id
         let face = family.defaultFace
         selectedFaceID = face?.id
@@ -1110,7 +1128,6 @@ final class LibraryViewModel {
     private func performQuery(reset: Bool, retainingCount: Int = 0) async throws {
         guard let repository else { return }
         isLoading = reset && families.isEmpty
-        let previousFace = selectedFace
         let offset = reset ? 0 : families.count
         let destination = selectedDestination
         let allowedFaceIDs: Set<FaceID>?
@@ -1141,6 +1158,7 @@ final class LibraryViewModel {
             visibleFamilies.append(contentsOf: next.families)
         }
         guard destination == selectedDestination else { return }
+        let previousFace = selectedFace
         if reset {
             families = visibleFamilies
             facetOptions = page.facets

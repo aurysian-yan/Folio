@@ -60,7 +60,7 @@ import { FontPreview } from "./components/FontPreview";
 import { FontLocationIcons } from "./components/FontLocationIcons";
 import { LibraryHero } from "./components/LibraryHero";
 import { createLibraryHero, type HeroAction } from "./library-hero";
-import { currentPreviewStyle } from "./font-preview";
+import { currentPreviewStyle, type PreviewStyle } from "./font-preview";
 import {
   Fragment,
   lazy,
@@ -735,6 +735,13 @@ export default function App() {
   const [page, setPage] = useState<LibraryPageDto | null>(null);
   const [selected, setSelected] = useState<FamilyDto | null>(null);
   const [characterMapTarget, setCharacterMapTarget] = useState<{ family: FamilyDto; style: NonNullable<ReturnType<typeof currentPreviewStyle>> } | null>(null);
+  const [characterLeftHost, setCharacterLeftHost] = useState<HTMLDivElement | null>(null);
+  const [characterRightHost, setCharacterRightHost] = useState<HTMLDivElement | null>(null);
+  const [characterToolbarHost, setCharacterToolbarHost] = useState<HTMLDivElement | null>(null);
+  const [characterMapLeaving, setCharacterMapLeaving] = useState(false);
+  const characterReturn = useRef<{ focus: HTMLElement | null; left: boolean; right: boolean } | null>(null);
+  const characterExitTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(characterExitTimer.current), []);
   const [selectedStyleKey, setSelectedStyleKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -783,6 +790,7 @@ export default function App() {
   useEffect(() => () => window.clearTimeout(recentStatisticsTimer.current), []);
 
   const selectFamily = useCallback((family: FamilyDto) => {
+    if (characterReturn.current) return;
     const fromSliderPreview = previewSelectedId.current === family.id;
     previewSelectedId.current = null;
     if (selectedRef.current?.id === family.id && !fromSliderPreview) return;
@@ -807,12 +815,35 @@ export default function App() {
   }, []);
 
   const previewSelectFamily = useCallback((family: FamilyDto) => {
+    if (characterReturn.current) return;
     previewSelectedId.current = family.id;
     if (selectedRef.current?.id === family.id) return;
     selectedRef.current = family;
     setSelected(family);
     setSelectedStyleKey(null);
   }, []);
+
+  const openCharacterMap = (family: FamilyDto, style: PreviewStyle | null) => {
+    if (!style || characterReturn.current) return;
+    if (selected?.id !== family.id) selectFamily(family);
+    characterReturn.current = { focus: document.activeElement instanceof HTMLElement ? document.activeElement : null, left: leftSidebarOpen, right: rightSidebarOpen };
+    setLeftSidebarOpen(true);
+    setRightSidebarOpen(true);
+    setCharacterMapTarget({ family, style });
+  };
+  const closeCharacterMap = () => {
+    if (characterExitTimer.current || !characterReturn.current) return;
+    setCharacterMapLeaving(true);
+    characterExitTimer.current = window.setTimeout(() => {
+      const previous = characterReturn.current;
+      setCharacterMapTarget(null);
+      setCharacterMapLeaving(false);
+      if (previous) { setLeftSidebarOpen(previous.left); setRightSidebarOpen(previous.right); }
+      characterReturn.current = null;
+      characterExitTimer.current = 0;
+      window.requestAnimationFrame(() => { if (previous?.focus?.isConnected) previous.focus.focus({ preventScroll: true }); });
+    }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180);
+  };
 
   useEffect(() => {
     if (!menuMode) return;
@@ -1905,10 +1936,33 @@ export default function App() {
       </Fragment>
     ));
 
+  const renderInspector = (family: FamilyDto, style?: PreviewStyle, controls?: ReactNode) => (
+    <Inspector
+      family={family}
+      onOpenCharacterMap={style ? undefined : (next) => openCharacterMap(family, next)}
+      onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
+      onFileAction={(fingerprint,action) => void changeFile(fingerprint,action)}
+      styleKey={selectedStyleKey}
+      currentStyle={style}
+      controls={controls}
+      previewText={previewText}
+      previewSize={inspectorAppearance.size}
+      textColor={inspectorAppearance.textColor}
+      backgroundColor={inspectorAppearance.backgroundColor}
+      collections={collections}
+      collectionTargetId={collectionTargetId}
+      onCollectionTargetChange={setCollectionTargetId}
+      onCollectionMembershipChange={
+        updateSelectedCollectionMembership
+      }
+      onClose={() => style ? setLeftSidebarOpen(false) : setRightSidebarOpen(false)}
+    />
+  );
+
   return (
     <main
       ref={appWindowRef}
-      className={`app-window${settingsWindow ? " settings-window" : ""}`}
+      className={`app-window${settingsWindow ? " settings-window" : ""}${characterMapTarget ? " character-map-active" : ""}${characterMapLeaving ? " character-map-leaving" : ""}`}
     >
       <header
         className={`titlebar${settingsWindow ? " settings-titlebar" : ""}`}
@@ -2017,7 +2071,7 @@ export default function App() {
             </div>
           </>
         )}
-        {!settingsWindow && <div className="titlebar-center" hidden={menuMode}>
+        {!settingsWindow && <div className="titlebar-center" hidden={menuMode || !!characterMapTarget} inert={!!characterMapTarget}>
           <div className="titlebar-drag-space" aria-hidden="true" />
           <Toolbar className="titlebar-actions" aria-label={t("desktop.tools")}>
           <SmoothCorners
@@ -2112,6 +2166,7 @@ export default function App() {
           </Toolbar>
           <div className="titlebar-drag-space" aria-hidden="true" />
         </div>}
+        {!settingsWindow && <div ref={setCharacterToolbarHost} className="character-map-toolbar" hidden={!characterMapTarget} />}
         {menuMode && !settingsWindow && <div className="titlebar-drag-space" aria-hidden="true" />}
         {settingsWindow && (
           <SegmentedTabs
@@ -2659,7 +2714,8 @@ export default function App() {
             inert={!leftSidebarVisible}
             data-open={leftSidebarVisible}
           >
-            <div className="sidebar-inner">
+            <div ref={setCharacterLeftHost} className="character-map-sidebar inspector-inner" hidden={!characterMapTarget} />
+            <div className="sidebar-inner library-navigation" inert={!!characterMapTarget} aria-hidden={!!characterMapTarget}>
               <div
                 className="sidebar-pages"
                 role="tablist"
@@ -2911,6 +2967,7 @@ export default function App() {
           />
 
           <section className="library-pane">
+            <div className="library-primary" inert={!!characterMapTarget} aria-hidden={!!characterMapTarget}>
             {scope === "cloudFonts" ? (
               <CloudFontsPane
                 onOpen={(font) => void openCloudFont(font)}
@@ -2933,9 +2990,9 @@ export default function App() {
               textColor={previewAppearance.committed.textColor} backgroundColor={previewAppearance.committed.backgroundColor}
               editingPreview={previewAppearance.editing}
               styleKey={selectedStyleKey} selectedId={selected?.id} onStyleChange={setSelectedStyleKey}
-              showMetadata={cardMetadata} selectOnHover={cardHover} hoverDelay={cardHoverDelay}
+              showMetadata={cardMetadata} selectOnHover={cardHover && !characterMapTarget} hoverDelay={cardHoverDelay}
               wheelSpeed={expandedCardWheelSpeed}
-              onSelect={selectFamily} onPreviewSelect={previewSelectFamily} onFavorite={favoriteFamily} onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
+              onSelect={selectFamily} onOpenCharacterMap={(family) => openCharacterMap(family, currentPreviewStyle(family, family.id === selected?.id ? selectedStyleKey : null))} onPreviewSelect={previewSelectFamily} onFavorite={favoriteFamily} onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
               header={
                 <div className="library-overview">
                   <div className="library-title-row">
@@ -3040,6 +3097,14 @@ export default function App() {
             </footer>
               </>
             )}
+            </div>
+            {characterMapTarget && <CharacterMap
+              family={page?.families.find((family) => family.id === characterMapTarget.family.id) ?? characterMapTarget.family}
+              initialStyle={characterMapTarget.style} onClose={closeCharacterMap}
+              onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
+              leftHost={characterLeftHost} rightHost={characterRightHost} toolbarHost={characterToolbarHost}
+              renderInspector={(style, controls) => renderInspector(page?.families.find((family) => family.id === characterMapTarget.family.id) ?? characterMapTarget.family, style, controls)} />}
+
           </section>
           <SidebarResizeHandle
             side="right"
@@ -3063,26 +3128,10 @@ export default function App() {
             inert={!rightSidebarVisible}
             data-open={rightSidebarVisible}
           >
-            <div className="inspector-inner">
+            <div ref={setCharacterRightHost} className="inspector-inner character-map-sidebar" hidden={!characterMapTarget} />
+            <div className="inspector-inner library-inspector" inert={!!characterMapTarget} aria-hidden={!!characterMapTarget}>
               {selected ? (
-                <Inspector
-                  family={selected}
-                  onOpenCharacterMap={(style) => setCharacterMapTarget({ family: selected, style })}
-                  onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
-                  onFileAction={(fingerprint,action) => void changeFile(fingerprint,action)}
-                  styleKey={selectedStyleKey}
-                  previewText={previewText}
-                  previewSize={inspectorAppearance.size}
-                  textColor={inspectorAppearance.textColor}
-                  backgroundColor={inspectorAppearance.backgroundColor}
-                  collections={collections}
-                  collectionTargetId={collectionTargetId}
-                  onCollectionTargetChange={setCollectionTargetId}
-                  onCollectionMembershipChange={
-                    updateSelectedCollectionMembership
-                  }
-                  onClose={() => setRightSidebarOpen(false)}
-                />
+                renderInspector(selected)
               ) : (
                 <div className="inspector-empty">
                   <TextAaIcon />
@@ -3127,7 +3176,6 @@ export default function App() {
         />
       )}
 
-      {characterMapTarget && <CharacterMap family={page?.families.find((family) => family.id === characterMapTarget.family.id) ?? characterMapTarget.family} initialStyle={characterMapTarget.style} onClose={() => setCharacterMapTarget(null)} onDownload={(fingerprint) => void downloadFontFile(fingerprint)} />}
 
       {settingsWindow && confirmRebuild && (
         <Modal isOpen onOpenChange={(open) => { if (!open) setConfirmRebuild(false); }}>
@@ -3732,9 +3780,13 @@ function Inspector({
   onDownload,
   onFileAction,
   onOpenCharacterMap,
+  currentStyle,
+  controls,
 }: {
   family: FamilyDto;
-  onOpenCharacterMap: (style: NonNullable<ReturnType<typeof currentPreviewStyle>>) => void;
+  onOpenCharacterMap?: (style: PreviewStyle) => void;
+  currentStyle?: PreviewStyle;
+  controls?: ReactNode;
   styleKey: string | null;
   previewText: string;
   previewSize: number;
@@ -3749,7 +3801,7 @@ function Inspector({
   onFileAction: (fingerprint: string,action: "remove" | "exclude" | "include") => void;
 }) {
   const { t } = useTranslation();
-  const style = currentPreviewStyle(family, styleKey);
+  const style = currentStyle ?? currentPreviewStyle(family, styleKey);
   const face = style?.face;
   const [copyMessage, setCopyMessage] = useState("");
   const copyValue = async (value: string, label: string) => {
@@ -3773,7 +3825,8 @@ function Inspector({
       <p className="inspector-style">
         {style?.name ?? t("font.regular")} <span>·</span> {face?.format ?? t("font.font")} <span>·</span> {t("macos.stylesCount", { count: family.faces.length })}
       </p>
-      {style && <Button variant="secondary" onPress={() => onOpenCharacterMap(style)}>{t("characterMap.open")}</Button>}
+      {style && onOpenCharacterMap && <Button variant="secondary" onPress={() => onOpenCharacterMap(style)}>{t("characterMap.open")}</Button>}
+      {controls}
       <details className="inspector-section" open>
         <summary>{t("common.preview")}</summary>
         <div className="inspector-preview" style={{ backgroundColor: backgroundColor ?? undefined }}>

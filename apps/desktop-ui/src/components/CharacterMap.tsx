@@ -1,5 +1,6 @@
-import { Button, Input, Label, ListBox, Modal, SearchField, Select } from '@heroui/react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Button, Input, Label, ListBox, SearchField, Select } from '@heroui/react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { CharacterMapSession, characterMapError, characterPageSize, characterText, codepointLabel,
   type CharacterEntry, type CharacterGlyph, type CharacterMapInfo, type CharacterPage } from '../../../../shared/character-map';
@@ -8,8 +9,10 @@ import { previewStyles, type PreviewStyle } from '../font-preview';
 import type { FamilyDto } from '../types';
 import { ClaralightSlider } from './ClaralightSlider';
 
-export function CharacterMap({ family, initialStyle, onClose, onDownload }: {
+export function CharacterMap({ family, initialStyle, onClose, onDownload, leftHost, rightHost, toolbarHost, renderInspector }: {
   family: FamilyDto; initialStyle: PreviewStyle; onClose: () => void; onDownload: (fingerprint: string) => void;
+  leftHost?: HTMLElement | null; rightHost?: HTMLElement | null; toolbarHost?: HTMLElement | null;
+  renderInspector?: (style: PreviewStyle, controls: ReactNode) => ReactNode;
 }) {
   const { t } = useTranslation();
   const styles = previewStyles(family);
@@ -34,41 +37,42 @@ export function CharacterMap({ family, initialStyle, onClose, onDownload }: {
     return () => { current = false; session.close(); };
   }, [selectionKey, style.face.id, face.revisionId, source, face.location?.cloudAvailable]);
   const failure = error?.key === selectionKey ? error.message : null;
-  return <Modal isOpen onOpenChange={(open) => { if (!open) onClose(); }}>
-    <Modal.Backdrop>
-      <Modal.Container className="character-map-container">
-        <Modal.Dialog className="character-map-dialog" aria-label={t('characterMap.title')}>
-          <header className="flex flex-wrap items-center gap-4">
-            <Button variant="secondary" onPress={onClose}>{t('common.back')}</Button>
-            <h1 className="text-lg font-semibold">{family.displayName} · {t('characterMap.title')}</h1>
-          </header>
-          <div className="flex flex-wrap items-center gap-4">
+  const controls = <div className="character-map-controls">
+          <div className="flex flex-col gap-4">
             <MapSelect label={t('font.styles')} value={style.key} options={styles.map((item) => ({ id: item.key, label: item.name }))} onChange={(key) => {
               const next = styles.find((item) => item.key === key)!;
               setStyle(next); setSource(next.face.sources[0]?.path ?? ''); setAxes(next.coordinates);
             }} />
             {sources.length > 0 && <MapSelect label={t('inspector.source')} value={source} options={sources.map((item) => ({ id: item.path, label: item.path }))} onChange={setSource} />}
           </div>
-          {face.variableAxes.length > 0 && <div className="flex flex-wrap gap-6">
-            {face.variableAxes.filter((axis) => axis.maxValue > axis.minValue).map((axis) => <label key={axis.tag} className="flex min-w-40 flex-1 items-center gap-4">
+          {face.variableAxes.length > 0 && <div className="flex flex-col gap-4">
+            {face.variableAxes.filter((axis) => axis.maxValue > axis.minValue).map((axis) => <label key={axis.tag} className="flex flex-col gap-2">
               <span>{axis.tag} {axes[axis.tag] ?? axis.defaultValue}</span>
               <ClaralightSlider aria-label={axis.tag} className="flex-1" min={axis.minValue} max={axis.maxValue}
                 step={(axis.maxValue - axis.minValue) / 1000} value={axes[axis.tag] ?? axis.defaultValue}
                 onValueChange={(value) => setAxes((values) => ({ ...values, [axis.tag]: value }))} />
             </label>)}
           </div>}
-          {failure ? <div role="alert" className="flex flex-wrap items-center gap-4"><p>{t(failure)}</p>
-            <Button onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button>
-            {face.location?.files.filter((file) => file.cloudAvailable && !file.localSources.length).map((file) =>
-              <Button key={file.fingerprint} onPress={() => onDownload(file.fingerprint)}>{t('fontLocation.download')}</Button>)}
-          </div> : active ? <CharacterMapContent key={active.info.handle} session={active.session} info={active.info} axes={axes} /> : <p role="status">{t('common.loading')}</p>}
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
-  </Modal>;
+  </div>;
+  const inspector = renderInspector?.({ ...style, face: { ...face, sources: sources.filter((item) => item.path === source) }, coordinates: axes }, controls) ?? controls;
+  const heading = <header className="character-map-heading flex items-center gap-4">
+    <Button autoFocus variant="secondary" onPress={onClose}>{t('common.back')}</Button>
+    <h1 className="text-lg font-semibold">{family.displayName} · {t('characterMap.title')}</h1>
+  </header>;
+  return <section className="character-map-page" aria-label={t('characterMap.title')} onKeyDown={(event) => {
+    if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('[role="listbox"], [role="menu"]')) { event.preventDefault(); onClose(); }
+  }}>
+    {toolbarHost ? createPortal(heading, toolbarHost) : heading}
+    {leftHost ? createPortal(inspector, leftHost) : inspector}
+    {failure ? <div role="alert" className="flex flex-wrap items-center gap-4"><p>{t(failure)}</p>
+      <Button onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button>
+      {face.location?.files.filter((file) => file.cloudAvailable && !file.localSources.length).map((file) =>
+        <Button key={file.fingerprint} onPress={() => onDownload(file.fingerprint)}>{t('fontLocation.download')}</Button>)}
+    </div> : active ? <CharacterMapContent key={active.info.handle} session={active.session} info={active.info} axes={axes} rightHost={rightHost} /> : <p role="status">{t('common.loading')}</p>}
+  </section>;
 }
 
-function CharacterMapContent({ session, info, axes }: { session: CharacterMapSession; info: CharacterMapInfo; axes: Record<string, number> }) {
+function CharacterMapContent({ session, info, axes, rightHost }: { session: CharacterMapSession; info: CharacterMapInfo; axes: Record<string, number>; rightHost?: HTMLElement | null }) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [script, setScript] = useState('');
@@ -112,19 +116,7 @@ function CharacterMapContent({ session, info, axes }: { session: CharacterMapSes
     try { await navigator.clipboard.writeText(value); setCopyStatus(t('common.copied')); }
     catch { setCopyStatus(t('characterMap.error.copyFailed')); }
   }
-  return <div ref={root} className="character-map-content">
-    <div className="flex flex-wrap items-center gap-4">
-      <SearchField aria-label={t('characterMap.search')} value={search} onChange={(value) => { setSearch(value); setOffset(0); }}>
-        <Input placeholder={t('characterMap.search')} />
-      </SearchField>
-      <MapSelect label={t('filters.script')} value={script} options={[{ id: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ id: item.name, label: `${item.name} (${item.count})` }))]}
-        onChange={(value) => { setScript(value); setOffset(0); }} />
-      <span role="status">{t('characterMap.count', { count: page?.total ?? info.count })}</span>
-    </div>
-    {error && <div role="alert" className="flex items-center gap-4"><p>{t(error)}</p><Button onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button></div>}
-    <div className="character-map-panels">
-      {page ? <CharacterGrid key={queryKey} entries={page.entries} selected={selected} onSelect={setSelected} session={session} axes={axes} foreground={foreground} /> : <p role="status">{!error && t('common.loading')}</p>}
-      <aside className="character-map-detail flex flex-col gap-4" aria-label={t('characterMap.title')}>
+  const detail = <aside className="character-map-detail flex flex-col gap-4" aria-label={t('characterMap.title')}>
         {selected && page ? <>
           <GlyphPreview key={`${selected.glyphId}:${JSON.stringify(axes)}:${foreground}`} session={session} entry={selected} axes={axes} foreground={foreground} size={512} />
           <dl className="grid grid-cols-2 gap-2">
@@ -136,7 +128,21 @@ function CharacterMapContent({ session, info, axes }: { session: CharacterMapSes
           <Button variant="secondary" onPress={() => void copy(codepointLabel(selected.codepoint))}>{t('characterMap.copyCodepoint')}</Button>
           <p role="status">{copyStatus}</p>
         </> : <p>{t('characterMap.selectCharacter')}</p>}
-      </aside>
+      </aside>;
+  return <div ref={root} className="character-map-content">
+    {rightHost && createPortal(detail, rightHost)}
+    <div className="flex flex-wrap items-center gap-4">
+      <SearchField aria-label={t('characterMap.search')} value={search} onChange={(value) => { setSearch(value); setOffset(0); }}>
+        <Input placeholder={t('characterMap.search')} />
+      </SearchField>
+      <MapSelect label={t('filters.script')} value={script} options={[{ id: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ id: item.name, label: `${item.name} (${item.count})` }))]}
+        onChange={(value) => { setScript(value); setOffset(0); }} />
+      <span role="status">{t('characterMap.count', { count: page?.total ?? info.count })}</span>
+    </div>
+    {error && <div role="alert" className="flex items-center gap-4"><p>{t(error)}</p><Button onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button></div>}
+    <div className="character-map-panels" data-external-details={!!rightHost}>
+      {page ? <CharacterGrid key={queryKey} entries={page.entries} selected={selected} onSelect={setSelected} session={session} axes={axes} foreground={foreground} /> : <p role="status">{!error && t('common.loading')}</p>}
+      {!rightHost && detail}
     </div>
     <footer className="flex flex-wrap items-center gap-4">
       <Button variant="secondary" isDisabled={offset === 0} onPress={() => setOffset(Math.max(0, offset - characterPageSize))}>{t('characterMap.previousPage')}</Button>

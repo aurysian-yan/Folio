@@ -1,9 +1,9 @@
-import { fireEvent, render, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { family } from "./test/fixtures";
 import App from "./App";
-import { clearCatalogCache, getStorageUsage, getSyncProfile, getSyncStatus, listSyncConflicts, openSettings, queryLibrary, quitApp, rebuildSyncIndexes, recordRecent } from "./api";
+import { characterMap, clearCatalogCache, getStorageUsage, getSyncProfile, getSyncStatus, listSyncConflicts, openSettings, queryLibrary, quitApp, rebuildSyncIndexes, recordRecent } from "./api";
 
 vi.mock("./components/FontPreview", () => ({ FontPreview: ({ size, label, color }: { size: number; label: string; color?: string | null }) => <span data-testid="preview-font-size" data-size={size} data-color={color ?? "default"} aria-label={label} /> }));
 vi.mock("@lisse/react", () => ({ useSmoothCorners: () => {}, SmoothCorners: ({ children }: { children: ReactNode }) => children }));
@@ -15,6 +15,12 @@ vi.mock("./api", async (importOriginal) => {
   const families = Array.from({ length: 300 }, (_, index) => family(String(index)));
   return {
     ...actual,
+    characterMap: {
+      open: vi.fn(async () => ({ handle: 'test-character-map', revisionId: 'fixture-revision', sourcePath: '', faceIndex: 0, count: 1, scripts: [{ name: 'Latin', count: 1 }] })),
+      query: vi.fn(async () => ({ entries: [{ codepoint: 65, glyphId: 1, script: 'Latin' }], total: 1, offset: 0 })),
+      render: vi.fn(async ({ glyphIds }: { glyphIds: number[] }) => glyphIds.map((glyphId) => ({ glyphId, status: 'empty' as const, dataUrl: null, error: null }))),
+      close: vi.fn(async () => {}),
+    },
     queryLibrary: vi.fn(async ({ offset, limit }: { offset: number; limit: number }) => ({ families: families.slice(offset, offset + limit), totalMatches: 300, facets: [], isLoading: false })),
     refreshLibrary: vi.fn(async () => ({ familyCount: 300, faceCount: 300, variableFamilyCount: 0, recentCount: 0, roots: [], fontStateCounts: {}, userFontGroups: [],
       health: { damagedFiles: 0, duplicateSources: 0, multipleRevisions: 0, metadataConflicts: 0 } })),
@@ -365,4 +371,54 @@ it.each([["17", "18"], ["120", "106"]])("保存的字号 %s 按 SwiftUI 范围�
   const slider = getByRole("slider", { name: "预览字号" });
   expect(slider.getAttribute("aria-valuenow")).toBe(expected);
   await waitFor(() => expect(localStorage.getItem("folio-preview-size")).toBe(expected));
+});
+
+it("双击进入三栏字符表，返回恢复父级滚动、侧栏与焦点", async () => {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ fillStyle: '', fillRect() {}, getImageData: () => ({ data: [255, 255, 255, 255] }) } as never);
+  const { getByRole, container, queryByRole } = render(<App />);
+  const first = await waitFor(() => getByRole('button', { name: '选择 字体 0' }));
+  const scroll = getByRole('region', { name: '字体浏览' });
+  scroll.scrollTop = 320;
+  first.focus();
+  fireEvent.click(first);
+  fireEvent.doubleClick(first);
+  await waitFor(() => expect(characterMap.open).toHaveBeenCalledWith(expect.objectContaining({ faceId: '0' })));
+  await waitFor(() => expect(container.querySelector('#right-sidebar .character-map-detail')?.textContent).toContain('U+0041'));
+  expect(queryByRole('dialog')).toBeNull();
+  expect(container.querySelector('#left-sidebar .inspector-panel')?.textContent).toContain('字体 0');
+  expect(container.querySelector('.library-primary')?.getAttribute('aria-hidden')).toBe('true');
+  expect(scroll.isConnected).toBe(true);
+  expect(scroll.scrollTop).toBe(320);
+  fireEvent.click(getByRole('button', { name: '收起左侧栏' }));
+  fireEvent.click(getByRole('button', { name: '返回' }));
+  await waitFor(() => expect(container.querySelector('.character-map-page')).toBeNull());
+  await waitFor(() => expect(document.activeElement).toBe(first));
+  expect(getByRole('button', { name: '收起左侧栏' })).toBeTruthy();
+  expect(scroll.scrollTop).toBe(320);
+  expect(characterMap.close).toHaveBeenCalledWith('test-character-map');
+  fireEvent.click(getByRole('button', { name: '收起左侧栏' }));
+  fireEvent.click(getByRole('button', { name: '查看字符表' }));
+  await waitFor(() => expect(container.querySelector('.character-map-page')).not.toBeNull());
+  expect(getByRole('button', { name: '收起左侧栏' })).toBeTruthy();
+  fireEvent.click(getByRole('button', { name: '返回' }));
+  fireEvent.click(getByRole('button', { name: '返回' }));
+  await waitFor(() => expect(container.querySelector('.character-map-page')).toBeNull());
+  expect(getByRole('button', { name: '展开左侧栏' })).toBeTruthy();
+});
+
+
+it("键盘聚焦与悬停切换后始终只有一个选中卡片", async () => {
+  const { getByRole, container } = render(<App />);
+  const first = await waitFor(() => getByRole('button', { name: '选择 字体 0' }));
+  const second = getByRole('button', { name: '选择 字体 1' });
+  act(() => first.focus());
+  await waitFor(() => expect(first.getAttribute('aria-pressed')).toBe('true'));
+  act(() => second.focus());
+  await waitFor(() => expect(second.getAttribute('aria-pressed')).toBe('true'));
+  expect(first.getAttribute('aria-pressed')).toBe('false');
+  expect(container.querySelectorAll('.font-card.selected')).toHaveLength(1);
+  fireEvent.pointerEnter(first.closest('.font-card')!, { pointerType: 'mouse' });
+  await waitFor(() => expect(first.getAttribute('aria-pressed')).toBe('true'));
+  expect(second.getAttribute('aria-pressed')).toBe('false');
+  expect(container.querySelectorAll('.font-card.selected')).toHaveLength(1);
 });

@@ -50,6 +50,8 @@ struct FontFamilyCardView: View {
     @Environment(\.folioThemeColor) private var themeColor
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
+    @FocusState private var cardFocused: Bool
+    @State private var restoreCardFocus = false
     @State private var hoverSelectionTask: Task<Void, Never>?
     @State private var previewSizeUpdateTask: Task<Void, Never>?
     @State private var displayedPreviewSize: Double
@@ -144,6 +146,7 @@ struct FontFamilyCardView: View {
             if selected, !model.isSelectingInstalledForCloud, presentation != .expanded {
                 cardActions
                     .padding(10)
+                    .highPriorityGesture(TapGesture(count: 2).onEnded { })
             }
         }
         .overlay(alignment: .topLeading) {
@@ -171,6 +174,30 @@ struct FontFamilyCardView: View {
             radius: 1,
             y: 2
         )
+        .focusable()
+        .focusEffectDisabled(!model.isSelectingInstalledForCloud)
+        .focused($cardFocused)
+        .onChange(of: cardFocused) { _, isFocused in
+            if isFocused, !model.isSelectingInstalledForCloud, model.characterMap == nil { select() }
+        }
+        .onChange(of: selected) { _, isSelected in
+            if !isSelected, !model.isSelectingInstalledForCloud { cardFocused = false }
+        }
+        .onChange(of: model.characterMap != nil) { _, isOpen in
+            if isOpen { restoreCardFocus = cardFocused }
+            else if restoreCardFocus { cardFocused = true; restoreCardFocus = false }
+        }
+        .onKeyPress(.return) {
+            guard !model.isSelectingInstalledForCloud else { return .ignored }
+            model.openCharacterMap(family)
+            return .handled
+        }
+        .onTapGesture(count: 2) {
+            cardFocused = true
+            hoverSelectionTask?.cancel()
+            model.openCharacterMap(family)
+        }
+        .accessibilityAction(named: Text(L.text("characterMap.open"))) { model.openCharacterMap(family) }
         .onTapGesture {
             hoverSelectionTask?.cancel()
             if model.isSelectingInstalledForCloud {
@@ -338,7 +365,9 @@ struct FontFamilyCardView: View {
                 HStack {
                     familyName
                     if face?.location?.localAvailable == false, let file = face?.location?.files.first(where: { $0.cloudAvailable }) {
-                        Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) }.help(L.text("fontLocation.previewHint"))
+                        Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) }
+                            .highPriorityGesture(TapGesture(count: 2).onEnded { })
+                            .help(L.text("fontLocation.previewHint"))
                     }
                     Spacer(minLength: 8)
                     if selected {
@@ -424,6 +453,7 @@ struct FontFamilyCardView: View {
                 Text(L.text("fontLocation.previewHint")).font(.caption).foregroundStyle(.secondary)
                 if let file = face?.location?.files.first(where: { $0.cloudAvailable }) {
                     Button(L.text("fontLocation.download")) { CloudSyncModel.shared.download(file.fingerprint) }
+                        .highPriorityGesture(TapGesture(count: 2).onEnded { })
                 }
             }
         }
@@ -525,6 +555,7 @@ struct FontFamilyCardView: View {
         .foregroundStyle(.secondary)
         .buttonStyle(.plain)
         .disabled(family.faces.count < 2)
+        .highPriorityGesture(TapGesture(count: 2).onEnded { })
     }
 
     private var cardActions: some View {
@@ -564,14 +595,14 @@ struct FontFamilyCardView: View {
         hoverSelectionTask = nil
 
         guard !model.isSelectingInstalledForCloud else { return }
-        guard hovering, selectCardsOnHover, !selected else { return }
+        guard hovering, selectCardsOnHover, !selected, model.characterMap == nil else { return }
         hoverSelectionTask = Task { @MainActor in
             do {
                 try await Task.sleep(for: .milliseconds(180))
             } catch {
                 return
             }
-            guard !selected, !model.isSelectingInstalledForCloud else { return }
+            guard !selected, !model.isSelectingInstalledForCloud, model.characterMap == nil else { return }
             if hoverSelectionHaptics {
                 NSHapticFeedbackManager.defaultPerformer.perform(
                     .alignment,
