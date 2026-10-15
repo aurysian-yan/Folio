@@ -59,6 +59,7 @@ struct FolioPreviewSelection: Record {
     @Field var fontSize: Double = 32
     @Field var centered: Bool = false
     @Field var wrapWidth: Double = 0
+    @Field var foregroundColor: String = ""
 }
 
 enum FolioPaths {
@@ -352,6 +353,11 @@ public final class FolioNativeModule: Module {
                 view.selection = selection
             }
             OnViewDidUpdateProps { (view: FolioFontPreview) in view.renderSelection() }
+        }
+
+        View(FolioPanelBackdrop.self) {
+            Prop("dark") { (view: FolioPanelBackdrop, value: Bool) in view.dark = value }
+            Prop("cornerRadius") { (view: FolioPanelBackdrop, value: Double) in view.cornerRadius = value }
         }
 
         View(FolioTabContent.self)

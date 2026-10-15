@@ -48,7 +48,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
             selection={{ sourcePath: face.sourcePath, faceIndex: face.faceIndex,
               revisionId: face.revisionId, axes: Object.fromEntries(face.axes.map((axis) => [axis.tag, axis.defaultValue])),
               text: compact ? 'Preview Text' : 'Preview\nText',
-              fontSize: preferences.previewScale * PixelRatio.getFontScale(), centered: !compact }}
+              fontSize: Math.min(160, preferences.previewScale * PixelRatio.getFontScale()), centered: !compact, foregroundColor: theme.label }}
             onStatus={(event) => setPreviewStatus({ key: previewKey, status: event.nativeEvent.status })} />
         ) : (
           <Text style={[styles.unavailable, { color: theme.secondary }, compact && styles.listUnavailable]}>

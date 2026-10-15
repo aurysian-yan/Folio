@@ -3,6 +3,7 @@ package com.folio.poc.navigation
 import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +28,7 @@ import expo.modules.kotlin.views.ExpoView
 
 class FolioPresetMenuLabels : Record {
     @Field var title: String = ""
+    @Field var value: String = ""
     @Field var expanded: String = ""
     @Field var collapsed: String = ""
 }
@@ -40,6 +42,7 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
     var dark by mutableStateOf(false)
     var triggerIcon by mutableStateOf("caret")
     var triggerSurface by mutableStateOf(false)
+    var triggerTrailing by mutableStateOf(false)
     var shadowProgress by mutableStateOf(0f)
     var colors by mutableStateOf<FolioViewMenuColors?>(null)
     var labels by mutableStateOf<FolioPresetMenuLabels?>(null)
@@ -64,7 +67,7 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
             LaunchedEffect(disabled) { if (disabled) updateExpanded(false) }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 FolioGlassMenu(selectedId, expanded, !disabled, dark, palette, backdrop,
-                    items, text.title, text.title, text.expanded, text.collapsed,
+                    items, listOf(text.title, text.value).filter { it.isNotEmpty() }.joinToString(" · "), text.title, text.expanded, text.collapsed,
                     onExpandedChange = ::updateExpanded,
                     onSelect = { id ->
                         if (!disabled && expanded && items.any { it.id == id }) {
@@ -82,8 +85,11 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
                         ViewMenuIcon("dots", tint, 20.dp)
                         ViewMenuIcon("caret", caretTint, 10.dp, Modifier.graphicsLayer { rotationZ = 180f * progress })
                     } else {
-                        ViewMenuIcon("caret", Color(android.graphics.Color.parseColor(palette.secondary)), 22.dp,
-                            Modifier.graphicsLayer { rotationZ = 180f * progress; alpha = if (disabled) 0.4f else 1f })
+                        Box(if (triggerTrailing) Modifier.fillMaxSize().padding(end = 16.dp) else Modifier,
+                            contentAlignment = if (triggerTrailing) Alignment.CenterEnd else Alignment.Center) {
+                            ViewMenuIcon("caret", Color(android.graphics.Color.parseColor(palette.secondary)), 18.dp,
+                                Modifier.graphicsLayer { rotationZ = 180f * progress; alpha = if (disabled) 0.4f else 1f })
+                        }
                     }
                 }
             }

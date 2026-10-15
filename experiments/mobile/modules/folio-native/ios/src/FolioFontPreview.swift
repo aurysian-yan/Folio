@@ -19,7 +19,7 @@ final class FolioFontPreview: ExpoView {
     func renderSelection() {
         let value = selection
         let axes = value.axes.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ";")
-        let key = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)|\(axes)|\(value.text)|\(value.fontSize)|\(value.centered)|\(value.wrapWidth)"
+        let key = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)|\(axes)|\(value.text)|\(value.fontSize)|\(value.centered)|\(value.wrapWidth)|\(value.foregroundColor)"
         guard key != lastKey else { return }
         lastKey = key
         generation += 1
@@ -41,7 +41,7 @@ final class FolioFontPreview: ExpoView {
                     if supported {
                         let attributes: [NSAttributedString.Key: Any] = [
                             NSAttributedString.Key(kCTFontAttributeName as String): font,
-                            NSAttributedString.Key(kCTForegroundColorAttributeName as String): UIColor.label.cgColor,
+                            NSAttributedString.Key(kCTForegroundColorAttributeName as String): Self.foreground(value.foregroundColor).cgColor,
                         ]
                         self.lines = paragraphs.flatMap { paragraph -> [CTLine] in
                             let text = NSAttributedString(string: paragraph, attributes: attributes)
@@ -107,7 +107,7 @@ final class FolioFontPreview: ExpoView {
         let lineHeight = CGFloat(selection.fontSize) * (selection.wrapWidth > 0 ? 1.3 : 1.05)
         let height = lineHeight * CGFloat(lines.count)
         let widths = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }
-        let scale = selection.centered && selection.wrapWidth == 0
+        let scale = selection.wrapWidth == 0
             ? min(1, bounds.width / max(1, widths.max() ?? 1), bounds.height / max(1, height)) : 1
         context.saveGState()
         context.textMatrix = .identity
@@ -133,5 +133,14 @@ final class FolioFontPreview: ExpoView {
             lastKey = nil
             renderSelection()
         }
+    }
+
+    // 应用语义前景色与原生字体绘制保持一致。
+    private static func foreground(_ hex: String) -> UIColor {
+        guard hex.hasPrefix("#"), hex.count == 7,
+              let rgb = UInt32(hex.dropFirst(), radix: 16) else { return .label }
+        return UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                       green: CGFloat((rgb >> 8) & 255) / 255,
+                       blue: CGFloat(rgb & 255) / 255, alpha: 1)
     }
 }

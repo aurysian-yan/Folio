@@ -37,6 +37,7 @@ export interface PreviewSelection {
   fontSize?: number;
   centered?: boolean;
   wrapWidth?: number;
+  foregroundColor?: string;
 }
 
 export interface PreviewStatus {
@@ -49,6 +50,6 @@ interface PreviewProps extends ViewProps {
   onStatus: (event: NativeSyntheticEvent<PreviewStatus>) => void;
 }
 
-export const NativeFontPreview = requireNativeViewManager<PreviewProps>('FolioNative');
+export const NativeFontPreview = requireNativeViewManager<PreviewProps>('FolioNative', 'FolioFontPreview');
 
 export const getAboutInfo = () => nativeModule.aboutInfo();

@@ -1,5 +1,4 @@
-import { locationLabel, transferLabel } from "../../../shared/font-location";
-import { CaretLeftIcon, CaretRightIcon, CheckIcon, CopyIcon } from './icons';
+import { CaretLeftIcon, CheckIcon, CopyIcon } from './icons';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AccessibilityInfo, ActivityIndicator, Animated, KeyboardAvoidingView, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -17,7 +16,9 @@ import { SettingsGroup, SettingsNavRow, settingsLayout, settingsTypography } fro
 import { DetailSlider } from './DetailSlider';
 import { CharacterMap } from './CharacterMap';
 import { FontNavigation } from './FontNavigation';
-import { adjustableAxes, axisStep, defaultAxisValues, detailPreviewSize, formatAxisValue, stepFaceId } from './font-details';
+import { FontStylePicker } from './FontStylePicker';
+import { FontStorageCard } from './FontStorageCard';
+import { adjustableAxes, axisStep, defaultAxisValues, detailPreviewSize, formatAxisValue } from './font-details';
 
 interface FontDetailsProps {
   family: FontFamily;
@@ -77,9 +78,6 @@ export function FontDetails(props: FontDetailsProps) {
 function FontDetailsContent({ family, theme, snapshot, collectionId, recentError, onRetryRecent, onSnapshotChange, onClose, onFavorite, onFileAction, onOpenCharacterMap }: FontDetailsProps & { onOpenCharacterMap: (face: FontFace, axes: Record<string, number>) => void }) {
   const { t } = useTranslation();
   const scroll = useRef<ScrollView>(null);
-  const styleScroll = useRef<ScrollView>(null);
-  const styleLayouts = useRef(new Map<string, { x: number; width: number }>());
-  const styleViewport = useRef(0);
   const header = usePageHeader({ bottomTabs: false,
     onSnap: (offset, animated) => scroll.current?.scrollTo({ y: offset, animated }) });
   const [favoritePending, setFavoritePending] = useState(false);
@@ -93,7 +91,6 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const [selectedFaceId, setSelectedFaceId] = useState(initialFace?.id);
   const selectedFace = family.faces.find((face) => face.id === selectedFaceId) ?? initialFace;
   const faceKey = selectedFace ? `${selectedFace.id}:${selectedFace.revisionId}` : '';
-  const faceIndex = selectedFace ? family.faces.findIndex((face) => face.id === selectedFace.id) : -1;
   const [previewText, setPreviewText] = useState(() => t('mobile.previewSample'));
   const [previewSize, setPreviewSize] = useState(detailPreviewSize.defaultValue);
   const [previewWidth, setPreviewWidth] = useState(0);
@@ -106,19 +103,12 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const axes = adjustableAxes(selectedFace);
   const variable = family.faces.some((face) => adjustableAxes(face).length > 0);
   const fontSize = Math.min(160, previewSize * PixelRatio.getFontScale());
-  const result = previewStatus?.key === faceKey ? previewStatus.result : null;
-  const previewHeight = Math.max(200, result?.contentHeight ?? 0);
+  const previewKey = JSON.stringify([faceKey, axisValues, previewText, fontSize, previewWidth, theme.label]);
+  const result = previewStatus?.key === previewKey ? previewStatus.result : null;
+  const previewHeight = Math.max(fontSize * 1.3 * 3, result?.contentHeight ?? 0);
   const showFallback = !selectedFace?.sourcePath || result?.status === 'error' || result?.status === 'missing-glyph';
 
-  function revealStyle() {
-    const layout = selectedFace ? styleLayouts.current.get(selectedFace.id) : undefined;
-    if (layout && styleViewport.current > 0) styleScroll.current?.scrollTo({
-      x: Math.max(0, layout.x - (styleViewport.current - layout.width) / 2), animated: !header.reduceMotion,
-    });
-  }
-
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
-  useEffect(revealStyle, [selectedFace, header.reduceMotion]);
 
   async function copyValue(id: string, value: string) {
     try {
@@ -177,30 +167,14 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
           </View>}
 
           <SettingsGroup theme={theme}>
-            <View style={settingsLayout.content}>
-              <Text style={[settingsTypography.body,{color:theme.label}]}>{t('fontLocation.title')}</Text>
-              <Text style={[settingsTypography.detail,{color:theme.secondary}]}>{locationLabel(family.faces,selectedFace,t)}</Text>
-              {selectedFace?.location?.cloudConfirmedAtMs && <Text style={[settingsTypography.detail,{color:theme.secondary}]}>{t('fontLocation.lastConfirmed',{date:new Date(selectedFace.location.cloudConfirmedAtMs).toLocaleString()})}</Text>}
-              {selectedFace?.location?.files.map((file) => <View key={file.fingerprint}>
-                <Text style={[settingsTypography.body,{color:theme.label}]}>{file.filename}</Text>
-                {!!file.localSources.length && <Text style={[settingsTypography.detail,{color:theme.secondary}]}>{t('fontLocation.localLibrary')}</Text>}
-                {transferLabel(file,t) && <Text accessibilityLiveRegion="polite" style={[settingsTypography.detail,{color:theme.secondary}]}>{transferLabel(file,t)}</Text>}
-                {file.cloudAvailable && !file.localSources.length && <PanelAction theme={theme} label={t('fontLocation.download')} onPress={() => { void onFileAction(file.fingerprint,'download').catch(() => setError(t('common.operationFailed'))); }} />}
-                {file.cloudAvailable && !!file.localSources.length && <PanelAction theme={theme} label={t('fontLocation.removeDownload')} onPress={() => { void onFileAction(file.fingerprint,'cloudOnly').catch(() => setError(t('common.operationFailed'))); }} />}
-                {!file.cloudAvailable && !file.uploadExcluded && !!file.localSources.length && <PanelAction theme={theme} label={t('cloud.upload')} onPress={() => { void onFileAction(file.fingerprint,'includeUpload').catch(() => setError(t('common.operationFailed'))); }} />}
-                {!!file.localSources.length && <PanelAction theme={theme} label={t(file.uploadExcluded ? 'fontLocation.resumeUpload' : 'fontLocation.keepLocal')} onPress={() => { void onFileAction(file.fingerprint,file.uploadExcluded ? 'includeUpload' : 'excludeUpload').catch(() => setError(t('common.operationFailed'))); }} />}
-              </View>)}
-            </View>
-          </SettingsGroup>
-          <SettingsGroup theme={theme}>
             <View style={styles.previewStage}>
               <View onLayout={(event) => setPreviewWidth(event.nativeEvent.layout.width)}
                 style={[styles.previewContent, { height: previewHeight }]}>
-                {!!selectedFace?.sourcePath && previewWidth > 0 && <NativeFontPreview key={faceKey} style={styles.fill}
+                {!!selectedFace?.sourcePath && previewWidth > 0 && <NativeFontPreview key={previewKey} style={styles.fill}
                   accessibilityLabel={t('mobile.previewLabel', { name: family.displayName, style: selectedFace.styleName })}
                   selection={{ sourcePath: selectedFace.sourcePath, faceIndex: selectedFace.faceIndex, revisionId: selectedFace.revisionId,
-                    axes: axisValues, text: previewText, fontSize, centered: true, wrapWidth: previewWidth }}
-                  onStatus={(event) => setPreviewStatus({ key: faceKey, result: event.nativeEvent })} />}
+                    axes: axisValues, text: previewText, fontSize, centered: true, wrapWidth: previewWidth, foregroundColor: theme.label }}
+                  onStatus={(event) => setPreviewStatus({ key: previewKey, result: event.nativeEvent })} />}
                 {showFallback ? <View style={styles.previewOverlay} pointerEvents="none">
                   <Text accessibilityLiveRegion="polite" style={[styles.previewFallback, { color: theme.secondary }]}>
                     {result?.status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t(selectedFace?.location?.cloudAvailable && !selectedFace.location.localAvailable ? 'fontLocation.previewHint' : 'mobile.previewUnavailable')}
@@ -210,20 +184,8 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
                 </View>}
               </View>
             </View>
-            <View style={styles.previewMeta}>
-              <View style={styles.styleHeading}>
-                <Text style={[styles.body, { color: theme.label }]}>{selectedFace?.styleName ?? family.displayName}</Text>
-                {faceIndex >= 0 && family.faces.length > 1 && <Text style={[styles.detail, { color: theme.secondary }]}>
-                  {t('common.indexOfTotal', { index: faceIndex + 1, total: family.faces.length })}
-                </Text>}
-              </View>
-              {family.faces.length > 1 && <View style={styles.styleNavigation}>
-                <PreviewNavButton side="left" theme={theme} disabled={faceIndex <= 0} label={t('mobile.previousStyle')}
-                  onPress={() => setSelectedFaceId(stepFaceId(family.faces, selectedFace?.id, -1))} />
-                <PreviewNavButton side="right" theme={theme} disabled={faceIndex < 0 || faceIndex >= family.faces.length - 1}
-                  label={t('mobile.nextStyle')} onPress={() => setSelectedFaceId(stepFaceId(family.faces, selectedFace?.id, 1))} />
-              </View>}
-            </View>
+            {selectedFace && <FontStylePicker faces={family.faces} selectedFaceId={selectedFace.id}
+              onChange={setSelectedFaceId} theme={theme} sourceId={header.sourceId} />}
             <View style={styles.previewEditor}>
               <Text style={[styles.detail, { color: theme.secondary }]}>{t('preview.customText')}</Text>
               <TextInput value={previewText} onChangeText={setPreviewText} placeholder={t('preview.inputText')}
@@ -237,20 +199,6 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
               onChange={setPreviewSize} theme={theme} />
           </SettingsGroup>
 
-          {family.faces.length > 1 && <SettingsGroup theme={theme} title={t('font.styles')}>
-            <ScrollView ref={styleScroll} horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false}
-              onLayout={(event) => { styleViewport.current = event.nativeEvent.layout.width; revealStyle(); }}
-              accessibilityRole="radiogroup" accessibilityLabel={t('font.styles')} contentContainerStyle={styles.chips}>
-              {family.faces.map((face) => <Pressable key={face.id} accessibilityRole="radio" accessibilityLabel={face.styleName}
-                accessibilityState={{ selected: face.id === selectedFace?.id }} onPress={() => setSelectedFaceId(face.id)}
-                onLayout={(event) => { styleLayouts.current.set(face.id, event.nativeEvent.layout); if (face.id === selectedFace?.id) revealStyle(); }}
-                style={({ pressed }) => [styles.chip, { backgroundColor: face.id === selectedFace?.id ? theme.accent : theme.raised,
-                  opacity: pressed ? 0.7 : 1 }]}>
-                <Text style={[styles.chipLabel, { color: face.id === selectedFace?.id ? theme.onAccent : theme.label }]}>{face.styleName}</Text>
-              </Pressable>)}
-            </ScrollView>
-          </SettingsGroup>}
-
           {axes.length > 0 && <SettingsGroup theme={theme} title={t('inspector.variableAxes')}>
             {axes.map((axis) => <DetailSlider key={`${faceKey}:${axis.tag}`} label={axisLabelKeys[axis.tag] ? t(axisLabelKeys[axis.tag]!) : axis.name}
               value={axisValues[axis.tag] ?? axis.defaultValue} minimum={axis.minimum} maximum={axis.maximum}
@@ -258,6 +206,10 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
               onChange={(value) => setAxisState({ key: faceKey, values: { ...axisValues, [axis.tag]: value } })} theme={theme} />)}
           </SettingsGroup>}
 
+          {selectedFace && <SettingsGroup theme={theme}>
+            <SettingsNavRow title={t('characterMap.title')} theme={theme} last
+              onPress={() => onOpenCharacterMap(selectedFace, axisValues)} />
+          </SettingsGroup>}
           <SettingsGroup theme={theme} title={t('inspector.copyAs')}>
             {copyOptions.map((option) => <Pressable key={option.id} accessibilityRole="button"
               accessibilityLabel={`${t(copied === option.id ? 'common.copied' : 'inspector.copyAs')} ${option.label}`}
@@ -273,10 +225,7 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
               </> : <CopyIcon size={20} color={theme.secondary} />}
             </Pressable>)}
           </SettingsGroup>
-          {selectedFace && <SettingsGroup theme={theme}>
-            <SettingsNavRow title={t('characterMap.title')} theme={theme} last
-              onPress={() => onOpenCharacterMap(selectedFace, axisValues)} />
-          </SettingsGroup>}
+          <FontStorageCard family={family} face={selectedFace} theme={theme} onAction={onFileAction} />
         </Animated.ScrollView>
       </NavigationBackdrop>
       <FamilyCollectionsPanel visible={collectionsOpen} family={family} snapshot={snapshot} collectionId={collectionId}
@@ -284,17 +233,6 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
     </NativeScrollContainer>
     </KeyboardAvoidingView>
   </SafeAreaView>;
-}
-
-// 字款导航保留 44 点触摸区域，独立于字形展示。
-function PreviewNavButton({ side, disabled, label, onPress, theme }: {
-  side: 'left' | 'right'; disabled: boolean; label: string; onPress: () => void; theme: Theme;
-}) {
-  const Icon = side === 'left' ? CaretLeftIcon : CaretRightIcon;
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled}
-    onPress={onPress} style={({ pressed }) => [styles.navButton, { backgroundColor: theme.raised, opacity: disabled ? 0.35 : pressed ? 0.7 : 1 }]}>
-    <Icon size={20} color={theme.label} />
-  </Pressable>;
 }
 
 function cssFontFace(family: FontFamily, face: FontFace | undefined) {
@@ -318,16 +256,8 @@ const styles = StyleSheet.create({
   previewContent: { width: '100%', overflow: 'hidden' },
   previewOverlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   previewFallback: { ...settingsTypography.detail, textAlign: 'center' },
-  previewMeta: { ...settingsLayout.row, paddingTop: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  styleHeading: { flex: 1, minWidth: 0, gap: 4 },
-  styleNavigation: { flexDirection: 'row', gap: 8 },
-  navButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  previewEditor: { ...settingsLayout.section, gap: 8 },
+  previewEditor: { ...settingsLayout.section, paddingTop: 8, gap: 8 },
   previewTextInput: { ...settingsLayout.control, ...settingsTypography.body, fontWeight: '400', minHeight: 64, padding: 12 },
-  chips: { ...settingsLayout.formControls, flexDirection: 'row', gap: 8 },
-  chip: { ...settingsLayout.formControl, minHeight: 44, minWidth: 64, paddingHorizontal: 16, paddingVertical: 12,
-    alignItems: 'center', justifyContent: 'center' },
-  chipLabel: { ...settingsTypography.detail, fontWeight: '500' },
   copyRow: { minHeight: 64, ...settingsLayout.row, flexDirection: 'row', alignItems: 'center', gap: 12 },
   copyBody: { flex: 1, minWidth: 0, gap: 4 },
 });

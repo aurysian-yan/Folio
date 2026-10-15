@@ -32,6 +32,13 @@ class FolioNavigationModule : Module() {
             Prop("tintColor") { view: FolioHeaderBackdropView, value: String -> view.tintColor = value }
         }
 
+        View(FolioPanelBackdropView::class) {
+            Prop("sourceId") { view: FolioPanelBackdropView, value: String -> view.sourceId = value }
+            Prop("active") { view: FolioPanelBackdropView, value: Boolean -> view.active = value }
+            Prop("tintColor") { view: FolioPanelBackdropView, value: String -> view.tintColor = value }
+            Prop("cornerRadius") { view: FolioPanelBackdropView, value: Float -> view.cornerRadius = value }
+        }
+
         View(FolioHeaderControlsView::class) {
             Events("onModeChange", "onExpandedChange", "onImport", "onSearchTextChange", "onFilter")
             Prop("sourceId") { view: FolioHeaderControlsView, value: String -> view.sourceId = value }
@@ -60,6 +67,7 @@ class FolioNavigationModule : Module() {
             Prop("dark") { view: FolioPresetMenuView, value: Boolean -> view.dark = value }
             Prop("triggerIcon") { view: FolioPresetMenuView, value: String -> view.triggerIcon = value }
             Prop("triggerSurface") { view: FolioPresetMenuView, value: Boolean -> view.triggerSurface = value }
+            Prop("triggerTrailing") { view: FolioPresetMenuView, value: Boolean -> view.triggerTrailing = value }
             Prop("shadowProgress") { view: FolioPresetMenuView, value: Float -> view.shadowProgress = value.coerceIn(0f, 1f) }
             Prop("colors") { view: FolioPresetMenuView, value: FolioViewMenuColors -> view.colors = value }
             Prop("labels") { view: FolioPresetMenuView, value: FolioPresetMenuLabels -> view.labels = value }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type ViewToken } from 'react-native';
+import { ActivityIndicator, AccessibilityInfo, Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View, type ViewToken } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { CharacterMapSession, characterForeground, characterMapError, characterPageSize, characterText, codepointLabel,
@@ -16,8 +17,9 @@ import { CaretLeftIcon } from './icons';
 import { PageHeader, usePageHeader } from './PageHeader';
 import { NavigationBackdrop } from './bottom-navigation';
 import { NativeScrollContainer } from './native-controls';
-import { CharacterMapChoice } from './CharacterMapChoice';
-import { fontCardSurfaceStyle } from './FontCard';
+import { FontChoiceRow, FontStylePicker } from './FontStylePicker';
+import { CharacterInspectorSheet } from './CharacterInspectorSheet';
+import { characterGridLayout, fontSourceOptions } from './character-map-layout';
 
 export function CharacterMap({ family, initialFace, initialAxes, theme, onClose, onDownload, deferClose }: {
   family: FontFamily; initialFace: FontFace; initialAxes: Record<string, number>; theme: Theme;
@@ -30,7 +32,7 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
     onSnap: (offset, animated) => list.current?.scrollToOffset({ offset, animated }) });
   const [chosenFace, setFace] = useState(initialFace);
   const face = family.faces.find((item) => item.id === chosenFace.id) ?? chosenFace;
-  const sources = [...new Set([face.sourcePath, ...(face.location?.files.flatMap((file) => file.localSources.map((source) => source.path)) ?? [])].filter((path): path is string => !!path))];
+  const sources = fontSourceOptions(face, t);
   const [sourcePath, setSource] = useState(initialFace.sourcePath ?? '');
   const source = sourcePath || face.sourcePath || '';
   const [axes, setAxes] = useState(initialAxes);
@@ -54,12 +56,13 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
   const error = failure?.key === selectionKey ? failure.message : null;
   const controls = <>
     <SettingsGroup theme={theme}>
-      <ChoiceRow sourceId={header.sourceId} label={t('font.styles')} theme={theme} value={face.id} options={family.faces.map((item) => ({ value: item.id, label: item.styleName }))} onChange={(id) => {
+      <FontStylePicker sourceId={header.sourceId} faces={family.faces} selectedFaceId={face.id} theme={theme} onChange={(id) => {
         const next = family.faces.find((item) => item.id === id);
         if (!next) return;
-        header.restoreTitle(); setFace(next); setSource(next.sourcePath ?? ''); setAxes(defaultAxisValues(next));
+        setFace(next); setSource(next.sourcePath ?? ''); setAxes(defaultAxisValues(next));
       }} />
-      {sources.length > 0 && <ChoiceRow sourceId={header.sourceId} label={t('inspector.source')} theme={theme} value={source} options={sources.map((path) => ({ value: path, label: path }))} onChange={(path) => { header.restoreTitle(); setSource(path); }} />}
+      {sources.length > 0 && <FontChoiceRow sourceId={header.sourceId} label={t('inspector.source')} theme={theme}
+        value={source} options={sources} onChange={setSource} />}
     </SettingsGroup>
     {adjustableAxes(face).length > 0 && <SettingsGroup theme={theme} title={t('inspector.variableAxes')}>
       {adjustableAxes(face).map((axis) => <DetailSlider key={axis.tag} label={axis.name || axis.tag} theme={theme}
@@ -74,35 +77,35 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
       onPress={() => { void onDownload(file.fingerprint).catch((cause) => setFailure({ key: selectionKey, message: characterMapError(cause) })); }} />)}
   </View> : null;
   return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <CharacterMapContent key={selectionKey} session={active?.session ?? null} info={active?.info ?? null} axes={axes} theme={theme}
+    <GestureHandlerRootView style={styles.screen}>
+      <CharacterMapContent selectionKey={selectionKey} session={active?.session ?? null} info={active?.info ?? null} axes={axes} theme={theme}
         title={family.displayName} header={header} controls={controls} list={list} failureContent={failureContent} onClose={onClose} />
-    </KeyboardAvoidingView>
+    </GestureHandlerRootView>
   </SafeAreaView>;
 }
 
-function CharacterMapContent({ session, info, axes, theme, header, controls, list, failureContent, onClose, title }: {
-  title: string; session: CharacterMapSession | null; info: CharacterMapInfo | null; axes: Record<string, number>; theme: Theme;
+function CharacterMapContent({ selectionKey, session, info, axes, theme, header, controls, list, failureContent, onClose, title }: {
+  selectionKey: string; title: string; session: CharacterMapSession | null; info: CharacterMapInfo | null; axes: Record<string, number>; theme: Theme;
   header: ReturnType<typeof usePageHeader>; controls: ReactNode; list: RefObject<FlatList<CharacterEntry> | null>;
   failureContent: ReactNode; onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const { width, height } = useWindowDimensions();
-  const wide = width >= 768;
-  const gridWidth = wide ? width * 0.65 : width;
-  const columns = Math.max(2, Math.floor(gridWidth / 80));
-  const cellWidth = gridWidth / columns;
-  const [search, setSearch] = useState('');
-  const [script, setScript] = useState('');
-  const [offset, setOffset] = useState(0);
-  const [retry, setRetry] = useState(0);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const { columns, cellWidth } = characterGridLayout(viewport.width);
+  const [collapsedHeight, setCollapsedHeight] = useState(200);
+  const [query, setQuery] = useState({ key: selectionKey, search: '', script: '', offset: 0, retry: 0 });
+  const currentQuery = query.key === selectionKey ? query : { key: selectionKey, search: '', script: '', offset: 0, retry: 0 };
+  if (query.key !== selectionKey) setQuery(currentQuery);
+  const { search, script, offset, retry } = currentQuery;
+  function updateQuery(patch: Partial<typeof query>) { setQuery({ ...currentQuery, ...patch }); }
   const [result, setResult] = useState<{ key: string; page: CharacterPage } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
-  const [selected, setSelected] = useState<CharacterEntry | null>(null);
+  const [selection, setSelection] = useState<{ key: string; entry: CharacterEntry } | null>(null);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 24 });
-  const queryKey = JSON.stringify([info?.handle, search, script]);
+  const queryKey = JSON.stringify([selectionKey, info?.handle, search, script]);
   const requestKey = JSON.stringify([queryKey, offset, retry]);
   const page = result?.key === queryKey ? result.page : null;
+  const selected = page ? (selection?.key === queryKey ? selection.entry : page.entries[0] ?? null) : null;
   const foreground = useMemo(() => characterForeground(theme.label), [theme.label]);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<CharacterEntry>[] }) => {
     const indices = viewableItems.map((item) => item.index ?? 0);
@@ -115,7 +118,7 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
       session.query({ text: search, script: script || null, offset, limit: characterPageSize }).then((value) => {
         if (current) {
           setResult((previous) => ({ key: queryKey, page: { ...value, entries: offset > 0 && previous?.key === queryKey ? [...previous.page.entries.slice(0, offset), ...value.entries] : value.entries } }));
-          if (offset === 0) { setSelected(value.entries[0] ?? null); setVisibleRange({ start: 0, end: 24 }); }
+          if (offset === 0) { setVisibleRange({ start: 0, end: 24 }); }
         }
       }).catch((cause) => { if (current) setFailure({ key: requestKey, message: characterMapError(cause) }); });
     }, 120);
@@ -136,17 +139,16 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
   const error = failure?.key === requestKey ? failure.message : null;
   const loading = !page || page.entries.length === offset;
   const loadMore = () => {
-    if (page && !loading && !error && page.entries.length < page.total) setOffset(page.entries.length);
+    if (page && !loading && !error && page.entries.length < page.total) updateQuery({ offset: page.entries.length });
   };
-  const listHeader = <View>
-    {controls}
-    {info && <View style={settingsLayout.content}>
-      <TextInput value={search} onChangeText={(value) => { header.restoreTitle(); setSearch(value); setOffset(0); }} accessibilityLabel={t('characterMap.search')}
+  const listHeader = <View style={styles.listHeader}>
+    {info && <View style={styles.filters}>
+      <TextInput value={search} onChangeText={(value) => { updateQuery({ search: value, offset: 0 }); list.current?.scrollToOffset({ offset: 0, animated: false }); }} accessibilityLabel={t('characterMap.search')}
         placeholder={t('characterMap.search')} placeholderTextColor={theme.secondary} autoCapitalize="none" autoCorrect={false}
-        style={[styles.search, settingsTypography.body, { color: theme.label, backgroundColor: theme.surface, borderColor: theme.border }]} />
-      <ChoiceRow sourceId={header.sourceId} label={t('filters.script')} theme={theme} value={script} options={[{ value: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ value: item.name, label: `${item.name} (${item.count})` }))]}
-        onChange={(value) => { header.restoreTitle(); setScript(value); setOffset(0); }} />
-      {error && <View><Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(error)}</Text><PanelAction label={t('common.retry')} theme={theme} onPress={() => setRetry((value) => value + 1)} /></View>}
+        style={[styles.search, settingsTypography.body, { color: theme.label, backgroundColor: theme.surface }]} />
+      <FontChoiceRow sourceId={header.sourceId} label={t('filters.script')} theme={theme} value={script} options={[{ value: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ value: item.name, label: `${item.name} (${item.count})` }))]}
+        onChange={(value) => { updateQuery({ script: value, offset: 0 }); list.current?.scrollToOffset({ offset: 0, animated: false }); }} />
+      {error && <View><Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(error)}</Text><PanelAction label={t('common.retry')} theme={theme} onPress={() => updateQuery({ retry: retry + 1 })} /></View>}
     </View>}
     {failureContent}
   </View>;
@@ -155,18 +157,20 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
       <IconButton theme={theme} label={t('common.back')} systemImage="chevron.left" onPress={onClose}>
         <CaretLeftIcon size={20} color={theme.label} />
       </IconButton>
-      <View style={styles.screen}>
-        <Text numberOfLines={1} accessibilityRole="header" style={[settingsTypography.body, { color: theme.label, fontWeight: '600' }]}>{title}</Text>
-        <Text numberOfLines={1} accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary }]}>{info ? t('characterMap.count', { count: page?.total ?? info.count }) : t('common.loading')}</Text>
+      <View style={styles.heading}>
+        <Text numberOfLines={1} accessibilityRole="header" style={[settingsTypography.body, { color: theme.label, fontWeight: '600', textAlign: 'center' }]}>{title}</Text>
+        <Text numberOfLines={1} accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary, textAlign: 'center' }]}>{info ? t('characterMap.count', { count: page?.total ?? info.count }) : t('common.loading')}</Text>
       </View>
+      <View style={styles.headerSpacer} />
     </PageHeader>
+    <View style={styles.screen} onLayout={({ nativeEvent }) => setViewport(nativeEvent.layout)}>
     <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
-    <View style={[styles.screen, wide && styles.wide]}>
-      <Animated.FlatList ref={list} key={columns} style={styles.grid}
+      <Animated.FlatList ref={list} key={`${selectionKey}:${columns}`} style={styles.grid}
         ListHeaderComponent={listHeader} onScroll={header.onScroll} scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
-        scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
-        contentContainerStyle={{ paddingTop: header.contentTop, paddingBottom: header.contentBottom }} keyboardDismissMode="on-drag" data={page?.entries ?? []} numColumns={columns} keyExtractor={(entry) => String(entry.codepoint)}
+        scrollIndicatorInsets={{ top: header.contentTop, bottom: collapsedHeight + 16 }}
+        columnWrapperStyle={styles.gridRow}
+        contentContainerStyle={{ paddingHorizontal: 12, paddingTop: header.contentTop, paddingBottom: collapsedHeight + 32 }} keyboardDismissMode="on-drag" data={page?.entries ?? []} numColumns={columns} keyExtractor={(entry) => String(entry.codepoint)}
         extraData={[byGlyph, selected, theme]} initialNumToRender={columns * 4} maxToRenderPerBatch={columns * 4} windowSize={3}
         onViewableItemsChanged={onViewableItemsChanged} keyboardShouldPersistTaps="handled"
         onEndReached={loadMore} onEndReachedThreshold={0.5}
@@ -177,20 +181,26 @@ function CharacterMapContent({ session, info, axes, theme, header, controls, lis
           return <Pressable style={[styles.cell, { width: cellWidth, backgroundColor: theme.surface, borderColor: selected?.codepoint === item.codepoint ? theme.accent : 'transparent' }]}
             accessibilityRole="button" accessibilityState={{ selected: selected?.codepoint === item.codepoint }}
             accessibilityLabel={t('characterMap.characterLabel', { codepoint: codepointLabel(item.codepoint), glyphId: item.glyphId, script: item.script })}
-            onPress={() => setSelected(item)}>
+            onPress={() => setSelection({ key: queryKey, entry: item })}>
             <Image source={image?.dataUrl ?? undefined} style={styles.cellImage} contentFit="contain" accessible={false} recyclingKey={`${renderKey}:${item.glyphId}`} />
             <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{codepointLabel(item.codepoint)}</Text>
             {image?.status === 'error' && <Text style={{ color: theme.danger }}>{t('characterMap.error.renderFailed')}</Text>}
           </Pressable>;
         }} />
-      {session && selected && page && <CharacterDetail key={`${selected.codepoint}:${JSON.stringify(axes)}:${foreground}`} session={session} entry={selected} axes={axes} foreground={foreground} theme={theme} wide={wide} topInset={wide ? header.contentTop : 0} maxHeight={height * (wide ? 0.7 : 0.3)} />}
-    </View>
     </NavigationBackdrop>
+    <CharacterInspectorSheet theme={theme} sourceId={header.sourceId} topInset={header.contentTop} height={viewport.height}
+      controls={controls} onCollapsedHeight={setCollapsedHeight} summary={session && selected ?
+        <CharacterDetail key={`${info?.handle}:${selected.codepoint}:${JSON.stringify(axes)}:${foreground}`}
+          session={session} entry={selected} axes={axes} foreground={foreground} theme={theme} /> :
+        <View style={styles.emptyDetail}><Text style={[settingsTypography.detail, { color: theme.secondary }]}>
+          {t(info || failureContent ? 'characterMap.selectCharacter' : 'common.loading')}
+        </Text></View>} />
+    </View>
   </NativeScrollContainer>;
 }
 
-function CharacterDetail({ session, entry, axes, foreground, theme, wide, maxHeight, topInset }: {
-  session: CharacterMapSession; entry: CharacterEntry; axes: Record<string, number>; foreground: [number, number, number, number]; theme: Theme; wide: boolean; maxHeight: number; topInset: number;
+function CharacterDetail({ session, entry, axes, foreground, theme }: {
+  session: CharacterMapSession; entry: CharacterEntry; axes: Record<string, number>; foreground: [number, number, number, number]; theme: Theme;
 }) {
   const { t } = useTranslation();
   const [image, setImage] = useState<CharacterGlyph | null>(null);
@@ -203,45 +213,43 @@ function CharacterDetail({ session, entry, axes, foreground, theme, wide, maxHei
     return () => { current = false; };
   }, [session, entry.glyphId, axes, foreground, retry]);
   async function copy(value: string) {
-    try { await copyText(value); setStatus(t('common.copied')); }
+    try { await copyText(value); setStatus(t('common.copied')); AccessibilityInfo.announceForAccessibility(t('common.copied')); }
     catch { setStatus(t('characterMap.error.copyFailed')); }
   }
-  return <ScrollView style={[wide && styles.detailWide, { maxHeight }]} contentContainerStyle={[settingsLayout.content, !wide && styles.detailRow, { paddingTop: topInset }]}>
-    <View style={wide ? styles.largeImage : styles.phoneImage}>
-      {image?.dataUrl && <Image source={image.dataUrl} style={styles.image} contentFit="contain" accessibilityLabel={codepointLabel(entry.codepoint)} />}
-      {image?.status === 'empty' && <Text style={{ color: theme.secondary }}>{t('characterMap.blankGlyph')}</Text>}
-      {image?.status === 'error' && <View><Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(image.error ?? 'characterMap.error.renderFailed')}</Text><PanelAction label={t('common.retry')} theme={theme} onPress={() => setRetry((value) => value + 1)} /></View>}
-      {!image && <ActivityIndicator color={theme.accent} />}
-    </View>
-    <View style={styles.screen}>
-      <Text style={[settingsTypography.body, { color: theme.label }]}>{codepointLabel(entry.codepoint)}</Text>
-      <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('characterMap.glyphId')}: {entry.glyphId} · {entry.script}</Text>
-      <View style={styles.pager}>
-        <PanelAction label={t('characterMap.copyCharacter')} theme={theme} onPress={() => { void copy(characterText(entry)); }} />
-        <PanelAction label={t('characterMap.copyCodepoint')} theme={theme} onPress={() => { void copy(codepointLabel(entry.codepoint)); }} />
+  return <View style={styles.detail}>
+    <View style={styles.detailRow}>
+      <View style={styles.phoneImage}>
+        {image?.dataUrl && <Image source={image.dataUrl} style={styles.image} contentFit="contain" accessibilityLabel={codepointLabel(entry.codepoint)} />}
+        {image?.status === 'empty' && <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('characterMap.blankGlyph')}</Text>}
+        {image?.status === 'error' && <View><Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(image.error ?? 'characterMap.error.renderFailed')}</Text><PanelAction label={t('common.retry')} theme={theme} onPress={() => setRetry((value) => value + 1)} /></View>}
+        {!image && <ActivityIndicator color={theme.accent} />}
       </View>
-      {!!status && <Text accessibilityLiveRegion="polite" style={{ color: theme.secondary }}>{status}</Text>}
+      <View style={styles.detailMeta}>
+        <Text style={[styles.codepoint, { color: theme.label }]}>{codepointLabel(entry.codepoint)}</Text>
+        <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{entry.script}</Text>
+        <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('characterMap.glyphId')}: {entry.glyphId}</Text>
+      </View>
     </View>
-  </ScrollView>;
-}
-
-function ChoiceRow({ label, options, value, onChange, theme, sourceId }: {
-  label: string; options: { value: string; label: string }[]; value: string; onChange: (value: string) => void; theme: Theme; sourceId: string;
-}) {
-  return <View style={[settingsLayout.row, styles.choiceRow]}>
-    <Text style={[settingsTypography.body, { color: theme.label }]}>{label}</Text>
-    <Text numberOfLines={1} style={[styles.choiceValue, settingsTypography.detail, { color: theme.secondary }]}>{options.find((item) => item.value === value)?.label}</Text>
-    <CharacterMapChoice label={label} options={options} value={value} onChange={onChange} theme={theme} sourceId={sourceId} />
+    <View style={styles.pager}>
+      <View style={styles.screen}><PanelAction label={t('characterMap.copyCharacter')} theme={theme} onPress={() => { void copy(characterText(entry)); }} /></View>
+      <View style={styles.screen}><PanelAction label={t('characterMap.copyCodepoint')} theme={theme} onPress={() => { void copy(codepointLabel(entry.codepoint)); }} /></View>
+    </View>
+    {!!status && <Text accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary }]}>{status}</Text>}
   </View>;
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 }, header: { paddingHorizontal: 16 }, wide: { flexDirection: 'row' },
-  grid: { flex: 1 },
-  cell: { ...fontCardSurfaceStyle, padding: 0, height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 3 }, cellImage: { width: 64, height: 64 },
-  detailWide: { width: '35%' }, detailRow: { flexDirection: 'row', alignItems: 'center' },
-  phoneImage: { width: 112, height: 112 }, largeImage: { width: '100%', aspectRatio: 1 }, image: { width: '100%', height: '100%' },
-  pager: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  search: { minHeight: 44, paddingHorizontal: 16, borderWidth: StyleSheet.hairlineWidth },
-  choiceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, choiceValue: { flex: 1, textAlign: 'right' },
+  screen: { flex: 1 }, header: { paddingHorizontal: 16 },
+  heading: { flex: 1, minWidth: 0, gap: 2 }, headerSpacer: { width: 44 },
+  grid: { flex: 1 }, gridRow: { gap: 8, marginBottom: 8 }, listHeader: { paddingBottom: 16 },
+  filters: { gap: 8 },
+  cell: { ...settingsLayout.control, height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  cellImage: { width: 64, height: 64 },
+  detail: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 16 }, detailMeta: { flex: 1, minWidth: 0, gap: 4 },
+  codepoint: { ...settingsTypography.body, fontVariant: ['tabular-nums'] },
+  phoneImage: { width: 96, height: 96, alignItems: 'center', justifyContent: 'center' }, image: { width: '100%', height: '100%' },
+  emptyDetail: { minHeight: 96, padding: 16, alignItems: 'center', justifyContent: 'center' },
+  pager: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  search: { ...settingsLayout.control, minHeight: 44, paddingHorizontal: 16, paddingVertical: 12 },
 });

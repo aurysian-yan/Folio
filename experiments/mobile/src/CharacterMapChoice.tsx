@@ -9,6 +9,7 @@ export interface CharacterMapChoiceProps {
   onChange: (value: string) => void;
   theme: Theme;
   sourceId: string;
+  triggerSize?: { width: number; height: number };
 }
 
 // 通用环境沿用设置页选择控件。
