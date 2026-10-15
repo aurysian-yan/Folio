@@ -134,14 +134,14 @@ final class FolioTests: XCTestCase {
         XCTAssertEqual(LibraryViewModel.hero(for: snapshot).kind, .normal)
     }
 
-    func testHeroPreviewSymbolsMatchFigma() {
+    func testHeroWarningSymbolsUseFill() {
         XCTAssertEqual(HeroKind.normal.symbol, "lasso.badge.sparkles")
-        XCTAssertEqual(HeroKind.damaged.symbol, "stethoscope")
+        XCTAssertEqual(HeroKind.damaged.symbol, "stethoscope.circle.fill")
         XCTAssertEqual(HeroKind.update.symbol, "tray.and.arrow.up")
-        XCTAssertEqual(HeroKind.cloudAhead.symbol, "icloud.and.arrow.down")
-        XCTAssertEqual(HeroKind.localUnsynced.symbol, "icloud.and.arrow.up")
-        XCTAssertEqual(HeroKind.cloudStorageLow.symbol, "externaldrive.badge.icloud")
-        XCTAssertEqual(HeroKind.conflict.symbol, "bookmark")
+        XCTAssertEqual(HeroKind.cloudAhead.symbol, "icloud.and.arrow.down.fill")
+        XCTAssertEqual(HeroKind.localUnsynced.symbol, "icloud.and.arrow.up.fill")
+        XCTAssertEqual(HeroKind.cloudStorageLow.symbol, "externaldrive.fill.badge.icloud")
+        XCTAssertEqual(HeroKind.conflict.symbol, "bookmark.fill")
     }
 
     func testLocalUnsyncedHeroDoesNotNeedAnUploadQueue() {

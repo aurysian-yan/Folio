@@ -39,7 +39,7 @@ final class CloudSyncModel {
     var connectionName: String {
         if let connectionAlias, !connectionAlias.isEmpty { return connectionAlias }
         guard let profile, let host = URL(string: profile.serverUrl)?.host else { return "WebDAV" }
-        if host.range(of: "(^|\\.)123pan\\.(com|cn)$", options: [.regularExpression, .caseInsensitive]) != nil { return "123PAN" }
+        if host.range(of: "(^|\\.)123pan\\.(com|cn)$", options: [.regularExpression, .caseInsensitive]) != nil { return L.text("macos.provider123") }
         if host.range(of: "(^|\\.)jianguoyun\\.com$", options: [.regularExpression, .caseInsensitive]) != nil { return L.text("macos.providerJianguoyun") }
         return host
     }

@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { createLibraryHero, type HeroInput } from "./library-hero";
+import { createLibraryHero, heroConnectionName, type HeroInput } from "./library-hero";
+import i18n from "./i18n";
 
 const base: HeroInput = {
   snapshot: { familyCount: 670, faceCount: 1200, variableFamilyCount: 42, recentCount: 12, syncSummary: { syncedCount: 670, cloudOnlyCount: 0, localOnlyFingerprints: [] }, roots: [], fontStateCounts: {}, userFontGroups: [], health: { damagedFiles: 0, duplicateSources: 0, multipleRevisions: 0, metadataConflicts: 0 } },
@@ -8,12 +9,49 @@ const base: HeroInput = {
   fonts: [], conflicts: [], cloudLoaded: true,
 };
 
+it("服务商名称随界面语言翻译，域名与同步状态不泄漏英文标识", async () => {
+  const providers = [
+    { hosts: ["123pan.cn", "WEBDAV.123PAN.CN", "webdav.123pan.com"], zh: "123 云盘", en: "123 Cloud Drive" },
+    { hosts: ["jianguoyun.com", "DAV.JIANGUOYUN.COM"], zh: "坚果云", en: "Jianguoyun" },
+  ];
+  const language = i18n.language;
+  try {
+    for (const locale of ["zh-CN", "en"]) {
+      await i18n.changeLanguage(locale);
+      for (const provider of providers) {
+        const name = locale === "zh-CN" ? provider.zh : provider.en;
+        for (const host of provider.hosts) {
+          const profile = { ...base.profile!, serverUrl: `https://${host}/custom/fonts/` };
+          expect(heroConnectionName(profile)).toBe(name);
+          const statuses: HeroInput["status"][] = [base.status, null, { ...base.status!, running: true, percent: 50 },
+            { ...base.status!, stage: "已同步", percent: 100 }, { ...base.status!, error: "连接失败" },
+            ...(["upload", "download"] as const).map((action) => ({ ...base.status!, items: [{ fingerprint: "font", action, status: "pending" as const }] })),
+            { ...base.status!, items: [{ fingerprint: "local", action: "upload", status: "pending" }, { fingerprint: "remote", action: "download", status: "pending" }] },
+          ];
+          const inputs: HeroInput[] = statuses.map((status) => ({ ...base, profile, status }));
+          inputs.push({ ...base, profile, cloudLoaded: false }, { ...base, profile, cloudReadError: true },
+            { ...base, profile, snapshot: { ...base.snapshot!, syncSummary: { syncedCount: 1, cloudOnlyCount: 1, localOnlyFingerprints: [] } } },
+            { ...base, profile, conflicts: [{ id: "c", kind: "collection_name", title: "", detail: "", localFingerprint: null, remoteFingerprint: null }] });
+          for (const input of inputs) {
+            const text = createLibraryHero(input).sync.text;
+            expect(text).toContain(name);
+            if (locale === "zh-CN") expect(text).not.toMatch(/123pan|jianguoyun/i);
+          }
+        }
+      }
+    }
+    for (const host of ["123pan.cn.example.test", "jianguoyun.com.example.test", "custom.example.test"]) {
+      expect(heroConnectionName({ ...base.profile!, serverUrl: `https://${host}/fonts` })).toBe(host);
+    }
+  } finally { await i18n.changeLanguage(language); }
+});
+
 it("全库统计来自快照，未完成同步不能声称全部已同步", () => {
   const hero = createLibraryHero(base);
   expect(hero.title).toBe("现有 670 个字族，随时可用");
   expect(hero.subtitle).toContain("42 个可变字族 · 12 个最近访问");
   expect(hero.sync.state).toBe("connected");
-  expect(hero.sync.text).toContain("123PAN");
+  expect(hero.sync.text).toContain("123 云盘");
   expect(createLibraryHero({ ...base, profile: null }).sync.state).toBe("disconnected");
   expect(createLibraryHero({ ...base, cloudLoaded: false }).sync.state).toBe("checking");
   expect(createLibraryHero({ ...base, profile: null, cloudReadError: true }).sync.state).toBe("error");

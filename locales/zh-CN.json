@@ -359,7 +359,7 @@
     "appearanceDescription": "选择深浅色、主题色与字体预览字号。",
     "shortcutsDescription": "选择退出 Folio 时使用的快捷键。",
     "importDescription": "复制会保留一份由 Folio 管理的字体文件；引用会从原目录读取字体。",
-    "cloudDescription": "连接 WebDAV 或 123PAN，同步字体文件与收藏状态。"
+    "cloudDescription": "连接 WebDAV 或 123 云盘，同步字体文件与收藏状态。"
   },
   "theme": {
     "default": "默认主题色",
@@ -469,6 +469,7 @@
     "statusUnavailable": "本地存储暂时不可用",
     "statusBusy": "请等待同步或存储操作完成",
     "connectedTo": "已连接 {{connection}}",
+    "connectionStatus": "{{connection}} · {{status}}",
     "uploadedCount": "上传 {{count}} 个",
     "downloadedCount": "下载 {{count}} 个",
     "uploadedFiles": "{{count}} 个待上传",

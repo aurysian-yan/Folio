@@ -9,7 +9,9 @@ export type WebDAVPresetId = typeof webdavPresets[number]['id'];
 export function matchingWebdavPreset(serverUrl: string): WebDAVPresetId {
   try {
     const hostname = new URL(serverUrl.trim()).hostname;
-    return webdavPresets.find((preset) => preset.url && new URL(preset.url).hostname === hostname)?.id ?? 'none';
+    if (/(^|\.)123pan\.(com|cn)$/i.test(hostname)) return 'pan123';
+    if (/(^|\.)jianguoyun\.com$/i.test(hostname)) return 'jianguoyun';
+    return 'none';
   } catch { return 'none'; }
 }
 

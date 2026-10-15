@@ -28,8 +28,8 @@ test('未运行队列也显示仅本地未同步，云端保留与传输分别�
     fileSize: 123, cloudOnly: true, deleted: false, localPath: null, localAvailable: false, identityIds: [] }] };
   const hero = createLibraryHero(snapshot, remote, null);
   assert.equal(hero.title, '云端有 1 个字体可下载');
-  assert.equal(hero.sync.text, '123PAN · 1 个字体仅在云端');
-  assert.equal(createLibraryHero(local, remote, null).sync.text, '本地有 1 个字体待上传');
+  assert.equal(hero.sync.text, '123 云盘 · 1 个字体仅在云端');
+  assert.equal(createLibraryHero(local, remote, null).sync.text, '123 云盘 · 本地有 1 个字体待上传');
 });
 
 test('读取失败不使用旧云端记录，未连接与同步失败分别显示', () => {
@@ -37,4 +37,16 @@ test('读取失败不使用旧云端记录，未连接与同步失败分别显�
   assert.equal(createLibraryHero(snapshot, { ...state, profile: null }, null).sync.state, 'disconnected');
   assert.equal(createLibraryHero(snapshot, state, 'cloud.readStatusError').sync.state, 'error');
   assert.equal(createLibraryHero(snapshot, { ...state, status: { ...state.status, errorMessage: '状态码 507' } }, null).kind, 'cloudStorageLow');
+});
+
+test('各类同步状态保留对应云提供商名称', () => {
+  for (const [serverUrl, name] of [['https://webdav.123pan.cn/webdav', '123 云盘'], ['https://dav.jianguoyun.com/dav', '坚果云']] as const) {
+    const connected: SyncState = { ...state, profile: { ...state.profile!, serverUrl } };
+    for (const status of [state.status, { ...state.status, isRunning: true }, { ...state.status, errorMessage: '连接失败' },
+      ...['upload', 'download'].map((action) => ({ ...state.status, items: [{ fingerprint: 'font', action, status: 'pending' }] }))]) {
+      assert.ok(createLibraryHero(snapshot, { ...connected, status }, null).sync.text.includes(name));
+    }
+    assert.equal(createLibraryHero(snapshot, connected, 'cloud.readStatusError').sync.text, `${name} · 无法读取同步状态`);
+  }
+  assert.equal(createLibraryHero(snapshot, { ...state, profile: null }, 'cloud.readStatusError').sync.text, '无法读取同步状态');
 });

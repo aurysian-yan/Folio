@@ -1295,22 +1295,22 @@ final class LibraryViewModel {
         let cloudReady = cloudLoaded && !readError && profile != nil
         let sync: HeroSyncPresentation
         if !cloudLoaded {
-            sync = .init(state: .checking, text: L.text("common.loading"), action: nil)
+            sync = .init(state: .checking, text: profile == nil ? L.text("common.loading") : L.format("cloud.readingCloud", connectionName), action: nil)
         } else if readError {
-            sync = .init(state: .error, text: L.text("cloud.readStatusError"), action: .cloudSettings)
+            sync = .init(state: .error, text: profile == nil ? L.text("cloud.readStatusError") : L.format("cloud.connectionStatus", connectionName, L.text("cloud.readStatusError")), action: .cloudSettings)
         } else if profile == nil {
             sync = .init(state: .disconnected, text: L.text("cloud.notConnected"), action: .cloudSettings)
         } else if let status {
             if status.isRunning {
                 sync = .init(state: .running, text: L.format("cloud.syncingCloud", connectionName, String(status.percent)), action: nil)
             } else if status.errorMessage != nil {
-                sync = .init(state: .error, text: "\(connectionName) \(L.text("cloud.syncIncomplete"))", action: .cloudSettings)
+                sync = .init(state: .error, text: L.format("cloud.connectionStatus", connectionName, L.text("cloud.syncIncomplete")), action: .cloudSettings)
             } else if !local.isEmpty && !downloads.isEmpty {
                 sync = .init(state: .pending, text: L.format("cloud.bothUnsynced", connectionName, String(local.count), String(downloads.count)), action: .cloudSettings)
             } else if !local.isEmpty {
-                sync = .init(state: .pending, text: L.plural("cloud.pendingUploads",local.count), action: .cloudSettings)
+                sync = .init(state: .pending, text: L.format("cloud.connectionStatus", connectionName, L.plural("cloud.pendingUploads", local.count)), action: .cloudSettings)
             } else if !downloads.isEmpty {
-                sync = .init(state: .pending, text: L.plural("cloud.pendingDownloads",downloads.count), action: .cloudFonts)
+                sync = .init(state: .pending, text: L.format("cloud.connectionStatus", connectionName, L.plural("cloud.pendingDownloads", downloads.count)), action: .cloudFonts)
             } else if !conflicts.isEmpty {
                 sync = .init(state: .pending, text: L.format("cloud.conflictsPending", connectionName, String(conflicts.count)), action: .cloudSettings)
             } else if cloudOnlyCount > 0 {
@@ -1366,18 +1366,19 @@ extension HeroPresentation {
     static var previewCases: [HeroPresentation] {
         let summary = L.format("library.summary", "670", "42", "12")
         let localSummary = L.format("library.localSummary", "670", "42", "12")
-        let synced = HeroSyncPresentation(state: .synced, text: L.format("cloud.librarySyncedTo", "123PAN"), action: nil)
+        let connection = L.text("macos.provider123")
+        let synced = HeroSyncPresentation(state: .synced, text: L.format("cloud.librarySyncedTo", connection), action: nil)
         return [
             .init(kind: .normal, title: L.plural("library.availableNow", 670), subtitle: L.format("library.summaryDamaged", "0", "42", "12"), detail: nil, sync: synced),
             .init(kind: .damaged, title: L.plural("health.damagedCount", 8), subtitle: summary, detail: nil, action: .fontHealth, sync: synced),
             .init(kind: .update, title: L.format("desktop.updatesAvailable", "3"), subtitle: summary, detail: nil, action: .fontHealth, sync: synced),
             .init(kind: .cloudAhead, title: L.plural("cloud.pendingDownloads", 12), subtitle: localSummary, detail: nil, action: .cloudFonts,
-                sync: .init(state: .pending, text: L.format("cloud.remoteAhead", "123PAN"), action: .cloudFonts)),
+                sync: .init(state: .pending, text: L.format("cloud.remoteAhead", connection), action: .cloudFonts)),
             .init(kind: .localUnsynced, title: L.plural("cloud.localUnsynced", 32), subtitle: localSummary, detail: nil, action: .cloudSettings,
-                sync: .init(state: .pending, text: L.format("cloud.localAhead", "123PAN"), action: .cloudSettings)),
-            .init(kind: .cloudStorageLow, title: L.text("cloud.spaceAlmostFull"), subtitle: L.format("cloud.remainingSpace", "123PAN", "0.6 GB"), detail: localSummary, action: .cloudSettings, sync: synced),
+                sync: .init(state: .pending, text: L.format("cloud.localAhead", connection), action: .cloudSettings)),
+            .init(kind: .cloudStorageLow, title: L.text("cloud.spaceAlmostFull"), subtitle: L.format("cloud.remainingSpace", connection, "0.6 GB"), detail: localSummary, action: .cloudSettings, sync: synced),
             .init(kind: .conflict, title: L.plural("cloud.conflictCount", 4), subtitle: [L.plural("health.revisions", 2), L.plural("health.names", 2)].joined(separator: " · "),
-                detail: localSummary, action: .cloudSettings, sync: .init(state: .pending, text: L.format("cloud.conflictsPending", "123PAN", "4"), action: .cloudSettings)),
+                detail: localSummary, action: .cloudSettings, sync: .init(state: .pending, text: L.format("cloud.conflictsPending", connection, "4"), action: .cloudSettings)),
         ]
     }
 }

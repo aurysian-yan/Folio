@@ -1,8 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import i18n from './i18n/instance.ts';
 import { canReuseSyncPassword, createSyncClient, maskedSyncAccount, matchingWebdavPreset, syncErrorKey, validateProfile, webdavPresets, webdavSourceName, type SyncBridge, type SyncState } from './sync.ts';
 
 const profile = { serverUrl: 'https://dav.example.test/', remoteDirectory: 'Fonts', username: 'user', automatic: true };
+test('来源名称使用当前语言，覆盖两类域名与任意路径', () => {
+  const providers = [
+    { id: 'pan123', hosts: ['123pan.cn', 'WEBDAV.123PAN.CN', 'webdav.123pan.com'], zh: '123 云盘', en: '123 Cloud Drive' },
+    { id: 'jianguoyun', hosts: ['jianguoyun.com', 'DAV.JIANGUOYUN.COM'], zh: '坚果云', en: 'Jianguoyun' },
+  ];
+  for (const provider of providers) {
+    for (const host of provider.hosts) {
+      const url = `https://${host}/custom/fonts/`;
+      assert.equal(matchingWebdavPreset(url), provider.id);
+      assert.equal(webdavSourceName(url, i18n.getFixedT('zh-CN')), provider.zh);
+      assert.equal(webdavSourceName(url, i18n.getFixedT('en')), provider.en);
+    }
+  }
+  assert.equal(matchingWebdavPreset('https://123pan.cn.example.test/fonts'), 'none');
+});
 test('服务商预设使用桌面 WebDAV 地址，识别尾斜线并保留自定义地址', () => {
   assert.deepEqual(webdavPresets.map((preset) => preset.url), ['', 'https://webdav.123pan.cn/webdav', 'https://dav.jianguoyun.com/dav']);
   assert.equal(matchingWebdavPreset(' HTTPS://WEBDAV.123PAN.CN/webdav/ '), 'pan123');

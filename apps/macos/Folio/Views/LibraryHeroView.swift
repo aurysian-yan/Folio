@@ -103,7 +103,8 @@ struct LibraryHeroView: View {
     private var syncSymbol: String {
         switch presentation.sync.state {
         case .running, .checking: "arrow.trianglehead.2.clockwise.rotate.90"
-        case .error: "exclamationmark.triangle"
+        case .error: "exclamationmark.triangle.fill"
+        case .pending: "icloud.fill"
         case .synced: "checkmark.icloud"
         default: "icloud"
         }

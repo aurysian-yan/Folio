@@ -43,7 +43,7 @@ export interface HeroInput {
 export function heroConnectionName(profile: { serverUrl: string }, t: HeroTranslate): string {
   try {
     const host = new URL(profile.serverUrl).hostname;
-    if (/(^|\.)123pan\.(com|cn)$/i.test(host)) return "123PAN";
+    if (/(^|\.)123pan\.(com|cn)$/i.test(host)) return t("macos.provider123");
     if (/(^|\.)jianguoyun\.com$/i.test(host)) return t("macos.providerJianguoyun");
     return host || "WebDAV";
   } catch { return "WebDAV"; }
@@ -102,15 +102,16 @@ export function createLibraryHero(input: HeroInput, t: HeroTranslate): HeroPrese
 
 function syncPresentation(input: HeroInput, connection: string, uploads: number, downloads: number, cloudOnly: number, t: HeroTranslate): HeroPresentation["sync"] {
   const { profile, status, cloudLoaded } = input;
-  if (!cloudLoaded) return { state: "checking", text: t("common.loading") };
-  if (input.cloudReadError) return { state: "error", text: t("cloud.readStatusError"), action: "cloudSettings" };
+  const connectionStatus = (key: string, values?: Record<string, string | number>) => t("cloud.connectionStatus", { connection, status: t(key, values) });
+  if (!cloudLoaded) return { state: "checking", text: profile ? t("cloud.readingCloud", { connection }) : t("common.loading") };
+  if (input.cloudReadError) return { state: "error", text: profile ? connectionStatus("cloud.readStatusError") : t("cloud.readStatusError"), action: "cloudSettings" };
   if (!profile) return { state: "disconnected", text: t("cloud.notConnected"), action: "cloudSettings" };
   if (!status) return { state: "checking", text: t("cloud.readingCloud", { connection }) };
   if (status.running) return { state: "running", text: t("cloud.syncingCloud", { connection, percent: Math.round(Math.min(100, Math.max(0, status.percent))) }) };
-  if (status.error) return { state: "error", text: `${connection} ${t("cloud.syncIncomplete")}`, action: "cloudSettings" };
+  if (status.error) return { state: "error", text: connectionStatus("cloud.syncIncomplete"), action: "cloudSettings" };
   if (uploads > 0 && downloads > 0) return { state: "pending", text: t("cloud.bothUnsynced", { connection, uploads, downloads }), action: "cloudSettings" };
-  if (uploads > 0) return { state: "pending", text: t("cloud.pendingUploads", { count: uploads }), action: "cloudSettings" };
-  if (downloads > 0) return { state: "pending", text: t("cloud.pendingDownloads", { count: downloads }), action: "cloudFonts" };
+  if (uploads > 0) return { state: "pending", text: connectionStatus("cloud.pendingUploads", { count: uploads }), action: "cloudSettings" };
+  if (downloads > 0) return { state: "pending", text: connectionStatus("cloud.pendingDownloads", { count: downloads }), action: "cloudFonts" };
   if (input.conflicts.length > 0) return { state: "pending", text: t("cloud.conflictsPending", { connection, count: input.conflicts.length }), action: "cloudSettings" };
   if (cloudOnly > 0) return { state: "connected", text: t("cloud.cloudOnlySummary", { connection, count: cloudOnly }), action: "cloudFonts" };
   if (input.snapshot?.syncSummary && status.percent === 100 && status.stage === "已同步") return { state: "synced", text: t("cloud.librarySyncedTo", { connection }) };

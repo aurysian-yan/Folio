@@ -13,6 +13,7 @@ export function LibraryHero({ presentation, theme, onAction, onLayout }: {
   onLayout: (event: LayoutChangeEvent) => void;
 }) {
   const Icon = icons[presentation.kind];
+  const iconWeight = presentation.kind === 'normal' || presentation.kind === 'update' ? 'regular' : 'fill';
   const standaloneIcon = ['normal', 'damaged', 'update'].includes(presentation.kind);
   const color = presentation.kind === 'normal' ? theme.heroNormal : presentation.kind === 'damaged' ? theme.heroDamaged
     : presentation.kind === 'update' ? theme.heroUpdate : presentation.kind === 'conflict' ? theme.heroConflict : theme.heroCloud;
@@ -25,11 +26,12 @@ export function LibraryHero({ presentation, theme, onAction, onLayout }: {
     {title}<CaretRightIcon size={16} color={theme.muted} />
   </Pressable> : title;
   const sync = <><View style={styles.syncIcon}><SyncIcon size={16}
+    weight={['pending', 'error'].includes(presentation.sync.state) ? 'fill' : 'regular'}
     color={['pending', 'error'].includes(presentation.sync.state) ? theme.heroCloud : theme.secondary} /></View>
     <Text style={[styles.syncText, { color: theme.secondary }]}>{presentation.sync.text}</Text></>;
   return <View style={styles.hero} onLayout={onLayout}>
-    {standaloneIcon ? <><Icon size={32} color={color} /><View style={styles.heading}>{heading}</View></>
-      : <View style={styles.headingRow}><Icon size={24} color={color} />{heading}</View>}
+    {standaloneIcon ? <><Icon size={32} color={color} weight={iconWeight} /><View style={styles.heading}>{heading}</View></>
+      : <View style={styles.headingRow}><Icon size={24} color={color} weight={iconWeight} />{heading}</View>}
     <Text style={[styles.subtitle, { color: theme.secondary }]}>{presentation.subtitle}</Text>
     {presentation.sync.action ? <Pressable accessibilityRole="button" onPress={() => onAction(presentation.sync.action!)} style={styles.sync}>{sync}</Pressable>
       : <View accessibilityLiveRegion="polite" style={styles.sync}>{sync}</View>}

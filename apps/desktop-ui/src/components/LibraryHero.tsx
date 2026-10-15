@@ -16,19 +16,20 @@ const heroIcons = {
 export function LibraryHero({ presentation, onAction }: { presentation: HeroPresentation; onAction: (action: HeroAction) => void }) {
   const { t } = useTranslation();
   const Icon = heroIcons[presentation.kind];
+  const iconWeight = presentation.kind === "normal" || presentation.kind === "update" ? "regular" : "fill";
   const SyncIcon = presentation.sync.state === "running" || presentation.sync.state === "checking" ? ArrowClockwiseIcon
     : presentation.sync.state === "error" ? WarningIcon
     : presentation.sync.state === "synced" ? CloudCheckIcon : CloudIcon;
   const comma = presentation.kind === "normal" ? presentation.title.indexOf("，") : -1;
   const title = <span>{comma >= 0 ? <>{presentation.title.slice(0, comma + 1)}<span className="library-hero-ready">{presentation.title.slice(comma + 1)}</span></> : presentation.title}</span>;
-  const sync = <><span className="library-hero-sync-icon-slot" aria-hidden="true"><SyncIcon className="library-hero-sync-icon" size={16} /></span><span>{presentation.sync.text}</span></>;
+  const sync = <><span className="library-hero-sync-icon-slot" aria-hidden="true"><SyncIcon className="library-hero-sync-icon" size={16} weight={presentation.sync.state === "pending" || presentation.sync.state === "error" ? "fill" : "regular"} /></span><span>{presentation.sync.text}</span></>;
 
   return (
     <div className="library-hero-container w-full max-w-[946px] shrink-0">
       <header className="library-hero flex w-full justify-center p-[10px]" data-kind={presentation.kind}>
         <div className="flex w-full min-w-0 max-w-[648px] flex-col items-start">
           <div className="library-hero-title-row flex w-full items-center gap-[6px] px-[2px]">
-            <span className="library-hero-icon-slot"><Icon className="library-hero-icon" size={24} aria-hidden="true" /></span>
+            <span className="library-hero-icon-slot"><Icon className="library-hero-icon" size={24} weight={iconWeight} aria-hidden="true" /></span>
             <h1 className="library-hero-heading m-0 min-w-0 text-2xl font-medium leading-8">
               {presentation.action ? (
                 <Button variant="tertiary" className="library-hero-action" aria-label={`${presentation.title}，${presentation.actionLabel ?? t("mobile.viewDetails")}`} onPress={() => onAction(presentation.action!)}>

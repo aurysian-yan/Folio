@@ -19,6 +19,13 @@ for (const [name, locale] of Object.entries(locales)) {
 
 const source = locales[SOURCE_LOCALE];
 if (source) {
+  // 中文来源名称不得使用服务商的英文标识。
+  for (const [key, value] of Object.entries(source.flat)) {
+    if (/123pan|jianguoyun/i.test(value)) {
+      problems.push(`${SOURCE_LOCALE}.json 的 ${key} 应使用中文服务商名称`);
+    }
+  }
+
   // 以源语言的基础键为基准，逐语言比对。
   const sourceBase = new Set(Object.keys(source.flat).map(baseKey));
   for (const name of names) {

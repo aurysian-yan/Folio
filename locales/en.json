@@ -476,6 +476,7 @@
     "statusUnavailable": "Local storage is temporarily unavailable",
     "statusBusy": "Wait for the sync or storage operation to finish",
     "connectedTo": "Connected to {{connection}}",
+    "connectionStatus": "{{connection}} · {{status}}",
     "uploadedCount": "Uploaded {{count}}",
     "downloadedCount": "Downloaded {{count}}",
     "uploadedFiles": "{{count}} to upload",

@@ -609,12 +609,12 @@ enum HeroKind: String, CaseIterable, Sendable {
     var symbol: String {
         switch self {
         case .normal: "lasso.badge.sparkles"
-        case .damaged: "stethoscope"
+        case .damaged: "stethoscope.circle.fill"
         case .update: "tray.and.arrow.up"
-        case .cloudAhead: "icloud.and.arrow.down"
-        case .localUnsynced: "icloud.and.arrow.up"
-        case .cloudStorageLow: "externaldrive.badge.icloud"
-        case .conflict: "bookmark"
+        case .cloudAhead: "icloud.and.arrow.down.fill"
+        case .localUnsynced: "icloud.and.arrow.up.fill"
+        case .cloudStorageLow: "externaldrive.fill.badge.icloud"
+        case .conflict: "bookmark.fill"
         }
     }
 }
