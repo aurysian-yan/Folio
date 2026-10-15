@@ -35,6 +35,7 @@ import { SettingsAboutPage } from './SettingsAboutPage';
 import { SettingsAppearancePage } from './SettingsAppearancePage';
 import { SettingsCardsPage } from './SettingsCardsPage';
 import { SettingsImportPage } from './SettingsImportPage';
+import { SettingsSearchPage } from './SettingsSearchPage';
 import { SettingsScreen, type SettingsPageId } from './SettingsScreen';
 import { SettingsSyncPage } from './SettingsSyncPage';
 import { CloudScreen } from './CloudScreen';
@@ -77,6 +78,8 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   onOpenFamily: (family: FontFamily) => void;
 }) {
   const { t } = useTranslation();
+  const { preferences } = usePreferences();
+  const autoFocusSearch = preferencesReady && preferences.searchAutoFocus;
   const { scope } = target;
   const collectionId = target.scope === 'collection' ? target.collectionId : undefined;
   const smartFolderId = target.scope === 'smart' ? target.smartFolderId : undefined;
@@ -149,9 +152,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
 
   useEffect(() => {
     if (usesNativeControls || Platform.OS === 'android' || !searchPage) return;
-    if (active && ready) searchInput.current?.focus();
-    else searchInput.current?.blur();
-  }, [active, ready, searchPage]);
+    if (!active || !ready) searchInput.current?.blur();
+    else if (autoFocusSearch) searchInput.current?.focus();
+  }, [active, autoFocusSearch, ready, searchPage]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch({ key: scopeKey, text: searchText.trim() }), 180);
@@ -376,9 +379,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           </Animated.View>
         </View>}
         {Platform.OS === 'android' ? <AndroidHeaderControls theme={theme} sourceId={sourceId} active={active}
-          mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
+          mode={mode} width={width - 52} searchOpen={searchOpen} autoFocusSearch={autoFocusSearch} searchText={searchText}
           ready={ready} importing={importing} importBlocked={syncBlocked} onModeChange={setMode} onImport={importFont}
-          onSearchTextChange={setSearchText} onFilter={openFilter} filterCount={selectedFacets.length} /> : usesNativeControls ? <NativeHeaderControls theme={theme} active={active} mode={mode} searchOpen={searchOpen}
+          onSearchTextChange={setSearchText} onFilter={openFilter} filterCount={selectedFacets.length} /> : usesNativeControls ? <NativeHeaderControls theme={theme} active={active} mode={mode} searchOpen={searchOpen} autoFocusSearch={autoFocusSearch}
           width={width - 52} searchText={searchText} onSearchTextChange={setSearchText}
           ready={ready} importing={importing} importBlocked={syncBlocked} onModeChange={setMode} onImport={importFont}
           onFilter={openFilter} filterCount={selectedFacets.length} /> : searchOpen ? (
@@ -425,7 +428,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   if (sidebar) {
     return <HeaderScrollContext.Provider value={headerScrollOffset}><NativeLibraryContent theme={theme} title={title} active={active}
       subtitle={snapshot ? t('mobile.familyCount', { count: scope === 'all' ? snapshot.familyCount : page.totalMatches }) : t('library.title')}
-      mode={mode} width={width - 52} searchOpen={searchOpen} searchText={searchText}
+      mode={mode} width={width - 52} searchOpen={searchOpen} autoFocusSearch={autoFocusSearch} searchText={searchText}
       ready={ready} importing={importing} importBlocked={syncBlocked} onModeChange={setMode}
       onSearchTextChange={setSearchText} onImport={importFont} onFilter={openFilter} filterCount={selectedFacets.length}>
       {content}
@@ -441,6 +444,7 @@ function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => voi
     case 'storage': return <SettingsStoragePage theme={theme} onClose={onClose} />;
     case 'cards': return <SettingsCardsPage theme={theme} onClose={onClose} />;
     case 'appearance': return <SettingsAppearancePage theme={theme} onClose={onClose} />;
+    case 'search': return <SettingsSearchPage theme={theme} onClose={onClose} />;
     case 'import': return <SettingsImportPage theme={theme} onClose={onClose} />;
     case 'about': return <SettingsAboutPage theme={theme} onClose={onClose} />;
   }

@@ -1,4 +1,4 @@
-import { CloudIcon, CardsIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from './icons';
+import { CloudIcon, CardsIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, MagnifyingGlassIcon, PaintBrushIcon } from './icons';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Animated, AppState, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
@@ -11,7 +11,7 @@ import { accentPresets, type Theme } from './ui';
 import type { CloudSyncController } from './useCloudSync';
 import { webdavSourceName } from './sync';
 
-export type SettingsPageId = 'sync' | 'storage' | 'cards' | 'appearance' | 'import' | 'about';
+export type SettingsPageId = 'sync' | 'storage' | 'cards' | 'appearance' | 'import' | 'search' | 'about';
 
 // 设置主页显示真实概览；进入页面和回到前台时刷新存储用量。
 export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage }: {
@@ -48,6 +48,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
   const entries = [
     { id: 'cards', Icon: CardsIcon, color: accentPresets.purple[mode], title: t('settings.cards'), description: t('mobile.settings.cardsSummary') },
     { id: 'appearance', Icon: PaintBrushIcon, color: theme.accent, title: t('settings.appearance'), description: t('mobile.settings.appearanceSummary') },
+    { id: 'search', Icon: MagnifyingGlassIcon, color: accentPresets.blue[mode], title: t('common.search'), description: t('mobile.settings.searchSummary') },
     { id: 'import', Icon: DownloadSimpleIcon, color: accentPresets.green[mode], title: t('settings.importing'), description: t('mobile.settings.importSummary') },
     { id: 'about', Icon: InfoIcon, color: accentPresets.blue[mode], title: t('settings.about'), description: t('mobile.settings.aboutDescription') },
   ] as const;

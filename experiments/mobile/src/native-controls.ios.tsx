@@ -118,16 +118,16 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
 
 // 分栏详情只保留系统工具栏，React Native 内容不再绘制顶部操作区。
 export function NativeLibraryContent({ children, title, subtitle, active, theme, mode, width,
-  searchOpen, searchText, ready, importing, importBlocked = false, onModeChange, onSearchTextChange, onImport, onFilter, filterCount }: NativeLibraryContentProps) {
+  searchOpen, autoFocusSearch = false, searchText, ready, importing, importBlocked = false, onModeChange, onSearchTextChange, onImport, onFilter, filterCount }: NativeLibraryContentProps) {
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
   const scrollShadow = shadow({ radius: 32, y: 2, color: headerShadowColor(theme, shadowProgress) });
   const text = useNativeState(searchText);
   const searchInput = useRef<TextFieldRef>(null);
   useEffect(() => {
-    if (searchOpen && active && ready) void searchInput.current?.focus();
-    else void searchInput.current?.blur();
-  }, [active, ready, searchOpen]);
+    if (!searchOpen || !active || !ready) void searchInput.current?.blur();
+    else if (autoFocusSearch) void searchInput.current?.focus();
+  }, [active, autoFocusSearch, ready, searchOpen]);
   useEffect(() => { if (searchText !== text.get()) text.set(searchText); }, [searchText, text]);
 
   const actionModifiers = [labelStyle('iconOnly'), tint(theme.label), scrollShadow];
@@ -149,7 +149,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
               ]} />
             {searchText.length > 0 && <Button label={t('mobile.clearSearch')} systemImage="xmark.circle.fill"
               onPress={() => { text.set(''); onSearchTextChange(''); }}
-              modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch')), scrollShadow]} />}
+              modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch'))]} />}
           </HStack> : <VStack>
             <Text modifiers={[font({ textStyle: 'headline' })]}>{title}</Text>
             {active && <Text modifiers={[font({ textStyle: 'caption' }), foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>{subtitle}</Text>}
@@ -181,7 +181,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
 }
 
 // 系统 Menu 保留原生展开、收起与菜单项选择行为。
-export function NativeHeaderControls({ theme, active, mode, width, searchOpen, searchText, ready, importing, importBlocked = false,
+export function NativeHeaderControls({ theme, active, mode, width, searchOpen, autoFocusSearch = false, searchText, ready, importing, importBlocked = false,
   onModeChange, onSearchTextChange, onImport, onFilter, filterCount }: NativeHeaderProps) {
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
@@ -190,9 +190,9 @@ export function NativeHeaderControls({ theme, active, mode, width, searchOpen, s
   const text = useNativeState(searchText);
   const searchInput = useRef<TextFieldRef>(null);
   useEffect(() => {
-    if (searchOpen && active && ready) void searchInput.current?.focus();
-    else void searchInput.current?.blur();
-  }, [active, ready, searchOpen]);
+    if (!searchOpen || !active || !ready) void searchInput.current?.blur();
+    else if (autoFocusSearch) void searchInput.current?.focus();
+  }, [active, autoFocusSearch, ready, searchOpen]);
   useEffect(() => { if (searchText !== text.get()) text.set(searchText); }, [searchText, text]);
 
   return (
@@ -211,7 +211,7 @@ export function NativeHeaderControls({ theme, active, mode, width, searchOpen, s
                   textInputAutocapitalization('never'), submitLabel('search'), onSubmit(() => Keyboard.dismiss())]} />
               {searchText.length > 0 && <Button label={t('mobile.clearSearch')} systemImage="xmark.circle.fill"
                 onPress={() => { text.set(''); onSearchTextChange(''); }}
-                modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch')), scrollShadow]} />}
+                modifiers={[buttonStyle('plain'), labelStyle('iconOnly'), tint(theme.secondary), accessibilityLabel(t('mobile.clearSearch'))]} />}
             </HStack>
             <Button onPress={onFilter}
               modifiers={[...iconButtonModifiers(filterCount ? theme.accent : theme.label), disabled(!ready || !active),

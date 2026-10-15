@@ -27,6 +27,7 @@ export interface NativeHeaderProps {
   mode: 'grid' | 'list';
   width: number;
   searchOpen: boolean;
+  autoFocusSearch?: boolean;
   searchText: string;
   importing: boolean;
   importBlocked?: boolean;

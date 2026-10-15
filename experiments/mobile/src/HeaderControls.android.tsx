@@ -13,6 +13,7 @@ interface NativeAndroidHeaderProps extends ViewProps {
   importing: boolean;
   importBlocked: boolean;
   searchOpen: boolean;
+  autoFocusSearch: boolean;
   searchText: string;
   filterCount: number;
   shadowProgress: number;
@@ -42,13 +43,13 @@ export function AndroidHeaderBackdrop({ theme, ...props }: AndroidHeaderBackdrop
 
 // 安卓操作区使用原生控件与共享语言目录。
 export function AndroidHeaderControls({ sourceId, theme, mode, active, width, ready, importing, importBlocked = false,
-  searchOpen, searchText, filterCount, onFilter, onModeChange, onImport, onSearchTextChange }: AndroidHeaderProps) {
+  searchOpen, autoFocusSearch = false, searchText, filterCount, onFilter, onModeChange, onImport, onSearchTextChange }: AndroidHeaderProps) {
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
   // 搜索框、顶栏图标与菜单面板统一使用当前主题色，覆盖 Material3 配色。
   const { label, secondary, muted, tab, border, backButtonBorder, accent, surface: raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
   return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
-    ready={ready} importing={importing} importBlocked={importBlocked} searchOpen={searchOpen} searchText={searchText}
+    ready={ready} importing={importing} importBlocked={importBlocked} searchOpen={searchOpen} autoFocusSearch={autoFocusSearch} searchText={searchText}
     labels={{ search: t('mobile.searchFonts'), searchPlaceholder: t('mobile.searchPlaceholder'), clearSearch: t('mobile.clearSearch'),
       filter: filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'),
       importFonts: t('import.importFonts'), loadingImport: t('mobile.loadingImport'), viewOptions: t('libraryView.viewOptions'), viewMode: t('mobile.viewMode'),

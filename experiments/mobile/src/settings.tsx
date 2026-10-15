@@ -15,6 +15,7 @@ export interface Preferences {
   showFavoriteBadge: boolean;
   defaultViewMode: LibraryMode;
   importShowResults: boolean;
+  searchAutoFocus: boolean;
 }
 
 export const defaultPreferences: Preferences = {
@@ -26,6 +27,7 @@ export const defaultPreferences: Preferences = {
   showFavoriteBadge: true,
   defaultViewMode: 'grid',
   importShowResults: true,
+  searchAutoFocus: false,
 };
 
 // 外观页可选的预览字号，与 FontCard 的基准字号对应。
@@ -54,6 +56,7 @@ function sanitize(raw: unknown): Preferences {
     showCardMetadata: typeof value.showCardMetadata === 'boolean' ? value.showCardMetadata : defaultPreferences.showCardMetadata,
     showFavoriteBadge: typeof value.showFavoriteBadge === 'boolean' ? value.showFavoriteBadge : defaultPreferences.showFavoriteBadge,
     defaultViewMode: pick(viewModeValues, value.defaultViewMode, defaultPreferences.defaultViewMode),
+    searchAutoFocus: typeof value.searchAutoFocus === 'boolean' ? value.searchAutoFocus : defaultPreferences.searchAutoFocus,
     importShowResults: typeof value.importShowResults === 'boolean' ? value.importShowResults : defaultPreferences.importShowResults,
   };
 }

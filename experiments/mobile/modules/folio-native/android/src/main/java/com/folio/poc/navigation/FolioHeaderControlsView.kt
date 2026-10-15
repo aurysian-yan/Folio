@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalView
@@ -163,6 +164,7 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
     var importing by mutableStateOf(false)
     var importBlocked by mutableStateOf(false)
     var searchOpen by mutableStateOf(false)
+    var autoFocusSearch by mutableStateOf(false)
     var searchText by mutableStateOf("")
     var filterCount by mutableStateOf(0)
     var shadowProgress by mutableStateOf(0f)
@@ -188,7 +190,7 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : ExpoVi
             LaunchedEffect(active, importing, searchOpen) {
                 if (!active || importing || searchOpen) updateExpanded(false)
             }
-            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, importBlocked, searchOpen, searchText, filterCount, shadowProgress, palette, text, backdrop,
+            FolioAndroidHeader(mode, expanded, active, dark, ready, importing, importBlocked, searchOpen, autoFocusSearch, searchText, filterCount, shadowProgress, palette, text, backdrop,
                 onExpandedChange = ::updateExpanded,
                 onFilter = { if (ready) onFilter(emptyMap<String, Any>()) },
                 onImport = { if (ready && !importing && !importBlocked) onImport(emptyMap<String, Any>()) },
@@ -322,14 +324,19 @@ private fun Modifier.headerButtonSurface(enabled: Boolean, dark: Boolean, colors
 
 @Composable
 private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean, dark: Boolean,
-    ready: Boolean, importing: Boolean, importBlocked: Boolean, searchOpen: Boolean, searchText: String, filterCount: Int, shadowProgress: Float,
+    ready: Boolean, importing: Boolean, importBlocked: Boolean, searchOpen: Boolean, autoFocusSearch: Boolean, searchText: String, filterCount: Int, shadowProgress: Float,
     colors: FolioViewMenuColors, labels: FolioHeaderLabels, backdrop: Backdrop, onExpandedChange: (Boolean) -> Unit,
     onSelect: (String) -> Unit, onImport: () -> Unit, onFilter: () -> Unit, onSearchTextChange: (String) -> Unit) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(searchOpen, active, ready) {
-        if (searchOpen && active && ready) { focus.requestFocus(); keyboard?.show() }
-        else if (searchOpen) keyboard?.hide()
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(searchOpen, autoFocusSearch, active, ready) {
+        if (searchOpen && active && ready) {
+            if (autoFocusSearch) { focus.requestFocus(); keyboard?.show() }
+        } else if (searchOpen) {
+            focusManager.clearFocus()
+            keyboard?.hide()
+        }
     }
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
         val availableWidth = maxWidth
@@ -359,9 +366,14 @@ private fun FolioAndroidHeader(mode: String, expanded: Boolean, active: Boolean,
                                 }
                             })
                     }
-                    if (searchText.isNotEmpty()) HeaderAction("close", labels.clearSearch,
-                        active && ready, false, dark, colors, backdrop,
-                        { onSearchTextChange(""); focus.requestFocus() }, shadowProgress, diameter = 20.dp, iconSize = 18.dp)
+                    if (searchText.isNotEmpty()) Box(Modifier.size(20.dp)
+                        .clickable(enabled = active && ready, interactionSource = remember { MutableInteractionSource() },
+                            indication = null, role = Role.Button,
+                            onClick = { onSearchTextChange(""); focus.requestFocus() })
+                        .semantics { contentDescription = labels.clearSearch },
+                        contentAlignment = Alignment.Center) {
+                        ViewMenuIcon("close", colors.label.menuColor().copy(alpha = if (active && ready) 1f else 0.4f), 18.dp)
+                    }
                 }
                 HeaderAction("filter", labels.filter,
                     active && ready, false, dark, colors, backdrop, onFilter, shadowProgress, selected = filterCount > 0)
