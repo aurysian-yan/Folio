@@ -14,19 +14,19 @@ export function ImportResults({ report, visible, theme, onClose }: {
   const { t } = useTranslation();
   if (!report) return null;
   const counts = summarizeImport(report.items);
-  const labels = { imported: t('mobile.imported'), duplicate: t('mobile.skippedDuplicates'), failed: t('mobile.importFailed') };
+  const labels = { imported: t('mobile.imported'), duplicate: t('mobile.skippedDuplicates'), failed: t('mobile.importFailed'), unprocessed: t('mobile.importUnprocessed') };
   return <LibraryPanel visible={visible} title={t('import.importResults')} theme={theme} onClose={onClose}>
         <FlatList data={report.items} keyExtractor={(_, index) => String(index)}
           contentContainerStyle={styles.content} initialNumToRender={12}
           ListHeaderComponent={<Text style={[styles.summary, { color: theme.secondary }]}>
-            {t('mobile.importSummary', { imported: counts.imported, duplicate: counts.duplicate, failed: counts.failed })}
+            {t('mobile.importSummary', counts)}
           </Text>}
           renderItem={({ item }) => <View style={[styles.item, { borderColor: theme.border }]}>
             <Text selectable style={[styles.name, { color: theme.label }]}>
               {item.archiveName ? `${item.archiveName}／${item.name}` : item.name}
             </Text>
             <Text style={[styles.detail, { color: item.status === 'failed' ? theme.danger : theme.secondary }]}>
-              {item.message ?? labels[item.status]}
+              {item.messageKey ? t(item.messageKey) : item.message ?? labels[item.status]}
             </Text>
           </View>} />
   </LibraryPanel>;

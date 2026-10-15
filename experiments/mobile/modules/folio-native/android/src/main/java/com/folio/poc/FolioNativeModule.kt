@@ -155,8 +155,8 @@ class FolioNativeModule : Module() {
                 requireSyncIdle()
                 val importer = FolioFontImporter(requireEngine(), File(context().filesDir, "FolioMobilePoC"), { uri ->
                     val source = Uri.parse(uri)
-                    if (source.scheme !in listOf("file", "content")) throw FontImportFailure("请选择可读取的字体文件。")
-                    context().contentResolver.openInputStream(source) ?: throw FontImportFailure("无法读取文件，请确认文件可用。")
+                    if (source.scheme !in listOf("file", "content")) throw FontImportFailure("mobile.importErrors.read")
+                    context().contentResolver.openInputStream(source) ?: throw FontImportFailure("mobile.importErrors.read")
                 })
                 val report = importer.importFiles(files.map { SelectedImportFile(it.uri, it.name) })
                 mapOf("snapshot" to snapshot(report.snapshot), "items" to report.items.map { it.dictionary() })

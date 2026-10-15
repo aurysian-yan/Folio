@@ -6,13 +6,16 @@ import com.folio.poc.ffi.QueryScopeDto
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.net.URI
 import java.nio.file.Files
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-// 原生导入使用真实 Rust 数据库，ZIP 与资源限制使用隔离样本。
+// 原生导入使用真实 Rust 数据库，ZIP 与批次使用隔离样本。
 class FolioFontImporterTest {
     private val samples = File(requireNotNull(System.getProperty("folio.samples")))
 
@@ -121,15 +124,153 @@ class FolioFontImporterTest {
         assertClean(root)
     }
 
-    @Test fun limitsApplyToActualStreamsAndExpandedData() = scenario { root, engine ->
-        val large = selected("Lato-Regular.ttf")
-        assertEquals("failed", importer(root, engine, FontImportLimits(fontBytes = 10)).importFiles(listOf(large)).items.single().status)
-        val zip = archive(root, "limit.zip", listOf("a.ttf" to File(samples, "Lato-Regular.ttf").readBytes()))
-        for (limits in listOf(FontImportLimits(archiveBytes = 10), FontImportLimits(archiveEntries = 0), FontImportLimits(batchBytes = 10))) {
-            assertTrue(importer(root, engine, limits).importFiles(listOf(zip)).items.all { it.status == "failed" })
+    @Test fun zipIsFullyPreparedAndDuplicatesSpanBatches() = scenario { root, engine ->
+        val zip = archive(root, "batches.zip", listOf(
+            "a.ttf" to File(samples, "Lato-Regular.ttf").readBytes(),
+            "b.ttf" to File(samples, "Lato-Bold.ttf").readBytes(),
+            "again.ttf" to File(samples, "Lato-Regular.ttf").readBytes(),
+            "c.otf" to File(samples, "SourceSerif4-Regular.otf").readBytes(),
+            "last.ttf" to File(samples, "Lato-Bold.ttf").readBytes()))
+        var refreshes = 0
+        val importer = FolioFontImporter(engine, root, { File(URI(it)).inputStream() }, FontImportLimits(batchFonts = 2), refresh = {
+            refreshes++
+            val staged = File(root, "imports").walkTopDown().filter { it.isFile }.toList()
+            assertEquals(if (refreshes == 1) 3 else 1, staged.size)
+            engine.refreshLibrary().snapshot
+        })
+        val report = importer.importFiles(listOf(zip))
+        assertEquals(listOf("imported", "imported", "duplicate", "imported", "duplicate"), report.items.map { it.status })
+        assertEquals(2, refreshes)
+        assertEquals(3L, report.snapshot.faceCount.toLong())
+        assertEquals(listOf("a.ttf", "b.ttf", "again.ttf", "c.otf", "last.ttf"), report.items.map { it.name })
+        assertTrue(report.items.all { it.archiveName == "batches.zip" })
+        assertClean(root)
+    }
+
+    @Test fun damagedDeflateEntryDoesNotStopOtherFonts() = scenario { root, engine ->
+        val zip = archive(root, "damaged.zip", listOf(
+            "damaged.ttf" to File(samples, "Lato-Regular.ttf").readBytes(),
+            "valid.ttf" to File(samples, "Lato-Bold.ttf").readBytes()))
+        RandomAccessFile(File(URI(zip.uri)), "rw").use { file ->
+            file.seek(26)
+            val nameLength = file.readUnsignedByte() or (file.readUnsignedByte() shl 8)
+            val extraLength = file.readUnsignedByte() or (file.readUnsignedByte() shl 8)
+            file.seek((30 + nameLength + extraLength).toLong())
+            file.write(6)
         }
-        val count = importer(root, engine, FontImportLimits(fonts = 1)).importFiles(listOf(large, selected("Lato-Bold.ttf")))
-        assertEquals(listOf("imported", "failed"), count.items.map { it.status })
+        val report = importer(root, engine).importFiles(listOf(zip))
+        assertEquals(listOf("failed", "imported"), report.items.map { it.status })
+        assertEquals(1L, report.snapshot.faceCount.toLong())
+        assertClean(root)
+    }
+
+    @Test fun laterRefreshFailureKeepsCommittedFontsAndStopsQueue() = scenario { root, engine ->
+        importer(root, engine).importFiles(listOf(selected("Lato-Regular.ttf")))
+        val query = LibraryQueryDto(null, QueryScopeDto.ALL, null, emptyList(), null, null, null, null, 0uL, 100uL)
+        engine.setFavorite(listOf(engine.queryLibrary(query).families.first().faces.first().identityId), true)
+        var refreshes = 0
+        val importer = FolioFontImporter(engine, root, { File(URI(it)).inputStream() }, FontImportLimits(batchFonts = 2), refresh = {
+            if (++refreshes == 2) error("refresh failed")
+            engine.refreshLibrary().snapshot
+        })
+        val report = importer.importFiles(listOf(selected("Lato-Bold.ttf"), selected("Lato-Regular.ttf"),
+            selected("SourceSerif4-Regular.otf"), selected("SourceSerif4-Regular.otf", "copy.otf"), selected("Inter-Variable.ttf")))
+        assertEquals(listOf("imported", "duplicate", "failed", "failed", "unprocessed"), report.items.map { it.status })
+        assertEquals("mobile.importErrors.batchRolledBack", report.items[2].messageKey)
+        assertEquals(2L, report.snapshot.faceCount.toLong())
+        assertEquals(2, engine.loadCachedLibrary().roots.size)
+        assertEquals(2L, engine.refreshLibrary().snapshot.faceCount.toLong())
+        assertTrue(engine.queryLibrary(query.copy(scope = QueryScopeDto.FAVORITES)).families.isNotEmpty())
+        assertEquals(2, File(root, "fonts").listFiles()!!.size)
+        assertClean(root)
+    }
+
+    @Test fun largeFontsArchivesAndCumulativeBytesHaveNoFixedLimit() = scenario { root, engine ->
+        val font = File(root, "large.ttf")
+        File(samples, "Lato-Regular.ttf").copyTo(font)
+        RandomAccessFile(font, "rw").use { it.setLength(65L * 1024 * 1024) }
+        val crc = CRC32()
+        font.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) { val count = input.read(buffer); if (count < 0) break; crc.update(buffer, 0, count) }
+        }
+        val zip = File(root, "large.zip")
+        ZipOutputStream(zip.outputStream()).use { output ->
+            repeat(4) { index ->
+                output.putNextEntry(ZipEntry("$index.ttf").apply {
+                    method = ZipEntry.STORED; size = font.length(); this.crc = crc.value
+                })
+                font.inputStream().use { it.copyTo(output, 64 * 1024) }
+                output.closeEntry()
+            }
+        }
+        assertTrue(zip.length() > 256L * 1024 * 1024)
+        val direct = SelectedImportFile(font.toURI().toString(), "large.ttf")
+        val report = importer(root, engine, FontImportLimits(batchFonts = 3)).importFiles(
+            listOf(SelectedImportFile(zip.toURI().toString(), "large.zip")) + List(5) { direct })
+        assertEquals(listOf("imported") + List(8) { "duplicate" }, report.items.map { it.status })
+        assertEquals(1L, report.snapshot.faceCount.toLong())
+        assertClean(root)
+    }
+
+    @Test fun entryCountAndTaskFontCountDoNotTruncateImport() = scenario { root, engine ->
+        val entries = (0 until 10_001).map { "notes/$it.txt" to byteArrayOf(1) } +
+            (0 until 1_001).map { "$it.ttf" to when (it) {
+                0 -> File(samples, "Lato-Regular.ttf").readBytes()
+                1_000 -> File(samples, "Lato-Bold.ttf").readBytes()
+                else -> byteArrayOf(1)
+            } }
+        val report = importer(root, engine).importFiles(listOf(archive(root, "many.zip", entries)))
+        assertEquals(1_001, report.items.size)
+        assertEquals("imported", report.items.first().status)
+        assertEquals("imported", report.items.last().status)
+        assertEquals(999, report.items.count { it.status == "failed" })
+        assertEquals(2L, report.snapshot.faceCount.toLong())
+        assertClean(root)
+    }
+
+    @Test fun zip64AndSplitArchivesAndLinksAreChecked() = scenario { root, engine ->
+        val font = File(samples, "Lato-Regular.ttf").readBytes()
+        val zip = archive(root, "zip64.zip", listOf("a.ttf" to font), true)
+        val file = File(URI(zip.uri))
+        val original = file.readBytes()
+        val end = original.size - 22
+        val eocd = ByteBuffer.wrap(original, end, 22).slice().order(ByteOrder.LITTLE_ENDIAN)
+        val size = eocd.getInt(12).toLong() and 0xffffffffL
+        val offset = eocd.getInt(16).toLong() and 0xffffffffL
+        val record = ByteBuffer.allocate(76).order(ByteOrder.LITTLE_ENDIAN)
+        record.putInt(0x06064b50).putLong(44).putShort(45).putShort(45).putInt(0).putInt(0)
+            .putLong(1).putLong(1).putLong(size).putLong(offset)
+            .putInt(0x07064b50).putInt(0).putLong(end.toLong()).putInt(1)
+        eocd.putShort(8, (-1).toShort()).putShort(10, (-1).toShort()).putInt(12, -1).putInt(16, -1)
+        file.writeBytes(original.copyOfRange(0, end) + record.array() + original.copyOfRange(end, original.size))
+        assertEquals("imported", importer(root, engine).importFiles(listOf(zip)).items.single().status)
+        val split = archive(root, "split.zip", listOf("a.ttf" to font), true)
+        val splitFile = File(URI(split.uri))
+        val splitBytes = splitFile.readBytes().also { it[it.size - 22 + 4] = 1 }
+        splitFile.writeBytes(splitBytes)
+        assertEquals("mobile.importErrors.splitArchive", importer(root, engine).importFiles(listOf(split)).items.single().messageKey)
+        val link = archive(root, "link.zip", listOf("link.ttf" to font), true)
+        val linkFile = File(URI(link.uri))
+        val bytes = linkFile.readBytes()
+        val central = bytes.indices.first { it + 4 <= bytes.size && bytes[it] == 0x50.toByte() && bytes[it + 1] == 0x4b.toByte() && bytes[it + 2] == 1.toByte() && bytes[it + 3] == 2.toByte() }
+        bytes[central + 5] = 3
+        bytes[central + 41] = 0xa0.toByte()
+        linkFile.writeBytes(bytes)
+        assertEquals("mobile.importErrors.link", importer(root, engine).importFiles(listOf(link)).items.single().messageKey)
+        assertClean(root)
+    }
+
+    @Test fun terminalPreparationFailureStopsEveryPreparedFont() = scenario { root, engine ->
+        var reads = 0
+        val importer = FolioFontImporter(engine, root, { uri ->
+            if (++reads == 2) throw FontImportFailure("mobile.importErrors.save", true)
+            File(URI(uri)).inputStream()
+        })
+        val report = importer.importFiles(listOf(selected("Lato-Regular.ttf"), selected("Lato-Bold.ttf"), selected("Inter-Variable.ttf")))
+        assertEquals(listOf("unprocessed", "failed", "unprocessed"), report.items.map { it.status })
+        assertEquals(0L, report.snapshot.faceCount.toLong())
+        assertEquals(2, reads)
         assertClean(root)
     }
 
@@ -138,7 +279,7 @@ class FolioFontImporterTest {
         val query = LibraryQueryDto(null, QueryScopeDto.ALL, null, emptyList(), null, null, null, null, 0uL, 100uL)
         engine.setFavorite(listOf(engine.queryLibrary(query).families.first().faces.first().identityId), true)
         val importer = FolioFontImporter(engine, root, { File(URI(it)).inputStream() }, refresh = { error("refresh failed") })
-        try { importer.importFiles(listOf(selected("Lato-Bold.ttf"))); fail("must fail") } catch (_: FontImportFailure) { }
+        assertEquals("failed", importer.importFiles(listOf(selected("Lato-Bold.ttf"))).items.single().status)
         assertEquals(1, engine.loadCachedLibrary().roots.size)
         assertEquals(1L, engine.refreshLibrary().snapshot.faceCount.toLong())
         assertTrue(engine.queryLibrary(query).families.single().isFavorite)

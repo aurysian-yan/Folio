@@ -43,12 +43,13 @@ test('批量导入传递全部文件和原始名称，保留逐项结果', async
   report.items = [
     { name: '中文.ttf', archiveName: null, status: 'imported', message: null },
     { name: '子目录/中文.ttf', archiveName: '字库.zip', status: 'duplicate', message: null },
+    { name: '未处理.ttf', archiveName: '字库.zip', status: 'unprocessed', message: null, messageKey: 'mobile.importErrors.stopped' },
     { name: '损坏.otf', archiveName: '字库.zip', status: 'failed', message: '字体文件损坏或格式不受支持。' },
   ];
   bridge.importFonts = async (received) => { assert.deepEqual(received, files); return report; };
   assert.equal(await createLibraryClient(bridge).importFonts(files), report);
-  assert.deepEqual(summarizeImport(report.items), { imported: 1, duplicate: 1, failed: 1 });
-  assert.deepEqual(summarizeImport([]), { imported: 0, duplicate: 0, failed: 0 });
+  assert.deepEqual(summarizeImport(report.items), { imported: 1, duplicate: 1, failed: 1, unprocessed: 1 });
+  assert.deepEqual(summarizeImport([]), { imported: 0, duplicate: 0, failed: 0, unprocessed: 0 });
 });
 
 test('无效页码在调用原生之前失败', () => {
@@ -59,7 +60,7 @@ test('无效页码在调用原生之前失败', () => {
   }
 });
 
-test('批量整体失败只显示产品提示，刷新回滚具有明确说明', async () => {
+test('批量整体失败只显示产品提示，更新失败说明已导入字体保留', async () => {
   const bridge = mockBridge(async () => emptyPage);
   for (const code of ['ERR_FOLIO_OPERATION', 'ERR_FOLIO_IMPORT']) {
     const cause = Object.assign(new Error('/private/fonts/import: database error'), { code });
@@ -68,7 +69,7 @@ test('批量整体失败只显示产品提示，刷新回滚具有明确说明',
       assert.ok(error instanceof LibraryError);
       assert.equal(error.cause, cause);
       assert.equal(error.message, code === 'ERR_FOLIO_IMPORT'
-        ? '无法更新字体库，本次新增字体未保留，请重试。'
+        ? '无法更新字体库，此前已导入的字体已保留。请重新打开应用后检查字体库。'
         : '无法完成导入，请确认文件可用、空间充足后重试。');
       return true;
     });

@@ -312,7 +312,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
             </Text>}
             {(importReport || importError) && <View style={[styles.notice, { backgroundColor: theme.surface }]}>
               <Text accessibilityRole="alert" style={[styles.noticeText, { color: importError ? theme.danger : theme.secondary }]}>
-                {importError ?? (importCounts && t('mobile.importSummary', { imported: importCounts.imported, duplicate: importCounts.duplicate, failed: importCounts.failed }))}
+                {importError ?? (importCounts && t('mobile.importSummary', importCounts))}
               </Text>
               {usesNativeControls ? <NativeActionButton label={importError ? t('mobile.reselect') : t('mobile.viewDetails')} color={theme.accent}
                 onPress={importError ? importFont : () => setImportDetailsOpen(true)} disabled={importing || (syncBlocked && !!importError)} />

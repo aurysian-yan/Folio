@@ -109,8 +109,9 @@ export interface ImportFile {
 export interface ImportItem {
   name: string;
   archiveName: string | null;
-  status: 'imported' | 'duplicate' | 'failed';
+  status: 'imported' | 'duplicate' | 'failed' | 'unprocessed';
   message: string | null;
+  messageKey?: string | null;
 }
 
 export interface ImportReport {
@@ -122,7 +123,7 @@ export function summarizeImport(items: ImportItem[]) {
   return items.reduce((counts, item) => {
     counts[item.status] += 1;
     return counts;
-  }, { imported: 0, duplicate: 0, failed: 0 });
+  }, { imported: 0, duplicate: 0, failed: 0, unprocessed: 0 });
 }
 
 export interface LibraryBridge {
