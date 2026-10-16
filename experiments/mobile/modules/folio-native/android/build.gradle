@@ -19,6 +19,7 @@ android {
     versionName '0.1.0'
     minSdkVersion 28
     testInstrumentationRunner project.findProperty('folioPreviewTest') ? 'com.folio.poc.FolioPreviewInstrumentation' :
+      project.findProperty('folioSliderTest') ? 'com.folio.poc.FolioSliderRefractionInstrumentation' :
       project.findProperty('folioSwitchTest') ? 'com.folio.poc.FolioSwitchRefractionInstrumentation' :
       project.findProperty('folioSyncTarget') ? 'com.folio.poc.FolioLiveSyncInstrumentation' : 'com.folio.poc.FolioSyncInstrumentation'
     consumerProguardFiles 'consumer-rules.pro'

@@ -75,6 +75,24 @@ class FolioNavigationModule : Module() {
             Prop("items") { view: FolioPresetMenuView, value: List<FolioNavigationItem> -> view.items = value }
         }
 
+        View(FolioGlassSliderView::class) {
+            Events("onValueChange")
+            Prop("label") { view: FolioGlassSliderView, value: String -> view.label = value }
+            Prop("valueText") { view: FolioGlassSliderView, value: String -> view.valueText = value }
+            Prop("value") { view: FolioGlassSliderView, value: Double -> view.incomingValue = value }
+            Prop("minimum") { view: FolioGlassSliderView, value: Double -> view.minimum = value }
+            Prop("maximum") { view: FolioGlassSliderView, value: Double -> view.maximum = value }
+            Prop("step") { view: FolioGlassSliderView, value: Double -> view.step = value }
+            Prop("enabled") { view: FolioGlassSliderView, value: Boolean -> view.controlEnabled = value }
+            Prop("dark") { view: FolioGlassSliderView, value: Boolean -> view.dark = value }
+            Prop("accentColor") { view: FolioGlassSliderView, value: String -> view.accentColor = value }
+            Prop("trackColor") { view: FolioGlassSliderView, value: String -> view.trackColor = value }
+            Prop("thumbColor") { view: FolioGlassSliderView, value: String -> view.thumbColor = value }
+            Prop("surfaceColor") { view: FolioGlassSliderView, value: String -> view.surfaceColor = value }
+            Prop("mostRecentEventCount") { view: FolioGlassSliderView, value: Int -> view.mostRecentEventCount = value }
+            OnViewDidUpdateProps { view: FolioGlassSliderView -> view.applyProps() }
+        }
+
         View(FolioGlassSwitchView::class) {
             Events("onValueChange")
             Prop("label") { view: FolioGlassSwitchView, value: String -> view.label = value }

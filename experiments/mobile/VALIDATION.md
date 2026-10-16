@@ -318,3 +318,20 @@ pnpm android --device "23013RK75C" --no-bundler
 | 待验收 | 坐标输入工具返回 `noWindowsAvailable`，本轮改用原生辅助功能与 Android 模拟器键盘完成上述检查；连续触摸拖动、软件键盘完整避让、复制短时反馈、长字族／字款名、双端完整浅深色矩阵、iPad 和真机仍待验证。未把模拟器检查写作完整触摸或设备验收。 |
 
 2026-10-04 修正：Android 详情预览首行基线缺少 `ascent`，换行预览整体上移并溢出顶部，恢复逐行 `ascent` 后重新居中。顶栏操作菜单改回与返回按钮一致的表层、按压色与拖动回弹；浅色沿用返回按钮的白色表层，`FolioPresetMenuView` 新增 `triggerIcon`／`triggerSurface` 桥接。原生菜单图标补齐 `dots`、`star`、`star-fill`、`folder-plus`，展开项不再回退到对号；WebDAV 地址入口保持原来看守图标与无表层行为。改动文件 ESLint、`pnpm typecheck`、45 项 `pnpm test` 与 `:folio-native:compileDebugKotlin` 通过；真机触摸与浅深色外观仍待确认。
+
+## Mobile Slider Refraction
+
+2026-10-16：移动端共用 `DetailSlider` 保留原有标题、数值、范围和步进，iOS 接入现有 Expo UI 的系统 SwiftUI Slider，Android 接入原生玻璃滑块，不新增依赖。
+
+Android 按住后白色长拨片淡出，按实际尺寸绘制玻璃胶囊；轨道中央和强调色圆头保持原始厚度与坐标，两侧曲面向上下翻起，不压窄轨道。玻璃采样祖先背景和本地轨道，不采样自身；拖动、端点外拉伸和松手回弹沿用现有玻璃动画机制。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| JS 与依赖 | PASS：`pnpm install --frozen-lockfile`、`pnpm typecheck`、全量 `pnpm lint`、70 项现有测试、iOS Hermes 导出和 `git diff --check`。没有修改语言目录或依赖版本。 |
+| Android 构建与数值 | PASS：原生模块 Kotlin 编译、arm64 Debug 应用与测试包构建；3 项新增数值测试覆盖小数步进、负范围、端点和无效输入。 |
+| Android 曲面与触摸 | PASS：Pixel 10 模拟器运行 192 组真实 GPU 渲染，覆盖浅深色、左右方向、按压、拖动形变及两端；验证中央内外轨道均为 12 点、两侧折射向上下展开、圆头停在拨片中心及轨道连通。挂载真实 Expo 控件验证点击、连续拖动、端点越界、旧值回传、纵向手势、取消和禁用，保存浅深色按住截图。 |
+| 验收边界 | iOS 接入与打包通过，Device Hub 界面读取超时，未完成 iOS 手势验收；未验证实体设备、完整页面滚动竞争、Material3 外观矩阵和读屏操作。Pixel 10 独立窗口按用户要求保留。 |
+
+曲面及原生触摸测试从 Android 工程目录执行 `./gradlew :folio-native:assembleDebugAndroidTest -PfolioSliderTest=true`，安装测试包后运行 `adb shell am instrument -w com.folio.poc.test/com.folio.poc.FolioSliderRefractionInstrumentation`。
+
+2026-10-16 布局调整：轨道铺满文字列宽，范围数字取消额外水平缩进；拨片保留原有端点活动范围，常态外缘与文字列对齐。滑块容器从 48 点收至 44 点，移除上下各 4 点区块间距，轨道与上下文字的距离各减少 6 点。改动文件 ESLint 与 `git diff --check` 通过；本次未执行原生构建或更新模拟器安装包。
