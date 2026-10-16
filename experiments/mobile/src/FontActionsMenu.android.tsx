@@ -22,7 +22,7 @@ interface NativeActionsMenuProps extends ViewProps {
 const ActionsMenu = requireNativeView<NativeActionsMenuProps>('FolioNavigation', 'FolioPresetMenuView');
 
 // 安卓复用主页菜单的材质、锚点与拖动回弹。
-export function FontActionsMenu({ theme, sourceId, favorite, favoritePending, onFavorite, onAddToCollection }: FontActionsMenuProps) {
+export function FontActionsMenu({ theme, sourceId, favorite = false, favoritePending = false, onFavorite, onAddToCollection, onReset, resetDisabled = false }: FontActionsMenuProps) {
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
   const { label, secondary, muted, accent, tab, border, backButtonBorder, surface: raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
@@ -31,12 +31,14 @@ export function FontActionsMenu({ theme, sourceId, favorite, favoritePending, on
     colors={{ label, secondary, muted, accent, tab, border, backButtonBorder, raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}
     labels={{ title: t('font.operations'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
     items={[
-      { id: 'favorite', label: t(favorite ? 'collection.unfavorite' : 'collection.favorite'), icon: favorite ? 'star-fill' : 'star', disabled: favoritePending },
-      { id: 'collection', label: t('collection.addTo'), icon: 'folder-plus' },
+      ...(onFavorite ? [{ id: 'favorite', label: t(favorite ? 'collection.unfavorite' : 'collection.favorite'), icon: favorite ? 'star-fill' : 'star', disabled: favoritePending }] : []),
+      ...(onAddToCollection ? [{ id: 'collection', label: t('collection.addTo'), icon: 'folder-plus' }] : []),
+      ...(onReset ? [{ id: 'reset', label: t('common.reset'), icon: 'reset', disabled: resetDisabled }] : []),
     ]} style={{ width: 64, height: 44 }}
     onExpandedChange={({ nativeEvent }) => { if (nativeEvent.expanded) Keyboard.dismiss(); }}
     onSelectionChange={({ nativeEvent }) => {
-      if (nativeEvent.id === 'favorite' && !favoritePending) onFavorite();
-      else if (nativeEvent.id === 'collection') onAddToCollection();
+      if (nativeEvent.id === 'favorite' && !favoritePending) onFavorite?.();
+      else if (nativeEvent.id === 'collection') onAddToCollection?.();
+      else if (nativeEvent.id === 'reset' && !resetDisabled) onReset?.();
     }} />;
 }

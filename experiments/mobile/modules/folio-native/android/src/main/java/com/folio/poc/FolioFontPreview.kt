@@ -13,8 +13,18 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.text.Layout
+import android.text.Editable
 import android.text.StaticLayout
 import android.text.TextPaint
+import android.text.TextWatcher
+import android.text.InputType
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.MotionEvent
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -24,7 +34,18 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     var selection = FolioPreviewSelection()
+    var editable = false
+    var editorTintColor = ""
+    var mostRecentTextEventCount = 0
     private val onStatus by EventDispatcher()
+    private val onTextChange by EventDispatcher()
+    private var editor: PreviewEditText? = null
+    private var textEventCount = 0
+    private var syncingText = false
+    private var committedTypeface: Typeface? = null
+    private var editorFontKey: String? = null
+    private var editorViewportWidth = 0
+    private var editorViewportHeight = 0
     private val generation = AtomicInteger()
     private var lastKey: String? = null
     private var lines: List<PositionedGlyphs> = emptyList()
@@ -40,6 +61,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
     init { setWillNotDraw(false) }
 
     fun renderSelection() {
+        syncEditor()
         val value = selection
         val key = "${value.sourcePath}|${value.faceIndex}|${value.revisionId}|${value.axes.toSortedMap()}|${value.text}|${value.fontSize}|${value.centered}|${value.wrapWidth}|${value.foregroundColor}|${value.requestId}"
         if (key == lastKey) return
@@ -50,6 +72,8 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
             sourceKey = identity
             lines = emptyList()
             layout = null
+            committedTypeface = null
+            syncEditor()
             invalidate()
         }
         pending = value to token
@@ -69,20 +93,26 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
         worker.execute {
             val result = runCatching {
                 val (shaped, supported) = shapeSelection(context, value, fontCache)
-                Triple(shaped, supported, if (supported) measureLines(shaped, value, context.resources.displayMetrics.density) else null)
+                PreviewFrame(shaped, supported,
+                    if (supported) measureLines(shaped, value, context.resources.displayMetrics.density) else null,
+                    fontCache.renderedTypeface)
             }
             mainHandler.post {
                 rendering = false
                 if (generation.get() == token) {
-                    result.fold(onSuccess = { (shaped, supported, measured) ->
+                    result.fold(onSuccess = { (shaped, supported, measured, typeface) ->
                         lines = if (supported) shaped else emptyList()
                         layout = measured
                         committedSelection = value
+                        committedTypeface = typeface
+                        syncEditor()
                         dispatchStatus(value, if (supported) "ready" else "missing-glyph",
                             measured?.contentHeight?.div(resources.displayMetrics.density)?.toDouble() ?: 0.0)
                     }, onFailure = {
                         lines = emptyList()
                         layout = null
+                        committedTypeface = null
+                        syncEditor()
                         dispatchStatus(value, "error")
                     })
                     invalidate()
@@ -101,6 +131,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (editable) return
         if (Build.VERSION.SDK_INT < 31) return
         if (lines.isEmpty() || width <= 0 || height <= 0) return
         val value = android.util.TypedValue()
@@ -115,6 +146,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
     }
 
     override fun onDetachedFromWindow() {
+        editor?.clearFocus()
         generation.incrementAndGet()
         pending = null
         lines = emptyList()
@@ -126,6 +158,99 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         renderSelection()
+    }
+
+    // 原生编辑器直接使用所选文件与轴值的 Typeface，光标与文字共用排版。
+    private fun syncEditor() {
+        if (!editable) { editor?.visibility = View.GONE; return }
+        val input = editor ?: PreviewEditText(context).also { field ->
+            field.background = null
+            field.setPadding(0, 0, 0, 0)
+            field.includeFontPadding = false
+            field.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            field.imeOptions = EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+            field.setHorizontallyScrolling(false)
+            field.gravity = Gravity.TOP
+            field.setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> field.parent?.requestDisallowInterceptTouchEvent(
+                        field.canScrollVertically(-1) || field.canScrollVertically(1))
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> field.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+                false
+            }
+            field.setOnEditorActionListener { _, action, _ ->
+                if (action != EditorInfo.IME_ACTION_DONE) false else {
+                    field.clearFocus()
+                    (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                        .hideSoftInputFromWindow(field.windowToken, 0)
+                    true
+                }
+            }
+            field.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(text: Editable?) {
+                    if (syncingText) return
+                    textEventCount++
+                    if (appContext.hasActiveReactInstance) onTextChange(mapOf("text" to text.toString(), "eventCount" to textEventCount))
+                }
+            })
+            editor = field
+            addView(field, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        }
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        input.contentDescription = contentDescription
+        input.visibility = View.VISIBLE
+        val typeface = committedTypeface ?: Typeface.DEFAULT
+        val size = selection.fontSize.toFloat().coerceIn(8f, 160f) * resources.displayMetrics.density
+        val fontKey = "${committedTypeface != null}|${committedSelection.sourcePath}|${committedSelection.faceIndex}|${committedSelection.revisionId}|${committedSelection.axes.toSortedMap()}|$size|${selection.centered}"
+        if (editorFontKey != fontKey) {
+            editorFontKey = fontKey
+            input.resetViewportScroll()
+            input.typeface = typeface
+        }
+        input.setTextSize(TypedValue.COMPLEX_UNIT_PX, size)
+        val metrics = input.paint.fontMetrics
+        input.setLineSpacing(maxOf(0f, size * 1.3f - (metrics.descent - metrics.ascent)), 1f)
+        input.gravity = (if (selection.centered) Gravity.CENTER_HORIZONTAL else Gravity.START) or
+            (input.gravity and Gravity.VERTICAL_GRAVITY_MASK)
+        runCatching { android.graphics.Color.parseColor(selection.foregroundColor) }.getOrNull()?.let(input::setTextColor)
+        runCatching { android.graphics.Color.parseColor(editorTintColor) }.getOrNull()?.let { color ->
+            input.highlightColor = (color and 0x00ffffff) or 0x33000000
+            if (Build.VERSION.SDK_INT >= 29) {
+                input.textCursorDrawable?.setTint(color)
+                input.textSelectHandle?.setTint(color)
+                input.textSelectHandleLeft?.setTint(color)
+                input.textSelectHandleRight?.setTint(color)
+            }
+        }
+        if (mostRecentTextEventCount >= textEventCount && input.text.toString() != selection.text) {
+            input.resetViewportScroll()
+            syncingText = true
+            try { input.setText(selection.text); input.setSelection(input.length()) }
+            finally { syncingText = false }
+        }
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        editor?.let {
+            val viewportWidth = right - left
+            val viewportHeight = bottom - top
+            val resized = editorViewportWidth != viewportWidth || editorViewportHeight != viewportHeight
+            editorViewportWidth = viewportWidth
+            editorViewportHeight = viewportHeight
+            if (resized) it.resetViewportScroll()
+            it.measure(MeasureSpec.makeMeasureSpec(viewportWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(viewportHeight, MeasureSpec.EXACTLY))
+            it.layout(0, 0, viewportWidth, viewportHeight)
+            // 内容溢出时从顶部显示，调整视口后清除光标留下的滚动偏移。
+            val overflows = (it.layout?.height ?: 0) > viewportHeight
+            val vertical = if (overflows) Gravity.TOP else Gravity.CENTER_VERTICAL
+            it.gravity = (it.gravity and Gravity.VERTICAL_GRAVITY_MASK.inv()) or vertical
+            if (!overflows) it.resetViewportScroll()
+        }
     }
 
     companion object {
@@ -145,6 +270,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
             if (settings.isNotEmpty()) builder.setFontVariationSettings(settings)
             val font = builder.build()
             val typeface = Typeface.CustomFallbackBuilder(FontFamily.Builder(font).build()).build()
+            fontCache?.renderedTypeface = typeface
             val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.typeface = typeface
                 textSize = value.fontSize.toFloat() * context.resources.displayMetrics.density
@@ -226,11 +352,36 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
     }
 }
 
+// 视口与字体重排时抑制预绘制的光标追踪，普通编辑仍沿用系统滚动。
+private class PreviewEditText(context: Context) : EditText(context) {
+    private var resettingViewport = false
+
+    fun resetViewportScroll() {
+        resettingViewport = true
+        scrollTo(0, 0)
+    }
+
+    override fun bringPointIntoView(offset: Int): Boolean =
+        if (resettingViewport) false else super.bringPointIntoView(offset)
+
+    override fun onPreDraw(): Boolean {
+        val result = super.onPreDraw()
+        if (resettingViewport) {
+            scrollTo(0, 0)
+            resettingViewport = false
+        }
+        return result
+    }
+}
+
 internal data class PreviewLinePlacement(val x: Float, val baseline: Float)
 internal data class PreviewLayout(val lines: List<PreviewLinePlacement>, val bounds: RectF, val contentHeight: Float)
+private data class PreviewFrame(val lines: List<PositionedGlyphs>, val supported: Boolean,
+    val layout: PreviewLayout?, val typeface: Typeface?)
 
 // 同一文件和版本复用字体缓冲区，仅重新创建轴值实例。
 internal class PreviewFontCache {
+    var renderedTypeface: Typeface? = null
     private var key: String? = null
     private var font: Font? = null
     fun get(source: File, value: FolioPreviewSelection): Font {

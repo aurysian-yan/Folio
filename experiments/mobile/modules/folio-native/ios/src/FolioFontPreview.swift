@@ -2,9 +2,18 @@ import CoreText
 import ExpoModulesCore
 import UIKit
 
-final class FolioFontPreview: ExpoView {
+final class FolioFontPreview: ExpoView, UITextViewDelegate {
     var selection = FolioPreviewSelection()
+    var editable = false
+    var editorTintColor = ""
+    var mostRecentTextEventCount = 0
     let onStatus = EventDispatcher()
+    let onTextChange = EventDispatcher()
+    private var editor: UITextView?
+    private var textEventCount = 0
+    private var syncingText = false
+    private var committedFont: CTFont?
+    private var editorViewportSize = CGSize.zero
     private var lines: [CTLine] = []
     private var lastKey: String?
     private let workQueue = DispatchQueue(label: "com.folio.mobile.poc.preview", qos: .userInitiated)
@@ -23,6 +32,7 @@ final class FolioFontPreview: ExpoView {
     }
 
     func renderSelection() {
+        syncEditor()
         let value = selection
         let axes = value.axes.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ";")
         let key = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)|\(axes)|\(value.text)|\(value.fontSize)|\(value.centered)|\(value.wrapWidth)|\(value.foregroundColor)|\(value.requestId ?? "")"
@@ -34,6 +44,8 @@ final class FolioFontPreview: ExpoView {
         if sourceKey != identity {
             sourceKey = identity
             lines = []
+            committedFont = nil
+            syncEditor()
             setNeedsDisplay()
         }
         pending = (value, token)
@@ -48,14 +60,13 @@ final class FolioFontPreview: ExpoView {
         let color = Self.foreground(value.foregroundColor).cgColor
         workQueue.async { [weak self] in
             guard let self else { return }
-            let result = self.makeFont(value).map { font -> ([CTLine], Bool) in
+            let result = self.makeFont(value).map { font -> (CTFont, [CTLine], Bool) in
                 let paragraphs = value.text.components(separatedBy: .newlines)
                 let supported = paragraphs.allSatisfy { paragraph in
                     let characters = Array(paragraph.utf16)
                     var glyphs = [CGGlyph](repeating: 0, count: characters.count)
                     return CTFontGetGlyphsForCharacters(font, characters, &glyphs, characters.count)
                 }
-                guard supported else { return ([], false) }
                 let attributes: [NSAttributedString.Key: Any] = [
                     NSAttributedString.Key(kCTFontAttributeName as String): font,
                     NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
@@ -75,7 +86,7 @@ final class FolioFontPreview: ExpoView {
                     }
                     return wrapped
                 }
-                return (lines, true)
+                return (font, lines, supported)
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -84,13 +95,17 @@ final class FolioFontPreview: ExpoView {
                     var status: [String: Any] = [:]
                     if let requestId = value.requestId { status["requestId"] = requestId }
                     switch result {
-                    case let .success((lines, supported)):
-                        self.lines = lines
+                    case let .success((font, lines, supported)):
+                        self.lines = supported ? lines : []
+                        self.committedFont = font
                         self.committedSelection = value
+                        self.syncEditor()
                         status["status"] = supported ? "ready" : "missing-glyph"
                         status["contentHeight"] = supported ? value.fontSize * (value.wrapWidth > 0 ? 1.3 : 1.05) * Double(lines.count) : 0
                     case .failure:
                         self.lines = []
+                        self.committedFont = nil
+                        self.syncEditor()
                         status["status"] = "error"
                     }
                     self.onStatus(status)
@@ -104,6 +119,7 @@ final class FolioFontPreview: ExpoView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil {
+            editor?.resignFirstResponder()
             generation += 1
             pending = nil
             lines = []
@@ -151,6 +167,7 @@ final class FolioFontPreview: ExpoView {
     }
 
     override func draw(_ rect: CGRect) {
+        if editable { return }
         guard let context = UIGraphicsGetCurrentContext(), !lines.isEmpty,
               bounds.width > 0, bounds.height > 0 else { return }
         let selection = committedSelection
@@ -175,6 +192,84 @@ final class FolioFontPreview: ExpoView {
             CTLineDraw(line, context)
         }
         context.restoreGState()
+    }
+
+    // 编辑器与只读预览使用同一份字体实例，保留可变轴、真实字号与光标定位。
+    private func syncEditor() {
+        guard editable else { editor?.isHidden = true; return }
+        let input: UITextView
+        if let editor {
+            input = editor
+        } else {
+            input = UITextView(frame: bounds)
+            input.backgroundColor = .clear
+            input.textContainer.lineFragmentPadding = 0
+            input.textContainerInset = .zero
+            input.autocorrectionType = .no
+            input.autocapitalizationType = .none
+            input.spellCheckingType = .no
+            input.smartQuotesType = .no
+            input.smartDashesType = .no
+            input.returnKeyType = .done
+            input.adjustsFontForContentSizeCategory = false
+            input.alwaysBounceVertical = false
+            input.delegate = self
+            addSubview(input)
+            editor = input
+        }
+        isAccessibilityElement = false
+        input.isHidden = false
+        input.accessibilityLabel = accessibilityLabel
+        input.tintColor = Self.foreground(editorTintColor)
+        input.keyboardAppearance = traitCollection.userInterfaceStyle == .dark ? .dark : .light
+        let font = committedFont.map {
+            CTFontCreateCopyWithAttributes($0, CGFloat(selection.fontSize), nil, nil) as UIFont
+        } ?? UIFont.systemFont(ofSize: CGFloat(selection.fontSize))
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = selection.centered ? .center : .left
+        paragraph.minimumLineHeight = CGFloat(selection.fontSize) * 1.3
+        paragraph.maximumLineHeight = CGFloat(selection.fontSize) * 1.3
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font, .foregroundColor: Self.foreground(selection.foregroundColor), .paragraphStyle: paragraph,
+        ]
+        syncingText = true
+        if mostRecentTextEventCount >= textEventCount && input.text != selection.text {
+            input.text = selection.text
+            input.selectedRange = NSRange(location: (selection.text as NSString).length, length: 0)
+        }
+        input.typingAttributes = attributes
+        input.textStorage.addAttributes(attributes, range: NSRange(location: 0, length: input.textStorage.length))
+        syncingText = false
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let editor, editable else { return }
+        let resized = editorViewportSize != bounds.size
+        editorViewportSize = bounds.size
+        editor.frame = bounds
+        let height = editor.sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height
+            - editor.textContainerInset.top - editor.textContainerInset.bottom
+        let inset = max(0, (bounds.height - height) / 2)
+        editor.textContainerInset = UIEdgeInsets(top: inset, left: 0, bottom: inset, right: 0)
+        // 缩小视口后从第一行显示，保留普通编辑时的原生光标滚动。
+        if resized || height <= bounds.height {
+            editor.layoutIfNeeded()
+            editor.setContentOffset(.zero, animated: false)
+        }
+    }
+
+    func textViewDidChange(_ textView: UITextView) {
+        guard !syncingText else { return }
+        textEventCount += 1
+        onTextChange(["text": textView.text ?? "", "eventCount": textEventCount])
+        setNeedsLayout()
+    }
+
+    func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        if text == "\n" { textView.resignFirstResponder(); return false }
+        return true
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {

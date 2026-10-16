@@ -349,7 +349,10 @@ public final class FolioNativeModule: Module {
         }
 
         View(FolioFontPreview.self) {
-            Events("onStatus")
+            Events("onStatus", "onTextChange")
+            Prop("editable") { (view: FolioFontPreview, value: Bool) in view.editable = value }
+            Prop("tintColor") { (view: FolioFontPreview, value: String) in view.editorTintColor = value }
+            Prop("mostRecentTextEventCount") { (view: FolioFontPreview, value: Int) in view.mostRecentTextEventCount = value }
             Prop("selection") { (view: FolioFontPreview, selection: FolioPreviewSelection) in
                 view.selection = selection
             }

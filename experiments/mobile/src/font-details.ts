@@ -2,6 +2,7 @@ import type { FontFace, VariableAxis } from './library';
 
 // 详情预览的字号范围与默认值，按视觉考虑保持够大的基准。
 export const detailPreviewSize = { minimum: 16, maximum: 64, defaultValue: 36 };
+export const detailPreviewHeight = { minimum: 120, maximum: 480, defaultValue: 200 };
 
 // 可变轴按范围选择步进，避免拖动时产生无意义的微小变化。
 export function axisStep(minimum: number, maximum: number) {

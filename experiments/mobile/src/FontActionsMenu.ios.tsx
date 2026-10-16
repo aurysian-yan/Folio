@@ -6,7 +6,7 @@ import { headerShadowColor, useHeaderShadowProgress } from './HeaderButtonShadow
 import type { FontActionsMenuProps } from './FontActionsMenu';
 
 // 收藏操作使用主页同款系统玻璃菜单。
-export function FontActionsMenu({ theme, favorite, favoritePending, onFavorite, onAddToCollection }: FontActionsMenuProps) {
+export function FontActionsMenu({ theme, favorite = false, favoritePending = false, onFavorite, onAddToCollection, onReset, resetDisabled = false }: FontActionsMenuProps) {
   const { t } = useTranslation();
   const glass = Number(Platform.Version) >= 26;
   const shadowProgress = useHeaderShadowProgress();
@@ -18,10 +18,12 @@ export function FontActionsMenu({ theme, favorite, favoritePending, onFavorite, 
       menuIndicator('hidden'), tint(theme.label), accessibilityLabel(t('font.operations')), frame({ width: 64, height: 44 }),
       ...(glass ? [glassEffect({ glass: { variant: 'regular', interactive: true }, shape: 'capsule' })] : []),
       shadow({ radius: 32, y: 2, color: headerShadowColor(theme, shadowProgress) })]}>
-      <Button label={t(favorite ? 'collection.unfavorite' : 'collection.favorite')} systemImage={favorite ? 'star.fill' : 'star'}
-        modifiers={[disabled(favoritePending)]} onPress={() => { Keyboard.dismiss(); onFavorite(); }} />
-      <Button label={t('collection.addTo')} systemImage="folder.badge.plus"
-        onPress={() => { Keyboard.dismiss(); onAddToCollection(); }} />
+      {onFavorite && <Button label={t(favorite ? 'collection.unfavorite' : 'collection.favorite')} systemImage={favorite ? 'star.fill' : 'star'}
+        modifiers={[disabled(favoritePending)]} onPress={() => { Keyboard.dismiss(); onFavorite(); }} />}
+      {onAddToCollection && <Button label={t('collection.addTo')} systemImage="folder.badge.plus"
+        onPress={() => { Keyboard.dismiss(); onAddToCollection(); }} />}
+      {onReset && <Button label={t('common.reset')} systemImage="arrow.counterclockwise"
+        modifiers={[disabled(resetDisabled)]} onPress={() => { Keyboard.dismiss(); onReset(); }} />}
     </Menu>
   </Host>;
 }

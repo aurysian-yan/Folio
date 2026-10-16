@@ -23,6 +23,7 @@ function symbol(name: ImageProps['systemName'], filled?: ImageProps['systemName'
 export const ArchiveIcon = symbol('archivebox', 'archivebox.fill');
 export const ArrowClockwiseIcon = symbol('arrow.clockwise');
 export const ArrowCounterClockwiseIcon = symbol('arrow.counterclockwise');
+export const ArrowsVerticalIcon = symbol('arrow.up.and.down');
 export const BookmarkIcon = symbol('bookmark', 'bookmark.fill');
 export const BookIcon = symbol('book.closed', 'book.closed.fill');
 export const BooksIcon = symbol('books.vertical', 'books.vertical.fill');
@@ -49,6 +50,7 @@ export const CopyIcon = symbol('doc.on.doc', 'doc.on.doc.fill');
 export const DatabaseIcon = symbol('internaldrive', 'internaldrive.fill');
 export const DotsThreeIcon = symbol('ellipsis');
 export const DownloadSimpleIcon = symbol('arrow.down.to.line');
+export const EqualsIcon = symbol('equal');
 export const EyeIcon = symbol('eye', 'eye.fill');
 export const EyeSlashIcon = symbol('eye.slash', 'eye.slash.fill');
 export const FileTextIcon = symbol('doc.text', 'doc.text.fill');

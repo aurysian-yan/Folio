@@ -9,6 +9,9 @@ import android.graphics.Paint
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.Gravity
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import com.facebook.react.bridge.BridgeReactContext
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.ModulesProvider
@@ -21,7 +24,12 @@ import kotlin.math.ceil
 
 // 直接绘制生产布局，验证大字号、字形上下伸部、空行及卡片缩放。
 class FolioPreviewInstrumentation : Instrumentation() {
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
+    private var pageSmoke = false
+    override fun onCreate(arguments: Bundle?) {
+        super.onCreate(arguments)
+        pageSmoke = arguments?.getString("pageSmoke") == "true"
+        start()
+    }
 
     override fun onStart() {
         val result = Bundle()
@@ -79,7 +87,8 @@ class FolioPreviewInstrumentation : Instrumentation() {
             }
             validateLivePreview(fonts.first { it.name.endsWith("Inter-Variable.ttf") })
             FolioPanelBackdropSmoke.run(this)
-            result.putString("stream", "PASS: $cases production preview renders; committed frames, latest axes, failure retries; moving panel samples live stripes and refreshes every animation frame\n")
+            if (pageSmoke) FolioPreviewPageSmoke.run(this)
+            result.putString("stream", "PASS: $cases preview renders; committed frames, axes, retries, editor composition, reset and fixed viewport; panel backdrop; pageSmoke=$pageSmoke\n")
             finish(Activity.RESULT_OK, result)
         } catch (error: Throwable) {
             result.putString("stream", "FAIL: ${error.stackTraceToString()}\n")
@@ -149,6 +158,79 @@ class FolioPreviewInstrumentation : Instrumentation() {
             waitFor { field("rendering") == false && (field("lines") as List<*>).isEmpty() }
             runOnMainSync { check(pixels().all { Color.alpha(it) == 0 }); view.selection = selection("retry", 500.0); view.renderSelection() }
             waitFor { (field("committedSelection") as FolioPreviewSelection).requestId == "retry" }
+            runOnMainSync { view.editable = true; view.renderSelection() }
+            runOnMainSync {
+                val input = (0 until view.childCount).map(view::getChildAt).filterIsInstance<EditText>().single()
+                check(input.text.toString() == "Folio Preview")
+                val text = input.text.toString()
+                val shaped = android.graphics.text.TextRunShaper.shapeTextRun(text, 0, text.length,
+                    0, text.length, 0f, 0f, false, input.paint)
+                check(shaped.getFont(0).file?.canonicalFile == file.canonicalFile) { "Editor lost selected font" }
+                val connection = checkNotNull(input.onCreateInputConnection(EditorInfo()))
+                connection.setComposingText("字", 1)
+                val composing = input.text.toString()
+                view.selection = selection("stale-editor", 500.0)
+                view.renderSelection()
+                check(input.text.toString() == composing) { "Stale text interrupted composition" }
+                connection.finishComposingText()
+                input.setText("Preview\n\n字体 😀")
+                input.scrollTo(0, 100)
+                view.layout(0, 0, 600, 320)
+                check(view.height == 320 && input.height == 320) { "Editor ignored viewport height" }
+                check(checkNotNull(input.layout).height > input.height)
+                check(input.gravity and Gravity.VERTICAL_GRAVITY_MASK == Gravity.TOP) { "Overflowing preview was centered" }
+                check(input.scrollY == 0) { "Shrinking viewport clipped the first line" }
+                input.viewTreeObserver.dispatchOnPreDraw()
+                check(input.scrollY == 0) { "Cursor pre-draw scrolled past the first line after resizing" }
+                view.layout(0, 0, 600, 1600)
+                check(input.gravity and Gravity.VERTICAL_GRAVITY_MASK == Gravity.CENTER_VERTICAL) { "Fitting preview lost centering" }
+                view.layout(0, 0, 600, 320)
+                view.mostRecentTextEventCount = field("textEventCount") as Int
+                view.selection = selection("reset-editor", 400.0, 36.0)
+                view.renderSelection()
+                check(input.text.toString() == "Folio Preview") { "Reset did not replace edited text" }
+                check(view.height == 320) { "Font size changed viewport height" }
+            }
+            waitFor { (field("committedSelection") as FolioPreviewSelection).requestId == "reset-editor" }
+            runOnMainSync {
+                val input = (0 until view.childCount).map(view::getChildAt).filterIsInstance<EditText>().single()
+                check(input.textSize == 36f * targetContext.resources.displayMetrics.density)
+                check((field("committedSelection") as FolioPreviewSelection).axes["wght"] == 400.0)
+                for ((index, size) in listOf(64.0, 36.0, 64.0).withIndex()) {
+                    view.selection = selection("resize-font-$index", 400.0, size).apply {
+                        text = "First line\nSecond line\nThird line\nFourth line"
+                    }
+                    view.renderSelection()
+                    view.layout(0, 0, 600, 320 + index * 20)
+                    input.viewTreeObserver.dispatchOnPreDraw()
+                    check(input.scrollY == 0) { "Changing font size after resizing clipped the first line" }
+                }
+            }
+            waitFor { (field("committedSelection") as FolioPreviewSelection).requestId == "resize-font-2" }
+            runOnMainSync {
+                val input = (0 until view.childCount).map(view::getChildAt).filterIsInstance<EditText>().single()
+                view.layout(0, 0, 600, 360)
+                input.viewTreeObserver.dispatchOnPreDraw()
+                check(input.scrollY == 0) { "Delayed font commit scrolled past the first line" }
+                input.requestFocus()
+                input.setSelection(input.length())
+                input.bringPointIntoView(input.length())
+                check(input.scrollY > 0) { "Normal editing no longer reveals the cursor" }
+                input.append(" edited")
+                view.mostRecentTextEventCount = field("textEventCount") as Int
+                view.selection = selection("editing-scroll", 400.0, 64.0).apply { text = input.text.toString() }
+                view.renderSelection()
+            }
+            waitFor { (field("committedSelection") as FolioPreviewSelection).requestId == "editing-scroll" }
+            runOnMainSync {
+                val input = (0 until view.childCount).map(view::getChildAt).filterIsInstance<EditText>().single()
+                view.layout(0, 0, 600, 360)
+                input.viewTreeObserver.dispatchOnPreDraw()
+                check(input.scrollY > 0) { "Committing edited text reset the cursor scroll" }
+                input.setText("")
+                view.renderSelection()
+                check(input.text.isEmpty()) { "Empty editing text was replaced" }
+            }
         } finally {
             runOnMainSync {
                 FolioFontPreview::class.java.getDeclaredMethod("onDetachedFromWindow").apply { isAccessible = true }.invoke(view)

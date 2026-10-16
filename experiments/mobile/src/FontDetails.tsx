@@ -1,7 +1,7 @@
-import { CaretLeftIcon, CheckIcon, CopyIcon } from './icons';
-import { useEffect, useRef, useState } from 'react';
+import { CaretLeftIcon, CheckIcon, CopyIcon, EqualsIcon } from './icons';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AccessibilityInfo, ActivityIndicator, Animated, KeyboardAvoidingView, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Animated, KeyboardAvoidingView, PanResponder, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { representativeFace, type FontFace, type FontFamily, type LibrarySnapshot } from './library';
 import { PanelAction } from './panel-content';
@@ -18,7 +18,7 @@ import { CharacterMap } from './CharacterMap';
 import { FontNavigation } from './FontNavigation';
 import { FontStylePicker } from './FontStylePicker';
 import { FontStorageCard } from './FontStorageCard';
-import { adjustableAxes, axisStep, defaultAxisValues, detailPreviewSize, formatAxisValue } from './font-details';
+import { adjustableAxes, axisStep, clampAxisValue, defaultAxisValues, detailPreviewHeight, detailPreviewSize, formatAxisValue } from './font-details';
 
 interface FontDetailsProps {
   family: FontFamily;
@@ -92,9 +92,11 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const selectedFace = family.faces.find((face) => face.id === selectedFaceId) ?? initialFace;
   const faceKey = selectedFace ? `${selectedFace.id}:${selectedFace.revisionId}` : '';
   const [previewText, setPreviewText] = useState(() => t('mobile.previewSample'));
+  const [previewTextEventCount, setPreviewTextEventCount] = useState(0);
   const [previewRetry, setPreviewRetry] = useState(0);
   const [previewSize, setPreviewSize] = useState(detailPreviewSize.defaultValue);
   const [previewWidth, setPreviewWidth] = useState(0);
+  const [previewHeight, setPreviewHeight] = useState(detailPreviewHeight.defaultValue);
   const [previewStatus, setPreviewStatus] = useState<{ key: string; identity: string; result: PreviewStatus } | null>(null);
 
   // 轴值跟随字款与版本身份重置。
@@ -108,8 +110,9 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const previewKey = JSON.stringify([previewIdentity, axisValues, previewText, fontSize, previewWidth, theme.label, previewRetry]);
   const result = previewStatus?.key === previewKey ? previewStatus.result : null;
   const committed = previewStatus?.identity === previewIdentity ? previewStatus.result : null;
-  const previewHeight = Math.max(fontSize * 1.3 * 3, (result ?? committed)?.contentHeight ?? 0);
   const showFallback = !selectedFace?.sourcePath || result?.status === 'error' || result?.status === 'missing-glyph';
+  const previewChanged = previewText !== t('mobile.previewSample') || previewSize !== detailPreviewSize.defaultValue
+    || axes.some((axis) => axisValues[axis.tag] !== axis.defaultValue);
 
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
 
@@ -148,7 +151,12 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
           <CaretLeftIcon size={20} color={theme.label} />
         </IconButton>
       } actions={<FontActionsMenu theme={theme} sourceId={header.sourceId} favorite={family.isFavorite}
-        favoritePending={favoritePending} onFavorite={favorite} onAddToCollection={() => setCollectionsOpen(true)} />} />
+        favoritePending={favoritePending} onFavorite={favorite} onAddToCollection={() => setCollectionsOpen(true)}
+        resetDisabled={!previewChanged} onReset={() => {
+          setPreviewText(t('mobile.previewSample'));
+          setPreviewSize(detailPreviewSize.defaultValue);
+          setAxisState({ key: faceKey, values: defaultAxisValues(selectedFace) });
+        }} />} />
       <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
         <Animated.ScrollView ref={scroll} {...header.snapScrollProps} onScroll={header.onScroll} scrollEventThrottle={16}
           contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
@@ -173,33 +181,32 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
             <View style={styles.previewStage}>
               <View onLayout={(event) => setPreviewWidth(event.nativeEvent.layout.width)}
                 style={[styles.previewContent, { height: previewHeight }]}>
-                {!!selectedFace?.sourcePath && previewWidth > 0 && <NativeFontPreview key={previewIdentity} style={styles.fill}
+                {selectedFace && previewWidth > 0 && <NativeFontPreview key={previewIdentity} style={styles.fill} editable
+                  tintColor={theme.accent} mostRecentTextEventCount={previewTextEventCount}
                   accessibilityLabel={t('mobile.previewLabel', { name: family.displayName, style: selectedFace.styleName })}
-                  selection={{ requestId: previewKey, sourcePath: selectedFace.sourcePath, faceIndex: selectedFace.faceIndex, revisionId: selectedFace.revisionId,
+                  selection={{ requestId: previewKey, sourcePath: selectedFace.sourcePath ?? '', faceIndex: selectedFace.faceIndex, revisionId: selectedFace.revisionId,
                     axes: axisValues, text: previewText, fontSize, centered: true, wrapWidth: previewWidth, foregroundColor: theme.label }}
+                  onTextChange={({ nativeEvent }) => {
+                    setPreviewTextEventCount(nativeEvent.eventCount);
+                    setPreviewText(nativeEvent.text);
+                  }}
                   onStatus={(event) => {
                     if (event.nativeEvent.requestId === previewKey) setPreviewStatus({ key: previewKey, identity: previewIdentity, result: event.nativeEvent });
                   }} />}
-                {showFallback ? <View style={styles.previewOverlay} pointerEvents="box-none">
-                  <Text accessibilityLiveRegion="polite" style={[styles.previewFallback, { color: theme.secondary }]}>
-                    {result?.status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t(selectedFace?.location?.cloudAvailable && !selectedFace.location.localAvailable ? 'fontLocation.previewHint' : 'mobile.previewUnavailable')}
-                  </Text>
-                  {result?.status === 'error' && <PanelAction label={t('common.retry')} theme={theme} onPress={() => setPreviewRetry((value) => value + 1)} />}
-                </View> : !result && !committed && <View style={styles.previewOverlay} pointerEvents="none">
+                {!showFallback && !result && !committed && <View style={styles.previewOverlay} pointerEvents="none">
                   <ActivityIndicator accessibilityLabel={t('preview.loading')} color={theme.secondary} />
                 </View>}
               </View>
+              {showFallback && <View style={styles.previewFeedback}>
+                <Text accessibilityLiveRegion="polite" style={[styles.previewFallback, { color: theme.secondary }]}>
+                  {result?.status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t(selectedFace?.location?.cloudAvailable && !selectedFace.location.localAvailable ? 'fontLocation.previewHint' : 'mobile.previewUnavailable')}
+                </Text>
+                {result?.status === 'error' && <PanelAction label={t('common.retry')} theme={theme} onPress={() => setPreviewRetry((value) => value + 1)} />}
+              </View>}
+              <PreviewResizeHandle height={previewHeight} onChange={setPreviewHeight} theme={theme} />
             </View>
             {selectedFace && <FontStylePicker faces={family.faces} selectedFaceId={selectedFace.id}
               onChange={setSelectedFaceId} theme={theme} sourceId={header.sourceId} />}
-            <View style={styles.previewEditor}>
-              <Text style={[styles.detail, { color: theme.secondary }]}>{t('preview.customText')}</Text>
-              <TextInput value={previewText} onChangeText={setPreviewText} placeholder={t('preview.inputText')}
-                placeholderTextColor={theme.muted} selectionColor={theme.selection} cursorColor={theme.accent}
-                accessibilityLabel={t('preview.customText')} style={[styles.previewTextInput, { color: theme.label, backgroundColor: theme.raised }]}
-                multiline scrollEnabled={false} textAlignVertical="top" autoCapitalize="none" autoCorrect={false}
-                returnKeyType="done" submitBehavior="blurAndSubmit" />
-            </View>
             <DetailSlider label={t('preview.size')} value={previewSize} minimum={detailPreviewSize.minimum}
               maximum={detailPreviewSize.maximum} step={1} formatValue={(value) => String(Math.round(value))}
               onChange={setPreviewSize} theme={theme} />
@@ -241,6 +248,31 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   </SafeAreaView>;
 }
 
+// 拖动手柄只调整视口高度，不改变字号或字体轴。
+function PreviewResizeHandle({ height, onChange, theme }: { height: number; onChange: (height: number) => void; theme: Theme }) {
+  const { t } = useTranslation();
+  const inputs = useRef({ height, onChange });
+  const origin = useRef(height);
+  useLayoutEffect(() => { inputs.current = { height, onChange }; }, [height, onChange]);
+  const clampHeight = (value: number) => Math.round(clampAxisValue(value, detailPreviewHeight.minimum, detailPreviewHeight.maximum));
+  // 手势回调仅在触摸事件中读取最新受控值。
+  // eslint-disable-next-line react-hooks/refs
+  const responder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { origin.current = inputs.current.height; },
+    onPanResponderMove: (_event, gesture) => inputs.current.onChange(clampHeight(origin.current + gesture.dy)),
+    onPanResponderTerminationRequest: () => false,
+  }), []);
+  return <View style={styles.previewResize} {...responder.panHandlers} accessible accessibilityRole="adjustable"
+    accessibilityLabel={t('preview.resizeHeight')}
+    accessibilityValue={{ min: detailPreviewHeight.minimum, max: detailPreviewHeight.maximum, now: height }}
+    accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+    onAccessibilityAction={({ nativeEvent }) => onChange(clampHeight(height + (nativeEvent.actionName === 'increment' ? 16 : -16)))}>
+    <EqualsIcon size={20} color={theme.secondary} />
+  </View>;
+}
+
 function cssFontFace(family: FontFamily, face: FontFace | undefined) {
   const fileName = face?.sourcePath ? face.sourcePath.split('/').pop() ?? 'font-file' : 'font-file';
   return `@font-face {\n  font-family: "${family.displayName}";\n  src: url("${fileName}");\n  font-style: normal;\n}`;
@@ -258,12 +290,12 @@ const styles = StyleSheet.create({
   feedback: { ...settingsLayout.section, gap: 8 },
   body: { ...settingsTypography.body },
   detail: { ...settingsTypography.detail },
-  previewStage: { ...settingsLayout.section, paddingVertical: 16 },
+  previewStage: { ...settingsLayout.section, paddingVertical: 16, gap: 8 },
   previewContent: { width: '100%', overflow: 'hidden' },
   previewOverlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: 8 },
   previewFallback: { ...settingsTypography.detail, textAlign: 'center' },
-  previewEditor: { ...settingsLayout.section, paddingTop: 8, gap: 8 },
-  previewTextInput: { ...settingsLayout.control, ...settingsTypography.body, fontWeight: '400', minHeight: 64, padding: 12 },
+  previewFeedback: { alignItems: 'center', gap: 8 },
+  previewResize: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   copyRow: { minHeight: 64, ...settingsLayout.row, flexDirection: 'row', alignItems: 'center', gap: 12 },
   copyBody: { flex: 1, minWidth: 0, gap: 4 },
 });

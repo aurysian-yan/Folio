@@ -1,4 +1,4 @@
-import { CaretDownIcon, DotsThreeIcon, FolderPlusIcon, StarIcon } from './icons';
+import { ArrowCounterClockwiseIcon, CaretDownIcon, DotsThreeIcon, FolderPlusIcon, StarIcon } from './icons';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -7,14 +7,16 @@ import { IconButton, type Theme } from './ui';
 export interface FontActionsMenuProps {
   theme: Theme;
   sourceId: string;
-  favorite: boolean;
-  favoritePending: boolean;
-  onFavorite: () => void;
-  onAddToCollection: () => void;
+  favorite?: boolean;
+  favoritePending?: boolean;
+  onFavorite?: () => void;
+  onAddToCollection?: () => void;
+  onReset?: () => void;
+  resetDisabled?: boolean;
 }
 
 // 通用入口沿用视图菜单的尺寸与操作行。
-export function FontActionsMenu({ theme, favorite, favoritePending, onFavorite, onAddToCollection }: FontActionsMenuProps) {
+export function FontActionsMenu({ theme, favorite = false, favoritePending = false, onFavorite, onAddToCollection, onReset, resetDisabled = false }: FontActionsMenuProps) {
   const { t } = useTranslation();
   const trigger = useRef<View>(null);
   const [anchor, setAnchor] = useState<{ right: number; top: number } | null>(null);
@@ -32,14 +34,18 @@ export function FontActionsMenu({ theme, favorite, favoritePending, onFavorite, 
         {!!anchor && <View accessibilityViewIsModal style={[styles.menu, { top: anchor.top, left: Math.max(16, anchor.right - 220),
           backgroundColor: theme.raised, borderColor: theme.border }]}>
           <Text style={[styles.title, { color: theme.secondary }]}>{t('font.operations')}</Text>
-          <Pressable accessibilityRole="button" disabled={favoritePending} accessibilityState={{ disabled: favoritePending }}
+          {onFavorite && <Pressable accessibilityRole="button" disabled={favoritePending} accessibilityState={{ disabled: favoritePending }}
             onPress={() => { setAnchor(null); onFavorite(); }} style={styles.item}>
             <StarIcon size={20} color={theme.label} weight={favorite ? 'fill' : 'regular'} />
             <Text style={[styles.label, { color: theme.label, opacity: favoritePending ? 0.4 : 1 }]}>{t(favorite ? 'collection.unfavorite' : 'collection.favorite')}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" onPress={() => { setAnchor(null); onAddToCollection(); }} style={styles.item}>
+          </Pressable>}
+          {onAddToCollection && <Pressable accessibilityRole="button" onPress={() => { setAnchor(null); onAddToCollection(); }} style={styles.item}>
             <FolderPlusIcon size={20} color={theme.label} /><Text style={[styles.label, { color: theme.label }]}>{t('collection.addTo')}</Text>
-          </Pressable>
+          </Pressable>}
+          {onReset && <Pressable accessibilityRole="button" disabled={resetDisabled} accessibilityState={{ disabled: resetDisabled }}
+            onPress={() => { setAnchor(null); onReset(); }} style={[styles.item, { opacity: resetDisabled ? 0.4 : 1 }]}>
+            <ArrowCounterClockwiseIcon size={20} color={theme.label} /><Text style={[styles.label, { color: theme.label }]}>{t('common.reset')}</Text>
+          </Pressable>}
         </View>}
       </View>
     </Modal>

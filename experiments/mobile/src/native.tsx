@@ -49,6 +49,10 @@ export interface PreviewStatus {
 
 interface PreviewProps extends ViewProps {
   selection: PreviewSelection;
+  editable?: boolean;
+  tintColor?: string;
+  mostRecentTextEventCount?: number;
+  onTextChange?: (event: NativeSyntheticEvent<{ text: string; eventCount: number }>) => void;
   onStatus: (event: NativeSyntheticEvent<PreviewStatus>) => void;
 }
 
