@@ -36,6 +36,7 @@ class FolioNavigationModule : Module() {
             Prop("sourceId") { view: FolioPanelBackdropView, value: String -> view.sourceId = value }
             Prop("active") { view: FolioPanelBackdropView, value: Boolean -> view.active = value }
             Prop("tintColor") { view: FolioPanelBackdropView, value: String -> view.tintColor = value }
+            Prop("borderColor") { view: FolioPanelBackdropView, value: String -> view.borderColor = value }
             Prop("cornerRadius") { view: FolioPanelBackdropView, value: Float -> view.cornerRadius = value }
         }
 

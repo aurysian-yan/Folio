@@ -92,9 +92,10 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const selectedFace = family.faces.find((face) => face.id === selectedFaceId) ?? initialFace;
   const faceKey = selectedFace ? `${selectedFace.id}:${selectedFace.revisionId}` : '';
   const [previewText, setPreviewText] = useState(() => t('mobile.previewSample'));
+  const [previewRetry, setPreviewRetry] = useState(0);
   const [previewSize, setPreviewSize] = useState(detailPreviewSize.defaultValue);
   const [previewWidth, setPreviewWidth] = useState(0);
-  const [previewStatus, setPreviewStatus] = useState<{ key: string; result: PreviewStatus } | null>(null);
+  const [previewStatus, setPreviewStatus] = useState<{ key: string; identity: string; result: PreviewStatus } | null>(null);
 
   // 轴值跟随字款与版本身份重置。
   const [axisState, setAxisState] = useState<{ key: string; values: Record<string, number> }>(
@@ -103,9 +104,11 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const axes = adjustableAxes(selectedFace);
   const variable = family.faces.some((face) => adjustableAxes(face).length > 0);
   const fontSize = Math.min(160, previewSize * PixelRatio.getFontScale());
-  const previewKey = JSON.stringify([faceKey, axisValues, previewText, fontSize, previewWidth, theme.label]);
+  const previewIdentity = JSON.stringify([faceKey, selectedFace?.sourcePath, selectedFace?.faceIndex]);
+  const previewKey = JSON.stringify([previewIdentity, axisValues, previewText, fontSize, previewWidth, theme.label, previewRetry]);
   const result = previewStatus?.key === previewKey ? previewStatus.result : null;
-  const previewHeight = Math.max(fontSize * 1.3 * 3, result?.contentHeight ?? 0);
+  const committed = previewStatus?.identity === previewIdentity ? previewStatus.result : null;
+  const previewHeight = Math.max(fontSize * 1.3 * 3, (result ?? committed)?.contentHeight ?? 0);
   const showFallback = !selectedFace?.sourcePath || result?.status === 'error' || result?.status === 'missing-glyph';
 
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
@@ -170,16 +173,19 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
             <View style={styles.previewStage}>
               <View onLayout={(event) => setPreviewWidth(event.nativeEvent.layout.width)}
                 style={[styles.previewContent, { height: previewHeight }]}>
-                {!!selectedFace?.sourcePath && previewWidth > 0 && <NativeFontPreview key={previewKey} style={styles.fill}
+                {!!selectedFace?.sourcePath && previewWidth > 0 && <NativeFontPreview key={previewIdentity} style={styles.fill}
                   accessibilityLabel={t('mobile.previewLabel', { name: family.displayName, style: selectedFace.styleName })}
-                  selection={{ sourcePath: selectedFace.sourcePath, faceIndex: selectedFace.faceIndex, revisionId: selectedFace.revisionId,
+                  selection={{ requestId: previewKey, sourcePath: selectedFace.sourcePath, faceIndex: selectedFace.faceIndex, revisionId: selectedFace.revisionId,
                     axes: axisValues, text: previewText, fontSize, centered: true, wrapWidth: previewWidth, foregroundColor: theme.label }}
-                  onStatus={(event) => setPreviewStatus({ key: previewKey, result: event.nativeEvent })} />}
-                {showFallback ? <View style={styles.previewOverlay} pointerEvents="none">
+                  onStatus={(event) => {
+                    if (event.nativeEvent.requestId === previewKey) setPreviewStatus({ key: previewKey, identity: previewIdentity, result: event.nativeEvent });
+                  }} />}
+                {showFallback ? <View style={styles.previewOverlay} pointerEvents="box-none">
                   <Text accessibilityLiveRegion="polite" style={[styles.previewFallback, { color: theme.secondary }]}>
                     {result?.status === 'missing-glyph' ? t('mobile.missingPreviewChars') : t(selectedFace?.location?.cloudAvailable && !selectedFace.location.localAvailable ? 'fontLocation.previewHint' : 'mobile.previewUnavailable')}
                   </Text>
-                </View> : !result && <View style={styles.previewOverlay} pointerEvents="none">
+                  {result?.status === 'error' && <PanelAction label={t('common.retry')} theme={theme} onPress={() => setPreviewRetry((value) => value + 1)} />}
+                </View> : !result && !committed && <View style={styles.previewOverlay} pointerEvents="none">
                   <ActivityIndicator accessibilityLabel={t('preview.loading')} color={theme.secondary} />
                 </View>}
               </View>
@@ -254,7 +260,7 @@ const styles = StyleSheet.create({
   detail: { ...settingsTypography.detail },
   previewStage: { ...settingsLayout.section, paddingVertical: 16 },
   previewContent: { width: '100%', overflow: 'hidden' },
-  previewOverlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
+  previewOverlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: 8 },
   previewFallback: { ...settingsTypography.detail, textAlign: 'center' },
   previewEditor: { ...settingsLayout.section, paddingTop: 8, gap: 8 },
   previewTextInput: { ...settingsLayout.control, ...settingsTypography.body, fontWeight: '400', minHeight: 64, padding: 12 },

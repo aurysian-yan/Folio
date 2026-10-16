@@ -77,10 +77,10 @@ function SettingsPageContent({ pageRef, title, theme, onClose, children, backgro
   </SafeAreaView>;
 }
 
-export function SettingsGroup({ theme, title, footer, children, animateLayout = false }: {
-  theme: Theme; title?: string; footer?: string; children: ReactNode; animateLayout?: boolean;
+export function SettingsGroup({ theme, title, footer, children, animateLayout = false, backgroundColor }: {
+  theme: Theme; title?: string; footer?: string; children: ReactNode; animateLayout?: boolean; backgroundColor?: string;
 }) {
-  const cardStyle = [styles.groupCard, { backgroundColor: theme.surface }];
+  const cardStyle = [styles.groupCard, { backgroundColor: backgroundColor ?? theme.surface }];
   const content = <>
     {!!title && <Text style={[styles.groupTitle, { color: theme.secondary }]}>{title}</Text>}
     {animateLayout ? <Motion.View layout={settingsTransition.layout} collapsable={false} style={cardStyle}>{children}</Motion.View>

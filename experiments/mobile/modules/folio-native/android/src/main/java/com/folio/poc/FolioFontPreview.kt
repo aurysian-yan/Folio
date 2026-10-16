@@ -10,6 +10,8 @@ import android.graphics.fonts.FontFamily
 import android.graphics.text.PositionedGlyphs
 import android.graphics.text.TextRunShaper
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -28,38 +30,73 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
     private var lines: List<PositionedGlyphs> = emptyList()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var layout: PreviewLayout? = null
+    private var committedSelection = FolioPreviewSelection()
+    private var pending: Pair<FolioPreviewSelection, Int>? = null
+    private var rendering = false
+    private var sourceKey: String? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val fontCache = PreviewFontCache()
 
     init { setWillNotDraw(false) }
 
     fun renderSelection() {
         val value = selection
-        val key = "${value.sourcePath}|${value.faceIndex}|${value.revisionId}|${value.axes.toSortedMap()}|${value.text}|${value.fontSize}|${value.centered}|${value.wrapWidth}|${value.foregroundColor}"
+        val key = "${value.sourcePath}|${value.faceIndex}|${value.revisionId}|${value.axes.toSortedMap()}|${value.text}|${value.fontSize}|${value.centered}|${value.wrapWidth}|${value.foregroundColor}|${value.requestId}"
         if (key == lastKey) return
         lastKey = key
         val token = generation.incrementAndGet()
-        lines = emptyList()
-        layout = null
-        invalidate()
+        val identity = "${value.sourcePath}|${value.faceIndex}|${value.revisionId}"
+        if (sourceKey != identity) {
+            sourceKey = identity
+            lines = emptyList()
+            layout = null
+            invalidate()
+        }
+        pending = value to token
+        renderNext()
+    }
+
+    // 中间轴值不排队，绘制内容与布局使用同一份已提交参数。
+    private fun renderNext() {
+        if (rendering) return
+        val (value, token) = pending ?: return
+        pending = null
         if (Build.VERSION.SDK_INT < 31) {
-            onStatus(mapOf("status" to "error"))
+            dispatchStatus(value, "error")
             return
         }
+        rendering = true
         worker.execute {
             val result = runCatching {
-                val (shaped, supported) = shapeSelection(context, value)
+                val (shaped, supported) = shapeSelection(context, value, fontCache)
                 Triple(shaped, supported, if (supported) measureLines(shaped, value, context.resources.displayMetrics.density) else null)
             }
-            post {
-                if (generation.get() != token) return@post
-                result.fold(onSuccess = { (shaped, supported, measured) ->
-                    lines = if (supported) shaped else emptyList()
-                    layout = measured
-                    onStatus(mapOf("status" to if (supported) "ready" else "missing-glyph",
-                        "contentHeight" to (measured?.contentHeight?.div(resources.displayMetrics.density)?.toDouble() ?: 0.0)))
-                }, onFailure = { onStatus(mapOf("status" to "error")) })
-                invalidate()
+            mainHandler.post {
+                rendering = false
+                if (generation.get() == token) {
+                    result.fold(onSuccess = { (shaped, supported, measured) ->
+                        lines = if (supported) shaped else emptyList()
+                        layout = measured
+                        committedSelection = value
+                        dispatchStatus(value, if (supported) "ready" else "missing-glyph",
+                            measured?.contentHeight?.div(resources.displayMetrics.density)?.toDouble() ?: 0.0)
+                    }, onFailure = {
+                        lines = emptyList()
+                        layout = null
+                        dispatchStatus(value, "error")
+                    })
+                    invalidate()
+                }
+                renderNext()
             }
         }
+    }
+
+    private fun dispatchStatus(value: FolioPreviewSelection, status: String, height: Double? = null) {
+        val event = mutableMapOf<String, Any>("status" to status)
+        value.requestId?.let { event["requestId"] = it }
+        height?.let { event["contentHeight"] = it }
+        if (appContext.hasActiveReactInstance) onStatus(event)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -69,16 +106,17 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
         val value = android.util.TypedValue()
         context.theme.resolveAttribute(android.R.attr.textColorPrimary, value, true)
         paint.color = if (value.resourceId != 0) context.getColor(value.resourceId) else value.data
-        if (selection.foregroundColor.isNotEmpty()) {
-            runCatching { android.graphics.Color.parseColor(selection.foregroundColor) }.getOrNull()?.let { paint.color = it }
+        if (committedSelection.foregroundColor.isNotEmpty()) {
+            runCatching { android.graphics.Color.parseColor(committedSelection.foregroundColor) }.getOrNull()?.let { paint.color = it }
         }
-        paint.textSize = selection.fontSize.toFloat() * resources.displayMetrics.density
+        paint.textSize = committedSelection.fontSize.toFloat() * resources.displayMetrics.density
         val measured = layout ?: return
-        drawPreview(canvas, lines, measured, selection, width.toFloat(), height.toFloat(), paint)
+        drawPreview(canvas, lines, measured, committedSelection, width.toFloat(), height.toFloat(), paint)
     }
 
     override fun onDetachedFromWindow() {
         generation.incrementAndGet()
+        pending = null
         lines = emptyList()
         layout = null
         lastKey = null
@@ -91,7 +129,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
     }
 
     companion object {
-        internal fun shapeSelection(context: Context, value: FolioPreviewSelection): Pair<List<PositionedGlyphs>, Boolean> {
+        internal fun shapeSelection(context: Context, value: FolioPreviewSelection, fontCache: PreviewFontCache? = null): Pair<List<PositionedGlyphs>, Boolean> {
             val source = File(value.sourcePath).canonicalFile
             val directory = File(context.filesDir, "FolioMobilePoC/fonts").canonicalFile
             require(source.path.startsWith(directory.path + File.separator) && source.canRead())
@@ -102,7 +140,8 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
                 tag.matches(Regex("[A-Za-z0-9 ]{4}")) && number.isFinite()
             })
             val settings = value.axes.toSortedMap().map { (tag, number) -> "'$tag' $number" }.joinToString(",")
-            val builder = Font.Builder(source).setTtcIndex(value.faceIndex)
+            val base = fontCache?.get(source, value) ?: Font.Builder(source).setTtcIndex(value.faceIndex).build()
+            val builder = Font.Builder(base)
             if (settings.isNotEmpty()) builder.setFontVariationSettings(settings)
             val font = builder.build()
             val typeface = Typeface.CustomFallbackBuilder(FontFamily.Builder(font).build()).build()
@@ -189,3 +228,17 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
 
 internal data class PreviewLinePlacement(val x: Float, val baseline: Float)
 internal data class PreviewLayout(val lines: List<PreviewLinePlacement>, val bounds: RectF, val contentHeight: Float)
+
+// 同一文件和版本复用字体缓冲区，仅重新创建轴值实例。
+internal class PreviewFontCache {
+    private var key: String? = null
+    private var font: Font? = null
+    fun get(source: File, value: FolioPreviewSelection): Font {
+        val identity = "${source.path}|${value.faceIndex}|${value.revisionId}"
+        if (key != identity) {
+            font = Font.Builder(source).setTtcIndex(value.faceIndex).build()
+            key = identity
+        }
+        return font!!
+    }
+}

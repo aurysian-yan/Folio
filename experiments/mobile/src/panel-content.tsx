@@ -28,15 +28,15 @@ export interface LibraryPanelProps {
 }
 
 // 面板沿用现有导入明细的间距与语义主题。
-export function PanelAction({ label, theme, onPress, disabled, destructive = false, primary = false, systemImage }: {
-  label: string; theme: Theme; onPress: () => void; disabled?: boolean; destructive?: boolean; primary?: boolean; systemImage?: string;
+export function PanelAction({ label, theme, onPress, disabled, destructive = false, primary = false, systemImage, fullWidth = false, cornerRadius }: {
+  label: string; theme: Theme; onPress: () => void; disabled?: boolean; destructive?: boolean; primary?: boolean; systemImage?: string; fullWidth?: boolean; cornerRadius?: number;
 }) {
   const color = destructive ? theme.danger : theme.accent;
   const Icon = systemImage ? actionIcons[systemImage] : undefined;
   return usesNativeControls ? <NativeActionButton label={label} systemImage={systemImage} color={color} onPress={onPress}
-    disabled={disabled} prominent={primary} minimumWidth={80} />
+    disabled={disabled} prominent={primary} minimumWidth={80} fullWidth={fullWidth} cornerRadius={cornerRadius} />
     : <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled}
-      onPress={onPress} style={({ pressed }) => [panelStyles.button, {
+      onPress={onPress} style={({ pressed }) => [panelStyles.button, fullWidth && { width: '100%' }, cornerRadius !== undefined && { borderRadius: cornerRadius }, {
         backgroundColor: primary ? color : theme.raised, borderColor: primary ? color : theme.border,
         opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
       }]}>

@@ -9,6 +9,12 @@ final class FolioFontPreview: ExpoView {
     private var lastKey: String?
     private let workQueue = DispatchQueue(label: "com.folio.mobile.poc.preview", qos: .userInitiated)
     private var generation = 0
+    private var committedSelection = FolioPreviewSelection()
+    private var pending: (FolioPreviewSelection, Int)?
+    private var rendering = false
+    private var sourceKey: String?
+    private var baseFont: CTFont?
+    private var baseFontKey: String?
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
@@ -19,68 +25,111 @@ final class FolioFontPreview: ExpoView {
     func renderSelection() {
         let value = selection
         let axes = value.axes.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ";")
-        let key = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)|\(axes)|\(value.text)|\(value.fontSize)|\(value.centered)|\(value.wrapWidth)|\(value.foregroundColor)"
+        let key = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)|\(axes)|\(value.text)|\(value.fontSize)|\(value.centered)|\(value.wrapWidth)|\(value.foregroundColor)|\(value.requestId ?? "")"
         guard key != lastKey else { return }
         lastKey = key
         generation += 1
         let token = generation
-        lines = []
-        setNeedsDisplay()
+        let identity = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)"
+        if sourceKey != identity {
+            sourceKey = identity
+            lines = []
+            setNeedsDisplay()
+        }
+        pending = (value, token)
+        renderNext()
+    }
+
+    // 字体构建、字形检查与换行在后台完成，只提交最新的完整帧。
+    private func renderNext() {
+        guard !rendering, let (value, token) = pending else { return }
+        pending = nil
+        rendering = true
+        let color = Self.foreground(value.foregroundColor).cgColor
         workQueue.async { [weak self] in
-            let result = Self.makeFont(value)
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.generation == token else { return }
-                switch result {
-                case let .success(font):
-                    let paragraphs = value.text.components(separatedBy: .newlines)
-                    let supported = paragraphs.allSatisfy { paragraph in
-                        let characters = Array(paragraph.utf16)
-                        var glyphs = [CGGlyph](repeating: 0, count: characters.count)
-                        return CTFontGetGlyphsForCharacters(font, characters, &glyphs, characters.count)
-                    }
-                    if supported {
-                        let attributes: [NSAttributedString.Key: Any] = [
-                            NSAttributedString.Key(kCTFontAttributeName as String): font,
-                            NSAttributedString.Key(kCTForegroundColorAttributeName as String): Self.foreground(value.foregroundColor).cgColor,
-                        ]
-                        self.lines = paragraphs.flatMap { paragraph -> [CTLine] in
-                            let text = NSAttributedString(string: paragraph, attributes: attributes)
-                            guard value.wrapWidth > 0, text.length > 0 else {
-                                return [CTLineCreateWithAttributedString(text)]
-                            }
-                            let typesetter = CTTypesetterCreateWithAttributedString(text)
-                            var wrapped: [CTLine] = []
-                            var offset = 0
-                            while offset < text.length {
-                                let count = max(1, CTTypesetterSuggestLineBreak(typesetter, offset, value.wrapWidth))
-                                wrapped.append(CTTypesetterCreateLine(typesetter, CFRange(location: offset, length: count)))
-                                offset += count
-                            }
-                            return wrapped
-                        }
-                    }
-                    self.onStatus(["status": supported ? "ready" : "missing-glyph",
-                                   "contentHeight": supported ? value.fontSize * (value.wrapWidth > 0 ? 1.3 : 1.05) * Double(self.lines.count) : 0])
-                case .failure:
-                    self.onStatus(["status": "error"])
+            guard let self else { return }
+            let result = self.makeFont(value).map { font -> ([CTLine], Bool) in
+                let paragraphs = value.text.components(separatedBy: .newlines)
+                let supported = paragraphs.allSatisfy { paragraph in
+                    let characters = Array(paragraph.utf16)
+                    var glyphs = [CGGlyph](repeating: 0, count: characters.count)
+                    return CTFontGetGlyphsForCharacters(font, characters, &glyphs, characters.count)
                 }
-                self.setNeedsDisplay()
+                guard supported else { return ([], false) }
+                let attributes: [NSAttributedString.Key: Any] = [
+                    NSAttributedString.Key(kCTFontAttributeName as String): font,
+                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+                ]
+                let lines = paragraphs.flatMap { paragraph -> [CTLine] in
+                    let text = NSAttributedString(string: paragraph, attributes: attributes)
+                    guard value.wrapWidth > 0, text.length > 0 else {
+                        return [CTLineCreateWithAttributedString(text)]
+                    }
+                    let typesetter = CTTypesetterCreateWithAttributedString(text)
+                    var wrapped: [CTLine] = []
+                    var offset = 0
+                    while offset < text.length {
+                        let count = max(1, CTTypesetterSuggestLineBreak(typesetter, offset, value.wrapWidth))
+                        wrapped.append(CTTypesetterCreateLine(typesetter, CFRange(location: offset, length: count)))
+                        offset += count
+                    }
+                    return wrapped
+                }
+                return (lines, true)
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.rendering = false
+                if self.generation == token {
+                    var status: [String: Any] = [:]
+                    if let requestId = value.requestId { status["requestId"] = requestId }
+                    switch result {
+                    case let .success((lines, supported)):
+                        self.lines = lines
+                        self.committedSelection = value
+                        status["status"] = supported ? "ready" : "missing-glyph"
+                        status["contentHeight"] = supported ? value.fontSize * (value.wrapWidth > 0 ? 1.3 : 1.05) * Double(lines.count) : 0
+                    case .failure:
+                        self.lines = []
+                        status["status"] = "error"
+                    }
+                    self.onStatus(status)
+                    self.setNeedsDisplay()
+                }
+                self.renderNext()
             }
         }
     }
 
-    private static func makeFont(_ value: FolioPreviewSelection) -> Result<CTFont, Error> {
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            generation += 1
+            pending = nil
+            lines = []
+            lastKey = nil
+        } else {
+            renderSelection()
+        }
+    }
+
+    private func makeFont(_ value: FolioPreviewSelection) -> Result<CTFont, Error> {
         Result {
             guard value.fontSize.isFinite, (8...160).contains(value.fontSize),
                   value.wrapWidth.isFinite, value.wrapWidth >= 0 else {
                 throw NSError(domain: "FolioPreview", code: 4)
             }
             let url = try FolioPaths.managedFont(value.sourcePath)
-            guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
-                  descriptors.indices.contains(value.faceIndex) else {
-                throw NSError(domain: "FolioPreview", code: 1)
+            let identity = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)"
+            if baseFontKey != identity {
+                guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+                      descriptors.indices.contains(value.faceIndex) else {
+                    throw NSError(domain: "FolioPreview", code: 1)
+                }
+                baseFont = CTFontCreateWithFontDescriptor(descriptors[value.faceIndex], CGFloat(value.fontSize), nil)
+                baseFontKey = identity
             }
-            let base = CTFontCreateWithFontDescriptor(descriptors[value.faceIndex], CGFloat(value.fontSize), nil)
+            guard let base = baseFont else { throw NSError(domain: "FolioPreview", code: 1) }
             let available = CTFontCopyVariationAxes(base) as? [[CFString: Any]] ?? []
             var variation: [NSNumber: NSNumber] = [:]
             for (tag, number) in value.axes {
@@ -104,6 +153,7 @@ final class FolioFontPreview: ExpoView {
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext(), !lines.isEmpty,
               bounds.width > 0, bounds.height > 0 else { return }
+        let selection = committedSelection
         let lineHeight = CGFloat(selection.fontSize) * (selection.wrapWidth > 0 ? 1.3 : 1.05)
         let height = lineHeight * CGFloat(lines.count)
         let widths = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }

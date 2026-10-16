@@ -8,7 +8,13 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import com.facebook.react.bridge.BridgeReactContext
+import expo.modules.kotlin.AppContext
+import expo.modules.kotlin.ModulesProvider
+import expo.modules.kotlin.modules.Module
 import java.io.File
+import java.lang.ref.WeakReference
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -71,11 +77,83 @@ class FolioPreviewInstrumentation : Instrumentation() {
                     }
                 }
             }
-            result.putString("stream", "PASS: $cases production preview renders, signed ascent, unclipped ink bounds, centered blocks, blank lines, variable axes and card scaling\n")
+            validateLivePreview(fonts.first { it.name.endsWith("Inter-Variable.ttf") })
+            FolioPanelBackdropSmoke.run(this)
+            result.putString("stream", "PASS: $cases production preview renders; committed frames, latest axes, failure retries; moving panel samples live stripes and refreshes every animation frame\n")
             finish(Activity.RESULT_OK, result)
         } catch (error: Throwable) {
             result.putString("stream", "FAIL: ${error.stackTraceToString()}\n")
             finish(Activity.RESULT_CANCELED, result)
         } finally { files.forEach { it.delete() } }
+    }
+
+    // 直接驱动原生视图，检查后台绘制期间的实际像素与最终参数。
+    @Suppress("DEPRECATION")
+    private fun validateLivePreview(file: File) {
+        lateinit var view: FolioFontPreview
+        lateinit var app: AppContext
+        runOnMainSync {
+            val react = BridgeReactContext(targetContext)
+            app = AppContext(object : ModulesProvider {
+                override fun getModulesMap(): Map<Class<out Module>, String?> = emptyMap()
+            }, expo.modules.core.ModuleRegistry(emptyList(), emptyList()), WeakReference(react))
+            view = FolioFontPreview(react, app)
+            view.layout(0, 0, 600, 600)
+        }
+        fun selection(id: String, weight: Double, size: Double = 36.0) = FolioPreviewSelection().apply {
+            requestId = id; sourcePath = file.path; revisionId = "preview-test"; text = "Folio Preview"
+            fontSize = size; centered = true; wrapWidth = 280.0; foregroundColor = "#FFFFFF"
+            axes = mapOf("wght" to weight)
+        }
+        fun field(name: String): Any? = FolioFontPreview::class.java.getDeclaredField(name).apply { isAccessible = true }.get(view)
+        fun pixels(): IntArray {
+            val bitmap = Bitmap.createBitmap(600, 600, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            val values = IntArray(600 * 600)
+            bitmap.getPixels(values, 0, 600, 0, 0, 600, 600)
+            bitmap.recycle()
+            return values
+        }
+        fun waitFor(predicate: () -> Boolean) {
+            val deadline = SystemClock.uptimeMillis() + 10000
+            while (SystemClock.uptimeMillis() < deadline) {
+                var done = false
+                runOnMainSync { done = predicate() }
+                if (done) return
+                SystemClock.sleep(10)
+            }
+            error("原生预览未提交预期帧")
+        }
+        try {
+            runOnMainSync { view.selection = selection("initial", 400.0); view.renderSelection() }
+            waitFor { (field("committedSelection") as FolioPreviewSelection).requestId == "initial" }
+            runOnMainSync {
+                val initial = pixels()
+                check(initial.any { Color.alpha(it) > 32 })
+                for (index in 0..30) {
+                    view.selection = selection("axis-$index", 400.0 + index * 10)
+                    view.renderSelection()
+                }
+                view.selection = selection("latest", 900.0, 96.0)
+                view.renderSelection()
+                check(initial.contentEquals(pixels())) { "更新期间清空或改变了已提交帧" }
+            }
+            waitFor { (field("committedSelection") as FolioPreviewSelection).requestId == "latest" }
+            runOnMainSync {
+                val committed = field("committedSelection") as FolioPreviewSelection
+                check(committed.axes["wght"] == 900.0 && committed.fontSize == 96.0)
+                check(pixels().any { Color.alpha(it) > 32 })
+                view.selection = selection("invalid", Double.NaN)
+                view.renderSelection()
+            }
+            waitFor { field("rendering") == false && (field("lines") as List<*>).isEmpty() }
+            runOnMainSync { check(pixels().all { Color.alpha(it) == 0 }); view.selection = selection("retry", 500.0); view.renderSelection() }
+            waitFor { (field("committedSelection") as FolioPreviewSelection).requestId == "retry" }
+        } finally {
+            runOnMainSync {
+                FolioFontPreview::class.java.getDeclaredMethod("onDetachedFromWindow").apply { isAccessible = true }.invoke(view)
+                app.javaClass.declaredMethods.first { it.name.startsWith("onDestroy") }.apply { isAccessible = true }.invoke(app)
+            }
+        }
     }
 }

@@ -29,6 +29,7 @@ export const materialPalette = (seed: string, dark: boolean, followWallpaper = f
 export const screenCornerRadius = () => nativeModule.screenCornerRadius();
 
 export interface PreviewSelection {
+  requestId?: string;
   sourcePath: string;
   faceIndex: number;
   revisionId: string;
@@ -41,6 +42,7 @@ export interface PreviewSelection {
 }
 
 export interface PreviewStatus {
+  requestId?: string;
   status: 'ready' | 'missing-glyph' | 'error';
   contentHeight?: number;
 }

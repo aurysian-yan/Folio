@@ -42,6 +42,8 @@ export interface NativeHeaderProps {
 export interface NativeActionProps {
   shadowColor?: string;
   minimumWidth?: number;
+  fullWidth?: boolean;
+  cornerRadius?: number;
   foregroundColor?: string;
   label: string;
   systemImage?: string;

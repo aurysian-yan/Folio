@@ -72,6 +72,7 @@ class FolioImportFile : Record {
 }
 
 class FolioPreviewSelection : Record {
+    @Field var requestId: String? = null
     @Field var sourcePath: String = ""
     @Field var faceIndex: Int = 0
     @Field var revisionId: String = ""

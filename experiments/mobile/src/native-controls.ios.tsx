@@ -253,19 +253,20 @@ export function NativeHeaderControls({ theme, active, mode, width, searchOpen, a
 }
 
 export function NativeActionButton({ label, systemImage, color, onPress, disabled: unavailable,
-  prominent = false, iconOnly = false, diameter = 44, plain = false, minimumWidth, foregroundColor, shadowColor }: NativeActionProps) {
+  prominent = false, iconOnly = false, diameter = 44, plain = false, minimumWidth, foregroundColor, shadowColor, fullWidth = false, cornerRadius }: NativeActionProps) {
   return (
-    <Host matchContents={!iconOnly} style={iconOnly ? { width: diameter, height: diameter } : undefined}>
-      <Button label={iconOnly ? undefined : label} systemImage={systemImage as ButtonProps['systemImage']} onPress={onPress}
+    <Host matchContents={fullWidth ? { vertical: true } : !iconOnly} style={iconOnly ? { width: diameter, height: diameter } : fullWidth ? { width: '100%' } : undefined}>
+      <Button label={iconOnly || fullWidth ? undefined : label} systemImage={systemImage as ButtonProps['systemImage']} onPress={onPress}
         modifiers={iconOnly ? [...iconButtonModifiers(color, diameter, plain, prominent), disabled(!!unavailable),
           opacity(unavailable ? 0.5 : 1), accessibilityLabel(label),
           ...(shadowColor ? [shadow({ radius: 32, y: 2, color: shadowColor })] : [])] : [
           buttonStyle(plain ? 'plain' : glass ? (prominent ? 'glassProminent' : 'glass') : (prominent ? 'borderedProminent' : 'bordered')),
           labelStyle('titleAndIcon'), disabled(!!unavailable),
-          controlSize('large'), buttonBorderShape('capsule'), font({ size: 16, weight: 'semibold' }),
-          frame({ minHeight: toolbarHeight, minWidth: minimumWidth }), tint(color), accessibilityLabel(label),
+          controlSize('large'), cornerRadius === undefined ? buttonBorderShape('capsule') : buttonBorderShape('roundedRectangle', cornerRadius), font({ size: 16, weight: 'semibold' }),
+          frame({ minHeight: toolbarHeight, minWidth: minimumWidth, ...(fullWidth ? { maxWidth: Infinity } : {}) }), tint(color), accessibilityLabel(label),
         ]}>
-        {iconOnly && systemImage ? <Image systemName={systemImage as ButtonProps['systemImage']}
+        {fullWidth && !iconOnly ? (systemImage ? <Label title={label} systemImage={systemImage as ButtonProps['systemImage']}
+          modifiers={[frame({ maxWidth: Infinity })]} /> : <Text modifiers={[frame({ maxWidth: Infinity })]}>{label}</Text>) : iconOnly && systemImage ? <Image systemName={systemImage as ButtonProps['systemImage']}
           size={diameter < toolbarHeight ? 14 : 20} color={foregroundColor ?? color}
           modifiers={[frame({ width: diameter, height: diameter }), contentShape(shapes.circle())]} /> : undefined}
       </Button>

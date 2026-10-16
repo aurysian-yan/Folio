@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, AccessibilityInfo, Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View, type ViewToken } from 'react-native';
+import { ActivityIndicator, AccessibilityInfo, Animated, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View, type ViewToken } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
+import { CharacterGlyphImage } from './CharacterGlyphImage';
+import { characterPreviewCapacity, CharacterPreviewRenderer } from './character-preview';
 import { CharacterMapSession, characterForeground, characterMapError, characterPageSize, characterText, codepointLabel,
   type CharacterEntry, type CharacterGlyph, type CharacterMapInfo, type CharacterPage } from '../../../shared/character-map';
 import type { FontFace, FontFamily } from './library';
@@ -54,8 +55,9 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
   }, [selectionKey, face.id, face.revisionId, source, face.location?.cloudAvailable]);
   const active = loaded?.key === selectionKey ? loaded : null;
   const error = failure?.key === selectionKey ? failure.message : null;
+  const cardBackground = Platform.OS === 'android' ? (theme.dark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.05)') : undefined;
   const controls = <>
-    <SettingsGroup theme={theme}>
+    <SettingsGroup theme={theme} backgroundColor={cardBackground}>
       <FontStylePicker sourceId={header.sourceId} faces={family.faces} selectedFaceId={face.id} theme={theme} onChange={(id) => {
         const next = family.faces.find((item) => item.id === id);
         if (!next) return;
@@ -64,7 +66,7 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
       {sources.length > 0 && <FontChoiceRow sourceId={header.sourceId} label={t('inspector.source')} theme={theme}
         value={source} options={sources} onChange={setSource} />}
     </SettingsGroup>
-    {adjustableAxes(face).length > 0 && <SettingsGroup theme={theme} title={t('inspector.variableAxes')}>
+    {adjustableAxes(face).length > 0 && <SettingsGroup theme={theme} backgroundColor={cardBackground} title={t('inspector.variableAxes')}>
       {adjustableAxes(face).map((axis) => <DetailSlider key={axis.tag} label={axis.name || axis.tag} theme={theme}
         value={axes[axis.tag] ?? axis.defaultValue} minimum={axis.minimum} maximum={axis.maximum} step={axisStep(axis.minimum, axis.maximum)}
         formatValue={formatAxisValue} onChange={(value) => setAxes((values) => ({ ...values, [axis.tag]: value }))} />)}
@@ -99,7 +101,7 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
   const { search, script, offset, retry } = currentQuery;
   function updateQuery(patch: Partial<typeof query>) { setQuery({ ...currentQuery, ...patch }); }
   const [result, setResult] = useState<{ key: string; page: CharacterPage } | null>(null);
-  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
+  const [failure, setFailure] = useState<{ key: string; message: string; render?: boolean } | null>(null);
   const [selection, setSelection] = useState<{ key: string; entry: CharacterEntry } | null>(null);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 24 });
   const queryKey = JSON.stringify([selectionKey, info?.handle, search, script]);
@@ -125,17 +127,28 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
     return () => { current = false; clearTimeout(timer); };
   }, [session, queryKey, requestKey, search, script, offset]);
   const visible = useMemo(() => page?.entries.slice(Math.max(0, visibleRange.start - columns), visibleRange.end + columns) ?? [], [page, visibleRange, columns]);
-  const renderKey = JSON.stringify([queryKey, axes, foreground, visible.map((entry) => entry.glyphId)]);
-  const [images, setImages] = useState<{ key: string; values: CharacterGlyph[] } | null>(null);
+  const renderer = useMemo(() => session ? new CharacterPreviewRenderer(session, characterPreviewCapacity - 1) : null, [session]);
+  useEffect(() => () => renderer?.dispose(), [renderer]);
+  const [images, setImages] = useState<{ renderer: CharacterPreviewRenderer; values: Map<number, CharacterGlyph> } | null>(null);
+  const renderRequest = useMemo(() => ({ glyphIds: [...new Set(visible.map((entry) => entry.glyphId))], axes, foreground, size: 128 }), [visible, axes, foreground]);
   useEffect(() => {
+    if (!renderer || !renderRequest.glyphIds.length) return;
     let current = true;
-    const glyphIds = [...new Set(visible.map((entry) => entry.glyphId))];
-    if (!session || !glyphIds.length) return;
-    session.render({ glyphIds, axes, foreground, size: 128 }).then((values) => { if (current) setImages({ key: renderKey, values }); })
-      .catch((cause) => { if (current) setFailure({ key: requestKey, message: characterMapError(cause) }); });
+    renderer.render(renderRequest).then((values) => {
+      if (!current || !values.length) return;
+      setImages((previous) => {
+        const next = new Map([...(previous?.renderer === renderer ? previous.values : [])].filter(([id]) => renderRequest.glyphIds.includes(id)));
+        for (const image of values) { next.delete(image.glyphId); next.set(image.glyphId, image); }
+        while (next.size > 512) next.delete(next.keys().next().value!);
+        return { renderer, values: next };
+      });
+      const failed = values.find((image) => image.status === 'error');
+      setFailure((previous) => failed ? { key: requestKey, message: failed.error ?? 'characterMap.error.renderFailed', render: true } : previous?.render && previous.key === requestKey ? null : previous);
+    }).catch((cause) => { if (current) setFailure({ key: requestKey, message: characterMapError(cause), render: true }); });
     return () => { current = false; };
-  }, [session, renderKey, requestKey, visible, axes, foreground]);
-  const byGlyph = useMemo(() => new Map((images?.key === renderKey ? images.values : []).map((image) => [image.glyphId, image])), [images, renderKey]);
+  }, [renderer, renderRequest, requestKey]);
+  const byGlyph = new Map(images?.renderer === renderer ? images.values : []);
+  for (const image of renderer?.get(renderRequest) ?? []) byGlyph.set(image.glyphId, image);
   const error = failure?.key === requestKey ? failure.message : null;
   const loading = !page || page.entries.length === offset;
   const loadMore = () => {
@@ -182,7 +195,7 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
             accessibilityRole="button" accessibilityState={{ selected: selected?.codepoint === item.codepoint }}
             accessibilityLabel={t('characterMap.characterLabel', { codepoint: codepointLabel(item.codepoint), glyphId: item.glyphId, script: item.script })}
             onPress={() => setSelection({ key: queryKey, entry: item })}>
-            <Image source={image?.dataUrl ?? undefined} style={styles.cellImage} contentFit="contain" accessible={false} recyclingKey={`${renderKey}:${item.glyphId}`} />
+            <CharacterGlyphImage dataUrl={image?.dataUrl} style={styles.cellImage} identity={`${info?.handle}:${item.glyphId}`} />
             <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{codepointLabel(item.codepoint)}</Text>
             {image?.status === 'error' && <Text style={{ color: theme.danger }}>{t('characterMap.error.renderFailed')}</Text>}
           </Pressable>;
@@ -190,7 +203,7 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
     </NavigationBackdrop>
     <CharacterInspectorSheet theme={theme} sourceId={header.sourceId} topInset={header.contentTop} height={viewport.height}
       controls={controls} onCollapsedHeight={setCollapsedHeight} summary={session && selected ?
-        <CharacterDetail key={`${info?.handle}:${selected.codepoint}:${JSON.stringify(axes)}:${foreground}`}
+        <CharacterDetail key={`${info?.handle}:${selected.codepoint}`}
           session={session} entry={selected} axes={axes} foreground={foreground} theme={theme} /> :
         <View style={styles.emptyDetail}><Text style={[settingsTypography.detail, { color: theme.secondary }]}>
           {t(info || failureContent ? 'characterMap.selectCharacter' : 'common.loading')}
@@ -206,12 +219,14 @@ function CharacterDetail({ session, entry, axes, foreground, theme }: {
   const [image, setImage] = useState<CharacterGlyph | null>(null);
   const [retry, setRetry] = useState(0);
   const [status, setStatus] = useState('');
+  const renderer = useMemo(() => new CharacterPreviewRenderer(session, 1), [session]);
+  useEffect(() => () => renderer.dispose(), [renderer]);
   useEffect(() => {
     let current = true;
-    session.render({ glyphIds: [entry.glyphId], axes, foreground, size: 512 }).then((values) => { if (current) setImage(values[0] ?? null); })
+    renderer.render({ glyphIds: [entry.glyphId], axes, foreground, size: 512 }).then((values) => { if (current && values[0]) setImage(values[0]); })
       .catch((cause) => { if (current) setImage({ glyphId: entry.glyphId, status: 'error', dataUrl: null, error: characterMapError(cause) }); });
     return () => { current = false; };
-  }, [session, entry.glyphId, axes, foreground, retry]);
+  }, [renderer, entry.glyphId, axes, foreground, retry]);
   async function copy(value: string) {
     try { await copyText(value); setStatus(t('common.copied')); AccessibilityInfo.announceForAccessibility(t('common.copied')); }
     catch { setStatus(t('characterMap.error.copyFailed')); }
@@ -219,7 +234,7 @@ function CharacterDetail({ session, entry, axes, foreground, theme }: {
   return <View style={styles.detail}>
     <View style={styles.detailRow}>
       <View style={styles.phoneImage}>
-        {image?.dataUrl && <Image source={image.dataUrl} style={styles.image} contentFit="contain" accessibilityLabel={codepointLabel(entry.codepoint)} />}
+        {image?.dataUrl && <CharacterGlyphImage dataUrl={image.dataUrl} identity={String(entry.glyphId)} style={styles.image} accessibilityLabel={codepointLabel(entry.codepoint)} />}
         {image?.status === 'empty' && <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('characterMap.blankGlyph')}</Text>}
         {image?.status === 'error' && <View><Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(image.error ?? 'characterMap.error.renderFailed')}</Text><PanelAction label={t('common.retry')} theme={theme} onPress={() => setRetry((value) => value + 1)} /></View>}
         {!image && <ActivityIndicator color={theme.accent} />}
@@ -231,8 +246,8 @@ function CharacterDetail({ session, entry, axes, foreground, theme }: {
       </View>
     </View>
     <View style={styles.pager}>
-      <View style={styles.screen}><PanelAction label={t('characterMap.copyCharacter')} theme={theme} onPress={() => { void copy(characterText(entry)); }} /></View>
-      <View style={styles.screen}><PanelAction label={t('characterMap.copyCodepoint')} theme={theme} onPress={() => { void copy(codepointLabel(entry.codepoint)); }} /></View>
+      <View style={styles.screen}><PanelAction label={t('characterMap.copyCharacter')} theme={theme} fullWidth cornerRadius={16} onPress={() => { void copy(characterText(entry)); }} /></View>
+      <View style={styles.screen}><PanelAction label={t('characterMap.copyCodepoint')} theme={theme} fullWidth cornerRadius={16} onPress={() => { void copy(codepointLabel(entry.codepoint)); }} /></View>
     </View>
     {!!status && <Text accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary }]}>{status}</Text>}
   </View>;
@@ -245,7 +260,7 @@ const styles = StyleSheet.create({
   filters: { gap: 8 },
   cell: { ...settingsLayout.control, height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   cellImage: { width: 64, height: 64 },
-  detail: { paddingHorizontal: 16, paddingBottom: 16, gap: 8 },
+  detail: { paddingHorizontal: 8, gap: 8 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: 16 }, detailMeta: { flex: 1, minWidth: 0, gap: 4 },
   codepoint: { ...settingsTypography.body, fontVariant: ['tabular-nums'] },
   phoneImage: { width: 96, height: 96, alignItems: 'center', justifyContent: 'center' }, image: { width: '100%', height: '100%' },

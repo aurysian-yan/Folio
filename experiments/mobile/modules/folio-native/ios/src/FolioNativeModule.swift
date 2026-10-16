@@ -51,6 +51,7 @@ struct FolioImportFile: Record {
 }
 
 struct FolioPreviewSelection: Record {
+    @Field var requestId: String? = nil
     @Field var sourcePath: String = ""
     @Field var faceIndex: Int = 0
     @Field var revisionId: String = ""

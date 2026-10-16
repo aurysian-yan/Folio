@@ -124,20 +124,26 @@ internal class FolioViewBackdrop(private val source: FolioBackdropSourceView) : 
     }
 
     override fun DrawScope.drawBackdrop(density: Density, coordinates: LayoutCoordinates?, layerBlock: (GraphicsLayerScope.() -> Unit)?) {
-        if (Build.VERSION.SDK_INT < 31 || coordinates?.isAttached != true) return
+        if (coordinates?.isAttached != true) return
+        val position = coordinates.positionOnScreen()
+        drawAtScreenPosition(position.x, position.y, density, layerBlock)
+    }
+
+    // 原生父视图的位移动画不触发布局，抽屉直接使用当前屏幕坐标采样。
+    fun DrawScope.drawAtScreenPosition(x: Float, y: Float, density: Density, layerBlock: (GraphicsLayerScope.() -> Unit)?) {
+        if (Build.VERSION.SDK_INT < 31) return
         val content = node ?: return
         if (!content.hasDisplayList()) return
         val canvas = drawContext.canvas.nativeCanvas
         if (!canvas.isHardwareAccelerated) return
-        // 弹层与主窗口共用屏幕坐标，保持背景采样位置一致。
         source.getLocationOnScreen(location)
-        val position = coordinates.positionOnScreen()
+
         withTransform({
             if (layerBlock != null) {
                 inverse.reset()
                 with(inverse) { inverseTransform(density, layerBlock) }
             }
-            translate(location[0] - position.x, location[1] - position.y)
+            translate(location[0] - x, location[1] - y)
         }) { drawContext.canvas.nativeCanvas.drawRenderNode(content) }
     }
 }

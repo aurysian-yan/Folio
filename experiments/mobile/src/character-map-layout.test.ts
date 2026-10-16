@@ -12,7 +12,7 @@ test('窄屏、手机和平板网格包含完整的左右缩进和格间距', ()
 });
 
 test('卡片按摘要高度收起，展开受可用高度限制，极矮窗口不生成重复档位', () => {
-  assert.deepEqual(characterSheetLayout(168, 160, 800, 100, 40), { collapsed: 192, snapPoints: [192, 368] });
+  assert.deepEqual(characterSheetLayout(168, 160, 800, 100, 40), { collapsed: 208, snapPoints: [208, 368] });
   const constrained = characterSheetLayout(168, 900, 800, 100, 40);
   assert.ok(Math.abs(constrained.snapPoints[1]! - 462) < 0.01);
   const compact = characterSheetLayout(200, 900, 300, 100, 40);
