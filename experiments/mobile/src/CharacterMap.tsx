@@ -165,7 +165,8 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
       <TextInput value={search} onChangeText={(value) => { updateQuery({ search: value, offset: 0 }); list.current?.scrollToOffset({ offset: 0, animated: false }); }} accessibilityLabel={t('characterMap.search')}
         placeholder={t('characterMap.search')} placeholderTextColor={theme.secondary} autoCapitalize="none" autoCorrect={false}
         style={[styles.search, settingsTypography.body, { color: theme.label, backgroundColor: theme.surface }]} />
-      <FontChoiceRow sourceId={header.sourceId} label={t('filters.script')} theme={theme} value={script} options={[{ value: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ value: item.name, label: `${item.name} (${item.count})` }))]}
+      <FontChoiceRow sourceId={header.sourceId} label={t('filters.script')} theme={theme} value={script} triggerFeedback={false}
+        options={[{ value: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ value: item.name, label: `${item.name} (${item.count})` }))]}
         onChange={(value) => { updateQuery({ script: value, offset: 0 }); list.current?.scrollToOffset({ offset: 0, animated: false }); }} />
       {error && <View><Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(error)}</Text><PanelAction label={t('common.retry')} theme={theme} onPress={() => updateQuery({ retry: retry + 1 })} /></View>}
     </View>}
@@ -182,7 +183,9 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
       </View>
       {actions}
     </PageHeader>
-    <View style={styles.screen} onLayout={({ nativeEvent }) => setViewport(nativeEvent.layout)}>
+    <View style={styles.screen} onLayout={({ nativeEvent: { layout } }) => {
+      if (layout.width > 0 && layout.height > 0) setViewport(layout);
+    }}>
     <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
       <Animated.FlatList ref={list} key={`${selectionKey}:${columns}`} style={styles.grid}
         ListHeaderComponent={listHeader} onScroll={header.onScroll} scrollEventThrottle={16}
@@ -239,9 +242,9 @@ function CharacterDetail({ session, entry, axes, foreground, theme }: {
   }
   return <View style={styles.detail}>
     <View style={styles.detailRow}>
-      <View style={styles.phoneImage}>
+      <View style={[styles.phoneImage, image?.status === 'empty' && [styles.emptyGlyph, { borderColor: theme.secondary }]]}
+        accessible={image?.status === 'empty'} accessibilityLabel={image?.status === 'empty' ? t('characterMap.blankGlyph') : undefined}>
         {image?.dataUrl && <CharacterGlyphImage dataUrl={image.dataUrl} identity={String(entry.glyphId)} style={styles.image} accessibilityLabel={codepointLabel(entry.codepoint)} />}
-        {image?.status === 'empty' && <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('characterMap.blankGlyph')}</Text>}
         {image?.status === 'error' && <View><Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(image.error ?? 'characterMap.error.renderFailed')}</Text><PanelAction label={t('common.retry')} theme={theme} onPress={() => setRetry((value) => value + 1)} /></View>}
         {!image && <ActivityIndicator color={theme.accent} />}
       </View>
@@ -270,6 +273,7 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: 16 }, detailMeta: { flex: 1, minWidth: 0, gap: 4 },
   codepoint: { ...settingsTypography.body, fontVariant: ['tabular-nums'] },
   phoneImage: { width: 96, height: 96, alignItems: 'center', justifyContent: 'center' }, image: { width: '100%', height: '100%' },
+  emptyGlyph: { borderWidth: 1, borderStyle: 'dashed', borderRadius: settingsLayout.control.borderRadius },
   emptyDetail: { minHeight: 96, padding: 16, alignItems: 'center', justifyContent: 'center' },
   pager: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   search: { ...settingsLayout.control, minHeight: 44, paddingHorizontal: 16, paddingVertical: 12 },

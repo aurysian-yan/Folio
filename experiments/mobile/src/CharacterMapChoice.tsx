@@ -10,6 +10,7 @@ export interface CharacterMapChoiceProps {
   theme: Theme;
   sourceId: string;
   triggerSize?: { width: number; height: number };
+  triggerFeedback?: boolean;
 }
 
 // 通用环境沿用设置页选择控件。

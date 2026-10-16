@@ -43,6 +43,7 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
     var triggerIcon by mutableStateOf("caret")
     var triggerSurface by mutableStateOf(false)
     var triggerTrailing by mutableStateOf(false)
+    var triggerFeedback by mutableStateOf(true)
     var shadowProgress by mutableStateOf(0f)
     var colors by mutableStateOf<FolioViewMenuColors?>(null)
     var labels by mutableStateOf<FolioPresetMenuLabels?>(null)
@@ -78,7 +79,8 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : ExpoView(c
                     triggerBackdrop = if (triggerSurface) backdrop else EmptyNavigationBackdrop,
                     shadowProgress = shadowProgress,
                     onPressedChange = { triggerPressed = it },
-                    showTriggerSurface = triggerSurface) { progress ->
+                    showTriggerSurface = triggerSurface,
+                    triggerFeedback = triggerFeedback) { progress ->
                     if (isActionsTrigger) {
                         val tint = Color(android.graphics.Color.parseColor(if (triggerPressed) palette.buttonPressedLabel else palette.label))
                         val caretTint = Color(android.graphics.Color.parseColor(if (triggerPressed) palette.buttonPressedLabel else palette.secondary))

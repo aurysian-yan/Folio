@@ -25,9 +25,11 @@ import kotlin.math.ceil
 // 直接绘制生产布局，验证大字号、字形上下伸部、空行及卡片缩放。
 class FolioPreviewInstrumentation : Instrumentation() {
     private var pageSmoke = false
+    private var characterMapSmoke = false
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         pageSmoke = arguments?.getString("pageSmoke") == "true"
+        characterMapSmoke = arguments?.getString("characterMapSmoke") == "true"
         start()
     }
 
@@ -35,6 +37,12 @@ class FolioPreviewInstrumentation : Instrumentation() {
         val result = Bundle()
         val files = mutableListOf<File>()
         try {
+            if (characterMapSmoke) {
+                FolioCharacterMapPageSmoke.run(this)
+                result.putString("stream", "PASS: character map trigger, empty preview, collapse scroll and foreground restoration\n")
+                finish(Activity.RESULT_OK, result)
+                return
+            }
             check(Build.VERSION.SDK_INT >= 31)
             val directory = File(targetContext.filesDir, "FolioMobilePoC/fonts").apply { mkdirs() }
             val names = mutableListOf("Lato-Regular.ttf", "SourceSerif4-Regular.otf", "Inter-Variable.ttf")

@@ -354,3 +354,16 @@ Android 按住后白色长拨片淡出，按实际尺寸绘制玻璃胶囊；轨
 验证通过：类型检查、全量 ESLint、70 项 JS 测试、Android arm64 Debug 应用和测试包构建、64 组原生绘制，以及 Pixel 10 实际详情页的连续高度／字号调整。原生回归覆盖延迟字体提交与编辑文字回传后的滚动位置，截图确认顶部首行完整；已更新 Android 模拟器安装包。iOS 仅验证共享代码类型与图标映射，未执行本次原生构建或交互验收。
 
 2026-10-16 重置与字符表偏好：详情页重置移入右上角原生菜单，保留手动预览高度；字符表菜单提供恢复当前字款默认轴值的重置操作，不修改详情页轴值。设置主页增加「继承字体详情可变轴」开关，默认开启并沿用本地偏好持久化，关闭后字符表从字体默认轴值开始。类型检查、全量 ESLint、70 项 JS 测试、921 字段语言校验和 Android Debug 构建通过；Pixel 10 实际页面回归覆盖两处菜单重置、继承开关两种状态及返回详情后轴值保持。iOS 使用共享状态与系统菜单，未执行本次原生构建或交互验收。
+
+## Mobile Character Map Interaction
+
+2026-10-17：Android 脚本入口关闭按压放大、玻璃表层和阴影，保留原生菜单的展开、选择和拖动行为。空字形预览使用主题色圆角虚线框，移除可见的空白字形说明，保留读屏标签。面板收起完成后重建滚动容器，清除手势锁定偏移和惯性；进入后台时保存有效档位，回到前台时重建面板布局，后台位置回调不覆盖恢复状态。页面忽略零尺寸布局，避免临时隐藏使面板高度归零。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| 共享代码 | PASS：`pnpm install --frozen-lockfile`、类型检查、全量 ESLint、70 项 JS 测试、iOS Hermes 导出和 `git diff --check`；没有新增依赖或文案。 |
+| Android 构建 | PASS：原生模块 Kotlin 编译、原生单元测试、arm64 Debug 应用和测试包构建，已更新 Pixel 10 开发包。 |
+| Android 页面 | PASS：浅深色实际 Roboto Flex 字符表；长按脚本的前后像素对比、菜单选择、圆角虚线空字形框；展开后滚动，再通过点击或拖动收起回顶；收起、展开、搜索键盘和吸附动画期间切换后台后恢复面板。 |
+| 验收边界 | iOS 完成共享代码打包，本次未执行 iOS 页面交互或实体设备验收。 |
+
+从 Android 工程目录执行 `./gradlew :folio-native:assembleDebugAndroidTest -PfolioPreviewTest=true -PreactNativeArchitectures=arm64-v8a`，安装测试包后运行 `adb shell am instrument -w -e characterMapSmoke true com.folio.poc.test/com.folio.poc.FolioPreviewInstrumentation`。页面检查需要本地开发服务、包含 Roboto Flex 的字体库和新启动的开发应用。

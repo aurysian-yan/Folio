@@ -69,6 +69,7 @@ class FolioNavigationModule : Module() {
             Prop("triggerIcon") { view: FolioPresetMenuView, value: String -> view.triggerIcon = value }
             Prop("triggerSurface") { view: FolioPresetMenuView, value: Boolean -> view.triggerSurface = value }
             Prop("triggerTrailing") { view: FolioPresetMenuView, value: Boolean -> view.triggerTrailing = value }
+            Prop("triggerFeedback") { view: FolioPresetMenuView, value: Boolean -> view.triggerFeedback = value }
             Prop("shadowProgress") { view: FolioPresetMenuView, value: Float -> view.shadowProgress = value.coerceIn(0f, 1f) }
             Prop("colors") { view: FolioPresetMenuView, value: FolioViewMenuColors -> view.colors = value }
             Prop("labels") { view: FolioPresetMenuView, value: FolioPresetMenuLabels -> view.labels = value }

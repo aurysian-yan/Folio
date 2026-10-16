@@ -446,6 +446,7 @@ internal fun FolioGlassMenu(
     shadowProgress: Float = 0f,
     onPressedChange: (Boolean) -> Unit = {},
     showTriggerSurface: Boolean = true,
+    triggerFeedback: Boolean = true,
     triggerContent: @Composable (Float) -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
@@ -477,8 +478,10 @@ internal fun FolioGlassMenu(
 
     Box(modifier) {
         Row(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - opacity.value.coerceIn(0f, 1f) }
-            .headerButtonSurface(active, dark, colors, triggerBackdrop, shadowProgress, onPressedChange,
+            .then(if (triggerFeedback) Modifier.headerButtonSurface(active, dark, colors, triggerBackdrop, shadowProgress, onPressedChange,
                 showSurface = showTriggerSurface) { onExpandedChange(!expanded) }
+            else Modifier.clickable(enabled = active, interactionSource = remember { MutableInteractionSource() },
+                indication = null, role = Role.Button) { onExpandedChange(!expanded) })
             .semantics {
                 contentDescription = label
                 stateDescription = if (expanded) expandedLabel else collapsedLabel
