@@ -113,7 +113,7 @@ export function SettingsNavRow({ icon, title, detail, value, theme, onPress, las
       {!!detail && <Text numberOfLines={2} style={[styles.rowDetail, { color: theme.secondary }]}>{detail}</Text>}
     </View>
     {value !== undefined && <Text numberOfLines={1} style={[styles.rowValue, { color: theme.secondary }]}>{value}</Text>}
-    <CaretRightIcon size={16} color={theme.muted} />
+    <CaretRightIcon size={16} color={theme.label} />
   </RowShell>;
 }
 

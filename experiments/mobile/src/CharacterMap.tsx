@@ -21,6 +21,8 @@ import { NativeScrollContainer } from './native-controls';
 import { FontChoiceRow, FontStylePicker } from './FontStylePicker';
 import { CharacterInspectorSheet } from './CharacterInspectorSheet';
 import { characterGridLayout, fontSourceOptions } from './character-map-layout';
+import { FontActionsMenu } from './FontActionsMenu';
+import { usePreferences } from './settings';
 
 export function CharacterMap({ family, initialFace, initialAxes, theme, onClose, onDownload, deferClose }: {
   family: FontFamily; initialFace: FontFace; initialAxes: Record<string, number>; theme: Theme;
@@ -28,6 +30,7 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
   deferClose?: (close: () => void) => boolean;
 }) {
   const { t } = useTranslation();
+  const { preferences } = usePreferences();
   const list = useRef<FlatList<CharacterEntry>>(null);
   const header = usePageHeader({ bottomTabs: false,
     onSnap: (offset, animated) => list.current?.scrollToOffset({ offset, animated }) });
@@ -36,7 +39,8 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
   const sources = fontSourceOptions(face, t);
   const [sourcePath, setSource] = useState(initialFace.sourcePath ?? '');
   const source = sourcePath || face.sourcePath || '';
-  const [axes, setAxes] = useState(initialAxes);
+  const [axes, setAxes] = useState(() => preferences.characterMapInheritAxes ? { ...initialAxes } : defaultAxisValues(initialFace));
+  const axesChanged = adjustableAxes(face).some((axis) => (axes[axis.tag] ?? axis.defaultValue) !== axis.defaultValue);
   const [retry, setRetry] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; session: CharacterMapSession; info: CharacterMapInfo } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
@@ -81,15 +85,17 @@ export function CharacterMap({ family, initialFace, initialAxes, theme, onClose,
   return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
     <GestureHandlerRootView style={styles.screen}>
       <CharacterMapContent selectionKey={selectionKey} session={active?.session ?? null} info={active?.info ?? null} axes={axes} theme={theme}
-        title={family.displayName} header={header} controls={controls} list={list} failureContent={failureContent} onClose={onClose} />
+        title={family.displayName} header={header} controls={controls} list={list} failureContent={failureContent} onClose={onClose}
+        actions={<FontActionsMenu theme={theme} sourceId={header.sourceId} resetDisabled={!axesChanged}
+          onReset={() => setAxes(defaultAxisValues(face))} />} />
     </GestureHandlerRootView>
   </SafeAreaView>;
 }
 
-function CharacterMapContent({ selectionKey, session, info, axes, theme, header, controls, list, failureContent, onClose, title }: {
+function CharacterMapContent({ selectionKey, session, info, axes, theme, header, controls, list, failureContent, onClose, title, actions }: {
   selectionKey: string; title: string; session: CharacterMapSession | null; info: CharacterMapInfo | null; axes: Record<string, number>; theme: Theme;
   header: ReturnType<typeof usePageHeader>; controls: ReactNode; list: RefObject<FlatList<CharacterEntry> | null>;
-  failureContent: ReactNode; onClose: () => void;
+  failureContent: ReactNode; onClose: () => void; actions: ReactNode;
 }) {
   const { t } = useTranslation();
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -174,7 +180,7 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
         <Text numberOfLines={1} accessibilityRole="header" style={[settingsTypography.body, { color: theme.label, fontWeight: '600', textAlign: 'center' }]}>{title}</Text>
         <Text numberOfLines={1} accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary, textAlign: 'center' }]}>{info ? t('characterMap.count', { count: page?.total ?? info.count }) : t('common.loading')}</Text>
       </View>
-      <View style={styles.headerSpacer} />
+      {actions}
     </PageHeader>
     <View style={styles.screen} onLayout={({ nativeEvent }) => setViewport(nativeEvent.layout)}>
     <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
@@ -255,7 +261,7 @@ function CharacterDetail({ session, entry, axes, foreground, theme }: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 }, header: { paddingHorizontal: 16 },
-  heading: { flex: 1, minWidth: 0, gap: 2 }, headerSpacer: { width: 44 },
+  heading: { flex: 1, minWidth: 0, gap: 2 },
   grid: { flex: 1 }, gridRow: { gap: 8, marginBottom: 8 }, listHeader: { paddingBottom: 16 },
   filters: { gap: 8 },
   cell: { ...settingsLayout.control, height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },

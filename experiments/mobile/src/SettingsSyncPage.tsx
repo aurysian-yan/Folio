@@ -166,7 +166,7 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
       {key === 'password' && <Pressable accessibilityRole="button" accessibilityLabel={t(passwordVisible ? 'common.hidePassword' : 'common.showPassword')}
         accessibilityState={{ disabled }} disabled={disabled} onPress={() => setPasswordVisible((visible) => !visible)}
         style={({ pressed }) => [styles.passwordToggle, { opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}>
-        {passwordVisible ? <EyeSlashIcon size={20} color={theme.secondary} /> : <EyeIcon size={20} color={theme.secondary} />}
+        {passwordVisible ? <EyeSlashIcon size={20} color={theme.label} /> : <EyeIcon size={20} color={theme.label} />}
       </Pressable>}
     </View>
   </View>;
@@ -197,9 +197,9 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
               if (serverUrl !== profile.serverUrl) setPassword('');
               updateProfile({ serverUrl }); goTo('account');
             }}>
-            <SettingsIcon><CloudIcon size={22} color={theme.accent} /></SettingsIcon>
+            <SettingsIcon><CloudIcon size={22} color={theme.label} /></SettingsIcon>
             <Text style={[styles.providerLabel, { color: theme.label }]}>{t(preset.label)}</Text>
-            <CaretRightIcon size={16} color={theme.muted} />
+            <CaretRightIcon size={16} color={theme.label} />
           </Pressable>)}
           <Pressable accessibilityRole="button" accessibilityLabel={t('cloud.setup.otherProvider')} accessibilityState={{ disabled }}
             disabled={disabled} style={({ pressed }) => [styles.provider, pressed && { backgroundColor: theme.raised }]}
@@ -207,9 +207,9 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
               if (matchingWebdavPreset(profile.serverUrl) !== 'none') { updateProfile({ serverUrl: '' }); setPassword(''); }
               goTo('server');
             }}>
-            <SettingsIcon><FolderIcon size={22} color={theme.secondary} /></SettingsIcon>
+            <SettingsIcon><FolderIcon size={22} color={theme.label} /></SettingsIcon>
             <Text style={[styles.providerLabel, { color: theme.label }]}>{t('cloud.setup.otherProvider')}</Text>
-            <CaretRightIcon size={16} color={theme.muted} />
+            <CaretRightIcon size={16} color={theme.label} />
           </Pressable>
         </SettingsGroup>}
         {currentStep === 'server' && <SettingsGroup theme={theme}>{field('serverUrl', t('cloud.serverURL'))}</SettingsGroup>}
@@ -244,7 +244,7 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
       </Motion.View> : savedProfile && <>
         <SettingsGroup theme={theme} animateLayout footer={expanded ? t('mobile.sync.secureStorage') : undefined}>
           <View style={styles.sourceRow}>
-            <SettingsIcon><CloudIcon size={22} color={theme.accent} /></SettingsIcon>
+            <SettingsIcon><CloudIcon size={22} color={theme.label} /></SettingsIcon>
             <Text numberOfLines={1} style={[styles.sourceTitle, { color: theme.label }]}>{savedProvider}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel={expanded ? primaryTitle : t('cloud.setup.editConnection')}
               accessibilityState={expanded ? { disabled, busy: pendingAction === 'save' } : { disabled, expanded: false }}
@@ -252,14 +252,14 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
               style={({ pressed }) => [styles.connectionAction, expanded && styles.saveAction, { opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}>
               {expanded && <Text style={[styles.saveLabel, { color: theme.accent }]}>{t('common.save')}</Text>}
               {pendingAction === 'save' ? <ActivityIndicator size="small" color={theme.accent} />
-                : expanded ? <CaretUpIcon size={19} color={theme.accent} /> : <CaretRightIcon size={19} color={theme.muted} />}
+                : expanded ? <CaretUpIcon size={19} color={theme.label} /> : <CaretRightIcon size={19} color={theme.label} />}
             </Pressable>
           </View>
           {!expanded && <Motion.View key="account" entering={settingsTransition.entering} exiting={settingsTransition.exiting}
             accessible accessibilityLabel={t('cloud.setup.accountSummary', {
               provider: savedProvider, account: maskedSyncAccount(savedProfile.username) || t('cloud.username'), status: t(connectionStatus),
             })} style={styles.account}>
-            {!!savedProfile.username && <UserCircleIcon size={32} color={theme.secondary} />}
+            {!!savedProfile.username && <UserCircleIcon size={32} color={theme.label} />}
             <View style={styles.accountBody}>
               {!!savedProfile.username && <Text numberOfLines={1} style={[styles.accountTitle, { color: theme.label }]}>{maskedSyncAccount(savedProfile.username)}</Text>}
               <Text style={[styles.accountDetail, { color: theme.secondary }]}>{t(connectionStatus)}</Text>

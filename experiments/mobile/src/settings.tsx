@@ -16,6 +16,7 @@ export interface Preferences {
   defaultViewMode: LibraryMode;
   importShowResults: boolean;
   searchAutoFocus: boolean;
+  characterMapInheritAxes: boolean;
 }
 
 export const defaultPreferences: Preferences = {
@@ -28,6 +29,7 @@ export const defaultPreferences: Preferences = {
   defaultViewMode: 'grid',
   importShowResults: true,
   searchAutoFocus: false,
+  characterMapInheritAxes: true,
 };
 
 // 外观页可选的预览字号，与 FontCard 的基准字号对应。
@@ -58,6 +60,7 @@ function sanitize(raw: unknown): Preferences {
     defaultViewMode: pick(viewModeValues, value.defaultViewMode, defaultPreferences.defaultViewMode),
     searchAutoFocus: typeof value.searchAutoFocus === 'boolean' ? value.searchAutoFocus : defaultPreferences.searchAutoFocus,
     importShowResults: typeof value.importShowResults === 'boolean' ? value.importShowResults : defaultPreferences.importShowResults,
+    characterMapInheritAxes: typeof value.characterMapInheritAxes === 'boolean' ? value.characterMapInheritAxes : defaultPreferences.characterMapInheritAxes,
   };
 }
 

@@ -1,4 +1,4 @@
-import { CloudIcon, CardsIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, MagnifyingGlassIcon, PaintBrushIcon } from './icons';
+import { CloudIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from './icons';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Animated, AppState, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
@@ -7,11 +7,11 @@ import { NativeScrollContainer } from './native-controls';
 import { PageHeader, PageTitle, usePageHeader } from './PageHeader';
 import { storage } from './native';
 import { SettingsGroup, SettingsIcon, SettingsNavRow, formatBytes, settingsLayout, settingsTypography } from './settings-ui';
-import { accentPresets, type Theme } from './ui';
+import type { Theme } from './ui';
 import type { CloudSyncController } from './useCloudSync';
 import { webdavSourceName } from './sync';
 
-export type SettingsPageId = 'sync' | 'storage' | 'cards' | 'appearance' | 'import' | 'search' | 'about';
+export type SettingsPageId = 'sync' | 'storage' | 'appearance' | 'browsing' | 'about';
 
 // 设置主页显示真实概览；进入页面和回到前台时刷新存储用量。
 export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage }: {
@@ -42,15 +42,12 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
     return () => { mounted = false; subscription.remove(); };
   }, [active]);
   const { state, readError } = controller;
-  const mode = theme.dark ? 'dark' : 'light';
   const profile = readError ? null : state?.profile;
   const cloudDetail = readError ? t(readError) : !state ? t('mobile.sync.reading') : t('cloud.notConnected');
   const entries = [
-    { id: 'cards', Icon: CardsIcon, color: accentPresets.purple[mode], title: t('settings.cards'), description: t('mobile.settings.cardsSummary') },
-    { id: 'appearance', Icon: PaintBrushIcon, color: theme.accent, title: t('settings.appearance'), description: t('mobile.settings.appearanceSummary') },
-    { id: 'search', Icon: MagnifyingGlassIcon, color: accentPresets.blue[mode], title: t('common.search'), description: t('mobile.settings.searchSummary') },
-    { id: 'import', Icon: DownloadSimpleIcon, color: accentPresets.green[mode], title: t('settings.importing'), description: t('mobile.settings.importSummary') },
-    { id: 'about', Icon: InfoIcon, color: accentPresets.blue[mode], title: t('settings.about'), description: t('mobile.settings.aboutDescription') },
+    { id: 'appearance', Icon: PaintBrushIcon, title: t('mobile.settings.appearanceAndDisplay'), description: t('mobile.settings.appearanceSummary') },
+    { id: 'browsing', Icon: DownloadSimpleIcon, title: t('mobile.settings.browsingAndImport'), description: t('mobile.settings.browsingSummary') },
+    { id: 'about', Icon: InfoIcon, title: t('settings.about'), description: t('mobile.settings.aboutDescription') },
   ] as const;
 
   return <NativeScrollContainer hasHeader onInsetsChange={header.onInsetsChange}
@@ -66,7 +63,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('sync')}
         style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
         <View style={styles.cardHeader}>
-          <SettingsIcon><CloudIcon size={22} color={accentPresets.blue[mode]} /></SettingsIcon>
+          <SettingsIcon><CloudIcon size={22} color={theme.label} /></SettingsIcon>
           <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.cloud')}</Text>
         </View>
         <View style={styles.cardBody}>
@@ -83,7 +80,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('storage')}
         style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
         <View style={styles.cardHeader}>
-          <SettingsIcon><DatabaseIcon size={22} color={theme.accent} /></SettingsIcon>
+          <SettingsIcon><DatabaseIcon size={22} color={theme.label} /></SettingsIcon>
           <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.storage')}</Text>
         </View>
         <View style={styles.cardBody}>
@@ -97,12 +94,11 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
         </View>
       </Pressable>
     </View>
-    {[entries.slice(0, 2), entries.slice(2)].map((group, index) => <SettingsGroup key={index} theme={theme}
-      title={index === 0 ? t('settings.display') : undefined}>
-      {group.map(({ id, Icon, color, title, description }, row) => <SettingsNavRow key={id} theme={theme}
-        icon={<SettingsIcon><Icon size={22} color={color} /></SettingsIcon>}
-        title={title} detail={description} onPress={() => onOpenPage(id)} last={row === group.length - 1} />)}
-    </SettingsGroup>)}
+    <SettingsGroup theme={theme}>
+      {entries.map(({ id, Icon, title, description }, row) => <SettingsNavRow key={id} theme={theme}
+        icon={<SettingsIcon><Icon size={22} color={theme.label} /></SettingsIcon>}
+        title={title} detail={description} onPress={() => onOpenPage(id)} last={row === entries.length - 1} />)}
+    </SettingsGroup>
     </Animated.ScrollView>
     </NavigationBackdrop>
   </NativeScrollContainer>;

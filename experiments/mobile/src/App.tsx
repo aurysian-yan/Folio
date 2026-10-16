@@ -33,9 +33,7 @@ import {
 import { PreferencesProvider, usePreferences } from './settings';
 import { SettingsAboutPage } from './SettingsAboutPage';
 import { SettingsAppearancePage } from './SettingsAppearancePage';
-import { SettingsCardsPage } from './SettingsCardsPage';
-import { SettingsImportPage } from './SettingsImportPage';
-import { SettingsSearchPage } from './SettingsSearchPage';
+import { SettingsBrowsingPage } from './SettingsBrowsingPage';
 import { SettingsScreen, type SettingsPageId } from './SettingsScreen';
 import { SettingsSyncPage } from './SettingsSyncPage';
 import { CloudScreen } from './CloudScreen';
@@ -442,10 +440,8 @@ function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => voi
   switch (page) {
     case 'sync': return <SettingsSyncPage theme={theme} onClose={onClose} controller={controller} />;
     case 'storage': return <SettingsStoragePage theme={theme} onClose={onClose} />;
-    case 'cards': return <SettingsCardsPage theme={theme} onClose={onClose} />;
     case 'appearance': return <SettingsAppearancePage theme={theme} onClose={onClose} />;
-    case 'search': return <SettingsSearchPage theme={theme} onClose={onClose} />;
-    case 'import': return <SettingsImportPage theme={theme} onClose={onClose} />;
+    case 'browsing': return <SettingsBrowsingPage theme={theme} onClose={onClose} />;
     case 'about': return <SettingsAboutPage theme={theme} onClose={onClose} />;
   }
 }
