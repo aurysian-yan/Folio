@@ -1,5 +1,29 @@
 # Folio 版本与发布
 
+## Sponsorship Planning
+
+2026-10-17 新增 [官方 Release 赞助计划](sponsor-release-plan.md)，当前尚未实施。
+后续官方构建的多 WebDAV、局域网多设备同步和目录监听／热重载需赞助解锁；
+基础字体管理、单 WebDAV（含多设备）、冲突／删除恢复与导出继续免费。
+自行编译默认开放全部已实现功能，优化 release 构建同样无需凭证。
+
+实施时官方工作流必须显式选择 `official` 渠道，普通本地构建默认 `community`；
+不得以优化级别或 Android 发布签名决定权益。各平台产物加入渠道一致性检查，
+验签公钥可随包发布，赞助签发私钥与 Android 签名私钥分别管理。
+既有版本、清单和签名流程在实施前保持原行为；按 S0–S3 与各功能验收门槛接入，
+不把规划中的能力写作当前 Release 权益。多端同步协议及迁移见
+[同步架构](sync-architecture.md)。
+
+## Product Workflow Release Gates
+
+按 [Roadmap](../FOLIO_ROADMAP.md) B0／B／E／F1／F2 分平台增加产品验收：独立
+安装窗口及 Library 并行使用、Reference／Managed Copy 与删除保护、六种动作、
+批量结果／Retry／Export、Font Health、Provider／Picker／Files／Share，以及交付
+后的 WOFF／WOFF2 管理／预览／同步。File Provider 和 Share Extension 按采用 ADR
+单独验收，不能以 Files 导出替代。现有 Release pipeline、安装包矩阵、签名和清单
+规则保持；本轮不改工作流代码，不把打包成功视为产品闭环完成。契约见
+[产品工作流架构](product-workflows.md)。
+
 ## 版本管理
 
 仓库版本以根目录 `Cargo.toml` 的 `[workspace.package].version` 为准。使用

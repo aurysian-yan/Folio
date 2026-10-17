@@ -1,5 +1,26 @@
 # Folio architecture
 
+## Current Product Workflow Contract
+
+2026-10-17：本文后续 Phase 分段保留其历史审计范围，不能作为当前全仓库完成度。
+当前执行顺序见 [Roadmap](../FOLIO_ROADMAP.md)，来源／操作／平台文件服务／健康／
+产品 v2 格式契约见 [产品工作流架构](product-workflows.md)，多 WebDAV／LAN 及兼容
+迁移见 [同步架构](sync-architecture.md)。本轮仅更新文档，未实现以下工作流。
+
+- Reference、Managed Copy、临时 Activate 与持久 Install 是独立维度；Collect +
+  Activate 分步记结果，Export 不改变来源。同步、离线、移除引用、清理和 tombstone／
+  restore 不能删除外部原件或改写来源所有权。
+- 桌面字体安装及批量分析／结果必须由独立窗口承载：macOS SwiftUI Window／
+  WindowGroup，Windows／Linux Tauri WebviewWindow；Library 继续可用。当前
+  macOS ImportReport Sheet 是待迁出的实现，不满足交付契约。
+- RN + Expo 继续作为移动共享应用层主要候选，平台原生组件经 Expo Native Module
+  接入。DocumentsProvider／Share／File Provider 的原生服务或独立扩展不依赖
+  RN JS runtime；跨进程文件、数据库与安全凭据边界由 D/E 的 ADR 固定。
+- Font Health 是已有检测基础上的正式 PARTIAL 能力；坏文件无 Face 也需明细，
+  离线／无权限／不支持与损坏分开。Tauri 损坏计数置零是缺口，不代表字体均正常。
+- WOFF／WOFF2 在产品 v2 交付识别、Metadata、管理、Preview、Search、Collections、
+  Sync；原始容器与解码缓存分开，管理能力不承诺 OS 直接安装。
+
 Status: Rust Font Catalog Core (Phase 1B) plus **Phase 2A — Persistent &
 Incremental Catalog**. Verification and remaining limits are recorded in
 [PHASE1_AUDIT.md](../PHASE1_AUDIT.md) and
