@@ -7,8 +7,9 @@ import { characterMap } from '../api';
 import { StrictMode } from 'react';
 import type { ClaralightSliderProps } from './ClaralightSlider';
 
+// 测试视口为 400px 宽，网格固定四列；方形卡片约 94px，行步长包含 8px 间距。
 const gridBottom = (count: number) => {
-  return Math.ceil(count / 4) * 96 - 400;
+  return Math.ceil(count / 4) * 102 - 400;
 };
 
 vi.mock('./ClaralightSlider', () => ({ ClaralightSlider: ({ value, min, max, onValueChange, onValueChangeStart, onValueChangeEnd, 'aria-label': label }: ClaralightSliderProps) =>

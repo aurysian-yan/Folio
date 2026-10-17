@@ -4,11 +4,13 @@ import { locallyAvailable, locationFilters, locationLabel, transferLabel } from 
 import { removeCloudDownload, setFontUploadExcluded, revealFontSource, getAutomaticDownload, setAutomaticDownload, deleteCloudFont } from "./api";
 import {
   ArrowClockwiseIcon,
+  CaretDownIcon,
   CheckIcon,
   CloudCheckIcon,
   CloudIcon,
   CopyIcon,
   CopySimpleIcon,
+  FolderOpenIcon,
   FolderPlusIcon,
   GearSixIcon,
   GridFourIcon,
@@ -741,7 +743,6 @@ export default function App() {
   const [characterMapTarget, setCharacterMapTarget] = useState<{ family: FamilyDto; style: NonNullable<ReturnType<typeof currentPreviewStyle>> } | null>(null);
   const [characterLeftHost, setCharacterLeftHost] = useState<HTMLDivElement | null>(null);
   const [characterRightHost, setCharacterRightHost] = useState<HTMLDivElement | null>(null);
-  const [characterToolbarHost, setCharacterToolbarHost] = useState<HTMLDivElement | null>(null);
   const [characterMapLeaving, setCharacterMapLeaving] = useState(false);
   const characterReturn = useRef<{ focus: HTMLElement | null; left: boolean; right: boolean } | null>(null);
   const characterExitTimer = useRef(0);
@@ -1962,7 +1963,6 @@ export default function App() {
       onCollectionMembershipChange={
         updateSelectedCollectionMembership
       }
-      onClose={() => style ? setLeftSidebarOpen(false) : setRightSidebarOpen(false)}
     />
   );
 
@@ -2173,7 +2173,6 @@ export default function App() {
           </Toolbar>
           <div className="titlebar-drag-space" aria-hidden="true" />
         </div>}
-        {!settingsWindow && <div ref={setCharacterToolbarHost} className="character-map-toolbar" hidden={!characterMapTarget} />}
         {menuMode && !settingsWindow && <div className="titlebar-drag-space" aria-hidden="true" />}
         {settingsWindow && (
           <SegmentedTabs
@@ -3114,7 +3113,7 @@ export default function App() {
               autoSelectFirstNonEmpty={characterMapAutoSelectFirstNonEmpty}
               initialStyle={characterMapTarget.style} onClose={closeCharacterMap}
               onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
-              leftHost={characterLeftHost} rightHost={characterRightHost} toolbarHost={characterToolbarHost}
+              leftHost={characterLeftHost} rightHost={characterRightHost}
               renderInspector={(style, controls) => renderInspector(page?.families.find((family) => family.id === characterMapTarget.family.id) ?? characterMapTarget.family, style, controls)} />}
 
           </section>
@@ -3788,7 +3787,6 @@ function Inspector({
   collectionTargetId,
   onCollectionTargetChange,
   onCollectionMembershipChange,
-  onClose,
   onDownload,
   onFileAction,
   onOpenCharacterMap,
@@ -3808,37 +3806,61 @@ function Inspector({
   collectionTargetId: string;
   onCollectionTargetChange: (id: string) => void;
   onCollectionMembershipChange: (member: boolean) => void;
-  onClose: () => void;
   onDownload: (fingerprint: string) => void;
   onFileAction: (fingerprint: string,action: "remove" | "exclude" | "include") => void;
 }) {
   const { t } = useTranslation();
   const style = currentStyle ?? currentPreviewStyle(family, styleKey);
   const face = style?.face;
+  const sourcePath = face?.sources[0]?.path;
   const [sourceMessage, setSourceMessage] = useState("");
+  const disclosure = (title: string) => (
+    <summary>
+      <span>{title}</span>
+      <CaretDownIcon className="inspector-chevron" aria-hidden="true" />
+    </summary>
+  );
   return (
     <section className="inspector-panel" aria-label={t("inspector.title")}>
-      <button
-        className="inspector-close"
-        aria-label={t("inspector.close")}
-        onClick={onClose}
-      >
-        <XIcon />
-      </button>
-      <h2>{family.displayName}</h2>
-      <p className="inspector-style">
-        {style?.name ?? t("font.regular")} <span>·</span> {face?.format ?? t("font.font")} <span>·</span> {t("macos.stylesCount", { count: family.faces.length })}
-      </p>
-      {style && onOpenCharacterMap && <Button variant="secondary" onPress={() => onOpenCharacterMap(style)}>{t("characterMap.open")}</Button>}
-      {controls}
+      <header className="inspector-header">
+        <div className="inspector-title-block">
+          <h2>{family.displayName}</h2>
+          <p className="inspector-style">
+            {style?.name ?? t("font.regular")} <span>·</span> {face?.format ?? t("font.font")} <span>·</span> {t("macos.stylesCount", { count: family.faces.length })}
+          </p>
+        </div>
+      </header>
+      {(sourcePath || (style && onOpenCharacterMap)) && (
+        <div className="inspector-actions">
+          {sourcePath && (
+            <Button
+              isIconOnly
+              size="sm"
+              variant="secondary"
+              className="inspector-action-icon"
+              aria-label={t("inspector.showInFinder")}
+              onPress={() => void revealFontSource(sourcePath).catch((cause) => setSourceMessage(errorMessage(cause)))}
+            >
+              <FolderOpenIcon />
+            </Button>
+          )}
+          {style && onOpenCharacterMap && (
+            <Button variant="secondary" className="inspector-open-map" onPress={() => onOpenCharacterMap(style)}>
+              {t("characterMap.open")}
+            </Button>
+          )}
+        </div>
+      )}
+      {sourceMessage && <p className="inspector-action-status" role="status">{sourceMessage}</p>}
       <details className="inspector-section" open>
-        <summary>{t("common.preview")}</summary>
+        {disclosure(t("common.preview"))}
         <div className="inspector-preview" style={{ backgroundColor: backgroundColor ?? undefined }}>
           {!face || locallyAvailable(face) ? <FontPreview style={style} text={previewText} size={previewSize} color={textColor} lines={6} align="left" priority="selected" label={t("desktop.previewLabelShort", { name: family.displayName, style: style?.name ?? t("font.regular") })} /> : <p>{t("fontLocation.previewHint")}</p>}
         </div>
       </details>
+      {controls}
       <details className="inspector-section" open>
-        <summary>{t("fontLocation.title")}</summary>
+        {disclosure(t("fontLocation.title"))}
         <p>{locationLabel(family.faces,face,t)}</p>
         {face?.location?.cloudConfirmedAtMs && <p>{t("fontLocation.lastConfirmed",{date:new Date(face.location.cloudConfirmedAtMs).toLocaleString()})}</p>}
         {face?.location?.files.map((file) => <div key={file.fingerprint}>
@@ -3858,7 +3880,7 @@ function Inspector({
         </div>
       )}
       <details className="inspector-section" open>
-        <summary>{t("inspector.copyAs")}</summary>
+        {disclosure(t("inspector.copyAs"))}
         <div className="inspector-copy-list">
           <CopyButton identity={family.id} size="sm" className="w-full h-auto" value={`font-family: "${family.displayName}";`} label="CSS" icon={<CopyIcon />} />
           <CopyButton identity={family.id} size="sm" className="w-full h-auto" value={`@font-face {\n  font-family: "${family.displayName}";\n  src: url("${face?.sources[0]?.path.split(/[\\/]/).pop() ?? "font-file"}");\n}`} label="CSS font-face" icon={<CopyIcon />} />
@@ -3866,10 +3888,9 @@ function Inspector({
           <CopyButton identity={family.id} size="sm" className="w-full h-auto" value={family.displayName} label={t("font.familyName")} icon={<CopyIcon />} />
           {face?.postscriptName && <CopyButton identity={`${family.id}:${face.id}`} size="sm" className="w-full h-auto" value={face.postscriptName} label={t("font.postScriptName")} icon={<CopyIcon />} />}
         </div>
-        {sourceMessage && <span className="inspector-copy-status" role="status">{sourceMessage}</span>}
       </details>
       <details className="inspector-section" open>
-        <summary>{t("inspector.information")}</summary>
+        {disclosure(t("inspector.information"))}
         <dl>
           <dt>{t("font.styles")}</dt><dd>{family.faces.length}</dd>
           <dt>{t("font.format")}</dt><dd>{face?.format ?? "—"}</dd>

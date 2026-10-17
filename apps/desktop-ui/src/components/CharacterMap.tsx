@@ -1,5 +1,5 @@
 import { Button, Card, Input, Label, ListBox, SearchField, Select, Toolbar } from '@heroui/react';
-import { CopyIcon, HashIcon } from '@phosphor-icons/react';
+import { CaretLeftIcon, CopyIcon, HashIcon } from '@phosphor-icons/react';
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -12,10 +12,15 @@ import type { FamilyDto } from '../types';
 import { CopyButton } from './CopyButton';
 import { ClaralightSlider } from './ClaralightSlider';
 
-export function CharacterMap({ family, initialStyle, onClose, onDownload, leftHost, rightHost, toolbarHost, renderInspector, autoSelectFirstNonEmpty = true }: {
+// 字符网格与 CSS 共用同一组几何参数，虚拟化步长包含行列间距。
+const characterCellMinimum = 88;
+const characterCellGap = 8;
+const characterCellFallback = 96;
+
+export function CharacterMap({ family, initialStyle, onClose, onDownload, leftHost, rightHost, renderInspector, autoSelectFirstNonEmpty = true }: {
   autoSelectFirstNonEmpty?: boolean;
   family: FamilyDto; initialStyle: PreviewStyle; onClose: () => void; onDownload: (fingerprint: string) => void;
-  leftHost?: HTMLElement | null; rightHost?: HTMLElement | null; toolbarHost?: HTMLElement | null;
+  leftHost?: HTMLElement | null; rightHost?: HTMLElement | null;
   renderInspector?: (style: PreviewStyle, controls: ReactNode) => ReactNode;
 }) {
   const { t } = useTranslation();
@@ -50,36 +55,41 @@ export function CharacterMap({ family, initialStyle, onClose, onDownload, leftHo
   const failure = error?.key === selectionKey ? error.message : null;
   const [count, setCount] = useState<{ handle: string; total: number } | null>(null);
   const controls = <div className="character-map-controls">
-          <div className="flex flex-col gap-4">
-            <MapSelect label={t('font.styles')} value={style.key} options={styles.map((item) => ({ id: item.key, label: item.name }))} onChange={(key) => {
-              const next = styles.find((item) => item.key === key)!;
-              setStyle(next); setSource(next.face.sources[0]?.path ?? ''); editing.current = false; setAdjusting(false); updateAxes(next.coordinates);
-            }} />
-            {sources.length > 0 && <MapSelect label={t('inspector.source')} value={source} options={sources.map((item) => ({ id: item.path, label: item.path }))} onChange={setSource} />}
-          </div>
-          {face.variableAxes.length > 0 && <div className="flex flex-col gap-4">
-            {face.variableAxes.filter((axis) => axis.maxValue > axis.minValue).map((axis) => <label key={axis.tag} className="flex flex-col gap-2">
-              <span>{axis.tag} {axes[axis.tag] ?? axis.defaultValue}</span>
-              <ClaralightSlider aria-label={axis.tag} className="flex-1" min={axis.minValue} max={axis.maxValue}
-                step={(axis.maxValue - axis.minValue) / 1000} value={axes[axis.tag] ?? axis.defaultValue}
-                onValueChangeStart={() => { editing.current = true; setAdjusting(true); }}
-                onValueChangeEnd={(value) => { editing.current = false; setAdjusting(false); setCommittedAxes({ ...axes, [axis.tag]: value }); }}
-                onValueChange={(value) => updateAxes({ ...axes, [axis.tag]: value })} />
-            </label>)}
-          </div>}
+    <div className="character-map-control-group">
+      <MapSelect label={t('font.styles')} value={style.key} options={styles.map((item) => ({ id: item.key, label: item.name }))} onChange={(key) => {
+        const next = styles.find((item) => item.key === key)!;
+        setStyle(next); setSource(next.face.sources[0]?.path ?? ''); editing.current = false; setAdjusting(false); updateAxes(next.coordinates);
+      }} />
+      {sources.length > 0 && <MapSelect label={t('inspector.source')} value={source} options={sources.map((item) => ({ id: item.path, label: item.path }))} onChange={setSource} />}
+    </div>
+    {face.variableAxes.filter((axis) => axis.maxValue > axis.minValue).length > 0 && <div className="character-map-control-group character-map-axes">
+      {face.variableAxes.filter((axis) => axis.maxValue > axis.minValue).map((axis) => <label key={axis.tag} className="character-map-axis">
+        <span className="character-map-axis-heading">
+          <span>{axis.tag}</span>
+          <span>{axes[axis.tag] ?? axis.defaultValue}</span>
+        </span>
+        <ClaralightSlider aria-label={axis.tag} className="flex-1" min={axis.minValue} max={axis.maxValue}
+          step={(axis.maxValue - axis.minValue) / 1000} value={axes[axis.tag] ?? axis.defaultValue}
+          onValueChangeStart={() => { editing.current = true; setAdjusting(true); }}
+          onValueChangeEnd={(value) => { editing.current = false; setAdjusting(false); setCommittedAxes({ ...axes, [axis.tag]: value }); }}
+          onValueChange={(value) => updateAxes({ ...axes, [axis.tag]: value })} />
+      </label>)}
+    </div>}
   </div>;
   const inspector = renderInspector?.({ ...style, face: { ...face, sources: sources.filter((item) => item.path === source) }, coordinates: axes }, controls) ?? controls;
-  const heading = <header className="character-map-heading flex items-center gap-4">
-    <Button autoFocus variant="secondary" onPress={onClose}>{t('common.back')}</Button>
-    <div className="min-w-0 flex flex-col">
-      <h1 className="text-lg font-semibold">{family.displayName}</h1>
-      <p className="text-sm text-muted" role="status">{active ? t('characterMap.count', { count: count?.handle === active.info.handle ? count.total : active.info.count }) : t('common.loading')}</p>
+  const heading = <header className="character-map-header">
+    <Button autoFocus isIconOnly variant="tertiary" className="character-map-back" aria-label={t('common.back')} onPress={onClose}>
+      <CaretLeftIcon aria-hidden="true" />
+    </Button>
+    <div className="character-map-heading">
+      <h1>{family.displayName}</h1>
+      <p role="status">{active ? t('characterMap.count', { count: count?.handle === active.info.handle ? count.total : active.info.count }) : t('common.loading')}</p>
     </div>
   </header>;
   return <section className="character-map-page" aria-label={t('characterMap.title')} onKeyDown={(event) => {
     if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('[role="listbox"], [role="menu"]')) { event.preventDefault(); onClose(); }
   }}>
-    {toolbarHost ? createPortal(heading, toolbarHost) : heading}
+    {heading}
     {leftHost ? createPortal(inspector, leftHost) : inspector}
     {failure ? <div role="alert" className="flex flex-wrap items-center gap-4"><p>{t(failure)}</p>
       <Button onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button>
@@ -166,36 +176,38 @@ function CharacterMapContent({ session, info, axes, committedAxes, axisDefaults,
   const loadMore = useCallback(() => {
     if (page && !loading && !error && page.entries.length < page.total) setOffset(page.entries.length);
   }, [page, loading, error]);
-  const detail = <aside className="character-map-detail flex w-full flex-col gap-4" aria-label={t('characterMap.title')}>
+  const detail = <aside className="character-map-detail" aria-label={t('characterMap.title')}>
         {selected && page ? <>
-          <div className="relative min-h-32 flex-1">
+          <div className="character-map-detail-glyph">
             <GlyphPreview key={selected.codepoint} renderer={renderer} channel="detail" priority={3} entry={selected} axes={axes} foreground={foreground} size={512} />
           </div>
-          <footer className="flex shrink-0 flex-col gap-4">
-            <dl className="flex min-w-0 flex-col gap-1 text-sm">
-              <div className="flex flex-wrap items-baseline gap-x-2">
-                <dt className="sr-only">{t('characterMap.codepoint')}</dt><dd className="font-mono">{codepointLabel(selected.codepoint)}</dd>
-                <dt className="sr-only">{t('filters.script')}</dt><dd className="min-w-0 break-words text-muted">{selected.script}</dd>
+          <footer className="character-map-detail-meta">
+            <dl className="character-map-character-info">
+              <div className="character-map-codepoint">
+                <dt className="sr-only">{t('characterMap.codepoint')}</dt><dd>{codepointLabel(selected.codepoint)}</dd>
+                <dt className="sr-only">{t('filters.script')}</dt><dd className="character-map-script">{selected.script}</dd>
               </div>
-              <div className="flex flex-wrap gap-x-2 text-xs text-muted">
-                <dt>{t('characterMap.glyphId')}</dt><dd className="font-mono">{selected.glyphId}</dd>
+              <div className="character-map-glyph-id">
+                <dt>{t('characterMap.glyphId')}</dt><dd>{selected.glyphId}</dd>
               </div>
             </dl>
-            <Toolbar className="grid grid-cols-2 gap-2" aria-label={t('characterMap.title')}>
-              <CopyButton size="sm" variant="ghost" vertical className="h-auto min-w-0 py-2 whitespace-normal" identity={`${info.handle}:${selected.codepoint}`} value={characterText(selected)} label={t('characterMap.copyCharacter')} icon={<CopyIcon className="size-5" />} errorKey="characterMap.error.copyFailed" />
-              <CopyButton size="sm" variant="ghost" vertical className="h-auto min-w-0 py-2 whitespace-normal" identity={`${info.handle}:${selected.codepoint}`} value={codepointLabel(selected.codepoint)} label={t('characterMap.copyCodepoint')} icon={<HashIcon className="size-5" />} errorKey="characterMap.error.copyFailed" />
+            <Toolbar className="character-map-copy-actions" aria-label={t('characterMap.title')}>
+              <CopyButton size="sm" variant="ghost" vertical className="character-map-copy-button" identity={`${info.handle}:${selected.codepoint}`} value={characterText(selected)} label={t('characterMap.copyCharacter')} icon={<CopyIcon className="size-5" />} errorKey="characterMap.error.copyFailed" />
+              <CopyButton size="sm" variant="ghost" vertical className="character-map-copy-button" identity={`${info.handle}:${selected.codepoint}`} value={codepointLabel(selected.codepoint)} label={t('characterMap.copyCodepoint')} icon={<HashIcon className="size-5" />} errorKey="characterMap.error.copyFailed" />
             </Toolbar>
           </footer>
-        </> : <p className="flex flex-1 items-center justify-center text-sm text-muted">{t('characterMap.selectCharacter')}</p>}
+        </> : <p className="character-map-detail-empty">{t('characterMap.selectCharacter')}</p>}
       </aside>;
   return <div ref={root} className="character-map-content">
     {rightHost && createPortal(detail, rightHost)}
-    <div className="flex flex-wrap items-center gap-4">
-      <SearchField aria-label={t('characterMap.search')} value={search} onChange={(value) => { setSearch(value); setOffset(0); }}>
+    <div className="character-map-filters">
+      <SearchField className="character-map-search" aria-label={t('characterMap.search')} value={search} onChange={(value) => { setSearch(value); setOffset(0); }}>
         <Input placeholder={t('characterMap.search')} />
       </SearchField>
-      <MapSelect label={t('filters.script')} value={script} options={[{ id: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ id: item.name, label: `${item.name} (${item.count})` }))]}
-        onChange={(value) => { setScript(value); setOffset(0); }} />
+      <div className="character-map-script-filter">
+        <MapSelect label={t('filters.script')} value={script} options={[{ id: '', label: t('characterMap.allScripts') }, ...info.scripts.map((item) => ({ id: item.name, label: `${item.name} (${item.count})` }))]}
+          onChange={(value) => { setScript(value); setOffset(0); }} />
+      </div>
     </div>
     {error && <div role="alert" className="flex items-center gap-4"><p>{t(error)}</p><Button onPress={() => setRetry((value) => value + 1)}>{t('common.retry')}</Button></div>}
     <div className="character-map-panels" data-external-details={!!rightHost}>
@@ -212,9 +224,9 @@ function CharacterGrid({ entries, selected, onSelect, renderer, axes, committedA
 }) {
   const { t } = useTranslation();
   const root = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ width: 0, height: 0, top: 0, stride: 96 });
+  const [viewport, setViewport] = useState({ width: 0, height: 0, top: 0, stride: characterCellFallback + characterCellGap });
   const { stride } = viewport;
-  const columns = Math.max(1, Math.floor(viewport.width / stride));
+  const columns = Math.max(1, Math.floor((viewport.width + characterCellGap) / (characterCellMinimum + characterCellGap)));
   useEffect(() => {
     if (viewport.height > 0 && viewport.top + viewport.height + stride * 2 >= Math.ceil(entries.length / columns) * stride) onLoadMore();
   }, [viewport, entries.length, columns, stride, onLoadMore]);
@@ -230,9 +242,10 @@ function CharacterGrid({ entries, selected, onSelect, renderer, axes, committedA
     const element = root.current;
     if (!element) return;
     const measure = () => {
-      const cell = element.querySelector<HTMLElement>('.character-map-cell');
-      setViewport((value) => ({ ...value, width: element.clientWidth, height: element.clientHeight,
-        stride: cell ? parseFloat(getComputedStyle(cell).height) || 96 : 96 }));
+      const width = element.clientWidth;
+      const columns = Math.max(1, Math.floor((width + characterCellGap) / (characterCellMinimum + characterCellGap)));
+      const cellSize = width > 0 ? (width - (columns - 1) * characterCellGap) / columns : characterCellFallback;
+      setViewport((value) => ({ ...value, width, height: element.clientHeight, stride: cellSize + characterCellGap }));
     };
     measure(); const observer = new ResizeObserver(measure); observer.observe(element);
     return () => observer.disconnect();
@@ -277,8 +290,8 @@ function CharacterGrid({ entries, selected, onSelect, renderer, axes, committedA
   return <div ref={root} className="character-map-grid" role="group" aria-label={t('characterMap.title')} onKeyDown={move}
     onScroll={(event) => { const top = event.currentTarget.scrollTop; setViewport((value) => ({ ...value, top })); }}>
     {!entries.length && <p>{t('characterMap.empty')}</p>}
-    <div style={{ height: Math.ceil(entries.length / columns) * stride, position: 'relative' }}>
-      <div style={{ position: 'absolute', top: first * stride, width: '100%', display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+    <div style={{ height: Math.max(0, Math.ceil(entries.length / columns) * stride - characterCellGap), position: 'relative' }}>
+      <div className="character-map-grid-rows" style={{ top: first * stride, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {visible.map((entry) => {
           const image = selected?.codepoint === entry.codepoint ? selectedImage.image ?? byGlyph.get(entry.glyphId) : byGlyph.get(entry.glyphId);
           return <Card key={entry.codepoint} variant="secondary" data-mode="compact" className={`font-card character-map-cell${selected?.codepoint === entry.codepoint ? ' selected' : ''}`}>

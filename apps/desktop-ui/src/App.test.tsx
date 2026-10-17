@@ -385,6 +385,8 @@ it("双击进入三栏字符表，返回恢复父级滚动、侧栏与焦点", a
   await waitFor(() => expect(characterMap.open).toHaveBeenCalledWith(expect.objectContaining({ faceId: '0' })));
   await waitFor(() => expect(container.querySelector('#right-sidebar .character-map-detail')?.textContent).toContain('U+0041'));
   expect(queryByRole('dialog')).toBeNull();
+  expect(container.querySelector('.character-map-page .character-map-back')).not.toBeNull();
+  expect(container.querySelector('.titlebar .character-map-header')).toBeNull();
   expect(container.querySelector('#left-sidebar .inspector-panel')?.textContent).toContain('字体 0');
   expect(container.querySelector('.library-primary')?.getAttribute('aria-hidden')).toBe('true');
   expect(scroll.isConnected).toBe(true);
