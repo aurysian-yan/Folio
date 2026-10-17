@@ -105,6 +105,7 @@ final class LibraryViewModel {
     var totalMatches: UInt64 = 0
     var axisValues: [String: Double] = [:] {
         didSet {
+            characterMap?.axesChanged(axisValues)
             if let selectedFaceID {
                 previewSession.axisValuesByFace[selectedFaceID] = axisValues
             }

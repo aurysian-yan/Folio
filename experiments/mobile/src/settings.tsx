@@ -16,6 +16,7 @@ export interface Preferences {
   defaultViewMode: LibraryMode;
   importShowResults: boolean;
   searchAutoFocus: boolean;
+  characterMapAutoSelectFirstNonEmpty: boolean;
   characterMapInheritAxes: boolean;
 }
 
@@ -29,6 +30,7 @@ export const defaultPreferences: Preferences = {
   defaultViewMode: 'grid',
   importShowResults: true,
   searchAutoFocus: false,
+  characterMapAutoSelectFirstNonEmpty: true,
   characterMapInheritAxes: true,
 };
 
@@ -60,6 +62,7 @@ function sanitize(raw: unknown): Preferences {
     defaultViewMode: pick(viewModeValues, value.defaultViewMode, defaultPreferences.defaultViewMode),
     searchAutoFocus: typeof value.searchAutoFocus === 'boolean' ? value.searchAutoFocus : defaultPreferences.searchAutoFocus,
     importShowResults: typeof value.importShowResults === 'boolean' ? value.importShowResults : defaultPreferences.importShowResults,
+    characterMapAutoSelectFirstNonEmpty: typeof value.characterMapAutoSelectFirstNonEmpty === 'boolean' ? value.characterMapAutoSelectFirstNonEmpty : defaultPreferences.characterMapAutoSelectFirstNonEmpty,
     characterMapInheritAxes: typeof value.characterMapInheritAxes === 'boolean' ? value.characterMapInheritAxes : defaultPreferences.characterMapInheritAxes,
   };
 }

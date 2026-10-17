@@ -77,7 +77,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioGlassSliderView::class) {
-            Events("onValueChange")
+            Events("onValueChange", "onEditingChanged")
             Prop("label") { view: FolioGlassSliderView, value: String -> view.label = value }
             Prop("valueText") { view: FolioGlassSliderView, value: String -> view.valueText = value }
             Prop("value") { view: FolioGlassSliderView, value: Double -> view.incomingValue = value }

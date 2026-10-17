@@ -337,7 +337,8 @@ struct FontInspectorView: View {
                             get: { model.axisValues[axis.tag, default: axis.defaultValue] },
                             set: { model.axisValues[axis.tag] = $0 }
                         ),
-                        in: axis.minimum...axis.maximum
+                        in: axis.minimum...axis.maximum,
+                        onEditingChanged: { model.characterMap?.setAxisEditing($0) }
                     )
                     .controlSize(.small)
                     .frame(height: 24)

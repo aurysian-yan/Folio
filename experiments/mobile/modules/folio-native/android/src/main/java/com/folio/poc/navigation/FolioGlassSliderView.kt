@@ -81,6 +81,7 @@ class FolioGlassSliderView(context: Context, appContext: AppContext) : ExpoView(
     private var eventCount = 0
     private var currentValue by mutableStateOf(0.0)
     private val onValueChange by EventDispatcher()
+    private val onEditingChanged by EventDispatcher()
     private val compose = ComposeView(context)
 
     init {
@@ -96,7 +97,8 @@ class FolioGlassSliderView(context: Context, appContext: AppContext) : ExpoView(
                 Color(android.graphics.Color.parseColor(accentColor)), Color(android.graphics.Color.parseColor(trackColor)),
                 Color(android.graphics.Color.parseColor(thumbColor)), Color(android.graphics.Color.parseColor(surfaceColor)),
                 drawSurface = ::drawAncestorBackgrounds,
-                lockScroll = { parent?.requestDisallowInterceptTouchEvent(it) }, onChange = ::commitValue)
+                lockScroll = { parent?.requestDisallowInterceptTouchEvent(it) }, onChange = ::commitValue,
+                onEditingChanged = { onEditingChanged(mapOf("isEditing" to it)) })
         }
     }
 
@@ -154,7 +156,7 @@ class FolioGlassSliderView(context: Context, appContext: AppContext) : ExpoView(
 @Composable
 private fun GlassSlider(label: String, valueText: String, value: Double, minimum: Double, maximum: Double,
     step: Double, controlEnabled: Boolean, dark: Boolean, accent: Color, track: Color, thumb: Color,
-    surface: Color, drawSurface: (Canvas) -> Unit, lockScroll: (Boolean) -> Unit, onChange: (Double) -> Unit) {
+    surface: Color, drawSurface: (Canvas) -> Unit, lockScroll: (Boolean) -> Unit, onChange: (Double) -> Unit, onEditingChanged: (Boolean) -> Unit) {
     val enabled = controlEnabled && minimum.isFinite() && maximum.isFinite() && maximum > minimum
     val fraction = if (enabled) ((value - minimum) / (maximum - minimum)).toFloat().coerceIn(0f, 1f) else 0f
     val scope = rememberCoroutineScope()
@@ -172,6 +174,7 @@ private fun GlassSlider(label: String, valueText: String, value: Double, minimum
     val center = inset + travel * if (isLtr) fraction else 1f - fraction
     val latestFraction by rememberUpdatedState(fraction)
     val latestOnChange by rememberUpdatedState(onChange)
+    val latestOnEditingChanged by rememberUpdatedState(onEditingChanged)
     val latestDrawSurface by rememberUpdatedState(drawSurface)
     val latestLockScroll by rememberUpdatedState(lockScroll)
     val backdrop = rememberLayerBackdrop(onDraw = {
@@ -216,6 +219,7 @@ private fun GlassSlider(label: String, valueText: String, value: Double, minimum
                 val onThumb = abs(down.position.x - thumbCenter) <= with(density) { 26.dp.toPx() }
                 var dragging = false
                 if (motionEnabled) { animation.updateValue(initial, down.uptimeMillis); animation.press(down.uptimeMillis) }
+                latestOnEditingChanged(true)
                 try {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Main)
@@ -239,6 +243,7 @@ private fun GlassSlider(label: String, valueText: String, value: Double, minimum
                         if (!change.pressed) break
                     }
                 } finally {
+                    latestOnEditingChanged(false)
                     latestLockScroll(false)
                     if (motionEnabled) animation.release()
                 }

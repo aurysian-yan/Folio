@@ -974,6 +974,8 @@
   },
   "characterMap": {
     "title": "字符表",
+    "autoSelectFirstNonEmpty": "自动选择首个非空字符",
+    "autoSelectFirstNonEmptyDescription": "进入字符表或筛选结果变化时，自动选择第一个可见字形。",
     "inheritAxes": "继承字体详情可变轴",
     "inheritAxesDescription": "关闭后，字符表使用字体默认轴值。",
     "open": "查看字符表",

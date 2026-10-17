@@ -72,6 +72,116 @@ final class FolioTests: XCTestCase {
         XCTAssertNil(state.page)
     }
 
+    func testCharacterAxisTransitionInterpolatesDefaultsAndEndsExactly() {
+        XCTAssertEqual(characterAxisCoordinates(from: [:], to: ["wght": 800], defaults: ["wght": 400], progress: 0), ["wght": 400])
+        XCTAssertEqual(characterAxisCoordinates(from: [:], to: ["wght": 800], defaults: ["wght": 400], progress: 0.5), ["wght": 750])
+        XCTAssertEqual(characterAxisCoordinates(from: ["wght": 800], to: [:], defaults: ["wght": 400], progress: 1), ["wght": 400])
+        XCTAssertEqual(characterAxisCoordinates(from: ["wght": 800, "wdth": 100], to: ["wght": 400, "wdth": 75], defaults: [:], progress: 1), ["wght": 400, "wdth": 75])
+    }
+
+    func testCharacterMapAxesCommitAfterEditingAndKeepSelection() {
+        let family = FamilyCard(id: FamilyID(rawValue: "axes"), displayName: "Axes", faces: [], identityIDs: [],
+            matchedFaceIDs: [], isFavorite: false, isVariable: true, manufacturer: nil)
+        let model = LibraryViewModel()
+        model.axisValues = ["wght": 400]
+        let state = CharacterMapState(model: model, family: family, inspectorPresented: false)
+        model.characterMap = state
+        let entry = CharacterEntry(codepoint: 65, glyphId: 1, script: "Latin")
+        state.select(entry)
+        state.setAxisEditing(true)
+        model.axisValues = ["wght": 500]
+        model.axisValues = ["wght": 700]
+        XCTAssertEqual(state.committedAxes, ["wght": 400])
+        XCTAssertEqual(state.selected, entry)
+        state.setAxisEditing(false)
+        XCTAssertEqual(state.committedAxes, ["wght": 700])
+        model.axisValues = ["wght": 600]
+        XCTAssertEqual(state.committedAxes, ["wght": 600])
+    }
+
+    func testCharacterMapAutoSelectionUsesPixelsAndPreservesMatchingSelection() async {
+        let preference = AppPreferences.characterMapAutoSelectFirstNonEmpty
+        let previous = UserDefaults.standard.object(forKey: preference)
+        defer { if let previous { UserDefaults.standard.set(previous, forKey: preference) } else { UserDefaults.standard.removeObject(forKey: preference) } }
+        UserDefaults.standard.removeObject(forKey: preference)
+        let family = FamilyCard(id: FamilyID(rawValue: "auto"), displayName: "Auto", faces: [], identityIDs: [],
+            matchedFaceIDs: [], isFavorite: false, isVariable: false, manufacturer: nil)
+        var calls = 0
+        let renderer = CharacterGlyphRenderer { request in
+            calls += 1
+            return request.glyphIds.map { CharacterGlyph(glyphId: $0, status: $0 == 2 ? "ready" : "empty", dataUrl: $0 == 2 ? "glyph:2" : nil, error: nil) }
+        }
+        let model = LibraryViewModel()
+        let state = CharacterMapState(model: model, family: family, inspectorPresented: false, renderer: renderer)
+        XCTAssertTrue(state.autoSelectFirstNonEmpty)
+        state.opened = (state.selectionKey, CharacterInfo(handle: "auto", count: 2, scripts: []))
+        let entries = [CharacterEntry(codepoint: 32, glyphId: 1, script: "Common"), CharacterEntry(codepoint: 65, glyphId: 2, script: "Latin")]
+        let page = CharacterPage(entries: entries, total: 2)
+        state.initializeSelection(page, foreground: [0, 0, 0, 255])
+        for _ in 0..<1000 { if state.selected != nil { break }; await Task.yield() }
+        XCTAssertEqual(state.selected, entries[1])
+        XCTAssertEqual(calls, 1)
+        state.search = "U+0041"
+        state.initializeSelection(CharacterPage(entries: [entries[1]], total: 1), foreground: [0, 0, 0, 255])
+        XCTAssertEqual(state.selected, entries[1])
+        XCTAssertEqual(calls, 1)
+        UserDefaults.standard.set(false, forKey: preference)
+        state.selected = nil
+        state.initializeSelection(page, foreground: [0, 0, 0, 255])
+        await Task.yield()
+        XCTAssertNil(state.selected)
+        XCTAssertEqual(calls, 1)
+        renderer.dispose()
+    }
+
+    func testCharacterRendererPrioritizesPreviewAndDropsIntermediatePendingRequests() async throws {
+        var requests: [CharacterRender] = []
+        var finishes: [CheckedContinuation<[CharacterGlyph], Error>] = []
+        let renderer = CharacterGlyphRenderer { request in
+            requests.append(request)
+            return try await withCheckedThrowingContinuation { finishes.append($0) }
+        }
+        func request(_ id: UInt32, _ weight: Double = 400) -> CharacterRender {
+            CharacterRender(handle: "queue", glyphIds: [id], axes: ["wght": weight], size: 128, foreground: [0, 0, 0, 255])
+        }
+        let first = Task { try await renderer.render(request(1), channel: "grid:1", priority: 0) }
+        for _ in 0..<1000 { if requests.count == 1 { break }; await Task.yield() }
+        let grid = Task { try await renderer.render(request(2), channel: "grid:2", priority: 0) }
+        let skipped = Task { try await renderer.render(request(3, 500), channel: "detail", priority: 3) }
+        await Task.yield()
+        let latest = Task { try await renderer.render(request(3, 700), channel: "detail", priority: 3) }
+        for _ in 0..<20 { await Task.yield() }
+        let skippedValues = try await skipped.value
+        XCTAssertTrue(skippedValues.isEmpty)
+        finishes[0].resume(returning: [CharacterGlyph(glyphId: 1, status: "ready", dataUrl: "first", error: nil)])
+        _ = try await first.value
+        for _ in 0..<1000 { if requests.count == 2 { break }; await Task.yield() }
+        XCTAssertEqual(requests[1].glyphIds, [3])
+        XCTAssertEqual(requests[1].axes, ["wght": 700])
+        finishes[1].resume(returning: [CharacterGlyph(glyphId: 3, status: "ready", dataUrl: "latest", error: nil)])
+        _ = try await latest.value
+        for _ in 0..<1000 { if requests.count == 3 { break }; await Task.yield() }
+        XCTAssertEqual(requests[2].glyphIds, [2])
+        finishes[2].resume(returning: [CharacterGlyph(glyphId: 2, status: "empty", dataUrl: nil, error: nil)])
+        _ = try await grid.value
+        renderer.dispose()
+    }
+
+    func testCharacterRendererKeepsSelectedCellWhenPausingGrid() async throws {
+        var finish: CheckedContinuation<[CharacterGlyph], Error>?
+        let renderer = CharacterGlyphRenderer { _ in
+            try await withCheckedThrowingContinuation { finish = $0 }
+        }
+        let request = CharacterRender(handle: "selected", glyphIds: [1], axes: [:], size: 128, foreground: [0, 0, 0, 255])
+        let selected = Task { try await renderer.render(request, channel: "grid:65", priority: 3) }
+        for _ in 0..<1000 { if finish != nil { break }; await Task.yield() }
+        renderer.cancelGrid()
+        finish?.resume(returning: [CharacterGlyph(glyphId: 1, status: "ready", dataUrl: "selected", error: nil)])
+        let values = try await selected.value
+        XCTAssertEqual(values.first?.dataUrl, "selected")
+        renderer.dispose()
+    }
+
     func testSyncPercentKeepsLiteralPercentSign() {
         XCTAssertTrue(L.format("cloud.syncingPercent", "34").contains("34%"))
         XCTAssertTrue(L.format("cloud.syncingCloud", "WebDAV", "34").contains("34%"))

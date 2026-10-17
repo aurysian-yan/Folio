@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var previewCacheBytes: UInt64?
     @State private var storageMessage: String?
     @State private var storageBusy = false
+    @AppStorage(AppPreferences.characterMapAutoSelectFirstNonEmpty) private var characterMapAutoSelectFirstNonEmpty = true
     @AppStorage(AppPreferences.selectCardsOnHover) private var selectCardsOnHover = true
     @AppStorage(AppPreferences.hoverSelectionHaptics) private var hoverSelectionHaptics = true
     @AppStorage(AppPreferences.sliderHaptics) private var sliderHaptics = true
@@ -398,6 +399,8 @@ struct SettingsView: View {
                             .tag(mode.rawValue)
                     }
                 }
+                Toggle(L.text("characterMap.autoSelectFirstNonEmpty"), isOn: $draft.characterMapAutoSelectFirstNonEmpty)
+                Text(L.text("characterMap.autoSelectFirstNonEmptyDescription")).font(.footnote).foregroundStyle(.secondary)
                 PreferenceSliderRow(
                     title: L.text("preview.size"),
                     value: $draft.previewSize,
@@ -627,6 +630,7 @@ struct SettingsView: View {
     private func loadDraft() {
         draft.googleFontsMirrorTemplate = googleFontsMirrorTemplate
         draft.useCustomGoogleFontsMirror = !googleFontsMirrorTemplate.isEmpty
+        draft.characterMapAutoSelectFirstNonEmpty = characterMapAutoSelectFirstNonEmpty
         draft.selectCardsOnHover = selectCardsOnHover
         draft.hoverSelectionHaptics = hoverSelectionHaptics
         draft.sliderHaptics = sliderHaptics
@@ -662,6 +666,7 @@ struct SettingsView: View {
             }
         }
         googleFontsMirrorTemplate = template
+        characterMapAutoSelectFirstNonEmpty = draft.characterMapAutoSelectFirstNonEmpty
         selectCardsOnHover = draft.selectCardsOnHover
         hoverSelectionHaptics = draft.hoverSelectionHaptics
         sliderHaptics = draft.sliderHaptics
@@ -874,6 +879,7 @@ private enum WebDAVPreset: String, CaseIterable, Identifiable {
 private struct SettingsDraft {
     var useCustomGoogleFontsMirror = false
     var googleFontsMirrorTemplate = ""
+    var characterMapAutoSelectFirstNonEmpty = true
     var selectCardsOnHover = true
     var hoverSelectionHaptics = true
     var sliderHaptics = true

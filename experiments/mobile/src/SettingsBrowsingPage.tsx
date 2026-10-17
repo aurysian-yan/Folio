@@ -12,6 +12,9 @@ export function SettingsBrowsingPage({ theme, onClose }: { theme: Theme; onClose
       <SettingsSwitchRow theme={theme} title={t('mobile.settings.searchAutoFocus')}
         detail={t('mobile.settings.searchAutoFocusDetail')} value={preferences.searchAutoFocus} disabled={!ready}
         onChange={(value) => update({ searchAutoFocus: value })} />
+      <SettingsSwitchRow theme={theme} title={t('characterMap.autoSelectFirstNonEmpty')}
+        detail={t('characterMap.autoSelectFirstNonEmptyDescription')} value={preferences.characterMapAutoSelectFirstNonEmpty} disabled={!ready}
+        onChange={(value) => update({ characterMapAutoSelectFirstNonEmpty: value })} />
       <SettingsSwitchRow theme={theme} title={t('characterMap.inheritAxes')}
         detail={t('characterMap.inheritAxesDescription')} value={preferences.characterMapInheritAxes} disabled={!ready}
         onChange={(value) => update({ characterMapInheritAxes: value })} last />

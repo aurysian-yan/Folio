@@ -9,6 +9,7 @@ export interface GlassSliderProps {
   valueText: string;
   theme: Theme;
   onChange: (value: number) => void;
+  onEditingChanged?: (editing: boolean) => void;
 }
 
 // 移动端通过平台文件加载原生滑块。

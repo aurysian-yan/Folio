@@ -4,7 +4,12 @@ import SwiftUI
 struct FolioApp: App {
     var body: some Scene {
         WindowGroup {
-            RootView()
+            // 单元测试不启动真实字体库与云同步。
+            if NSClassFromString("XCTestCase") == nil {
+                RootView()
+            } else {
+                Color.clear
+            }
         }
         .defaultSize(width: 1200, height: 800)
         .commands {

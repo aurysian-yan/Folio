@@ -95,6 +95,8 @@ internal object FolioCharacterMapPageSmoke {
             }
             click("Character Map", "字符表")
         }
+        // 空字形用例显式选择 NULL，兼容默认选中首个非空字符。
+        tap(button(awaitNode { it.contentDescription?.toString()?.startsWith("U+0000") == true }))
         summary()
         if (copyFeedback) {
             // 验证真实复制入口的成功反馈与定时复原，截图保留各稳定状态。

@@ -18,7 +18,7 @@ vi.mock("./api", async (importOriginal) => {
     characterMap: {
       open: vi.fn(async () => ({ handle: 'test-character-map', revisionId: 'fixture-revision', sourcePath: '', faceIndex: 0, count: 1, scripts: [{ name: 'Latin', count: 1 }] })),
       query: vi.fn(async () => ({ entries: [{ codepoint: 65, glyphId: 1, script: 'Latin' }], total: 1, offset: 0 })),
-      render: vi.fn(async ({ glyphIds }: { glyphIds: number[] }) => glyphIds.map((glyphId) => ({ glyphId, status: 'empty' as const, dataUrl: null, error: null }))),
+      render: vi.fn(async ({ glyphIds }: { glyphIds: number[] }) => glyphIds.map((glyphId) => ({ glyphId, status: 'ready' as const, dataUrl: 'data:image/png;base64,Z2x5cGg=', error: null }))),
       close: vi.fn(async () => {}),
     },
     queryLibrary: vi.fn(async ({ offset, limit }: { offset: number; limit: number }) => ({ families: families.slice(offset, offset + limit), totalMatches: 300, facets: [], isLoading: false })),
@@ -421,4 +421,21 @@ it("键盘聚焦与悬停切换后始终只有一个选中卡片", async () => {
   await waitFor(() => expect(first.getAttribute('aria-pressed')).toBe('true'));
   expect(second.getAttribute('aria-pressed')).toBe('false');
   expect(container.querySelectorAll('.font-card.selected')).toHaveLength(1);
+});
+
+
+it('字符表自动选择偏好默认开启，保存关闭值并同步其他窗口', async () => {
+  window.history.replaceState(null, "", "?window=settings");
+  const screen = render(<App />);
+  fireEvent.click(screen.getByRole('tab', { name: '显示' }));
+  const toggle = screen.getByRole('switch', { name: '自动选择首个非空字符' });
+  expect((toggle as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(toggle);
+  await waitFor(() => expect(localStorage.getItem('folio-character-map-auto-select-first-non-empty')).toBe('false'));
+  screen.unmount();
+  const next = render(<App />);
+  fireEvent.click(next.getByRole('tab', { name: '显示' }));
+  expect((next.getByRole('switch', { name: '自动选择首个非空字符' }) as HTMLInputElement).checked).toBe(false);
+  fireEvent(window, new StorageEvent('storage', { key: 'folio-character-map-auto-select-first-non-empty', newValue: 'true' }));
+  await waitFor(() => expect((next.getByRole('switch', { name: '自动选择首个非空字符' }) as HTMLInputElement).checked).toBe(true));
 });

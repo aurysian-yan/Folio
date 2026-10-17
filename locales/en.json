@@ -987,6 +987,8 @@
   },
   "characterMap": {
     "title": "Character Map",
+    "autoSelectFirstNonEmpty": "Automatically select the first non-empty character",
+    "autoSelectFirstNonEmptyDescription": "Select the first visible glyph when opening the character map or changing filters.",
     "inheritAxes": "Inherit Font Detail Axes",
     "inheritAxesDescription": "When off, the character map uses default axes.",
     "open": "Open Character Map",

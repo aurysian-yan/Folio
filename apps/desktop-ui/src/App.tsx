@@ -640,6 +640,9 @@ export default function App() {
   const [importMode, setImportMode] = useState(
     () => localStorage.getItem("folio-import-mode") ?? "copy",
   );
+  const [characterMapAutoSelectFirstNonEmpty, setCharacterMapAutoSelectFirstNonEmpty] = useState(
+    () => localStorage.getItem("folio-character-map-auto-select-first-non-empty") !== "false",
+  );
   const [cardHover, setCardHover] = useState(
     () => localStorage.getItem("folio-card-hover") !== "false",
   );
@@ -971,11 +974,12 @@ export default function App() {
   }, [quitShortcut]);
 
   useEffect(() => {
+    localStorage.setItem("folio-character-map-auto-select-first-non-empty", String(characterMapAutoSelectFirstNonEmpty));
     localStorage.setItem("folio-import-mode", importMode);
     localStorage.setItem("folio-card-hover", String(cardHover));
     localStorage.setItem("folio-card-hover-delay", String(cardHoverDelay));
     localStorage.setItem("folio-card-metadata", String(cardMetadata));
-  }, [importMode, cardHover, cardHoverDelay, cardMetadata]);
+  }, [importMode, cardHover, cardHoverDelay, cardMetadata, characterMapAutoSelectFirstNonEmpty]);
 
   useEffect(() => {
     localStorage.setItem("folio-expanded-card-wheel-speed", String(expandedCardWheelSpeed));
@@ -999,6 +1003,8 @@ export default function App() {
         setViewMode(event.newValue as ViewMode);
       if (event.key === "folio-quit-shortcut")
         setQuitShortcut(parseQuitShortcut(event.newValue));
+      if (event.key === "folio-character-map-auto-select-first-non-empty")
+        setCharacterMapAutoSelectFirstNonEmpty(event.newValue !== "false");
       if (event.key === "folio-card-hover")
         setCardHover(event.newValue !== "false");
       if (event.key === "folio-card-hover-delay")
@@ -2348,6 +2354,10 @@ export default function App() {
                     />
                     <output>{previewSize}px</output>
                   </label>
+                  <Switch className="setting-toggle" isSelected={characterMapAutoSelectFirstNonEmpty} onChange={setCharacterMapAutoSelectFirstNonEmpty}>
+                    <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>{t("characterMap.autoSelectFirstNonEmpty")}</Switch.Content>
+                  </Switch>
+                  <p className="settings-note">{t("characterMap.autoSelectFirstNonEmptyDescription")}</p>
                   <BlurSettingsPreview
                     items={fileMenuItems}
                     value={sidebarBlur}
@@ -3100,6 +3110,7 @@ export default function App() {
             </div>
             {characterMapTarget && <CharacterMap
               family={page?.families.find((family) => family.id === characterMapTarget.family.id) ?? characterMapTarget.family}
+              autoSelectFirstNonEmpty={characterMapAutoSelectFirstNonEmpty}
               initialStyle={characterMapTarget.style} onClose={closeCharacterMap}
               onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
               leftHost={characterLeftHost} rightHost={characterRightHost} toolbarHost={characterToolbarHost}

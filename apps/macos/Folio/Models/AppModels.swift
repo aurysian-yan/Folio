@@ -3,6 +3,7 @@ import SwiftUI
 enum AppPreferences {
     static let useCollectionThemeColor = "useCollectionThemeColor"
     static let defaultThemeColor = "defaultThemeColor"
+    static let characterMapAutoSelectFirstNonEmpty = "characterMapAutoSelectFirstNonEmpty"
     static let selectCardsOnHover = "selectCardsOnHover"
     static let hoverSelectionHaptics = "hoverSelectionHaptics"
     static let sliderHaptics = "sliderHaptics"
