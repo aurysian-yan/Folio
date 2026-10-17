@@ -1,7 +1,12 @@
 import SwiftUI
 
 struct RootView: View {
-    @State private var model = LibraryViewModel()
+    @State private var model: LibraryViewModel
+    @Environment(\.openWindow) private var openWindow
+
+    init(model: LibraryViewModel = LibraryViewModel()) {
+        _model = State(initialValue: model)
+    }
     @State private var cloud = CloudSyncModel.shared
     @State private var sidebarPage = SidebarPage.navigation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -111,15 +116,8 @@ struct RootView: View {
         .sheet(item: $model.favoriteFolderEditor) { intent in
             FavoriteFolderEditorView(model: model, intent: intent)
         }
-        .confirmationDialog(L.text("import.importFonts"), isPresented: $model.isImportChoicePresented) {
-            Button(L.text("import.copyToLibrary")) { model.importPending(as: .copy) }
-            Button(L.text("import.referenceOriginal")) { model.importPending(as: .reference) }
-            Button(L.text("common.cancel"), role: .cancel) {}
-        } message: {
-            Text(L.text("import.chooseMode"))
-        }
-        .sheet(isPresented: $model.isImportReportPresented) {
-            ImportReportView(model: model)
+        .onChange(of: model.installationWindowRequest) { _, _ in
+            openWindow(id: "font-installation")
         }
         .tint(themeColor)
         .accentColor(themeColor)
@@ -127,18 +125,51 @@ struct RootView: View {
     }
 }
 
-private struct ImportReportView: View {
+struct ImportReportView: View {
     @Bindable var model: LibraryViewModel
     @Environment(\.dismiss) private var dismiss
 
+    @State private var mode = FontImportMode.copy
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(model.isCloudImportReport ? L.text("import.addToCloud") : L.text("import.importResults"))
-                .font(.headline)
+        VStack(alignment: .leading) {
+            if model.isFontOperationRunning || model.isAnalyzingImports {
+                ProgressView(L.text("common.loading"))
+            }
             List {
-                Section(model.isCloudImportReport ? L.text("font.fonts") : L.text("import.title")) {
-                    ForEach(model.importOutcomes.indices, id: \.self) { index in
-                        outcomeRow(model.importOutcomes[index])
+                if !model.importCandidates.isEmpty {
+                    Section(L.text("import.pendingFiles")) {
+                        ForEach(model.importCandidates) { candidate in
+                            VStack(alignment: .leading) {
+                                Text(candidate.url.lastPathComponent)
+                                Text(candidate.url.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                                if let analysis = candidate.analysis {
+                                    Text(analysis.format).font(.caption)
+                                    ForEach(analysis.faces, id: \.faceIndex) { face in
+                                        HStack {
+                                            Text([face.family, face.style].compactMap { $0 }.joined(separator: " · "))
+                                            Text(L.format("import.faceIndex", String(face.faceIndex))).foregroundStyle(.secondary)
+                                            if face.duplicate { Text(L.text("import.duplicate")) }
+                                            if face.conflict { Text(L.text("import.differentRevision")) }
+                                        }.font(.caption)
+                                    }
+                                    if analysis.problemCount > 0 {
+                                        Text(L.text("health.viewScanIssues")).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                if let error = candidate.error { Text(error).font(.caption).foregroundStyle(.secondary) }
+                            }
+                        }
+                    }
+                }
+                if !model.importOutcomes.isEmpty {
+                    Section(model.isCloudImportReport ? L.text("import.addToCloud") : L.text(model.isAnalyzedSourceReport ? "font.fonts" : "import.importResults")) {
+                        if !model.isCloudImportReport, !model.isAnalyzedSourceReport {
+                            Text(model.lastImportModeTitle).font(.caption).foregroundStyle(.secondary)
+                        }
+                        ForEach(model.importOutcomes.indices, id: \.self) { index in
+                            outcomeRow(model.importOutcomes[index])
+                        }
                     }
                 }
                 if let action = model.lastReportedBatchAction, !model.batchOutcomes.isEmpty {
@@ -148,26 +179,56 @@ private struct ImportReportView: View {
                         }
                     }
                 }
+                if !model.exportOutcomes.isEmpty {
+                    Section(L.text("import.exportResults")) {
+                        ForEach(model.exportOutcomes.indices, id: \.self) { index in
+                            outcomeRow(model.exportOutcomes[index])
+                        }
+                    }
+                }
+            }
+            if !model.importCandidates.isEmpty {
+                HStack {
+                    Picker(L.text("import.mode"), selection: $mode) {
+                        ForEach(FontImportMode.allCases) { option in Text(option.title).tag(option) }
+                    }
+                    Button(L.text("import.title")) { model.importPending(as: mode) }
+                    Button(L.text("import.collectAndActivate")) { model.importPending(as: .copy, thenActivate: true) }
+                    Menu(L.text("import.actions")) {
+                        Button(L.text("macos.activate")) { model.performPendingBatch(.activate) }
+                        Button(L.text("macos.install")) { model.performPendingBatch(.install) }
+                    }
+                    Button(L.text("common.cancel")) { model.cancelPendingImport() }
+                }.disabled(model.isFontOperationRunning || model.isAnalyzingImports)
             }
             HStack {
-                if model.importOutcomes.contains(where: { $0.error != nil })
-                    || model.batchOutcomes.contains(where: { $0.error != nil }) {
+                Button(L.text("import.addFonts")) { model.importFiles() }
+                if model.hasFailedFontOperations {
                     Button(L.text("import.retryFailed")) { model.retryFailedOutcomes() }
                 }
-                if !model.isCloudImportReport, model.importOutcomes.contains(where: { $0.error == nil }) {
-                    Button(L.text("import.activateImported")) {
-                        model.performImportedBatch(.activate)
-                    }
-                    Button(L.text("import.installImported")) {
-                        model.performImportedBatch(.install)
-                    }
-                }
+                Menu(L.text("import.actions")) {
+                    Button(L.text("macos.activate")) { model.performImportedBatch(.activate) }
+                    Button(L.text("macos.install")) { model.performImportedBatch(.install) }
+                    Button(L.text("macos.deactivate")) { model.performImportedBatch(.deactivate) }
+                    Button(L.text("macos.uninstallAction")) { model.performImportedBatch(.uninstall) }
+                    Divider()
+                    Button(L.text("import.export")) { model.exportImportedFonts() }
+                }.disabled(!model.importOutcomes.contains { $0.error == nil })
                 Spacer()
                 Button(L.text("common.done")) { dismiss() }
-            }
+            }.disabled(model.isFontOperationRunning || model.isAnalyzingImports)
         }
         .padding()
-        .frame(width: 480, height: 360)
+        .frame(minWidth: 600, minHeight: 400)
+        .onAppear {
+            let raw = UserDefaults.standard.string(forKey: AppPreferences.defaultImportMode) ?? "copy"
+            mode = FontImportMode(rawValue: raw) ?? .copy
+        }
+        .alert(L.text("common.operationFailed"), isPresented: Binding(
+            get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } }
+        )) { Button(L.text("common.ok")) { model.errorMessage = nil } } message: {
+            Text(model.errorMessage ?? L.text("common.unknownError"))
+        }
     }
 
     private func outcomeRow(_ outcome: FontOperationOutcome) -> some View {

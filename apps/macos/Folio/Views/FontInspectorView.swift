@@ -62,6 +62,8 @@ struct FontInspectorView: View {
                 if model.characterMap == nil {
                     Button(L.text("characterMap.open")) { model.openCharacterMap() }
                 }
+                Button(L.text("import.export")) { model.exportSelectedFont() }
+                    .disabled(model.selectedSource == nil || model.isFontOperationRunning)
                 inspectorDivider
 
                 VStack(alignment:.leading,spacing:10) {

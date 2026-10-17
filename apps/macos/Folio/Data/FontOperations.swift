@@ -107,10 +107,13 @@ actor FontOperations {
         try JSONEncoder().encode(origins).write(to: onlineOriginsURL, options: .atomic)
     }
 
-    func performBatch(_ action: FontAction, paths: [String]) async -> [FontOperationOutcome] {
+    func performBatch(_ action: FontAction, paths: [String], authorizedURLs: [String: URL] = [:]) async -> [FontOperationOutcome] {
         var outcomes: [FontOperationOutcome] = []
         var seen: Set<String> = []
         for path in paths where seen.insert(path).inserted {
+            let url = authorizedURLs[path] ?? URL(fileURLWithPath: path)
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
             let name = URL(fileURLWithPath: path).lastPathComponent
             do {
                 try await perform(action, path: path)
@@ -125,16 +128,17 @@ actor FontOperations {
     func status(for path: String) -> FontSourceStatus {
         let url = URL(fileURLWithPath: path)
         let managed = url.resolvingSymlinksInPath().deletingLastPathComponent() == managedDirectory.resolvingSymlinksInPath()
-        guard manager.fileExists(atPath: path) else {
-            return .init(state: .unavailable, isManagedCopy: managed, canDeactivate: false, canUninstall: false)
-        }
-        if isSystemFont(path) {
-            return .init(state: .system, isManagedCopy: false, canDeactivate: false, canUninstall: false)
-        }
         let folioInstallation = ledger.installed.first { $0.sourcePath == path }.map {
             manager.fileExists(atPath: $0.installedPath)
                 && CTFontManagerGetScopeForURL(URL(fileURLWithPath: $0.installedPath) as CFURL) == .persistent
         } ?? false
+        guard manager.fileExists(atPath: path) else {
+            return .init(state: .unavailable, isManagedCopy: managed,
+                         canDeactivate: ledger.activated.contains(path), canUninstall: folioInstallation)
+        }
+        if isSystemFont(path) {
+            return .init(state: .system, isManagedCopy: false, canDeactivate: false, canUninstall: false)
+        }
         let scope = CTFontManagerGetScopeForURL(url as CFURL)
         if folioInstallation || isUserInstalledFont(path) || scope == .persistent {
             return .init(state: .installed, isManagedCopy: managed, canDeactivate: false, canUninstall: folioInstallation)
@@ -151,14 +155,50 @@ actor FontOperations {
         Dictionary(uniqueKeysWithValues: Set(paths).map { ($0, status(for: $0)) })
     }
 
+    func exportFiles(paths: [String], to directory: URL, authorizedURLs: [String: URL] = [:]) async -> [FontOperationOutcome] {
+        let access = directory.startAccessingSecurityScopedResource()
+        defer { if access { directory.stopAccessingSecurityScopedResource() } }
+        var seen: Set<URL> = []
+        var outcomes: [FontOperationOutcome] = []
+        for path in paths {
+            let url = authorizedURLs[path] ?? URL(fileURLWithPath: path)
+            let sourceAccess = url.startAccessingSecurityScopedResource()
+            defer { if sourceAccess { url.stopAccessingSecurityScopedResource() } }
+            let source = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
+            guard seen.insert(source).inserted else { continue }
+            do {
+                try await repository.validateFontFile(source)
+                let destination = directory.appendingPathComponent(source.lastPathComponent)
+                guard !manager.fileExists(atPath: destination.path) else {
+                    throw operationError(L.text("import.destinationExists"))
+                }
+                let staging = directory.appendingPathComponent(".folio-export-\(UUID().uuidString)")
+                defer { try? manager.removeItem(at: staging) }
+                let digest = try fingerprint(source)
+                try manager.copyItem(at: source, to: staging)
+                guard try fingerprint(staging) == digest else {
+                    throw operationError(L.text("import.fileChanged"))
+                }
+                try await repository.validateFontFile(staging)
+                try manager.moveItem(at: staging, to: destination)
+                outcomes.append(.init(name: source.lastPathComponent, error: nil, path: path))
+            } catch {
+                outcomes.append(.init(name: source.lastPathComponent, error: error.localizedDescription, path: path))
+            }
+        }
+        return outcomes
+    }
+
     func perform(_ action: FontAction, path: String) async throws {
         guard !isSystemFont(path) else { throw operationError(L.text("macos.systemFontManaged")) }
         switch action {
         case .activate:
+            try await repository.validateFontFile(URL(fileURLWithPath: path))
             try await activate(path)
         case .deactivate:
             try await deactivate(path)
         case .install:
+            try await repository.validateFontFile(URL(fileURLWithPath: path))
             try await install(path)
         case .uninstall:
             try await uninstall(path)
@@ -179,7 +219,7 @@ actor FontOperations {
 
         switch mode {
         case .copy:
-            let destination = try copyFont(source, to: managedDirectory)
+            let destination = try await copyFont(source, to: managedDirectory)
             if ledger.imported.contains(where: { $0.path == destination.path && $0.mode == mode.rawValue }) {
                 return destination
             }
@@ -225,8 +265,7 @@ actor FontOperations {
         guard manager.fileExists(atPath: path) else { throw operationError(L.text("macos.fileUnavailable")) }
         if status(for: path).state == .installed { return }
         let source = URL(fileURLWithPath: path)
-        let managed = ledger.imported.contains { $0.path == path && $0.mode == FontImportMode.copy.rawValue }
-        let installation = managed ? source : try copyFont(source, to: installedDirectory)
+        let installation = try await copyFont(source, to: installedDirectory)
         if ledger.installed.contains(where: { $0.installedPath == installation.path }),
            CTFontManagerGetScopeForURL(installation as CFURL) == .persistent {
             if ledger.activated.contains(path) { try await deactivate(path) }
@@ -240,7 +279,7 @@ actor FontOperations {
             try await register(installation, scope: .persistent)
         } catch {
             if wasActive { try? await activate(path) }
-            if !managed, !ledger.installed.contains(where: { $0.installedPath == installation.path }) {
+            if !ledger.installed.contains(where: { $0.installedPath == installation.path }) {
                 try? manager.removeItem(at: installation)
             }
             throw error
@@ -302,12 +341,24 @@ actor FontOperations {
         }
     }
 
-    private func copyFont(_ source: URL, to directory: URL) throws -> URL {
+    private func copyFont(_ source: URL, to directory: URL) async throws -> URL {
         let digest = try fingerprint(source)
         let destination = directory.appendingPathComponent("\(digest).\(source.pathExtension.lowercased())")
-        if !manager.fileExists(atPath: destination.path) {
-            try manager.copyItem(at: source, to: destination)
+        if manager.fileExists(atPath: destination.path) {
+            guard try fingerprint(destination) == digest else {
+                throw operationError(L.text("import.fileChanged"))
+            }
+            try await repository.validateFontFile(destination)
+            return destination
         }
+        let staging = directory.appendingPathComponent(".folio-import-\(UUID().uuidString)")
+        defer { try? manager.removeItem(at: staging) }
+        try manager.copyItem(at: source, to: staging)
+        guard try fingerprint(staging) == digest else {
+            throw operationError(L.text("import.fileChanged"))
+        }
+        try await repository.validateFontFile(staging)
+        try manager.moveItem(at: staging, to: destination)
         return destination
     }
 

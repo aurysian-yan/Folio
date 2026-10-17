@@ -398,14 +398,25 @@
     "chooseMode": "Choose how to save the font files",
     "askEachTime": "Ask every time",
     "defaultMode": "Default Import Mode",
-    "askDisabledHint": "When “Ask every time” is off, imports use the default mode directly.",
+    "askDisabledHint": "When “Ask each time” is off, fonts without duplicates, conflicts, or file issues use the default import mode.",
     "retryFailed": "Retry Failed Items",
     "activateImported": "Activate Imported Fonts",
     "installImported": "Install Imported Fonts",
     "collectSelected": "Collect Selected Styles",
     "addToCloudSync": "Add Selected Fonts to Cloud Sync",
     "folderOwner": "{{name}}'s personal font folder",
-    "userFontsFolder": "User Fonts · {{name}}"
+    "userFontsFolder": "User Fonts · {{name}}",
+    "installationWindow": "Font Installation",
+    "pendingFiles": "Pending Files",
+    "faceIndex": "Face {{index}}",
+    "duplicate": "Same revision already in library",
+    "differentRevision": "Another revision exists in library",
+    "collectAndActivate": "Collect and Activate",
+    "actions": "Font Actions",
+    "export": "Export Fonts",
+    "exportResults": "Export Results",
+    "destinationExists": "The destination file already exists. Choose another directory and retry.",
+    "fileChanged": "The file content has changed. Analyze it again and retry."
   },
   "health": {
     "conflictCount": "Found {{count}} font conflicts",
@@ -422,7 +433,22 @@
     "names_one": "{{count}} naming conflict",
     "names_other": "{{count}} naming conflicts",
     "otherConflicts_one": "{{count}} other font conflict",
-    "otherConflicts_other": "{{count}} other font conflicts"
+    "otherConflicts_other": "{{count}} other font conflicts",
+    "fileIssues": "File Issues",
+    "rescan": "Scan Again",
+    "issueKinds": {
+      "root_unavailable": "Source unavailable",
+      "traversal_incomplete": "Some directories could not be read",
+      "file_read": "File could not be read",
+      "unstable_file": "File is changing",
+      "known_unsupported_format": "Format not supported yet",
+      "malformed_font": "Damaged font file",
+      "metadata_problem": "Incomplete font information",
+      "collection_problem": "Collection member could not be read",
+      "cache_corrupt": "Cache needs another scan",
+      "cache_incompatible": "Cache needs an update"
+    },
+    "scanPending": "Font scan has not completed"
   },
   "cloud": {
     "library": "Cloud Library",

@@ -57,6 +57,18 @@ actor FolioRepository {
         return RootID(rawValue: root.id.value)
     }
 
+    func fileIssues() throws -> [FontFileIssue] {
+        let json = try engine.cachedFileIssues()
+        let issues = try JSONDecoder().decode([FontFileIssue].self, from: Data(json.utf8))
+        var seen: Set<String> = []
+        return issues.filter { seen.insert($0.id).inserted }
+    }
+
+    func analyzeFontFile(_ url: URL) throws -> FontFileAnalysis {
+        let json = try engine.analyzeFontFile(path: url.path)
+        return try JSONDecoder().decode(FontFileAnalysis.self, from: Data(json.utf8))
+    }
+
     func validateFontFile(_ url: URL) throws {
         try engine.validateFontFile(path: url.path)
     }

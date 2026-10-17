@@ -213,7 +213,7 @@ struct SidebarView: View {
                 Section {
                     sidebarRow(L.text("navigation.onlineFonts"), symbol: "globe", count: nil, destination: .onlineFonts)
                         .tag(SidebarDestination.onlineFonts)
-                    sidebarRow(L.text("navigation.fontHealth"), symbol: "stethoscope", count: UInt64(healthCount), destination: .fontHealth)
+                    sidebarRow(L.text("navigation.fontHealth"), symbol: "stethoscope", count: model.hasCompletedHealthScan ? UInt64(healthCount) : nil, destination: .fontHealth)
                         .tag(SidebarDestination.fontHealth)
                 } header: {
                     sidebarSectionHeader(L.text("navigation.tools"))

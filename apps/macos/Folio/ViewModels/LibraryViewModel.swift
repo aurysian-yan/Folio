@@ -18,6 +18,8 @@ private final class FontPreviewSession {
 @Observable
 final class LibraryViewModel {
     var snapshot: LibrarySnapshot = .empty
+    var fileIssues: [FontFileIssue] = []
+    var hasCompletedHealthScan = false
     var families: [FamilyCard] = []
     var cloudOnlyFonts: [CloudFontDto] = []
     var carouselTailFamilies: [FamilyCard] = []
@@ -34,6 +36,7 @@ final class LibraryViewModel {
     var selectedInstalledFamilyIDs: Set<FamilyID> = []
     var isAddingInstalledToCloud = false
     var isCloudImportReport = false
+    var isAnalyzedSourceReport = false
     var selectedFamilyID: FamilyID?
     var selectedFaceID: FaceID?
     var selectedSourcePath: String?
@@ -41,8 +44,13 @@ final class LibraryViewModel {
     var fontStateCounts: [FontOperationState: UInt64] = [:]
     var importOutcomes: [FontOperationOutcome] = []
     var batchOutcomes: [FontOperationOutcome] = []
-    var isImportReportPresented = false
-    var isImportChoicePresented = false
+    var installationWindowRequest = UUID()
+    var isFontOperationRunning = false
+    var isAnalyzingImports = false
+    var importCandidates: [FontImportCandidate] = []
+    var exportOutcomes: [FontOperationOutcome] = []
+    private var lastExportDirectory: URL?
+    private var activateAfterImport = false
     var viewMode: LibraryViewMode {
         didSet {
             UserDefaults.standard.set(
@@ -155,6 +163,7 @@ final class LibraryViewModel {
     private var pendingImportURLs: [URL] = []
     private var lastImportURLs: [URL] = []
     private var lastImportMode: FontImportMode = .copy
+    private var operationURLs: [String: URL] = [:]
     private var lastBatchAction: FontAction?
     private var incomingURLs: [URL] = []
     private var incomingTask: Task<Void, Never>?
@@ -181,6 +190,8 @@ final class LibraryViewModel {
     var previewText: String {
         previewMode.text ?? customPreviewText
     }
+
+    var lastImportModeTitle: String { lastImportMode.title }
 
     var lastReportedBatchAction: FontAction? {
         lastBatchAction
@@ -244,10 +255,15 @@ final class LibraryViewModel {
     }
 
     var hero: HeroPresentation {
-        Self.hero(for: snapshot, profile: CloudSyncModel.shared.profile, status: CloudSyncModel.shared.status,
+        let presentation = Self.hero(for: snapshot, profile: CloudSyncModel.shared.profile, status: CloudSyncModel.shared.status,
             fonts: CloudSyncModel.shared.fonts, conflicts: CloudSyncModel.shared.conflicts,
             cloudLoaded: CloudSyncModel.shared.stateLoaded, readError: CloudSyncModel.shared.stateReadError,
             connectionName: CloudSyncModel.shared.connectionName)
+        guard hasCompletedHealthScan else {
+            return .init(kind: .normal, title: presentation.title, subtitle: L.text("health.scanPending"),
+                detail: nil, action: .fontHealth, sync: presentation.sync)
+        }
+        return presentation
     }
 
     func start() {
@@ -274,6 +290,7 @@ final class LibraryViewModel {
                    try await repository.addDefaultLibraryRoots() {
                     self.isRefreshing = true
                     self.snapshot = try await repository.refreshLibrary()
+                    self.hasCompletedHealthScan = true
                     try await self.reloadLibrarySources()
                     self.isRefreshing = false
                     refreshedDuringSetup = true
@@ -283,6 +300,7 @@ final class LibraryViewModel {
                 if !refreshedDuringSetup {
                     self.isRefreshing = true
                     self.snapshot = try await repository.refreshLibrary()
+                    self.hasCompletedHealthScan = true
                     try await self.reloadLibrarySources()
                     try await self.performQuery(reset: true)
                     self.isRefreshing = false
@@ -305,6 +323,7 @@ final class LibraryViewModel {
             do {
                 isRefreshing = true
                 snapshot = try await repository.refreshLibrary()
+                hasCompletedHealthScan = true
                 try await reloadLibrarySources()
                 try await performQuery(reset: true, retainingCount: retainedCount)
                 isRefreshing = false
@@ -347,7 +366,7 @@ final class LibraryViewModel {
         guard let operations, let repository,
               CloudSyncModel.shared.isConnected,
               !selectedInstalledFamilyIDs.isEmpty,
-              !isAddingInstalledToCloud else { return }
+              !isAddingInstalledToCloud, !isFontOperationRunning, !isAnalyzingImports else { return }
         let paths = Set(families
             .filter { selectedInstalledFamilyIDs.contains($0.id) }
             .flatMap(\.faces)
@@ -364,12 +383,16 @@ final class LibraryViewModel {
         lastImportMode = .copy
         lastBatchAction = nil
         batchOutcomes = []
+        activateAfterImport = false
         isAddingInstalledToCloud = true
+        isFontOperationRunning = true
         Task {
+            defer { finishFontOperation() }
             importOutcomes = await operations.importFiles(urls, mode: .copy)
             do {
                 isRefreshing = true
                 snapshot = try await repository.refreshLibrary()
+                hasCompletedHealthScan = true
                 try await reloadLibrarySources()
                 try await performQuery(reset: true)
                 isRefreshing = false
@@ -380,7 +403,7 @@ final class LibraryViewModel {
             isAddingInstalledToCloud = false
             endInstalledCloudSelection()
             isCloudImportReport = true
-            isImportReportPresented = true
+            installationWindowRequest = UUID()
             if importOutcomes.contains(where: { $0.error == nil }) {
                 CloudSyncModel.shared.syncNow()
             }
@@ -388,19 +411,25 @@ final class LibraryViewModel {
     }
 
     func addSourceToCloud(_ source: FontSource) {
-        guard let operations, let repository, CloudSyncModel.shared.isConnected, !CloudSyncModel.shared.isRunning else { return }
+        guard let operations, let repository, CloudSyncModel.shared.isConnected, !CloudSyncModel.shared.isRunning, !isFontOperationRunning, !isAnalyzingImports else { return }
         let urls = [URL(fileURLWithPath: source.path)]
         lastImportURLs = urls
         lastImportMode = .copy
+        lastBatchAction = nil
+        batchOutcomes = []
+        activateAfterImport = false
+        isFontOperationRunning = true
         Task {
+            defer { finishFontOperation() }
             importOutcomes = await operations.importFiles(urls, mode: .copy)
             do {
                 snapshot = try await repository.refreshLibrary()
+                hasCompletedHealthScan = true
                 try await reloadLibrarySources()
                 try await performQuery(reset: true, retainingCount: families.count)
             } catch { present(error) }
             isCloudImportReport = true
-            isImportReportPresented = true
+            installationWindowRequest = UUID()
             if importOutcomes.contains(where: { $0.error == nil }) { CloudSyncModel.shared.syncNow() }
         }
     }
@@ -651,6 +680,7 @@ final class LibraryViewModel {
                 try await repository.addLibraryRoot(url)
                 isRefreshing = true
                 snapshot = try await repository.refreshLibrary()
+                hasCompletedHealthScan = true
                 try await reloadLibrarySources()
                 try await performQuery(reset: true)
                 isRefreshing = false
@@ -685,42 +715,105 @@ final class LibraryViewModel {
     }
 
     private func queueImport(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
-        pendingImportURLs = urls
-        guard operations != nil else { return }
-        if UserDefaults.standard.bool(forKey: AppPreferences.askImportMode) {
-            isImportChoicePresented = true
-        } else {
-            let raw = UserDefaults.standard.string(forKey: AppPreferences.defaultImportMode)
-            importPending(as: FontImportMode(rawValue: raw ?? "copy") ?? .copy)
+        for url in urls where url.isFileURL && !pendingImportURLs.contains(url) {
+            pendingImportURLs.append(url)
+        }
+        installationWindowRequest = UUID()
+        analyzePendingImports()
+    }
+
+    private func analyzePendingImports() {
+        guard let repository, !isFontOperationRunning, !isAnalyzingImports,
+              !pendingImportURLs.isEmpty else { return }
+        isAnalyzingImports = true
+        Task {
+            defer { isAnalyzingImports = false }
+            while let url = pendingImportURLs.first(where: { url in !importCandidates.contains { $0.url == url } }) {
+                let access = url.startAccessingSecurityScopedResource()
+                do {
+                    let analysis = try await repository.analyzeFontFile(url)
+                    importCandidates.append(.init(url: url, analysis: analysis, error: nil))
+                } catch {
+                    importCandidates.append(.init(url: url, analysis: nil, error: error.localizedDescription))
+                }
+                if access { url.stopAccessingSecurityScopedResource() }
+            }
+            let analyses = importCandidates.compactMap(\.analysis)
+            let canImportAutomatically = analyses.count == importCandidates.count
+                && Set(analyses.map(\.fingerprint)).count == analyses.count
+                && analyses.allSatisfy { analysis in
+                    !analysis.faces.isEmpty && analysis.problemCount == 0
+                        && analysis.faces.allSatisfy { !$0.duplicate && !$0.conflict }
+                }
+            if !UserDefaults.standard.bool(forKey: AppPreferences.askImportMode), canImportAutomatically {
+                isAnalyzingImports = false
+                let raw = UserDefaults.standard.string(forKey: AppPreferences.defaultImportMode) ?? "copy"
+                importPending(as: FontImportMode(rawValue: raw) ?? .copy)
+            }
         }
     }
 
-    func importPending(as mode: FontImportMode) {
-        guard let operations, let repository else { return }
-        let urls = pendingImportURLs
+    func cancelPendingImport() {
+        guard !isFontOperationRunning, !isAnalyzingImports else { return }
         pendingImportURLs.removeAll()
+        importCandidates.removeAll()
+    }
+
+    func importPending(as mode: FontImportMode, thenActivate: Bool = false) {
+        guard let operations, let repository, !isFontOperationRunning, !isAnalyzingImports else { return }
+        let urls = pendingImportURLs
         guard !urls.isEmpty else { return }
+        pendingImportURLs.removeAll()
+        importCandidates.removeAll()
         lastImportURLs = urls
         isCloudImportReport = false
+        isAnalyzedSourceReport = false
         lastImportMode = mode
+        activateAfterImport = thenActivate
         lastBatchAction = nil
         batchOutcomes = []
+        exportOutcomes = []
+        isFontOperationRunning = true
         Task {
+            defer { finishFontOperation() }
             importOutcomes = await operations.importFiles(urls, mode: mode)
-            do {
-                isRefreshing = true
-                snapshot = try await repository.refreshLibrary()
-                try await reloadLibrarySources()
-                try await performQuery(reset: true)
-                isRefreshing = false
-            } catch {
-                isRefreshing = false
-                present(error)
+            if thenActivate {
+                lastBatchAction = .activate
+                batchOutcomes = await operations.performBatch(.activate, paths: importOutcomes.compactMap { $0.error == nil ? $0.path : nil })
             }
-            isImportReportPresented = true
+            do {
+                snapshot = try await repository.refreshLibrary()
+                hasCompletedHealthScan = true
+                try await reloadLibrarySources()
+                try await performQuery(reset: true, retainingCount: families.count)
+            } catch { present(error) }
             if mode == .copy { CloudSyncModel.shared.requestAutomaticSync() }
         }
+    }
+
+    func performPendingBatch(_ action: FontAction) {
+        guard !isFontOperationRunning, !isAnalyzingImports, !pendingImportURLs.isEmpty else { return }
+        isCloudImportReport = false
+        isAnalyzedSourceReport = true
+        exportOutcomes = []
+        lastImportURLs = []
+        activateAfterImport = false
+        operationURLs = Dictionary(uniqueKeysWithValues: pendingImportURLs.map { ($0.path, $0) })
+        importOutcomes = pendingImportURLs.map { .init(name: $0.lastPathComponent, error: nil, path: $0.path) }
+        pendingImportURLs.removeAll()
+        importCandidates.removeAll()
+        performImportedBatch(action)
+    }
+
+    private func finishFontOperation() {
+        isFontOperationRunning = false
+        analyzePendingImports()
+    }
+
+    var hasFailedFontOperations: Bool {
+        importOutcomes.enumerated().contains { index, outcome in
+            outcome.error != nil && lastImportURLs.indices.contains(index)
+        } || (batchOutcomes + exportOutcomes).contains { $0.error != nil && $0.path != nil }
     }
 
     func onlineLocalPaths() -> [String] {
@@ -747,6 +840,7 @@ final class LibraryViewModel {
         do {
             isRefreshing = true
             snapshot = try await repository.refreshLibrary()
+            hasCompletedHealthScan = true
             try await reloadLibrarySources()
             if selectedDestination != .onlineFonts {
                 try await performQuery(reset: true)
@@ -763,41 +857,47 @@ final class LibraryViewModel {
     }
 
     func performImportedBatch(_ action: FontAction) {
-        guard let operations else { return }
+        guard let operations, !isFontOperationRunning, !isAnalyzingImports else { return }
         let paths = importOutcomes.compactMap { $0.error == nil ? $0.path : nil }
         guard !paths.isEmpty else { return }
         lastBatchAction = action
+        batchOutcomes = []
+        isFontOperationRunning = true
         Task {
+            defer { finishFontOperation() }
             let names = Dictionary(importOutcomes.compactMap { outcome in
                 outcome.path.map { ($0, outcome.name) }
             }, uniquingKeysWith: { first, _ in first })
-            batchOutcomes = await operations.performBatch(action, paths: paths).map { outcome in
+            batchOutcomes = await operations.performBatch(action, paths: paths, authorizedURLs: operationURLs).map { outcome in
                 FontOperationOutcome(
                     name: outcome.path.flatMap { names[$0] } ?? outcome.name,
                     error: outcome.error,
                     path: outcome.path
                 )
             }
-            await refreshAllStatuses()
-            if case .fontState = selectedDestination {
-                do { try await performQuery(reset: true) }
-                catch { present(error) }
-            }
-            isImportReportPresented = true
+            await refreshAfterBatch(action, outcomes: batchOutcomes)
+            installationWindowRequest = UUID()
         }
     }
 
     func retryFailedOutcomes() {
-        guard let operations else { return }
+        guard let operations, !isFontOperationRunning, !isAnalyzingImports else { return }
         let failures = importOutcomes.indices.filter { importOutcomes[$0].error != nil }
         let urls = failures.compactMap { $0 < lastImportURLs.count ? lastImportURLs[$0] : nil }
         let paths = batchOutcomes.compactMap { $0.error != nil ? $0.path : nil }
-        guard !urls.isEmpty || !paths.isEmpty else { return }
+        let exportPaths = exportOutcomes.compactMap { $0.error != nil ? $0.path : nil }
+        guard !urls.isEmpty || !paths.isEmpty || !exportPaths.isEmpty else { return }
+        isFontOperationRunning = true
         Task {
+            defer { finishFontOperation() }
             if !urls.isEmpty {
                 let retried = await operations.importFiles(urls, mode: lastImportMode)
                 for (index, outcome) in zip(failures, retried) {
                     importOutcomes[index] = outcome
+                }
+                if activateAfterImport {
+                    let activated = await operations.performBatch(.activate, paths: retried.compactMap { $0.error == nil ? $0.path : nil })
+                    batchOutcomes.append(contentsOf: activated)
                 }
                 if isCloudImportReport, retried.contains(where: { $0.error == nil }) {
                     CloudSyncModel.shared.syncNow()
@@ -805,6 +905,7 @@ final class LibraryViewModel {
                 if let repository {
                     do {
                         snapshot = try await repository.refreshLibrary()
+                        hasCompletedHealthScan = true
                         try await reloadLibrarySources()
                         try await performQuery(reset: true)
                     } catch { present(error) }
@@ -814,7 +915,7 @@ final class LibraryViewModel {
                 let names = Dictionary(batchOutcomes.compactMap { outcome in
                     outcome.path.map { ($0, outcome.name) }
                 }, uniquingKeysWith: { first, _ in first })
-                let retried = await operations.performBatch(action, paths: paths).map { outcome in
+                let retried = await operations.performBatch(action, paths: paths, authorizedURLs: operationURLs).map { outcome in
                     FontOperationOutcome(
                         name: outcome.path.flatMap { names[$0] } ?? outcome.name,
                         error: outcome.error,
@@ -826,12 +927,84 @@ final class LibraryViewModel {
                         batchOutcomes[index] = outcome
                     }
                 }
-                await refreshAllStatuses()
-                if case .fontState = selectedDestination {
-                    do { try await performQuery(reset: true) }
-                    catch { present(error) }
+                await refreshAfterBatch(action, outcomes: retried)
+            }
+            if let directory = lastExportDirectory, !exportPaths.isEmpty {
+                let retried = await operations.exportFiles(paths: exportPaths, to: directory, authorizedURLs: operationURLs)
+                for outcome in retried {
+                    if let index = exportOutcomes.firstIndex(where: { $0.path == outcome.path }) {
+                        exportOutcomes[index] = outcome
+                    }
                 }
             }
+        }
+    }
+
+    func exportImportedFonts() {
+        exportFonts(paths: importOutcomes.compactMap { $0.error == nil ? $0.path : nil })
+    }
+
+    func exportSelectedFont() {
+        guard let path = selectedSource?.path else { return }
+        exportFonts(paths: [path])
+    }
+
+    func exportCurrentFonts() {
+        guard let repository, !isFontOperationRunning, !isAnalyzingImports else { return }
+        let destination = selectedDestination
+        let text = searchText
+        let facets = selectedFacets
+        let location = locationFilter
+        let fingerprint = fileFingerprint
+        let allowedFaces: Set<FaceID>?
+        let allowedPaths: Set<String>?
+        if case let .fontState(state) = destination {
+            allowedFaces = faceIDsByState[state] ?? []
+            allowedPaths = sourcePathsByState[state] ?? []
+        } else {
+            allowedFaces = nil
+            allowedPaths = nil
+        }
+        isFontOperationRunning = true
+        Task {
+            do {
+                let page = try await repository.query(text: text, destination: destination, facets: facets,
+                    allowedFaceIDs: allowedFaces, allowedSourcePaths: allowedPaths, locationFilter: location,
+                    fileFingerprint: fingerprint, offset: 0, limit: Int.max)
+                let faces = page.families.flatMap { family in
+                    family.faces.filter { family.matchedFaceIDs.contains($0.id) }
+                }
+                let unavailable = faces.filter { $0.sources.isEmpty }.map {
+                    FontOperationOutcome(name: $0.fullName ?? $0.styleName, error: L.text("macos.fileUnavailable"), path: nil)
+                }
+                isFontOperationRunning = false
+                exportFonts(paths: faces.flatMap(\.sources).map(\.path), unavailable: unavailable)
+            } catch {
+                finishFontOperation()
+                present(error)
+            }
+        }
+    }
+
+    private func exportFonts(paths: [String], unavailable: [FontOperationOutcome] = []) {
+        guard let operations, !isFontOperationRunning else { return }
+        guard !paths.isEmpty else {
+            exportOutcomes = unavailable
+            installationWindowRequest = UUID()
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = L.text("import.export")
+        guard panel.runModal() == .OK, let directory = panel.url else { return }
+        lastExportDirectory = directory
+        isFontOperationRunning = true
+        installationWindowRequest = UUID()
+        Task {
+            defer { finishFontOperation() }
+            exportOutcomes = unavailable + (await operations.exportFiles(paths: paths, to: directory, authorizedURLs: operationURLs))
         }
     }
 
@@ -848,36 +1021,52 @@ final class LibraryViewModel {
         case .active: actions = status.canDeactivate ? [.deactivate, .install] : [.install]
         case .installed: actions = status.canUninstall ? [.uninstall] : []
         case .external: actions = [.activate, .install]
-        case .system, .unavailable: actions = []
+        case .system: actions = []
+        case .unavailable:
+            actions = []
+            if status.canDeactivate { actions.append(.deactivate) }
+            if status.canUninstall { actions.append(.uninstall) }
         }
         if status.isManagedCopy && status.state != .unavailable { actions.append(.remove) }
         return actions
     }
 
     func perform(_ action: FontAction, on source: FontSource) {
-        guard let operations, let repository else { return }
+        guard let operations, !isFontOperationRunning, !isAnalyzingImports else { return }
+        isFontOperationRunning = true
+        isAnalyzedSourceReport = true
+        isCloudImportReport = false
+        exportOutcomes = []
+        lastImportURLs = []
+        activateAfterImport = false
+        importOutcomes = [.init(name: source.filename, error: nil, path: source.path)]
+        lastBatchAction = action
+        batchOutcomes = []
+        installationWindowRequest = UUID()
         Task {
-            do {
-                try await operations.perform(action, path: source.path)
-                if action == .remove {
-                    CloudSyncModel.shared.markLocalRemoval(at: source.path)
-                    isRefreshing = true
-                    snapshot = try await repository.refreshLibrary()
-                    try await reloadLibrarySources()
-                    try await performQuery(reset: true)
-                    isRefreshing = false
-                    CloudSyncModel.shared.requestAutomaticSync()
-                } else {
-                    await refreshAllStatuses()
-                    if case .fontState = selectedDestination {
-                        try await performQuery(reset: true)
-                    }
-                }
-            } catch {
-                isRefreshing = false
-                present(error)
-            }
+            defer { finishFontOperation() }
+            batchOutcomes = await operations.performBatch(action, paths: [source.path])
+            guard batchOutcomes.allSatisfy({ $0.error == nil }) else { return }
+            await refreshAfterBatch(action, outcomes: batchOutcomes)
         }
+    }
+
+    private func refreshAfterBatch(_ action: FontAction, outcomes: [FontOperationOutcome]) async {
+        do {
+            if action == .remove, let repository {
+                for outcome in outcomes where outcome.error == nil {
+                    if let path = outcome.path { CloudSyncModel.shared.markLocalRemoval(at: path) }
+                }
+                snapshot = try await repository.refreshLibrary()
+                hasCompletedHealthScan = true
+                try await reloadLibrarySources()
+                try await performQuery(reset: true, retainingCount: families.count)
+                CloudSyncModel.shared.requestAutomaticSync()
+            } else {
+                await refreshAllStatuses()
+                if case .fontState = selectedDestination { try await performQuery(reset: true) }
+            }
+        } catch { present(error) }
     }
 
     func revealSelectedFace() {
@@ -1195,6 +1384,7 @@ final class LibraryViewModel {
     private func reloadLibrarySources() async throws {
         guard let repository else { return }
         libraryFaceSources = try await repository.libraryFaceSources()
+        fileIssues = try await repository.fileIssues()
         await refreshAllStatuses()
     }
 

@@ -396,14 +396,25 @@
     "chooseMode": "选择字体文件的保存方式",
     "askEachTime": "每次询问导入方式",
     "defaultMode": "默认导入方式",
-    "askDisabledHint": "关闭“每次询问”后，导入字体将直接使用默认方式。",
+    "askDisabledHint": "关闭“每次询问”后，无重复、冲突或文件问题的字体将按默认方式导入。",
     "retryFailed": "重试失败项",
     "activateImported": "激活成功导入的字体",
     "installImported": "安装成功导入的字体",
     "collectSelected": "收集所选字款",
     "addToCloudSync": "将所选字体加入云端同步",
     "folderOwner": "{{name}} 的个人字体目录",
-    "userFontsFolder": "用户字体 · {{name}}"
+    "userFontsFolder": "用户字体 · {{name}}",
+    "installationWindow": "字体安装",
+    "pendingFiles": "待处理文件",
+    "faceIndex": "字款 {{index}}",
+    "duplicate": "相同修订已在库中",
+    "differentRevision": "库中存在其他修订",
+    "collectAndActivate": "收集并启用",
+    "actions": "字体操作",
+    "export": "导出字体",
+    "exportResults": "导出结果",
+    "destinationExists": "目标文件已存在，请选择其他目录后重试。",
+    "fileChanged": "文件内容已变化，请重新检测后重试。"
   },
   "health": {
     "damagedCount": "发现 {{count}} 个损坏字体",
@@ -415,7 +426,22 @@
     "viewVersions": "查看字体版本",
     "revisions": "{{count}} 个版本冲突",
     "names": "{{count}} 个命名冲突",
-    "otherConflicts": "{{count}} 个其他字体冲突"
+    "otherConflicts": "{{count}} 个其他字体冲突",
+    "fileIssues": "文件问题",
+    "rescan": "重新检测",
+    "issueKinds": {
+      "root_unavailable": "来源不可用",
+      "traversal_incomplete": "部分目录无法读取",
+      "file_read": "文件无法读取",
+      "unstable_file": "文件正在变化",
+      "known_unsupported_format": "暂不支持此格式",
+      "malformed_font": "字体文件损坏",
+      "metadata_problem": "字体信息不完整",
+      "collection_problem": "集合成员无法读取",
+      "cache_corrupt": "缓存需要重新检测",
+      "cache_incompatible": "缓存需要更新"
+    },
+    "scanPending": "尚未完成字体检测"
   },
   "cloud": {
     "library": "云字体库",

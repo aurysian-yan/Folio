@@ -345,6 +345,33 @@ final class FolioTests: XCTestCase {
         XCTAssertNotEqual(FaceID(rawValue: "a").rawValue, FamilyID(rawValue: "b").rawValue)
     }
 
+    func testInstallationSceneOpensAsAnIndependentWindowAndReopens() async throws {
+        func item(in menu: NSMenu?) -> NSMenuItem? {
+            for entry in menu?.items ?? [] {
+                if entry.title == L.text("import.installationWindow"), entry.action != nil { return entry }
+                if let found = item(in: entry.submenu) { return found }
+            }
+            return nil
+        }
+        func openWindow() throws {
+            let entry = try XCTUnwrap(item(in: NSApp.mainMenu))
+            let action = try XCTUnwrap(entry.action)
+            XCTAssertTrue(NSApp.sendAction(action, to: entry.target, from: entry))
+        }
+        try openWindow()
+        try await Task.sleep(for: .milliseconds(250))
+        let window = try XCTUnwrap(NSApp.windows.first { $0.title == L.text("import.installationWindow") })
+        defer { window.close() }
+        XCTAssertTrue(window.isVisible)
+        XCTAssertFalse(window.isModalPanel)
+        XCTAssertNil(window.sheetParent)
+        XCTAssertNil(NSApp.modalWindow)
+        window.close()
+        try openWindow()
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(NSApp.windows.contains { $0.title == L.text("import.installationWindow") && $0.isVisible })
+    }
+
     func testCopiedImportKeepsOriginalAndDeduplicates() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -384,6 +411,50 @@ final class FolioTests: XCTestCase {
         let snapshot = try await repository.refreshLibrary()
         XCTAssertEqual(snapshot.faceCount, 1)
         XCTAssertTrue(FileManager.default.fileExists(atPath: invalid.path))
+    }
+
+    func testExportPreservesBytesDeduplicatesFilesAndNeverOverwrites() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = try FolioRepository(databaseURL: directory.appendingPathComponent("folio.sqlite"))
+        let operations = try FontOperations(repository: repository, supportDirectory: directory)
+        let source = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "Lato-Regular", withExtension: "ttf"))
+        let output = directory.appendingPathComponent("export")
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        let missing = directory.appendingPathComponent("missing.ttf").path
+        let outcomes = await operations.exportFiles(paths: [source.path, source.path, missing], to: output)
+        XCTAssertEqual(outcomes.count, 2)
+        XCTAssertNil(outcomes[0].error)
+        XCTAssertNotNil(outcomes[1].error)
+        let exported = output.appendingPathComponent(source.lastPathComponent)
+        XCTAssertEqual(try Data(contentsOf: exported), try Data(contentsOf: source))
+        let sentinel = Data("keep existing".utf8)
+        try sentinel.write(to: exported)
+        let repeated = await operations.exportFiles(paths: [source.path], to: output)
+        XCTAssertNotNil(repeated[0].error)
+        XCTAssertEqual(try Data(contentsOf: exported), sentinel)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: output.path), [source.lastPathComponent])
+        let snapshot = try await repository.loadCachedLibrary()
+        XCTAssertEqual(snapshot.faceCount, 0)
+    }
+
+    func testAnalysisIsReadOnlyAndDetectsExistingRevision() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = try FolioRepository(databaseURL: directory.appendingPathComponent("folio.sqlite"))
+        let source = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "Lato-Regular", withExtension: "ttf"))
+        let analysis = try await repository.analyzeFontFile(source)
+        XCTAssertEqual(analysis.faces.count, 1)
+        XCTAssertFalse(analysis.faces[0].duplicate)
+        let empty = try await repository.loadCachedLibrary()
+        XCTAssertEqual(empty.faceCount, 0)
+        _ = try await repository.addFontFile(source)
+        _ = try await repository.refreshLibrary()
+        let duplicate = try await repository.analyzeFontFile(source)
+        XCTAssertTrue(duplicate.faces[0].duplicate)
+        XCTAssertFalse(duplicate.faces[0].conflict)
     }
 
     func testBatchActivationReportsUnavailableFileSeparately() async throws {

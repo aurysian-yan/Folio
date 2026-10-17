@@ -644,3 +644,34 @@ struct HeroSyncPresentation: Hashable, Sendable {
     let text: String
     let action: HeroAction?
 }
+
+// 安装窗口只读分析与文件级健康结果。
+struct FontFileAnalysis: Decodable, Sendable {
+    struct Face: Decodable, Sendable {
+        let family: String?
+        let style: String?
+        let faceIndex: UInt32
+        let duplicate: Bool
+        let conflict: Bool
+    }
+    let fingerprint: String
+    let format: String
+    let faces: [Face]
+    let problemCount: Int
+}
+
+struct FontImportCandidate: Identifiable, Sendable {
+    let url: URL
+    let analysis: FontFileAnalysis?
+    let error: String?
+    var id: String { url.path }
+}
+
+struct FontFileIssue: Decodable, Identifiable, Sendable {
+    let kind: String
+    let path: String?
+    let message: String
+    let face_index: UInt32?
+    var id: String { "\(kind):\(path ?? ""):\(face_index.map(String.init) ?? "")" }
+    var title: String { L.text("health.issueKinds.\(kind)") }
+}

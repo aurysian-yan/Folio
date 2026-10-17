@@ -2,11 +2,12 @@ import SwiftUI
 
 @main
 struct FolioApp: App {
+    @State private var model = LibraryViewModel()
     var body: some Scene {
-        WindowGroup {
+        Window("Folio", id: "library") {
             // 单元测试不启动真实字体库与云同步。
             if NSClassFromString("XCTestCase") == nil {
-                RootView()
+                RootView(model: model)
             } else {
                 Color.clear
             }
@@ -16,6 +17,11 @@ struct FolioApp: App {
             SidebarCommands()
             CommandGroup(replacing: .appInfo) { AboutMenuButton() }
         }
+
+        Window(L.text("import.installationWindow"), id: "font-installation") {
+            ImportReportView(model: model)
+        }
+        .defaultSize(width: 720, height: 520)
 
         Settings {
             SettingsView()

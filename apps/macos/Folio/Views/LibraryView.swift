@@ -14,7 +14,11 @@ struct LibraryView: View {
     var body: some View {
         ZStack {
             Group {
-                if model.snapshot.roots.isEmpty, model.families.isEmpty, !model.isLoading {
+                if model.selectedDestination == .fontHealth, !model.hasCompletedHealthScan {
+                    ContentUnavailableView {
+                        Label { Text(L.text("health.scanPending")) } icon: { Image.englishSystemName("stethoscope") }
+                    }
+                } else if model.snapshot.roots.isEmpty, model.families.isEmpty, !model.isLoading {
                     emptyLibrary
                 } else {
                     gridContent
@@ -60,6 +64,11 @@ struct LibraryView: View {
                 }
             }
             if model.characterMap == nil {
+                if model.selectedDestination == .fontHealth {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(L.text("health.rescan")) { model.reloadAfterSync() }.disabled(model.isRefreshing)
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Picker(L.text("fontLocation.title"),selection:$model.locationFilter) {
                         ForEach(["all","local","cloudOnly","both","pendingUpload","excluded"],id:\.self) { filter in Text(L.text("fontLocation.\(filter)")).tag(filter) }
@@ -102,6 +111,8 @@ struct LibraryView: View {
                                 Image.englishSystemName("plus")
                             }
                         }
+                        Button(L.text("import.export")) { model.exportCurrentFonts() }
+                            .disabled(model.isFontOperationRunning)
                         Button {
                             model.addFolder()
                         } label: {
@@ -166,7 +177,11 @@ struct LibraryView: View {
         ScrollView {
             VStack(spacing: 0) {
                 libraryHeader
-                if model.families.isEmpty, !model.isLoading {
+                if model.selectedDestination == .fontHealth, !model.fileIssues.isEmpty {
+                    fileHealthIssues
+                }
+                if model.families.isEmpty, !model.isLoading,
+                   !(model.selectedDestination == .fontHealth && !model.fileIssues.isEmpty) {
                     noResults
                         .frame(minHeight: 260)
                 } else {
@@ -175,6 +190,33 @@ struct LibraryView: View {
 
             }
         }
+    }
+
+    private var fileHealthIssues: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(L.text("health.fileIssues")).font(.headline)
+                Spacer()
+            }
+            ForEach(model.fileIssues) { issue in
+                GroupBox {
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(issue.title)
+                            if let path = issue.path {
+                                Text(path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                            }
+                        }
+                        Spacer()
+                        if let path = issue.path {
+                            Button(L.text("inspector.revealInFinder")) {
+                                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                            }
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }.padding()
     }
 
     @ViewBuilder
