@@ -1028,12 +1028,11 @@ async fn open_settings(window: WebviewWindow, app: tauri::AppHandle, page: Optio
     .inner_size(840.0, 640.0)
     .resizable(false)
     .decorations(false)
-    .transparent(true)
+    .transparent(cfg!(target_os = "windows"))
     .visible(false)
     .build()
     .map_err(|error| error.to_string())?;
 
-    apply_window_material(&window);
     window.show().map_err(|error| error.to_string())?;
     Ok(())
 }
@@ -1052,18 +1051,21 @@ fn require_main_window(window: &WebviewWindow) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
-fn apply_window_material(window: &tauri::WebviewWindow) {
-    if window_vibrancy::apply_mica(window, None).is_err() {
-        let _ = window_vibrancy::apply_acrylic(window, None);
-    }
+fn apply_window_material(window: &tauri::Window) -> bool {
+    // 云母接口自身检查 Windows 11 版本，失败时保留实色背景。
+    window_vibrancy::apply_mica(window, None).is_ok()
 }
 
 #[cfg(not(target_os = "windows"))]
-fn apply_window_material(_window: &tauri::WebviewWindow) {}
+fn apply_window_material(_window: &tauri::Window) -> bool { false }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
+    let mut context = tauri::generate_context!();
+    for window in &mut context.config_mut().app.windows {
+        window.transparent = cfg!(target_os = "windows");
+    }
 
     #[cfg(desktop)]
     {
@@ -1088,6 +1090,12 @@ pub fn run() {
 
     let app_state = builder
         .plugin(tauri_plugin_dialog::init())
+        .on_page_load(|webview, payload| {
+            if payload.event() != tauri::webview::PageLoadEvent::Finished { return; }
+            let material = if apply_window_material(&webview.window()) { "mica" } else { "solid" };
+            // 页面重载后同步实际材质，默认实色避免不支持云母时透出桌面。
+            let _ = webview.eval(format!("document.documentElement.dataset.windowMaterial = '{material}';"));
+        })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -1108,7 +1116,6 @@ pub fn run() {
             });
 
             if let Some(window) = app.get_webview_window("main") {
-                apply_window_material(&window);
                 window.show()?;
             }
             Ok(())
@@ -1161,7 +1168,7 @@ pub fn run() {
             about::open_about_link,
             quit_app,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("启动 Folio 桌面应用失败");
 
     app_state.run(|_, _| {});

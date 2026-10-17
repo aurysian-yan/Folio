@@ -43,6 +43,7 @@
     --menu-surface: #ffffff;
     --content-surface: #ffffff;
     --menu-backdrop: #ffffff;
+    --window-background: var(--menu-backdrop);
     --accent: #f06835;
     --accent-foreground: #ffffff;
     --foreground: var(--text);
@@ -124,6 +125,10 @@
         filter: invert(1);
     }
 }
+/* 仅实际启用云母的 Windows 11 窗口透出系统材质。 */
+:root[data-window-material="mica"] {
+    --window-background: transparent;
+}
 * {
     box-sizing: border-box;
 }
@@ -135,8 +140,7 @@ body,
     min-width: 640px;
     min-height: 460px;
     margin: 0;
-    background: transparent !important;
-    background-color: transparent !important;
+    background: var(--window-background) !important;
 }
 body {
     overflow: hidden;
@@ -183,7 +187,7 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: transparent;
+    background: var(--window-background);
     color: var(--text);
 }
 .titlebar {
