@@ -2,6 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Animated, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View, type ViewToken } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CharacterGlyphImage } from './CharacterGlyphImage';
 import { characterPreviewCapacity, CharacterPreviewRenderer } from './character-preview';
@@ -195,13 +196,22 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
         ListEmptyComponent={page ? <Text style={[settingsLayout.content, { color: theme.secondary }]}>{t('characterMap.empty')}</Text> : !error && !failureContent ? <ActivityIndicator color={theme.accent} /> : null}
         renderItem={({ item }) => {
           const image = byGlyph.get(item.glyphId);
-          return <Pressable style={[styles.cell, { width: cellWidth, backgroundColor: theme.surface, borderColor: selected?.codepoint === item.codepoint ? theme.accent : 'transparent' }]}
-            accessibilityRole="button" accessibilityState={{ selected: selected?.codepoint === item.codepoint }}
+          const isSelected = selected?.codepoint === item.codepoint;
+          return <Pressable style={[styles.cell, { width: cellWidth, backgroundColor: theme.surface }]}
+            accessibilityRole="button" accessibilityState={{ selected: isSelected }}
             accessibilityLabel={t('characterMap.characterLabel', { codepoint: codepointLabel(item.codepoint), glyphId: item.glyphId, script: item.script })}
             onPress={() => setSelection({ key: queryKey, entry: item })}>
+            {isSelected && <Svg pointerEvents="none" accessible={false} style={StyleSheet.absoluteFill} width="100%" height="100%">
+              <Defs><LinearGradient id="characterSelection" x1="0%" y1="0%" x2="0%" y2="100%">
+                <Stop offset={0.53125} stopColor={theme.accent} stopOpacity={0} />
+                <Stop offset={1} stopColor={theme.accent} stopOpacity={0.4} />
+              </LinearGradient></Defs>
+              <Rect width="100%" height="100%" fill="url(#characterSelection)" />
+            </Svg>}
             <CharacterGlyphImage dataUrl={image?.dataUrl} style={styles.cellImage} identity={`${info?.handle}:${item.glyphId}`} />
             <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{codepointLabel(item.codepoint)}</Text>
             {image?.status === 'error' && <Text style={{ color: theme.danger }}>{t('characterMap.error.renderFailed')}</Text>}
+            {isSelected && <View pointerEvents="none" accessible={false} style={[styles.cellSelection, { borderColor: theme.accent }]} />}
           </Pressable>;
         }} />
     </NavigationBackdrop>
@@ -260,7 +270,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1 }, header: { paddingHorizontal: 16 },
   grid: { flex: 1 }, gridRow: { gap: 8, marginBottom: 8 }, listHeader: { paddingBottom: 16 },
   filters: { gap: 8 },
-  cell: { ...settingsLayout.control, height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  cell: { ...settingsLayout.control, height: 96, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  cellSelection: { ...StyleSheet.absoluteFill, ...settingsLayout.control, borderWidth: 3 },
   cellImage: { width: 64, height: 64 },
   detail: { paddingHorizontal: 8, gap: 8 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: 16 }, detailMeta: { flex: 1, minWidth: 0, gap: 4 },
