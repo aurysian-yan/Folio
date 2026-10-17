@@ -6,7 +6,7 @@ import type { PageHeaderTextProps } from './PageHeaderText';
 import { pageTitleBlur, pageTitleMotion } from './page-header-motion';
 
 // iOS 复用现有 SwiftUI 文本模糊，仅订阅标题交接区间的半径变化。
-export function PageHeaderText({ title, theme, compact = false, scrollY, reduceMotion, style }: PageHeaderTextProps) {
+export function PageHeaderText({ title, theme, compact = false, secondary = false, scrollY, reduceMotion, style }: PageHeaderTextProps) {
   const [offset, setOffset] = useState(0);
   const { fontScale } = useWindowDimensions();
   const typography = StyleSheet.flatten(style);
@@ -19,10 +19,10 @@ export function PageHeaderText({ title, theme, compact = false, scrollY, reduceM
   }, [scrollY, compact, reduceMotion]);
   return <Host matchContents={{ vertical: true }} ignoreSafeArea="all" pointerEvents="none"
     colorScheme={theme.dark ? 'dark' : 'light'} style={{ width: '100%', minHeight: lineHeight }}>
-    <Text modifiers={[font({ size, weight: 'semibold' }), foregroundStyle(theme.label),
+    <Text modifiers={[font({ size, weight: secondary ? 'regular' : 'semibold' }), foregroundStyle(secondary ? theme.secondary : theme.label),
       lineLimit(compact ? 1 : 2),
       scaleEffect(reduceMotion || compact ? 1 : 1 + (pageTitleMotion.minimumScale - 1) * offset / pageTitleMotion.end),
       frame({ maxWidth: Infinity, minHeight: lineHeight, alignment: compact ? 'center' : 'leading' }),
-      accessibilityAddTraits(['isHeader']), blur(reduceMotion ? 0 : pageTitleBlur(offset, compact))]}>{title}</Text>
+      ...(secondary ? [] : [accessibilityAddTraits(['isHeader'])]), blur(reduceMotion ? 0 : pageTitleBlur(offset, compact))]}>{title}</Text>
   </Host>;
 }

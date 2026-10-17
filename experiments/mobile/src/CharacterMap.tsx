@@ -174,16 +174,10 @@ function CharacterMapContent({ selectionKey, session, info, axes, theme, header,
     {failureContent}
   </View>;
   return <NativeScrollContainer hasHeader onInsetsChange={header.onInsetsChange} style={styles.screen}>
-    <PageHeader {...header} theme={theme} style={styles.header}>
-      <IconButton theme={theme} label={t('common.back')} systemImage="chevron.left" onPress={onClose}>
+    <PageHeader {...header} title={title} subtitle={info ? t('characterMap.count', { count: page?.total ?? info.count }) : t('common.loading')}
+      fixed theme={theme} style={styles.header} leading={<IconButton theme={theme} label={t('common.back')} systemImage="chevron.left" onPress={onClose}>
         <CaretLeftIcon size={20} color={theme.label} />
-      </IconButton>
-      <View style={styles.heading}>
-        <Text numberOfLines={1} accessibilityRole="header" style={[settingsTypography.body, { color: theme.label, fontWeight: '600', textAlign: 'center' }]}>{title}</Text>
-        <Text numberOfLines={1} accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary, textAlign: 'center' }]}>{info ? t('characterMap.count', { count: page?.total ?? info.count }) : t('common.loading')}</Text>
-      </View>
-      {actions}
-    </PageHeader>
+      </IconButton>} actions={actions} />
     <View style={styles.screen} onLayout={({ nativeEvent: { layout } }) => {
       if (layout.width > 0 && layout.height > 0) setViewport(layout);
     }}>
@@ -264,7 +258,6 @@ function CharacterDetail({ session, entry, axes, foreground, theme }: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 }, header: { paddingHorizontal: 16 },
-  heading: { flex: 1, minWidth: 0, gap: 2 },
   grid: { flex: 1 }, gridRow: { gap: 8, marginBottom: 8 }, listHeader: { paddingBottom: 16 },
   filters: { gap: 8 },
   cell: { ...settingsLayout.control, height: 96, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },

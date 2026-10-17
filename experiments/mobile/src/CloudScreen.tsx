@@ -68,7 +68,10 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
     scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
     contentContainerStyle={[styles.content, { paddingTop: header.contentTop,
       paddingBottom: header.contentBottom }]} data={readError ? [] : state?.fonts.filter((font) => font.deleted === (section === 'deleted')) ?? []}
-    onScrollBeginDrag={() => openSwipe.current?.methods.close()}
+    onScrollBeginDrag={(event) => {
+      header.snapScrollProps.onScrollBeginDrag(event);
+      openSwipe.current?.methods.close();
+    }}
     keyExtractor={(font) => font.fingerprint}
     ListHeaderComponent={<View style={styles.header}>
       <PageTitle {...header} title={t('mobile.cloudFonts')} theme={theme} />

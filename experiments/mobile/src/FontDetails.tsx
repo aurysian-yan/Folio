@@ -104,6 +104,7 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const axisValues = axisState.key === faceKey ? axisState.values : defaultAxisValues(selectedFace);
   const axes = adjustableAxes(selectedFace);
   const variable = family.faces.some((face) => adjustableAxes(face).length > 0);
+  const summary = `${t('macos.stylesCount', { count: family.faces.length })}${variable ? ` · ${t('font.variable')}` : ''}`;
   const fontSize = Math.min(160, previewSize * PixelRatio.getFontScale());
   const previewIdentity = JSON.stringify([faceKey, selectedFace?.sourcePath, selectedFace?.faceIndex]);
   const previewKey = JSON.stringify([previewIdentity, axisValues, previewText, fontSize, previewWidth, theme.label, previewRetry]);
@@ -132,7 +133,7 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <NativeScrollContainer accessibilityViewIsModal hasHeader onInsetsChange={header.onInsetsChange} style={styles.screen}>
-      <PageHeader {...header} title={family.displayName} theme={theme} style={styles.header} leading={
+      <PageHeader {...header} title={family.displayName} subtitle={summary} theme={theme} style={styles.header} leading={
         <IconButton theme={theme} label={t('mobile.backToLibrary')} systemImage="chevron.left" onPress={onClose}>
           <CaretLeftIcon size={20} color={theme.label} />
         </IconButton>
@@ -149,12 +150,7 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
           scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
           contentContainerStyle={[settingsLayout.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}
           keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          <View>
-            <PageTitle {...header} title={family.displayName} theme={theme} style={settingsLayout.pageTitle} />
-            <Text style={[styles.summary, { color: theme.secondary }]}>
-              {t('macos.stylesCount', { count: family.faces.length })}{variable ? ` · ${t('font.variable')}` : ''}
-            </Text>
-          </View>
+          <PageTitle {...header} title={family.displayName} subtitle={summary} theme={theme} style={settingsLayout.pageTitle} />
           {(recentError || error) && <View style={styles.feedback}>
             {!!recentError && <View style={styles.feedback}>
               <Text accessibilityRole="alert" style={[styles.detail, { color: theme.danger }]}>{recentError}</Text>
@@ -262,7 +258,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   fill: { ...StyleSheet.absoluteFill },
   header: { paddingHorizontal: 16 },
-  summary: { ...settingsTypography.detail, ...settingsLayout.section },
   feedback: { ...settingsLayout.section, gap: 8 },
   body: { ...settingsTypography.body },
   detail: { ...settingsTypography.detail },

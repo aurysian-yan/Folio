@@ -8,7 +8,7 @@ import { AndroidHeaderBackdrop } from './HeaderControls';
 import { navigationContentInset } from './bottom-navigation';
 import { usesNativeControls } from './native-controls';
 import { PageHeaderText } from './PageHeaderText';
-import { pageHeaderSnapTarget, pageTitleMotion } from './page-header-motion';
+import { pageHeaderSnapTarget, pageTitleCollapsed, pageTitleDuration, pageTitleMotion, pageTitleRemainingDuration } from './page-header-motion';
 import { HeaderScrollContext } from './HeaderButtonShadow';
 import type { Theme } from './ui';
 
@@ -16,7 +16,7 @@ export const pageHeaderHeight = 64;
 export const pageTitleInset = 12;
 
 // 滚动标题共用安全区域、原生栏遮挡与减少动态效果设置。
-export function usePageHeader({ collapseOffset = pageTitleMotion.end, bottomTabs = true, sourceId: providedSourceId, onSnap }: {
+export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset, bottomTabs = true, sourceId: providedSourceId, onSnap }: {
   collapseOffset?: number; bottomTabs?: boolean; sourceId?: string;
   onSnap: (offset: number, animated: boolean) => void;
 }) {
@@ -27,9 +27,14 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.end, bottomTabs
   const [restoringTitle, setRestoringTitle] = useState(false);
   const restoring = useRef(false);
   const currentOffset = useRef(0);
+  const scrollSample = useRef({ offset: 0, time: 0 });
   const onSnapRef = useRef(onSnap);
   const scrollY = restoringTitle ? restoreOffset : scrollOffset;
   const [collapsed, setCollapsed] = useState(false);
+  const [titleCollapsed, setTitleCollapsed] = useState(false);
+  const titleTarget = useRef(false);
+  const [titleOffset] = useState(() => new Animated.Value(0));
+  const [titleScale] = useState(() => new Animated.Value(pageTitleMotion.compactMinimumScale));
   const [reduceMotion, setReduceMotion] = useState(false);
   const [nativeInsets, setNativeInsets] = useState({ top: inset.top, bottom: 0, contentTop: 0 });
   useLayoutEffect(() => { onSnapRef.current = onSnap; }, [onSnap]);
@@ -40,9 +45,49 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.end, bottomTabs
     return () => { mounted = false; subscription.remove(); };
   }, []);
   useEffect(() => {
-    const listener = scrollY.addListener(({ value }) => { currentOffset.current = value; setCollapsed(value >= collapseOffset); });
-    return () => scrollY.removeListener(listener);
-  }, [collapseOffset, scrollY]);
+    let transition: Animated.CompositeAnimation | undefined;
+    let startedAt = 0;
+    let deadline = 0;
+    scrollSample.current = { offset: currentOffset.current, time: performance.now() };
+    // 滚动开始即驱动标题上浮与模糊交接，时长统一受限。
+    function update(value: number, force = false) {
+      const time = performance.now();
+      const sample = scrollSample.current;
+      const velocity = (value - sample.offset) / Math.max(1, time - sample.time);
+      scrollSample.current = { offset: value, time };
+      currentOffset.current = value;
+      setCollapsed(value >= collapseOffset);
+      const target = reduceMotion ? value >= collapseOffset : pageTitleCollapsed(value, titleTarget.current);
+      let duration: number;
+      if (!force && target === titleTarget.current) {
+        if (reduceMotion || time >= deadline || (target ? velocity <= 0 : velocity >= 0)) return;
+        const remaining = pageTitleRemainingDuration(velocity, time - startedAt, deadline - startedAt, collapseOffset);
+        if (remaining === null) return;
+        duration = remaining;
+      } else {
+        startedAt = time;
+        duration = pageTitleDuration(velocity, collapseOffset);
+      }
+      deadline = time + duration;
+      titleTarget.current = target;
+      setTitleCollapsed(target);
+      transition?.stop();
+      const offset = target ? pageTitleMotion.end : 0;
+      const scale = target ? pageTitleMotion.compactScale : pageTitleMotion.compactMinimumScale;
+      if (reduceMotion) { titleOffset.setValue(offset); titleScale.setValue(1); return; }
+      transition = Animated.parallel([
+        Animated.timing(titleOffset, { toValue: offset, duration, easing: Easing.out(Easing.cubic),
+          useNativeDriver: true, isInteraction: false }),
+        Animated.timing(titleScale, { toValue: scale, duration,
+          easing: target ? Easing.out(Easing.back(1.2)) : Easing.out(Easing.cubic),
+          useNativeDriver: true, isInteraction: false }),
+      ]);
+      transition.start();
+    }
+    update(currentOffset.current, true);
+    const listener = scrollY.addListener(({ value }) => update(value));
+    return () => { scrollY.removeListener(listener); transition?.stop(); };
+  }, [collapseOffset, reduceMotion, scrollY, titleOffset, titleScale]);
   const onScroll = useMemo(() => Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollOffset } } }], { useNativeDriver: true },
   ), [scrollOffset]);
@@ -70,7 +115,8 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.end, bottomTabs
     });
     return () => { current = false; transition.stop(); };
   }, [reduceMotion, restoreOffset, restoringTitle, scrollOffset]);
-  const interruptRestore = useCallback(() => {
+  const interruptRestore = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollSample.current = { offset: event.nativeEvent.contentOffset.y, time: performance.now() };
     if (restoring.current) { restoring.current = false; setRestoringTitle(false); }
   }, []);
   const settleHeader = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -90,7 +136,7 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.end, bottomTabs
   }), [collapseOffset, interruptRestore, settleHeader]);
   const topInset = usesNativeControls ? Math.max(inset.top, nativeInsets.top) : inset.top;
   return {
-    scrollY, onScroll, collapsed, reduceMotion, topInset, snapScrollProps, restoreTitle,
+    scrollY, titleOffset, titleScale, titleCollapsed, onScroll, collapsed, reduceMotion, topInset, snapScrollProps, restoreTitle,
     sourceId: providedSourceId ?? generatedSourceId,
     contentTop: Math.max(nativeInsets.contentTop, topInset + pageHeaderHeight + 16),
     contentBottom: bottomTabs ? usesNativeControls ? nativeInsets.bottom + 32 : navigationContentInset(inset.bottom)
@@ -99,32 +145,34 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.end, bottomTabs
   };
 }
 
-// 两处标题按同一滚动区间交接，减少动态效果时直接切换。
+// 两处标题共用有界时长的交接进度，减少动态效果时直接切换。
 function useTitleTransition(scrollY: Animated.Value, compact: boolean, reduceMotion: boolean) {
   return useMemo(() => {
     const inputRange = reduceMotion ? [pageTitleMotion.end - 0.01, pageTitleMotion.end]
-      : [compact ? pageTitleMotion.compactStart : 0, pageTitleMotion.end];
+      : [0, pageTitleMotion.end];
     const interpolate = (outputRange: number[]) => scrollY.interpolate({ inputRange, outputRange, extrapolate: 'clamp' });
     return {
       opacity: interpolate(compact ? [0, 1] : [1, 0]),
-      scale: reduceMotion ? 1 : interpolate(compact ? [pageTitleMotion.compactMinimumScale, 1] : [1, pageTitleMotion.minimumScale]),
+      scale: reduceMotion ? 1 : interpolate(compact ? [pageTitleMotion.compactMinimumScale, pageTitleMotion.compactScale] : [1, pageTitleMotion.minimumScale]),
       blurRadius: reduceMotion ? 0 : interpolate(compact ? [pageTitleMotion.blur, 0] : [0, pageTitleMotion.blur]),
     };
   }, [scrollY, compact, reduceMotion]);
 }
 
 // 一级与二级页面复用主页的渐进模糊和浮动操作栏。
-export function PageHeader({ theme, scrollY, topInset, sourceId, active = true, title,
-  collapsed = false, reduceMotion = false, leading, actions, children, style, onLayout }: {
+export function PageHeader({ theme, scrollY, titleOffset = scrollY, titleScale, topInset, sourceId, active = true, title, subtitle, fixed = false,
+  collapsed = false, titleCollapsed = collapsed, reduceMotion = false, leading, actions, children, style, onLayout }: {
   theme: Theme; scrollY: Animated.Value; topInset: number; sourceId: string; active?: boolean;
-  title?: string; collapsed?: boolean; reduceMotion?: boolean;
+  title?: string; subtitle?: string; fixed?: boolean; collapsed?: boolean; titleCollapsed?: boolean; reduceMotion?: boolean;
+  titleOffset?: Animated.Value; titleScale?: Animated.Value;
   leading?: ReactNode; actions?: ReactNode; children?: ReactNode;
 } & ViewProps) {
-  const compact = useTitleTransition(scrollY, true, reduceMotion);
+  const compact = useTitleTransition(titleOffset, true, reduceMotion);
   const [leadingWidth, setLeadingWidth] = useState(44);
   const [actionsWidth, setActionsWidth] = useState(44);
   const horizontalInset = StyleSheet.flatten([styles.header, style]).paddingHorizontal ?? 26;
   const titleInset = Number(horizontalInset) + Math.max(leadingWidth, actionsWidth) + 12;
+  const titleVisible = fixed || titleCollapsed;
   return <>
     {Platform.OS === 'android' && <Animated.View pointerEvents="none"
       accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
@@ -137,10 +185,13 @@ export function PageHeader({ theme, scrollY, topInset, sourceId, active = true, 
         backgroundColor: Platform.OS === 'ios' && Number(Platform.Version) < 26 ? theme.background : undefined }, style]}>
       <HeaderScrollContext.Provider value={scrollY}>{children ?? <>
         <View onLayout={({ nativeEvent }) => setLeadingWidth(nativeEvent.layout.width)} style={styles.leading}>{leading}</View>
-        <Animated.View pointerEvents="none" accessibilityElementsHidden={!collapsed} importantForAccessibility={collapsed ? 'auto' : 'no-hide-descendants'}
-          style={[styles.compactTitle, { left: titleInset, right: titleInset, opacity: compact.opacity, transform: [{ scale: compact.scale }],
-            ...(Platform.OS === 'android' ? { filter: [{ blur: compact.blurRadius }] } : {}) }]}>
-          <PageHeaderText title={title} theme={theme} compact scrollY={scrollY} reduceMotion={reduceMotion} style={styles.smallTitle} />
+        <Animated.View pointerEvents="none" accessibilityElementsHidden={!titleVisible} importantForAccessibility={titleVisible ? 'auto' : 'no-hide-descendants'}
+          style={[styles.compactTitle, { left: titleInset, right: titleInset, opacity: fixed ? 1 : compact.opacity,
+            transform: [{ scale: fixed || reduceMotion ? 1 : titleScale ?? compact.scale }],
+            ...(Platform.OS === 'android' && !fixed ? { filter: [{ blur: compact.blurRadius }] } : {}) }]}>
+          <PageHeaderText title={title} theme={theme} compact scrollY={titleOffset} reduceMotion={reduceMotion || fixed} style={styles.smallTitle} />
+          {!!subtitle && <PageHeaderText title={subtitle} theme={theme} compact secondary scrollY={titleOffset}
+            reduceMotion={reduceMotion || fixed} style={styles.smallSubtitle} />}
         </Animated.View>
         <View onLayout={({ nativeEvent }) => setActionsWidth(nativeEvent.layout.width)} style={styles.actions}>{actions}</View>
       </>}</HeaderScrollContext.Provider>
@@ -148,17 +199,23 @@ export function PageHeader({ theme, scrollY, topInset, sourceId, active = true, 
   </>;
 }
 
-// 反向抵消正文位移，大标题保持原位并逐渐缩小、模糊和淡出。
-export function PageTitle({ title, theme, scrollY, collapsed, reduceMotion = false, style }: {
+// 上浮、模糊和淡出共用交接进度，抵消正文位移以限制上浮距离。
+export function PageTitle({ title, subtitle, theme, scrollY, titleOffset = scrollY, collapsed, titleCollapsed = collapsed, reduceMotion = false, style }: {
   title: string; theme: Theme; scrollY: Animated.Value; collapsed: boolean; reduceMotion?: boolean;
+  subtitle?: string; titleOffset?: Animated.Value; titleCollapsed?: boolean;
 } & Pick<ViewProps, 'style'>) {
-  const expanded = useTitleTransition(scrollY, false, reduceMotion);
-  return <Animated.View pointerEvents="none" accessibilityElementsHidden={collapsed}
-    importantForAccessibility={collapsed ? 'no-hide-descendants' : 'auto'}
+  const expanded = useTitleTransition(titleOffset, false, reduceMotion);
+  const translateY = useMemo(() => reduceMotion ? scrollY : Animated.subtract(scrollY, titleOffset.interpolate({
+    inputRange: [0, pageTitleMotion.end], outputRange: [0, pageTitleMotion.collapseOffset], extrapolate: 'clamp',
+  })), [reduceMotion, scrollY, titleOffset]);
+  return <Animated.View pointerEvents="none" accessibilityElementsHidden={titleCollapsed}
+    importantForAccessibility={titleCollapsed ? 'no-hide-descendants' : 'auto'}
     style={[styles.contentTitle, { opacity: expanded.opacity,
-      transform: [{ translateY: scrollY }],
+      transform: [{ translateY }],
       ...(Platform.OS === 'android' ? { filter: [{ blur: expanded.blurRadius }] } : {}) }, style]}>
-    <PageHeaderText title={title} theme={theme} scrollY={scrollY} reduceMotion={reduceMotion} style={styles.largeTitle} />
+    <PageHeaderText title={title} theme={theme} scrollY={titleOffset} reduceMotion={reduceMotion} style={styles.largeTitle} />
+    {!!subtitle && <PageHeaderText title={subtitle} theme={theme} secondary scrollY={titleOffset}
+      reduceMotion={reduceMotion} style={styles.largeSubtitle} />}
   </Animated.View>;
 }
 
@@ -168,7 +225,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
   leading: { minWidth: 44 }, actions: { minWidth: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  compactTitle: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center', paddingVertical: 8 }, smallTitle: { fontSize: 18, lineHeight: 24, fontWeight: '600', textAlign: 'center' },
+  compactTitle: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center', paddingVertical: 8, gap: 4 }, smallTitle: { fontSize: 18, lineHeight: 24, fontWeight: '600', textAlign: 'center' },
+  smallSubtitle: { fontSize: 13, lineHeight: 18, fontWeight: '400', textAlign: 'center' },
   largeTitle: { fontSize: 34, lineHeight: 44, fontWeight: '600' },
-  contentTitle: { paddingHorizontal: pageTitleInset, paddingVertical: 8, zIndex: 1 },
+  largeSubtitle: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
+  contentTitle: { paddingHorizontal: pageTitleInset, paddingVertical: 8, gap: 8, zIndex: 1 },
 });
