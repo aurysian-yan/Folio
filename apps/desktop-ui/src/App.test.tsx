@@ -183,13 +183,15 @@ it("存储页统计占用并确认重建同步索引", async () => {
   await waitFor(() => expect(rebuildSyncIndexes).toHaveBeenCalledTimes(1));
 });
 
-it("设置滑块保留步长、上下限与禁用行为", async () => {
+it("设置滑块保留上下限、连续调节和禁用行为", async () => {
   window.history.replaceState(null, "", "?window=settings");
   const { getByRole } = render(<App />);
   fireEvent.click(getByRole("tab", { name: "显示" }));
   const blur = getByRole("slider", { name: "模糊度" });
   fireEvent.keyDown(blur, { key: "Home" });
   expect(blur.getAttribute("aria-valuenow")).toBe("1");
+  fireEvent.keyDown(blur, { key: "ArrowRight" });
+  expect(blur.getAttribute("aria-valuenow")).toBe("1.1");
   fireEvent.keyDown(blur, { key: "ArrowLeft" });
   expect(blur.getAttribute("aria-valuenow")).toBe("1");
   fireEvent.keyDown(blur, { key: "End" });

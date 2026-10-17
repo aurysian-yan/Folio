@@ -229,6 +229,14 @@ const titlebarThumbCorners = { radius: 13, smoothing: 0.6 } as const;
 // 菜单外壳与菜单项圆角同心：外壳 10px、内边距 3px、菜单项 6px。
 const menuCorners = { radius: 10, smoothing: 0.6 } as const;
 const menuItemCorners = { radius: 6, smoothing: 0.6 } as const;
+const sidebarBlurRange = { min: 1, max: 12 } as const;
+// 模糊度按 4 等分设置磁性吸附点，吸附点之间保持连续调节。
+const sidebarBlurSnapPoints = Array.from(
+  { length: 5 },
+  (_, index) =>
+    sidebarBlurRange.min +
+    ((sidebarBlurRange.max - sidebarBlurRange.min) * index) / 4,
+);
 // 侧边栏菜单项使用 lisse 平滑圆角。
 const sidebarItemCorners = { radius: 8, smoothing: 0.6 } as const;
 
@@ -662,8 +670,9 @@ export default function App() {
     parseSidebarBlur(localStorage.getItem("folio-sidebar-status-blur")),
   );
   const updateSidebarBlur = useCallback((value: number) => {
-    setSidebarBlur(value);
-    localStorage.setItem("folio-sidebar-status-blur", String(value));
+    const next = normalizeSidebarBlur(value);
+    setSidebarBlur(next);
+    localStorage.setItem("folio-sidebar-status-blur", String(next));
   }, []);
   const [scope, setScope] = useState<LibraryScope>("all");
   const [collectionId, setCollectionId] = useState<string | null>(null);
@@ -988,7 +997,10 @@ export default function App() {
   }, [expandedCardWheelSpeed]);
 
   useEffect(() => {
-    const saturation = 150 + ((sidebarBlur - 1) * 50) / 11;
+    const saturation =
+      150 +
+      ((sidebarBlur - sidebarBlurRange.min) * 50) /
+        (sidebarBlurRange.max - sidebarBlurRange.min);
     document.documentElement.style.setProperty(
       "--sidebar-status-blur",
       `${sidebarBlur}px`,
@@ -2347,6 +2359,7 @@ export default function App() {
                       label={t("preview.size")}
                       minValue={previewSizeRange.min}
                       maxValue={previewSizeRange.max}
+                      step={1}
                       value={previewSize}
                       onChange={setPreviewSize}
                       onChangeStart={previewAppearance.begin}
@@ -3978,7 +3991,10 @@ function SettingSlider({
   onChangeStart,
   onChangeEnd,
   className = "settings-slider",
-  step = 1,
+  step,
+  keyboardStep,
+  snapPoints,
+  snapRadius,
   unit = "px",
   isDisabled = false,
 }: {
@@ -3991,6 +4007,9 @@ function SettingSlider({
   onChangeEnd?: () => void;
   className?: string;
   step?: number;
+  keyboardStep?: number;
+  snapPoints?: number[];
+  snapRadius?: number;
   unit?: string;
   isDisabled?: boolean;
 }) {
@@ -4002,6 +4021,9 @@ function SettingSlider({
       min={minValue}
       max={maxValue}
       step={step}
+      keyboardStep={keyboardStep}
+      snapPoints={snapPoints}
+      snapRadius={snapRadius}
       disabled={isDisabled}
       value={value}
       onValueChange={onChange}
@@ -4141,15 +4163,24 @@ function BlurSettingsPreview({
         </div>
       </div>
       <div className="blur-preview-controls">
-        <span>{t("desktop.blur")}</span>
+        <span className="blur-preview-icon" aria-hidden="true">
+          <CopySimpleIcon size={18} />
+        </span>
         <SettingSlider
           label={t("desktop.blur")}
-          minValue={1}
-          maxValue={12}
+          minValue={sidebarBlurRange.min}
+          maxValue={sidebarBlurRange.max}
+          keyboardStep={0.1}
+          snapPoints={sidebarBlurSnapPoints}
           value={value}
           onChange={onChange}
         />
-        <output>{value}px</output>
+        <span
+          className="blur-preview-icon blur-preview-icon-strong"
+          aria-hidden="true"
+        >
+          <CopySimpleIcon size={18} weight="fill" />
+        </span>
       </div>
       <p className="settings-note">
         {t("desktop.blurScrollHint")}
@@ -4176,6 +4207,7 @@ function PreviewSizeSlider({
       label={t("preview.size")}
       minValue={previewSizeRange.min}
       maxValue={previewSizeRange.max}
+      step={1}
       value={value}
       onChange={onChange}
       onChangeStart={onChangeStart}
@@ -4206,12 +4238,18 @@ function storedSidebarWidth(key: string) {
   return Number.isFinite(value) && value >= 256 && value <= 480 ? value : null;
 }
 
+function normalizeSidebarBlur(value: number) {
+  const clamped = Math.min(
+    sidebarBlurRange.max,
+    Math.max(sidebarBlurRange.min, value),
+  );
+  return Math.round(clamped * 100) / 100;
+}
+
 function parseSidebarBlur(value: string | null) {
   if (value === null) return 4;
   const amount = Number(value);
-  return Number.isFinite(amount)
-    ? Math.round(Math.min(12, Math.max(1, amount)))
-    : 4;
+  return Number.isFinite(amount) ? normalizeSidebarBlur(amount) : 4;
 }
 
 function errorMessage(cause: unknown) {

@@ -2288,16 +2288,19 @@ body {
 }
 .blur-preview-controls {
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr) 42px;
+    width: min(100%, 640px);
+    grid-template-columns: 20px minmax(0, 1fr) 20px;
     align-items: center;
-    gap: 12px;
-    color: var(--text);
-    font-size: 12px;
+    gap: 10px;
 }
-.blur-preview-controls output {
+.blur-preview-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: var(--text-muted);
-    font-size: 11px;
-    text-align: right;
+}
+.blur-preview-icon-strong {
+    color: color-mix(in srgb, var(--text) 74%, transparent);
 }
 .blur-preview-section > .settings-note {
     margin: 0;
