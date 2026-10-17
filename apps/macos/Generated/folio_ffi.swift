@@ -621,6 +621,16 @@ public protocol FolioEngineProtocol: AnyObject, Sendable {
 
     func addLibraryRoot(path: String) throws  -> RootDto
 
+    /**
+     * 只读分析候选文件，复用核心身份与修订，不写入字体库。
+     */
+    func analyzeFontFile(path: String) throws  -> String
+
+    /**
+     * 文件级缓存诊断保留无有效字款的坏文件，路径只在本机使用。
+     */
+    func cachedFileIssues() throws  -> String
+
     func closeCharacterMap(handle: String)
 
     func convertCollectionToSmartFolder(id: CollectionIdDto, name: String, query: SmartFolderQueryDto, icon: String, color: String) throws  -> SmartFolderIdDto
@@ -760,6 +770,31 @@ open func addLibraryRoot(path: String)throws  -> RootDto  {
     uniffi_folio_ffi_fn_method_folioengine_add_library_root(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(path),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * 只读分析候选文件，复用核心身份与修订，不写入字体库。
+     */
+open func analyzeFontFile(path: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_analyze_font_file(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(path),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * 文件级缓存诊断保留无有效字款的坏文件，路径只在本机使用。
+     */
+open func cachedFileIssues()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeFolioFfiError_lift) {
+        uniffiCallStatus in
+    uniffi_folio_ffi_fn_method_folioengine_cached_file_issues(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -5448,6 +5483,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_add_library_root() != 56225) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_analyze_font_file() != 22447) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_folio_ffi_checksum_method_folioengine_cached_file_issues() != 63964) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_folio_ffi_checksum_method_folioengine_close_character_map() != 54900) {

@@ -236,6 +236,50 @@ struct Enumeration {
     issues: Vec<(PathBuf, String)>,
 }
 
+/// 从已保存的文件解析结果恢复问题，不依赖有效字款存在。
+pub(crate) fn cached_file_issues(
+    conn: &rusqlite::Connection,
+    roots: &[LibraryRoot],
+) -> Result<Vec<RefreshIssue>, StorageError> {
+    let mut issues = Vec::new();
+    for root in roots {
+        let rows = cache::load_rows_for_refresh(conn, root.id)?;
+        for row in rows.valid {
+            let path = row_path(&row);
+            match row.status {
+                SourceStatus::Parsed => {
+                    for problem in cache::parsed_payload(&row)?.problems {
+                        issues.push(problem_issue(root, &path, &problem.to_problem()));
+                    }
+                }
+                SourceStatus::KnownUnsupported => {
+                    issues.push(known_unsupported_issue(
+                        root,
+                        &path,
+                        row.format.unwrap_or(FontFormat::Woff),
+                    ));
+                }
+                SourceStatus::Malformed => {
+                    issues.push(RefreshIssue::error(
+                        RefreshIssueKind::MalformedFont,
+                        root,
+                        Some(path),
+                        row.error_message.unwrap_or_default(),
+                    ));
+                }
+            }
+        }
+        if !rows.invalid.is_empty() {
+            return Err(StorageError::CorruptCache {
+                context: "source_files".to_owned(),
+                message: "invalid cached source diagnostics".to_owned(),
+            });
+        }
+    }
+    issues.sort_by(RefreshIssue::order);
+    Ok(issues)
+}
+
 /// 刷新给定根目录并返回全局重建的目录。
 pub(crate) fn refresh_roots(
     conn: &mut rusqlite::Connection,

@@ -184,6 +184,21 @@ impl FolioDatabase {
         Ok(rebuild_catalog(faces))
     }
 
+    /// 返回上次解析保存的文件级问题；重新检测仍须执行刷新。
+    pub fn cached_file_issues(&self) -> Result<Vec<crate::RefreshIssue>, StorageError> {
+        refresh::cached_file_issues(&self.conn, &self.list_roots()?)
+    }
+
+    /// 按文件去重统计损坏结果，重叠来源不重复计数。
+    pub fn cached_damaged_file_count(&self) -> Result<u64, StorageError> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(*) FROM (SELECT path_platform, path_bytes FROM source_files \
+             WHERE status = 'malformed' GROUP BY path_platform, path_bytes)",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? as u64)
+    }
+
     /// 返回全部可读取来源与缓存指纹；内容已变化的文件不冒用旧指纹。
     pub fn readable_font_files(
         &self,

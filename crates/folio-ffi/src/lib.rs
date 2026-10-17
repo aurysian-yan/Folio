@@ -16,7 +16,7 @@ use folio_query::{
     FacetFilter, FacetValue, FontFeature, FontQuery, FontQueryIndex, FontState, FoundryKey,
     QueryScope, QuerySort, SavedFontQuery,
 };
-use folio_storage::{AddRootOutcome, FolioDatabase, RefreshIssueKind, RefreshMode};
+use folio_storage::{AddRootOutcome, FolioDatabase, RefreshMode};
 use folio_sync::{ConflictResolution, SyncProfile, SyncProgress};
 
 fn library_refresh_lock() -> &'static Mutex<()> {
@@ -1140,7 +1140,7 @@ struct EngineState {
     database: FolioDatabase,
     catalog: Catalog,
     index: FontQueryIndex,
-    damaged_files: u64,
+    refresh_issues: Option<Vec<folio_storage::RefreshIssue>>,
 }
 
 #[derive(uniffi::Object)]
@@ -1167,13 +1167,14 @@ impl FolioEngine {
                 database,
                 catalog,
                 index,
-                damaged_files: 0,
+                refresh_issues: None,
             }),
         }))
     }
 
     pub fn load_cached_library(&self) -> Result<LibrarySnapshotDto, FolioFfiError> {
         let mut state = self.lock()?;
+        state.refresh_issues = None;
         state.catalog = state
             .database
             .load_cached_catalog()
@@ -1239,11 +1240,7 @@ impl FolioEngine {
             .database
             .refresh(RefreshMode::Incremental)
             .map_err(FolioFfiError::operation)?;
-        state.damaged_files = result
-            .issues
-            .iter()
-            .filter(|issue| issue.kind == RefreshIssueKind::MalformedFont)
-            .count() as u64;
+        state.refresh_issues = Some(result.issues.clone());
         state.catalog = result.catalog;
         let stats = result.stats;
         let issue_count = result.issues.len() as u64;
@@ -1292,6 +1289,50 @@ impl FolioEngine {
             });
         }
         Ok(())
+    }
+
+    /// 只读分析候选文件，复用核心身份与修订，不写入字体库。
+    pub fn analyze_font_file(&self, path: String) -> Result<String, FolioFfiError> {
+        let parsed =
+            folio_core::parse_font_file(Path::new(&path)).map_err(FolioFfiError::operation)?;
+        let state = self.lock()?;
+        let faces: Vec<_> = parsed
+            .faces
+            .iter()
+            .map(|face| {
+                let existing: Vec<_> = state
+                    .catalog
+                    .faces()
+                    .filter(|item| item.identity_id == face.identity.id)
+                    .collect();
+                serde_json::json!({
+                    "family": face.metadata.family_name,
+                    "style": face.metadata.subfamily_name,
+                    "faceIndex": face.face_index,
+                    "duplicate": existing.iter().any(|item| item.revision_id == face.revision.id),
+                    "conflict": existing.iter().any(|item| item.revision_id != face.revision.id)
+                })
+            })
+            .collect();
+        serde_json::to_string(&serde_json::json!({
+            "fingerprint": parsed.fingerprint.to_hex(),
+            "format": parsed.format.label(),
+            "faces": faces,
+            "problemCount": parsed.problems.len()
+        }))
+        .map_err(FolioFfiError::operation)
+    }
+
+    /// 文件级缓存诊断保留无有效字款的坏文件，路径只在本机使用。
+    pub fn cached_file_issues(&self) -> Result<String, FolioFfiError> {
+        let state = self.lock()?;
+        let issues = state
+            .refresh_issues
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(|| state.database.cached_file_issues())
+            .map_err(FolioFfiError::operation)?;
+        serde_json::to_string(&issues).map_err(FolioFfiError::operation)
     }
 
     pub fn remove_library_root(&self, id: RootIdDto) -> Result<(), FolioFfiError> {
@@ -1916,7 +1957,10 @@ fn snapshot(state: &mut EngineState) -> Result<LibrarySnapshotDto, FolioFfiError
         smart_folders,
         roots,
         health: HealthSummaryDto {
-            damaged_files: state.damaged_files,
+            damaged_files: state
+                .database
+                .cached_damaged_file_count()
+                .map_err(FolioFfiError::operation)?,
             duplicate_sources: health
                 .identities
                 .iter()
@@ -2708,6 +2752,57 @@ mod tests {
             })
             .unwrap();
         assert_eq!(page.total_matches, 0);
+    }
+
+    #[test]
+    fn file_analysis_and_health_are_read_only_and_survive_reopening() {
+        let dir = tempfile::tempdir().unwrap();
+        let database = dir
+            .path()
+            .join("folio.sqlite")
+            .to_string_lossy()
+            .into_owned();
+        let engine = FolioEngine::open(database.clone()).unwrap();
+        let sample = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/fonts/Lato-Regular.ttf")
+            .to_string_lossy()
+            .into_owned();
+        let analysis: serde_json::Value =
+            serde_json::from_str(&engine.analyze_font_file(sample.clone()).unwrap()).unwrap();
+        assert_eq!(analysis["faces"][0]["duplicate"], false);
+        assert!(engine.load_cached_library().unwrap().roots.is_empty());
+        engine.add_font_file(sample.clone()).unwrap();
+        engine.refresh_library().unwrap();
+        let analysis: serde_json::Value =
+            serde_json::from_str(&engine.analyze_font_file(sample).unwrap()).unwrap();
+        assert_eq!(analysis["faces"][0]["duplicate"], true);
+        let bad = dir.path().join("bad.ttf");
+        std::fs::write(&bad, b"invalid").unwrap();
+        engine
+            .add_font_file(bad.to_string_lossy().into_owned())
+            .unwrap();
+        assert_eq!(
+            engine
+                .refresh_library()
+                .unwrap()
+                .snapshot
+                .health
+                .damaged_files,
+            1
+        );
+        drop(engine);
+        let engine = FolioEngine::open(database).unwrap();
+        assert_eq!(
+            engine.load_cached_library().unwrap().health.damaged_files,
+            1
+        );
+        let issues: serde_json::Value =
+            serde_json::from_str(&engine.cached_file_issues().unwrap()).unwrap();
+        assert!(issues
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|issue| issue["kind"] == "malformed_font"));
     }
 
     #[test]
