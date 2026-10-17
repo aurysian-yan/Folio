@@ -13,7 +13,7 @@ import kotlin.math.abs
 
 // 在真实字符表页面回归菜单按压、空字形、收起回顶与前后台切换。
 internal object FolioCharacterMapPageSmoke {
-    fun run(test: Instrumentation) {
+    fun run(test: Instrumentation, copyFeedback: Boolean = false) {
         fun shell(command: String) = ParcelFileDescriptor.AutoCloseInputStream(test.uiAutomation.executeShellCommand(command))
             .use { it.readBytes() }
         fun find(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
@@ -48,6 +48,15 @@ internal object FolioCharacterMapPageSmoke {
             SystemClock.sleep(500)
         }
         fun handle() = awaitNode { labeled(it, "Character Map", "字符表") && it.isClickable }
+        fun tap(node: AccessibilityNodeInfo) {
+            val area = bounds(node)
+            val down = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, area.exactCenterX(), area.exactCenterY(), 0)
+                try { check(test.uiAutomation.injectInputEvent(event, true)) } finally { event.recycle() }
+                SystemClock.sleep(16)
+            }
+        }
         fun screenshot(name: String): Bitmap = checkNotNull(test.uiAutomation.takeScreenshot()).also { bitmap ->
             File(test.context.getExternalFilesDir(null), "character-map-$name.png").outputStream().use {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
@@ -55,7 +64,7 @@ internal object FolioCharacterMapPageSmoke {
         }
         fun summary() {
             awaitNode { labeled(it, "Blank glyph", "空白字形") }
-            awaitNode { labeled(it, "Copy character", "复制字符") }
+            awaitNode { labeled(it, "Character", "复制字符") }
             check(find { it.text?.toString() in listOf("Blank glyph", "空白字形") } == null) { "空字形仍显示说明文字" }
         }
         fun backgroundAndRestore(expectedTop: Int) {
@@ -87,6 +96,69 @@ internal object FolioCharacterMapPageSmoke {
             click("Character Map", "字符表")
         }
         summary()
+        if (copyFeedback) {
+            // 验证真实复制入口的成功反馈与定时复原，截图保留各稳定状态。
+            fun validateCopy(en: String, zh: String, copiedEn: String = "Copied", copiedZh: String = "已复制", name: String) {
+                repeat(12) {
+                    if (find { it.contentDescription?.toString() in listOf(en, zh) } == null) {
+                        find { it.isScrollable }?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                        SystemClock.sleep(150)
+                    }
+                }
+                val node = button(awaitNode { it.contentDescription?.toString() in listOf(en, zh) })
+                val area = bounds(node)
+                val baseline = screenshot("copy-$name-before")
+                val start = SystemClock.uptimeMillis()
+                tap(button(awaitNode { it.contentDescription?.toString() in listOf(en, zh) }))
+                awaitNode { it.contentDescription?.toString() in listOf(copiedEn, copiedZh) && bounds(it).centerX() == area.centerX() }
+                SystemClock.sleep(220)
+                val success = screenshot("copy-$name-success")
+                fun differences(a: Bitmap, b: Bitmap): Int {
+                    var count = 0
+                    for (y in area.top.coerceAtLeast(0) until area.bottom.coerceAtMost(a.height)) {
+                        for (x in area.left.coerceAtLeast(0) until area.right.coerceAtMost(a.width)) {
+                            if (a.getPixel(x, y) != b.getPixel(x, y)) count++
+                        }
+                    }
+                    return count
+                }
+                check(differences(baseline, success) > 50) { "复制成功未替换按钮内容" }
+                awaitNode { it.contentDescription?.toString() in listOf(en, zh) && bounds(it).centerX() == area.centerX() }
+                val elapsed = SystemClock.uptimeMillis() - start
+                check(elapsed in 1800..6500) { "复制反馈未按时复原：$elapsed 毫秒" }
+                SystemClock.sleep(250)
+                val restored = screenshot("copy-$name-restored")
+                for (image in listOf(baseline, success, restored)) image.recycle()
+                tap(awaitNode { it.text?.toString() == "Roboto Flex" && bounds(it).top < area.top })
+                SystemClock.sleep(200)
+            }
+            val nullCopy = awaitNode { it.contentDescription?.toString() in listOf("Character", "复制字符") }
+            check(!nullCopy.isEnabled) { "NULL 字符的复制入口未禁用" }
+            tap(nullCopy)
+            check(find { it.contentDescription?.toString() in listOf("Copied", "已复制") } == null) { "禁用入口仍触发复制" }
+            validateCopy("Code point", "复制码位", name = "codepoint")
+            tap(button(awaitNode { it.contentDescription?.toString()?.startsWith("U+0021,") == true }))
+            awaitNode { it.contentDescription?.toString() in listOf("Character", "复制字符") && it.isEnabled }
+            validateCopy("Character", "复制字符", name = "character")
+            // 两个按钮的成功反馈独立保留两秒，不互相提前复原。
+            val characterButton = awaitNode { it.contentDescription?.toString() in listOf("Character", "复制字符") }
+            val codepointButton = awaitNode { it.contentDescription?.toString() in listOf("Code point", "复制码位") }
+            val right = bounds(codepointButton).centerX()
+            tap(characterButton)
+            SystemClock.sleep(700)
+            tap(awaitNode { it.contentDescription?.toString() in listOf("Code point", "复制码位") })
+            SystemClock.sleep(1450)
+            awaitNode { it.contentDescription?.toString() in listOf("Character", "复制字符") }
+            check(find { it.contentDescription?.toString() in listOf("Copied", "已复制") && bounds(it).centerX() == right } != null)
+            SystemClock.sleep(800)
+            awaitNode { it.contentDescription?.toString() in listOf("Code point", "复制码位") }
+            click("Back", "返回")
+            validateCopy("Copy As Family Name", "复制为 字族名", "Copied Family Name", "已复制 字族名", "family")
+            validateCopy("Copy As CSS", "复制为 CSS", "Copied CSS", "已复制 CSS", "css")
+            validateCopy("Copy As CSS @font-face", "复制为 CSS @font-face", "Copied CSS @font-face", "已复制 CSS @font-face", "fontface")
+            validateCopy("Copy As SwiftUI", "复制为 SwiftUI", "Copied SwiftUI", "已复制 SwiftUI", "swiftui")
+            return
+        }
         val collapsedTop = bounds(handle()).top
         val baseline = screenshot("collapsed")
         val script = bounds(awaitNode { labeled(it, "Script", "脚本") })

@@ -1,5 +1,11 @@
 import type { FontFace } from './library';
 
+// 不复制不可用控制字符，保留制表、换行与有效空白字符。
+export function canCopyCharacter(codepoint: number) {
+  return codepoint === 0x09 || codepoint === 0x0a || codepoint === 0x0d
+    || (codepoint >= 0x20 && (codepoint < 0x7f || codepoint > 0x9f));
+}
+
 // 网格宽度扣除页面缩进和格间距，始终保留完整字符格。
 export function characterGridLayout(width: number) {
   const available = Math.max(0, width - 24);

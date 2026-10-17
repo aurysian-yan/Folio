@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FontFace } from './library.ts';
-import { characterGridLayout, characterSheetLayout, fontSourceOptions } from './character-map-layout.ts';
+import { canCopyCharacter, characterGridLayout, characterSheetLayout, fontSourceOptions } from './character-map-layout.ts';
+
+test('NULL 与不可用控制字符禁止复制，文本空白、格式字符与可见字符仍可复制', () => {
+  for (const codepoint of [0, 1, 0x1b, 0x1f, 0x7f, 0x80, 0x9f]) assert.equal(canCopyCharacter(codepoint), false);
+  for (const codepoint of [0x09, 0x0a, 0x0d, 0x20, 0xa0, 0x200b, 0x200d, 0x41, 0x1f600]) assert.equal(canCopyCharacter(codepoint), true);
+});
 
 test('窄屏、手机和平板网格包含完整的左右缩进和格间距', () => {
   for (const width of [280, 360, 393, 768, 1024]) {

@@ -367,3 +367,11 @@ Android 按住后白色长拨片淡出，按实际尺寸绘制玻璃胶囊；轨
 | 验收边界 | iOS 完成共享代码打包，本次未执行 iOS 页面交互或实体设备验收。 |
 
 从 Android 工程目录执行 `./gradlew :folio-native:assembleDebugAndroidTest -PfolioPreviewTest=true -PreactNativeArchitectures=arm64-v8a`，安装测试包后运行 `adb shell am instrument -w -e characterMapSmoke true com.folio.poc.test/com.folio.poc.FolioPreviewInstrumentation`。页面检查需要本地开发服务、包含 Roboto Flex 的字体库和新启动的开发应用。
+
+## Mobile Copy Feedback
+
+2026-10-17：空字形虚线框固定为 82×82 点，居中保留原来的 96×96 点预览区域。详情页与字符表共用复制入口，每个按钮独立保留成功反馈两秒；文字与图标通过 220 毫秒的模糊、透明度交接进入成功态和复原。iOS 使用 SwiftUI 原生模糊，Android 使用现有 Reanimated 与原生视图滤镜，遵循系统减少动态效果。字符表按钮使用普通文字色和常规字重，英文显示「Character／Code point」，中文保留「复制字符／复制码位」。NULL、DEL 等不可用控制字符保留禁用入口，空格、制表、换行与格式字符仍可复制，码点复制保持可用。
+
+共享代码检查通过：`pnpm install --frozen-lockfile`、类型检查、全量 ESLint、71 项 JS 测试、922 字段国际化校验、双端 Hermes 导出和 `git diff --check`。未新增依赖；iOS 本次未执行页面交互验收。
+
+Android 原生测试包构建与页面回归通过，参数为 `-e copyFeedbackSmoke true`，覆盖 NULL 入口禁用、两个字符表复制入口、四个详情复制入口、成功反馈、定时复原和独立计时；另检查深色详情页的成功与复原外观。

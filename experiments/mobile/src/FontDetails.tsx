@@ -1,12 +1,13 @@
-import { CaretLeftIcon, CheckIcon, CopyIcon, EqualsIcon } from './icons';
+import { CaretLeftIcon, EqualsIcon } from './icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AccessibilityInfo, ActivityIndicator, Animated, KeyboardAvoidingView, PanResponder, PixelRatio, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, PanResponder, PixelRatio, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { representativeFace, type FontFace, type FontFamily, type LibrarySnapshot } from './library';
 import { PanelAction } from './panel-content';
 import { FamilyCollectionsPanel } from './CollectionsPanel';
-import { copyText, NativeFontPreview, type PreviewStatus } from './native';
+import { NativeFontPreview, type PreviewStatus } from './native';
+import { CopyButton } from './CopyButton';
 import { IconButton, type Theme } from './ui';
 import { NavigationBackdrop } from './bottom-navigation';
 import { NativeScrollContainer } from './native-controls';
@@ -83,8 +84,6 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const [favoritePending, setFavoritePending] = useState(false);
   const favoriteInFlight = useRef(false);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const initialFace = representativeFace(family);
@@ -113,19 +112,6 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
   const showFallback = !selectedFace?.sourcePath || result?.status === 'error' || result?.status === 'missing-glyph';
   const previewChanged = previewText !== t('mobile.previewSample') || previewSize !== detailPreviewSize.defaultValue
     || axes.some((axis) => axisValues[axis.tag] !== axis.defaultValue);
-
-  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
-
-  async function copyValue(id: string, value: string) {
-    try {
-      await copyText(value);
-      if (copyTimer.current) clearTimeout(copyTimer.current);
-      setCopied(id);
-      setError(null);
-      AccessibilityInfo.announceForAccessibility(t('common.copied'));
-      copyTimer.current = setTimeout(() => setCopied(null), 2000);
-    } catch { setError(t('mobile.errorCopyName')); }
-  }
 
   async function favorite() {
     if (favoriteInFlight.current) return;
@@ -224,19 +210,9 @@ function FontDetailsContent({ family, theme, snapshot, collectionId, recentError
               onPress={() => onOpenCharacterMap(selectedFace, axisValues)} />
           </SettingsGroup>}
           <SettingsGroup theme={theme} title={t('inspector.copyAs')}>
-            {copyOptions.map((option) => <Pressable key={option.id} accessibilityRole="button"
-              accessibilityLabel={`${t(copied === option.id ? 'common.copied' : 'inspector.copyAs')} ${option.label}`}
-              onPress={() => { void copyValue(option.id, option.value); }}
-              style={({ pressed }) => [styles.copyRow, { backgroundColor: pressed ? theme.raised : undefined }]}>
-              <View style={styles.copyBody}>
-                <Text style={[styles.body, { color: theme.label }]}>{option.label}</Text>
-                {!!option.detail && <Text style={[styles.detail, { color: theme.secondary }]}>{option.detail}</Text>}
-              </View>
-              {copied === option.id ? <>
-                <Text style={[styles.detail, { color: theme.accent }]}>{t('common.copied')}</Text>
-                <CheckIcon size={20} color={theme.accent} />
-              </> : <CopyIcon size={20} color={theme.secondary} />}
-            </Pressable>)}
+            {copyOptions.map((option) => <CopyButton key={option.id} label={option.label} value={option.value}
+              detail={option.detail} variant="row" theme={theme} onSuccess={() => setError(null)}
+              onError={() => setError(t('mobile.errorCopyName'))} />)}
           </SettingsGroup>
           <FontStorageCard family={family} face={selectedFace} theme={theme} onAction={onFileAction} />
         </Animated.ScrollView>
@@ -296,6 +272,4 @@ const styles = StyleSheet.create({
   previewFallback: { ...settingsTypography.detail, textAlign: 'center' },
   previewFeedback: { alignItems: 'center', gap: 8 },
   previewResize: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  copyRow: { minHeight: 64, ...settingsLayout.row, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  copyBody: { flex: 1, minWidth: 0, gap: 4 },
 });
