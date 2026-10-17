@@ -2,6 +2,8 @@
 
 原审计基准：2026-09-30，`93697a4`；优先级复审：2026-10-17，仓库 HEAD `c8bd70e`（代码基线 `7d45929`）。本轮仅核对源码与报告、重排计划，未重新执行构建、设备或网络验收。状态表示**当前仓库中的能力**，不是发布日期或跨设备验收结论。`COMPLETE` 表示有实现及相应仓库/阶段验证；`PARTIAL` 表示已有可运行路径但关键流程、目标平台或实机验收缺失；`NOT STARTED` 表示没有该产品能力。历史阶段报告只证明报告当时的范围；后续源码、[同步迁移报告](docs/sync-migration-v7-report.md) 与 [移动验证记录](experiments/mobile/VALIDATION.md) 优先。本文取代 [旧开发计划](docs/project-development-plan.md) 的执行顺序。
 
+后续执行更新：2026-10-17 已启动 P0／P1 首批实现与验证，见 [执行记录](docs/p0-p1-validation.md)；上段的“仅审计”描述保留优先级复审时点。
+
 ## Current State
 
 | 能力 | 状态 | 源码与实际边界 |
@@ -18,16 +20,16 @@
 | Character Map | PARTIAL | Core 字符映射、`folio-render` 共享渲染与 UniFFI/Tauri/Expo 四项会话接口已收尾，格式、快照与分页测试通过。桌面二级三栏、移动详情下三级页面与连续滚动已接入；2026-10-17 又有轴值刷新、自动选择及部分页面验证。剩余为目标设备、生命周期与性能验收，不重建共享接口或导航；见 [字符表验证记录](docs/character-map-validation.md)。 |
 | Android / iOS | PARTIAL（隔离 PoC） | `experiments/mobile` 已建立 RN/Expo、UniFFI 本地模块、导入/查询与原生预览基础；已有批量／ZIP 导入、查询、手动／智慧收藏夹、最近、单 WebDAV 前台同步、详情及字符表；Android 真机与模拟器有分项运行记录，iOS 主要是模拟器／主机验证。双端 Rust 打包、Android APK 和 arm64 iOS Simulator App 构建已通过，见 [验证记录](experiments/mobile/VALIDATION.md)。未交付正式移动客户端、`DocumentsProvider` 或 File Provider；架构 go/no-go 与实机验收仍待完成。 |
 | 在线字体 | PARTIAL | `folio-online`、macOS 在线浏览与下载已有实现；旧 README 仍称未实现。镜像可用性、来源许可和跨平台范围需另验。 |
-| Font Health | PARTIAL | `folio-query/src/health.rs` 已分析重复来源、多修订与关键元数据冲突；Core／Storage 有扫描问题，UniFFI 刷新统计损坏，macOS／Tauri 有健康入口。但 Tauri 损坏计数目前固定为零，移动健康动作尚未接通；文件级坏字体明细及恢复闭环由 P1／P2／P3／P7 分平台补齐，不视为已完成全面检测。 |
-| 桌面独立字体安装窗口 | NOT STARTED | macOS `RootView.swift` 当前仍以 Sheet 显示 `ImportReportView`，不满足产品要求；Tauri 的设置独立窗口不算安装窗口。按 P1／P2／P7 分平台交付，复用已有字体操作，不重建核心。 |
+| Font Health | PARTIAL | 已补共享文件级缓存诊断和按文件去重的损坏统计，重开保留；修正 Tauri 固定零，macOS 接入问题明细、定位与重新检测，未完成首次扫描时不显示零损坏摘要。移动健康动作、跨平台未知／离线口径及完整恢复链仍待验收，见 [P0/P1 首批记录](docs/p0-p1-validation.md)。 |
+| 桌面独立字体安装窗口 | PARTIAL | macOS 已迁出 Sheet，使用 SwiftUI `Window`；只读分析、来源选择、字体操作、逐项结果、失败重试与 Export 已接入。真实场景测试确认独立、非模态、关闭／重开；持久批次恢复和完整人工操作矩阵仍待验收。Windows／Linux 窗口尚未交付。 |
 | WOFF / WOFF2 | NOT STARTED（产品 v2 Planned） | 当前仅 magic 识别并报告 known unsupported；Metadata、Library、Preview、Search、Collections、Sync 纳入 P7 的独立格式工作线。管理支持不等于 OS 可直接安装。 |
 | 多 WebDAV 同步 | NOT STARTED | 当前只有单 profile、全局发布标记与设备 cursor；同库多副本、端点独立进度和故障切换按 P4／P5 实施，见 [同步架构](docs/sync-architecture.md)。 |
 | 局域网多设备同步 | NOT STARTED | 发现、配对、设备信任、直接传输及与 WebDAV 混合同步按 P4／P6 实施；移动首期只保证前台。 |
 | 官方 Release 赞助解锁 | NOT STARTED | 已有发布工作流，尚无渠道策略或赞助凭证校验；功能范围及交付门槛见 [赞助计划](docs/sponsor-release-plan.md)。自行编译默认全部开放。 |
 
-**历史验证边界：**2026-09-30 原审计在 Windows 上记录前端类型、Lint 与 69 项测试通过；Rust workspace 曾有时间精度与事务回滚样本两项失败。当前源码仍包含纳秒往返断言与 `/tmp/font.ttf` 路径样本，不能只凭后来 macOS 测试通过判定 Windows 已解决，也不能据此断定生产回滚失效。2026-10-10 至 17 的字符表记录已有更新的主机测试、构建和部分页面操作；它们不替代 Windows 或完整移动实机验收。
+**历史验证边界：**2026-09-30 原审计在 Windows 上记录前端类型、Lint 与 69 项测试通过；Rust workspace 曾有时间精度与事务回滚样本两项失败。优先级复审时源码仍包含纳秒往返断言与 `/tmp/font.ttf` 路径样本；本批已修正这两处平台假设并通过 macOS 回归，Windows 实测仍待补齐，历史失败也不等同于生产回滚失效。2026-10-10 至 17 的字符表记录已有更新的主机测试、构建和部分页面操作；它们不替代 Windows 或完整移动实机验收。
 
-**本轮仓库检查：**起始工作区已有 `FOLIO_ROADMAP.md` 将状态行名称改为 `WebDAV` 的修改，本轮保留；未改其他文件。源码确认 SQLite schema v11、wire v1、macOS 导入结果 Sheet、Tauri 健康损坏数固定为零；Windows 单实例回调只唤起主窗，尚未转交文件参数。Release 已覆盖 macOS／Windows／Linux／Android 构建，不证明对应产品工作流完成，iOS 当前无发布安装包。
+**优先级复审时的仓库检查（实现前）：**起始工作区已有 `FOLIO_ROADMAP.md` 将状态行名称改为 `WebDAV` 的修改，本轮保留；未改其他文件。源码确认 SQLite schema v11、wire v1、macOS 导入结果 Sheet、Tauri 健康损坏数固定为零；Windows 单实例回调只唤起主窗，尚未转交文件参数。Release 已覆盖 macOS／Windows／Linux／Android 构建，不证明对应产品工作流完成，iOS 当前无发布安装包。
 
 ## Architecture Decisions
 
@@ -264,4 +266,4 @@ Font Health 在本阶段先补**共享文件级问题、真实统计与最小恢
 
 下一轮先执行 **P0 的当前基线与单 WebDAV 实网验收**，同时安排 **P1 macOS 独立窗口／动作闭环** 与 **P2 Android 无 JS 文件服务门槛、Windows 路径转交／字体作用域验证**；有 iOS 资源时提前做 Files／Share／File Provider PoC。先补共享来源／健康口径和真实客户端证据，不启动大规模 wire v2，不重做已完成模块。
 
-本轮到此为止：仅审计与更新 Roadmap，未开始上述功能实现。
+2026-10-17 已从 HEAD `a0552ed` 启动 P0／P1 首批实现，详见 [执行与验证记录](docs/p0-p1-validation.md)。当前仍为 PARTIAL：本地 HTTPS WebDAV／模拟器验证与真实服务商／实际跨客户端矩阵分开登记；macOS 独立窗口与来源／导出基础已落地，完整操作、批次持久恢复和同步清理协调继续按 P0／P1 验收，不启动 wire v2。
