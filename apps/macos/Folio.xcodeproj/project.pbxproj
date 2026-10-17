@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		B034 /* CharacterMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F034 /* CharacterMapView.swift */; };
+		B035 /* CopyFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = F035 /* CopyFeedback.swift */; };
 		93C09882305EB3B800807FBF /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 93C09881305EB3B800807FBF /* AppIcon.icon */; };
 		B001 /* FolioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F001 /* FolioApp.swift */; };
 		B002 /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002 /* AppModels.swift */; };
@@ -55,6 +56,7 @@
 
 /* Begin PBXFileReference section */
 		F034 /* CharacterMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterMapView.swift; sourceTree = "<group>"; };
+		F035 /* CopyFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyFeedback.swift; sourceTree = "<group>"; };
 		93C09881305EB3B800807FBF /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		F001 /* FolioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioApp.swift; sourceTree = "<group>"; };
 		F002 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
@@ -183,6 +185,7 @@
 				F013 /* LibraryListView.swift */,
 				F014 /* FontInspectorView.swift */,
 				F034 /* CharacterMapView.swift */,
+		F035 /* CopyFeedback.swift */,
 				F015 /* PreviewBar.swift */,
 				F016 /* FontPreviewView.swift */,
 				F022 /* SettingsView.swift */,
@@ -396,6 +399,7 @@
 				B013 /* LibraryListView.swift in Sources */,
 				B014 /* FontInspectorView.swift in Sources */,
 				B034 /* CharacterMapView.swift in Sources */,
+		B035 /* CopyFeedback.swift in Sources */,
 				B015 /* PreviewBar.swift in Sources */,
 				B016 /* FontPreviewView.swift in Sources */,
 				B017 /* folio_ffi.swift in Sources */,

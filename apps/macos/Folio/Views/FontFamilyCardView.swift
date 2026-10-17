@@ -235,11 +235,11 @@ struct FontFamilyCardView: View {
             }
             Divider()
             Button(L.text("inspector.copyFamilyName")) {
-                model.copy(family.displayName)
+                if model.copy(family.displayName) { model.copyToast.show() }
             }
             if let postScriptName = face?.postScriptName {
                 Button(L.text("inspector.copyPostScriptName")) {
-                    model.copy(postScriptName)
+                    if model.copy(postScriptName) { model.copyToast.show() }
                 }
             }
             if !model.snapshot.collections.isEmpty {
@@ -560,12 +560,14 @@ struct FontFamilyCardView: View {
 
     private var cardActions: some View {
         HStack(spacing: 8) {
-            CardGlassButton(
-                systemName: "document.on.document",
-                accessibilityLabel: L.text("inspector.copyFamilyName")
-            ) {
-                model.copy(family.displayName)
+            CopyFeedbackButton(identity: family.id.rawValue + family.displayName, iconOnly: true, action: { model.copy(family.displayName) }) { copied in
+                Image.englishSystemName(copied ? "checkmark" : "document.on.document")
+                    .frame(width: 22, height: 22)
             }
+            .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            .buttonStyle(.plain)
+            .modifier(CardGlassMaterial())
+            .accessibilityLabel(L.text("inspector.copyFamilyName"))
             CardGlassButton(
                 systemName: family.isFavorite ? "star.fill" : "star",
                 accessibilityLabel: family.isFavorite ? L.text("collection.unfavorite") : L.text("collection.favorite")
@@ -643,17 +645,7 @@ private struct CardGlassButton: View {
     let action: () -> Void
 
     var body: some View {
-        if #available(macOS 26.0, *) {
-            button
-                .glassEffect(.regular, in: Circle())
-        } else {
-            button
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
-                }
-        }
+        button.modifier(CardGlassMaterial())
     }
 
     private var button: some View {
@@ -666,5 +658,15 @@ private struct CardGlassButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct CardGlassMaterial: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) { content.glassEffect(.regular, in: Circle()) }
+        else {
+            content.background(.ultraThinMaterial, in: Circle())
+                .overlay { Circle().stroke(Color.primary.opacity(0.12), lineWidth: 0.5) }
+        }
     }
 }

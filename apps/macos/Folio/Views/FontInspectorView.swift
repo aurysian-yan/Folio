@@ -368,29 +368,29 @@ struct FontInspectorView: View {
     private func copySection(_ family: FamilyCard, face: FaceSummary) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(spacing: 4) {
-                inspectorButton("CSS", systemImage: "apple.terminal") {
+                copyButton("CSS", identity: family.id.rawValue + family.displayName, systemImage: "apple.terminal") {
                     model.copy("font-family: \"\(family.displayName)\";")
                 }
-                inspectorButton("CSS font-face", systemImage: "at") {
+                copyButton("CSS font-face", identity: family.id.rawValue + cssFontFace(family, face: face), systemImage: "at") {
                     model.copy(cssFontFace(family, face: face))
                 }
-                inspectorButton("SwiftUI", systemImage: "swift") {
+                copyButton("SwiftUI", identity: family.id.rawValue + swiftUIFont(family, face: face), systemImage: "swift") {
                     model.copy(swiftUIFont(family, face: face))
                 }
-                inspectorButton("Figma", systemImage: "f.circle") {
+                copyButton("Figma", identity: richCopyIdentity(family, face: face), systemImage: "f.circle") {
                     model.copyForFigma(family, face: face)
                 }
-                inspectorButton("Sketch", systemImage: "s.circle") {
+                copyButton("Sketch", identity: richCopyIdentity(family, face: face), systemImage: "s.circle") {
                     model.copyForSketch(family, face: face)
                 }
             }
             .padding(.bottom, 10)
 
             VStack(spacing: 4) {
-                inspectorButton(L.text("font.familyName"), systemImage: "doc.on.doc") {
+                copyButton(L.text("font.familyName"), identity: family.id.rawValue + family.displayName, systemImage: "doc.on.doc") {
                     model.copy(family.displayName)
                 }
-                inspectorButton(L.text("font.postScriptName"), systemImage: "doc.on.doc") {
+                copyButton(L.text("font.postScriptName"), identity: family.id.rawValue + face.id.rawValue + (face.postScriptName ?? ""), systemImage: "doc.on.doc") {
                     model.copy(face.postScriptName)
                 }
                 .disabled(face.postScriptName == nil)
@@ -445,6 +445,26 @@ struct FontInspectorView: View {
         }
         .buttonStyle(.plain)
         .accessibilityValue(isExpanded.wrappedValue ? L.text("inspector.expanded") : L.text("inspector.collapsed"))
+    }
+
+    private func richCopyIdentity(_ family: FamilyCard, face: FaceSummary) -> String {
+        family.id.rawValue + family.displayName + face.id.rawValue + face.revisionID
+            + model.axisValues.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ";")
+    }
+
+    private func copyButton(_ title: String, identity: String, systemImage: String, action: @escaping () -> Bool) -> some View {
+        CopyFeedbackButton(identity: identity, action: action) { copied in
+            HStack(spacing: 10) {
+                Image.englishSystemName(copied ? "checkmark" : systemImage).font(.system(size: 12, weight: .semibold)).frame(width: 16)
+                Text(copied ? L.text("common.copied") : title).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .buttonStyle(InspectorButtonStyle())
+        .accessibilityLabel(title)
     }
 
     private func inspectorButton(

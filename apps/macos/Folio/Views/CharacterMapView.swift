@@ -279,9 +279,11 @@ final class CharacterMapState {
         if canLoadMore { offset = page?.entries.count ?? 0 }
     }
 
-    func copy(_ value: String) {
+    func copy(_ value: String) -> Bool {
         NSPasteboard.general.clearContents()
-        copyStatus = L.text(NSPasteboard.general.setString(value, forType: .string) ? "common.copied" : "characterMap.error.copyFailed")
+        let success = NSPasteboard.general.setString(value, forType: .string)
+        copyStatus = success ? "" : L.text("characterMap.error.copyFailed")
+        return success
     }
 }
 
@@ -382,18 +384,18 @@ struct CharacterMapInspectorView: View {
                 .accessibilityLabel(L.format("characterMap.characterLabel", selected.label, String(selected.glyphId), selected.script))
 
                 HStack(alignment: .top) {
-                    Button { state.copy(selected.text) } label: {
+                    CopyFeedbackButton(identity: state.selectionKey + selected.label, action: { state.copy(selected.text) }) { copied in
                         VStack(spacing: 4) {
-                            Image.englishSystemName("doc.on.doc").font(.title3)
-                            Text(L.text("characterMap.copyCharacter")).font(.caption)
+                            Image.englishSystemName(copied ? "checkmark" : "doc.on.doc").font(.title3)
+                            Text(L.text(copied ? "common.copied" : "characterMap.copyCharacter")).font(.caption)
                         }.frame(maxWidth: .infinity)
-                    }
-                    Button { state.copy(selected.label) } label: {
+                    }.accessibilityLabel(L.text("characterMap.copyCharacter"))
+                    CopyFeedbackButton(identity: state.selectionKey + selected.label, action: { state.copy(selected.label) }) { copied in
                         VStack(spacing: 4) {
-                            Image.englishSystemName("number").font(.title3)
-                            Text(L.text("characterMap.copyCodepoint")).font(.caption)
+                            Image.englishSystemName(copied ? "checkmark" : "number").font(.title3)
+                            Text(L.text(copied ? "common.copied" : "characterMap.copyCodepoint")).font(.caption)
                         }.frame(maxWidth: .infinity)
-                    }
+                    }.accessibilityLabel(L.text("characterMap.copyCodepoint"))
                 }
                 .buttonStyle(.borderless)
                 .fixedSize(horizontal: false, vertical: true)

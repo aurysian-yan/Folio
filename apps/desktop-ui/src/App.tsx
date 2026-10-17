@@ -1,3 +1,4 @@
+import { CopyButton } from "./components/CopyButton";
 import { CharacterMap } from "./components/CharacterMap";
 import { locallyAvailable, locationFilters, locationLabel, transferLabel } from "../../../shared/font-location";
 import { removeCloudDownload, setFontUploadExcluded, revealFontSource, getAutomaticDownload, setAutomaticDownload, deleteCloudFont } from "./api";
@@ -3814,15 +3815,7 @@ function Inspector({
   const { t } = useTranslation();
   const style = currentStyle ?? currentPreviewStyle(family, styleKey);
   const face = style?.face;
-  const [copyMessage, setCopyMessage] = useState("");
-  const copyValue = async (value: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopyMessage(t("desktop.copiedLabel", { label }));
-    } catch {
-      setCopyMessage(t("desktop.copyFailedClipboard"));
-    }
-  };
+  const [sourceMessage, setSourceMessage] = useState("");
   return (
     <section className="inspector-panel" aria-label={t("inspector.title")}>
       <button
@@ -3850,7 +3843,7 @@ function Inspector({
         {face?.location?.cloudConfirmedAtMs && <p>{t("fontLocation.lastConfirmed",{date:new Date(face.location.cloudConfirmedAtMs).toLocaleString()})}</p>}
         {face?.location?.files.map((file) => <div key={file.fingerprint}>
           <strong>{file.filename}</strong>
-          {file.localSources.map((source) => <div key={source.path}><span>{t(`fontLocation.source.${source.kind}`)}{source.previewSource && ` · ${t("fontLocation.currentPreview")}`}</span><p className="source-path">{source.path}</p><Button size="sm" variant="ghost" onPress={() => void revealFontSource(source.path).catch((cause) => setCopyMessage(errorMessage(cause)))}>{t("fontLocation.reveal")}</Button></div>)}
+          {file.localSources.map((source) => <div key={source.path}><span>{t(`fontLocation.source.${source.kind}`)}{source.previewSource && ` · ${t("fontLocation.currentPreview")}`}</span><p className="source-path">{source.path}</p><Button size="sm" variant="ghost" onPress={() => void revealFontSource(source.path).catch((cause) => setSourceMessage(errorMessage(cause)))}>{t("fontLocation.reveal")}</Button></div>)}
           {transferLabel(file,t) && <p role="status">{transferLabel(file,t)}</p>}
           {file.cloudAvailable && !file.localSources.length && <Button size="sm" onPress={() => onDownload(file.fingerprint)}>{t("fontLocation.download")}</Button>}
           {file.cloudAvailable && file.localSources.some((source) => source.kind === "managed") && <Button size="sm" variant="secondary" onPress={() => onFileAction(file.fingerprint,"remove")}>{t("fontLocation.removeDownload")}</Button>}
@@ -3867,13 +3860,13 @@ function Inspector({
       <details className="inspector-section" open>
         <summary>{t("inspector.copyAs")}</summary>
         <div className="inspector-copy-list">
-          <button type="button" onClick={() => void copyValue(`font-family: "${family.displayName}";`, "CSS")}><CopyIcon />CSS</button>
-          <button type="button" onClick={() => void copyValue(`@font-face {\n  font-family: "${family.displayName}";\n  src: url("${face?.sources[0]?.path.split(/[\\/]/).pop() ?? "font-file"}");\n}`, "CSS font-face")}><CopyIcon />CSS font-face</button>
-          <button type="button" onClick={() => void copyValue(`.font(.custom("${face?.postscriptName ?? family.displayName}", size: 16))`, "SwiftUI")}><CopyIcon />SwiftUI</button>
-          <button type="button" onClick={() => void copyValue(family.displayName, t("font.familyName"))}><CopyIcon />{t("font.familyName")}</button>
-          {face?.postscriptName && <button type="button" onClick={() => void copyValue(face.postscriptName!, t("font.postScriptName"))}><CopyIcon />{t("font.postScriptName")}</button>}
+          <CopyButton identity={family.id} size="sm" className="w-full h-auto" value={`font-family: "${family.displayName}";`} label="CSS" icon={<CopyIcon />} />
+          <CopyButton identity={family.id} size="sm" className="w-full h-auto" value={`@font-face {\n  font-family: "${family.displayName}";\n  src: url("${face?.sources[0]?.path.split(/[\\/]/).pop() ?? "font-file"}");\n}`} label="CSS font-face" icon={<CopyIcon />} />
+          <CopyButton identity={`${family.id}:${face?.id}`} size="sm" className="w-full h-auto" value={`.font(.custom("${face?.postscriptName ?? family.displayName}", size: 16))`} label="SwiftUI" icon={<CopyIcon />} />
+          <CopyButton identity={family.id} size="sm" className="w-full h-auto" value={family.displayName} label={t("font.familyName")} icon={<CopyIcon />} />
+          {face?.postscriptName && <CopyButton identity={`${family.id}:${face.id}`} size="sm" className="w-full h-auto" value={face.postscriptName} label={t("font.postScriptName")} icon={<CopyIcon />} />}
         </div>
-        <span className="inspector-copy-status" role="status">{copyMessage}</span>
+        {sourceMessage && <span className="inspector-copy-status" role="status">{sourceMessage}</span>}
       </details>
       <details className="inspector-section" open>
         <summary>{t("inspector.information")}</summary>

@@ -1,8 +1,74 @@
+import AppKit
 import XCTest
 @testable import Folio
 
 @MainActor
 final class FolioTests: XCTestCase {
+    func testCopyFeedbackRestoresAfterTwoSeconds() async throws {
+        let state = CopyFeedbackState()
+        state.show()
+        XCTAssertTrue(state.copied)
+        try await Task.sleep(for: .milliseconds(2100))
+        XCTAssertFalse(state.copied)
+    }
+
+    func testCopyFeedbackTimersAreIndependentAndResetCancelsRestoration() async throws {
+        let first = CopyFeedbackState()
+        let second = CopyFeedbackState()
+        first.show(duration: .milliseconds(80))
+        second.show(duration: .seconds(5))
+        first.show(duration: .seconds(5))
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertTrue(first.copied)
+        XCTAssertTrue(second.copied)
+        first.reset()
+        XCTAssertFalse(first.copied)
+        XCTAssertTrue(second.copied)
+        second.reset()
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertFalse(first.copied)
+        XCTAssertFalse(second.copied)
+    }
+
+    func testCopyToastClampsToTheRecordedScreenIncludingNegativeCoordinates() {
+        let screen = NSRect(x: -1920, y: 120, width: 1920, height: 1080)
+        let size = NSSize(width: 120, height: 44)
+        for anchor in [NSPoint(x: -1920, y: 120), NSPoint(x: 0, y: 1200), NSPoint(x: -900, y: 600)] {
+            let frame = CopyToastPresenter.frame(size: size, anchor: anchor, visible: screen)
+            XCTAssertTrue(screen.contains(frame))
+            XCTAssertEqual(frame.size, size)
+        }
+        XCTAssertEqual(CopyToastPresenter.frame(size: size, anchor: NSPoint(x: -900, y: 600), visible: screen).origin,
+                       NSPoint(x: -900, y: 556))
+    }
+
+    func testClipboardCopyPreservesTextAndRichFormats() {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let model = LibraryViewModel()
+        for value in ["字", "😀", "U+1F600", "font-family: \"Folio\";", ".font(.custom(\"Folio\", size: 16))"] {
+            XCTAssertTrue(model.copy(value, to: pasteboard))
+            XCTAssertEqual(pasteboard.string(forType: .string), value)
+        }
+        XCTAssertFalse(model.copy(nil, to: pasteboard))
+        XCTAssertFalse(model.copy("", to: pasteboard))
+        let face = FaceSummary(id: FaceID(rawValue: "copy"), identityID: IdentityID(rawValue: "copy"), revisionID: "revision",
+            styleName: "Regular", postScriptName: nil, fullName: nil, format: "TrueType", isVariable: false,
+            weight: 400, width: 1, sourcePath: "", sources: [], faceIndex: 0, fileSize: 0,
+            version: nil, manufacturer: nil, designer: nil, copyright: nil, category: "", license: "", scripts: [], axes: [])
+        let family = FamilyCard(id: FamilyID(rawValue: "copy"), displayName: "Folio", faces: [face], identityIDs: [face.identityID],
+            matchedFaceIDs: [face.id], isFavorite: false, isVariable: false, manufacturer: nil)
+        XCTAssertTrue(model.copyForFigma(family, face: face, to: pasteboard))
+        XCTAssertEqual(pasteboard.types?.filter { [.html, .rtf, .string].contains($0) }, [.html, .rtf, .string])
+        XCTAssertNotNil(pasteboard.data(forType: .html))
+        XCTAssertNotNil(pasteboard.data(forType: .rtf))
+        let copiedName = pasteboard.string(forType: .string)
+        XCTAssertFalse(copiedName?.isEmpty ?? true)
+        XCTAssertTrue(model.copyForSketch(family, face: face, to: pasteboard))
+        XCTAssertEqual(pasteboard.types?.filter { [.html, .rtf, .string].contains($0) }, [.rtf, .html, .string])
+        XCTAssertEqual(pasteboard.string(forType: .string), copiedName)
+    }
+
     func testCharacterMapLocksFamilyAndRestoresParentSelection() {
         func family(_ id: String) -> FamilyCard {
             let face = FaceSummary(id: FaceID(rawValue: id), identityID: IdentityID(rawValue: id), revisionID: "revision",

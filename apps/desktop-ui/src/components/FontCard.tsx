@@ -5,6 +5,7 @@ import { memo, useEffect, useEffectEvent, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { currentPreviewStyle, previewStyles } from "../font-preview";
 import type { FamilyDto } from "../types";
+import { CopyButton } from "./CopyButton";
 import { FontPreview } from "./FontPreview";
 import { FontLocationIcons } from "./FontLocationIcons";
 
@@ -39,7 +40,6 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
   const transfers = style?.face.location?.files.filter((file) => transferLabel(file, t)) ?? [];
   const index = styles.findIndex((entry) => entry.key === style?.key);
   const [hovered, setHovered] = useState(false);
-  const [copyMessage, setCopyMessage] = useState("");
   const selectHoveredCard = useEffectEvent(() => {
     if (hovered && selectOnHover && !selected) onSelect(family);
   });
@@ -57,10 +57,6 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
   const moveStyle = (offset: number) => {
     const next = styles[(index + offset + styles.length) % styles.length];
     if (next) onStyleChange(next.key);
-  };
-  const copyName = async () => {
-    try { await navigator.clipboard.writeText(family.displayName); setCopyMessage(t("inspector.copiedFamilyName")); }
-    catch { setCopyMessage(t("desktop.copyFailedClipboard")); }
   };
   const metadata = <Card.Description className="font-card-metadata">
     <span>{t("macos.stylesCount", { count: styles.length })}</span>
@@ -108,10 +104,9 @@ export const FontCard = memo(function FontCard({ family, mode, selected, styleKe
     </Card.Content>
 
     {selected && mode !== "expanded" && <Toolbar className="font-card-actions" aria-label={t("desktop.fontOf", { name: family.displayName })}>
-      <Button isIconOnly size="sm" variant="secondary" className="font-card-action" aria-label={t("inspector.copyFamilyName")} onPress={() => void copyName()}><CopySimpleIcon /></Button>
+      <CopyButton iconOnly size="sm" variant="secondary" className="font-card-action" identity={family.id} value={family.displayName} label={t("inspector.copyFamilyName")} icon={<CopySimpleIcon />} />
       <Button isIconOnly size="sm" variant="secondary" className={`font-card-action${family.isFavorite ? " is-favorite" : ""}`} aria-label={family.isFavorite ? t("collection.unfavorite") : t("collection.favorite")}
         aria-pressed={family.isFavorite} onPress={() => onFavorite(family)}><StarIcon weight={family.isFavorite ? "fill" : "regular"} /></Button>
     </Toolbar>}
-    <span className="sr-only" role="status">{copyMessage}</span>
   </Card>;
 });

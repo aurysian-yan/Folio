@@ -81,6 +81,8 @@ struct RootView: View {
             }
         }
         .background(WindowLayoutPersistenceController())
+        .background(CopyToastHost(presenter: model.copyToast))
+        .onDisappear { model.copyToast.dismiss() }
         .task {
             cloud.start()
             model.start()

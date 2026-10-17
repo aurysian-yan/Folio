@@ -9,6 +9,7 @@ import { CharacterPreviewRenderer, characterMatchesQuery, firstNonEmptyCharacter
 import { characterMap } from '../api';
 import { previewStyles, type PreviewStyle } from '../font-preview';
 import type { FamilyDto } from '../types';
+import { CopyButton } from './CopyButton';
 import { ClaralightSlider } from './ClaralightSlider';
 
 export function CharacterMap({ family, initialStyle, onClose, onDownload, leftHost, rightHost, toolbarHost, renderInspector, autoSelectFirstNonEmpty = true }: {
@@ -114,7 +115,6 @@ function CharacterMapContent({ session, info, axes, committedAxes, axisDefaults,
     selectedRef.current = entry;
     setSelected(entry);
   }
-  const [copyStatus, setCopyStatus] = useState('');
   const [foreground, setForeground] = useState<[number, number, number, number]>([0, 0, 0, 255]);
   const root = useRef<HTMLDivElement>(null);
   const initializeSelection = useEffectEvent((page: CharacterPage) => {
@@ -166,10 +166,6 @@ function CharacterMapContent({ session, info, axes, committedAxes, axisDefaults,
   const loadMore = useCallback(() => {
     if (page && !loading && !error && page.entries.length < page.total) setOffset(page.entries.length);
   }, [page, loading, error]);
-  async function copy(value: string) {
-    try { await navigator.clipboard.writeText(value); setCopyStatus(t('common.copied')); }
-    catch { setCopyStatus(t('characterMap.error.copyFailed')); }
-  }
   const detail = <aside className="character-map-detail flex w-full flex-col gap-4" aria-label={t('characterMap.title')}>
         {selected && page ? <>
           <div className="relative min-h-32 flex-1">
@@ -186,14 +182,9 @@ function CharacterMapContent({ session, info, axes, committedAxes, axisDefaults,
               </div>
             </dl>
             <Toolbar className="grid grid-cols-2 gap-2" aria-label={t('characterMap.title')}>
-              <Button size="sm" variant="ghost" className="h-auto min-w-0 flex-col gap-1 py-2 whitespace-normal" onPress={() => void copy(characterText(selected))}>
-                <CopyIcon className="size-5" aria-hidden="true" />{t('characterMap.copyCharacter')}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-auto min-w-0 flex-col gap-1 py-2 whitespace-normal" onPress={() => void copy(codepointLabel(selected.codepoint))}>
-                <HashIcon className="size-5" aria-hidden="true" />{t('characterMap.copyCodepoint')}
-              </Button>
+              <CopyButton size="sm" variant="ghost" vertical className="h-auto min-w-0 py-2 whitespace-normal" identity={`${info.handle}:${selected.codepoint}`} value={characterText(selected)} label={t('characterMap.copyCharacter')} icon={<CopyIcon className="size-5" />} errorKey="characterMap.error.copyFailed" />
+              <CopyButton size="sm" variant="ghost" vertical className="h-auto min-w-0 py-2 whitespace-normal" identity={`${info.handle}:${selected.codepoint}`} value={codepointLabel(selected.codepoint)} label={t('characterMap.copyCodepoint')} icon={<HashIcon className="size-5" />} errorKey="characterMap.error.copyFailed" />
             </Toolbar>
-            <p className="empty:hidden text-xs text-muted" role="status">{copyStatus}</p>
           </footer>
         </> : <p className="flex flex-1 items-center justify-center text-sm text-muted">{t('characterMap.selectCharacter')}</p>}
       </aside>;

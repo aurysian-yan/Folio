@@ -101,6 +101,7 @@ final class LibraryViewModel {
     var inspectorPresented = true
     var isLoading = true
     var isRefreshing = false
+    let copyToast = CopyToastPresenter()
     var errorMessage: String?
     var totalMatches: UInt64 = 0
     var axisValues: [String: Double] = [:] {
@@ -926,18 +927,23 @@ final class LibraryViewModel {
         }
     }
 
-    func copy(_ value: String?) {
-        guard let value, !value.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(value, forType: .string)
+    @discardableResult
+    func copy(_ value: String?, to pasteboard: NSPasteboard = .general) -> Bool {
+        guard let value, !value.isEmpty else { return false }
+        pasteboard.clearContents()
+        let success = pasteboard.setString(value, forType: .string)
+        if !success { errorMessage = L.text("desktop.copyFailedClipboard") }
+        return success
     }
 
-    func copyForFigma(_ family: FamilyCard, face: FaceSummary) {
-        copyRichFontStyle(family, face: face, prefersHTML: true)
+    @discardableResult
+    func copyForFigma(_ family: FamilyCard, face: FaceSummary, to pasteboard: NSPasteboard = .general) -> Bool {
+        copyRichFontStyle(family, face: face, prefersHTML: true, pasteboard: pasteboard)
     }
 
-    func copyForSketch(_ family: FamilyCard, face: FaceSummary) {
-        copyRichFontStyle(family, face: face, prefersHTML: false)
+    @discardableResult
+    func copyForSketch(_ family: FamilyCard, face: FaceSummary, to pasteboard: NSPasteboard = .general) -> Bool {
+        copyRichFontStyle(family, face: face, prefersHTML: false, pasteboard: pasteboard)
     }
 
     func loadMoreIfNeeded(current family: FamilyCard) {
@@ -1066,8 +1072,9 @@ final class LibraryViewModel {
     private func copyRichFontStyle(
         _ family: FamilyCard,
         face: FaceSummary,
-        prefersHTML: Bool
-    ) {
+        prefersHTML: Bool,
+        pasteboard: NSPasteboard
+    ) -> Bool {
         let font = localFont(for: face, size: 16, axes: axisValues)
         let familyName = font.familyName ?? family.displayName
         let attributedString = NSAttributedString(
@@ -1082,18 +1089,16 @@ final class LibraryViewModel {
         let html = fontStyleHTML(familyName: familyName, face: face)
             .data(using: .utf8)
 
-        let pasteboard = NSPasteboard.general
         let richTypes: [NSPasteboard.PasteboardType] = prefersHTML
             ? [.html, .rtf, .string]
             : [.rtf, .html, .string]
         pasteboard.declareTypes(richTypes, owner: nil)
-        if let html {
-            pasteboard.setData(html, forType: .html)
-        }
-        if let rtf {
-            pasteboard.setData(rtf, forType: .rtf)
-        }
-        pasteboard.setString(familyName, forType: .string)
+        var success = true
+        if let html { success = pasteboard.setData(html, forType: .html) && success }
+        if let rtf { success = pasteboard.setData(rtf, forType: .rtf) && success }
+        success = pasteboard.setString(familyName, forType: .string) && success
+        if !success { errorMessage = L.text("desktop.copyFailedClipboard") }
+        return success
     }
 
     private func fontStyleHTML(familyName: String, face: FaceSummary) -> String {

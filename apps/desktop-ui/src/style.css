@@ -3252,3 +3252,17 @@ body {
 }
 
 .sidebar[data-open="false"] .character-map-sidebar { transform: translateX(-18px); opacity: 0; }
+
+/* 复制反馈的两层内容共同占位，切换时不改变按钮尺寸。 */
+.copy-feedback { display: inline-grid; align-items: center; gap: inherit; }
+.copy-feedback-normal, .copy-feedback-success { grid-area: 1 / 1; display: flex; align-items: center; justify-content: flex-start; gap: inherit; transition: opacity 220ms ease-in-out, filter 220ms ease-in-out; }
+.copy-feedback-success { opacity: 0; filter: blur(8px); }
+.copy-feedback[data-copied="true"] .copy-feedback-normal { opacity: 0; filter: blur(8px); }
+.copy-feedback[data-copied="true"] .copy-feedback-success { opacity: 1; filter: blur(0); }
+.copy-feedback-normal > svg, .copy-feedback-success > svg { flex-shrink: 0; }
+.copy-feedback-vertical > span { flex-direction: column; justify-content: center; gap: --spacing(1); }
+.copy-feedback-hint { position: fixed; z-index: 100; visibility: hidden; pointer-events: none; padding: --spacing(1) --spacing(2); border-radius: var(--radius); background: var(--surface-raised); color: var(--text-muted); font-size: var(--text-xs); opacity: 0; filter: blur(8px); transition: opacity 220ms ease-in-out, filter 220ms ease-in-out; }
+.copy-feedback-hint[data-copied="true"] { opacity: 1; filter: blur(0); }
+@media (prefers-reduced-motion: reduce) {
+  .copy-feedback-normal, .copy-feedback-success, .copy-feedback-hint { transition: none; filter: none !important; }
+}
