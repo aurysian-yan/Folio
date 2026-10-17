@@ -155,8 +155,11 @@ jobs:
       - name: Prepare Android toolchain
         shell: bash
         run: |
-          sdkmanager 'ndk;29.0.13846066' 'ndk;27.1.12297006' 'platforms;android-36' 'build-tools;36.0.0'
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.13846066" >> "$GITHUB_ENV"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" 'ndk;29.0.13846066' 'ndk;27.1.12297006' 'platforms;android-36' 'build-tools;36.0.0'
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/29.0.13846066" >> "$GITHUB_ENV"
       - run: rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.98.1
       - run: pnpm --dir experiments/mobile install --frozen-lockfile
       - run: pnpm --dir experiments/mobile bindings kotlin
