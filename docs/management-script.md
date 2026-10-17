@@ -29,14 +29,15 @@ pnpm manage <框架> <动作> [选项]
 | 命令 | macOS 主机 | Windows 主机 | Linux 主机 |
 | --- | --- | --- | --- |
 | `swiftui dev/build` | 支持 | 不支持 | 不支持 |
-| `tauri dev` | 不支持 | Windows 版本 | Linux 版本 |
+| `tauri dev` | 警告后启动本机调试 | Windows 版本 | Linux 版本 |
 | `tauri build --platform windows` | cargo-xwin 交叉编译 | 原生 MSVC | cargo-xwin 交叉编译 |
 | `tauri build --platform linux` | 不支持 | 不支持 | 原生构建 |
 | `expo dev/build --platform android` | 支持 | 支持 | 支持 |
 | `expo dev/build --platform ios` | 支持 | 不支持 | 不支持 |
 
-Tauri 客户端只面向 Windows 与 Linux，脚本会拒绝 `--platform macos`。Expo 的
-iOS 编译天然需要 Xcode，因此在非 macOS 主机上会直接给出提示。
+Tauri 客户端面向 Windows 与 Linux；macOS 主机允许启动本机调试，启动前仅显示
+兼容性警告。Tauri 的 `build` 和 `open` 仍拒绝 `--platform macos`。Expo 的 iOS
+编译天然需要 Xcode，因此在非 macOS 主机上会直接给出提示。
 
 ## 命令说明
 
@@ -52,7 +53,8 @@ iOS 编译天然需要 Xcode，因此在非 macOS 主机上会直接给出提示
 
 ### Tauri（`apps/desktop-ui`）
 
-- `tauri dev`：在当前主机对应的目标平台上运行开发环境。
+- `tauri dev`：在当前主机对应的目标平台上运行开发环境；macOS 显示警告后
+  继续启动，支持显式指定 `--platform macos` 或 `--platform darwin`。
 - `tauri build [--platform windows|linux] [--arch x64|arm64]`：构建指定目标。
   Windows 目标使用 MSVC 工具链；在 macOS 或 Linux 主机上构建 Windows 版本时，
   脚本会检查 `cargo-xwin`、NSIS、LLVM 与 Windows Rust 目标，再以交叉编译方式

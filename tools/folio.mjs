@@ -524,16 +524,17 @@ function swiftuiOpen() {
 }
 
 // ---------------------------------------------------------------------------
-// Tauri（Windows/Linux 共用桌面客户端，明确不含 macOS）
+// Tauri 面向 Windows/Linux，macOS 允许本机调试。
 // ---------------------------------------------------------------------------
 
 function tauriDev(args) {
-  if (HOST === 'darwin') {
-    fail('Tauri 客户端不将 macOS 纳入支持范围，无法在本机运行调试；请在 Windows 或 Linux 主机执行。');
-  }
-  const supported = HOST === 'win32' ? 'windows' : 'linux';
-  if ((args.platform ?? supported) !== supported) {
+  const supported = HOST === 'darwin' ? 'macos' : HOST === 'win32' ? 'windows' : 'linux';
+  const platform = args.platform === 'darwin' ? 'macos' : args.platform ?? supported;
+  if (platform !== supported) {
     fail(`本机只能调试 ${supported} 版本，跨目标构建请使用 build。`);
+  }
+  if (HOST === 'darwin') {
+    warn('Tauri 客户端主要面向 Windows 与 Linux；将继续在 macOS 上启动调试，部分功能可能存在兼容性差异。');
   }
   run(PNPM, ['exec', 'tauri', 'dev'], { cwd: DESKTOP_DIR });
 }
@@ -925,7 +926,7 @@ function printHelp() {
   swiftui dev                         在 macOS 上调试运行 SwiftUI 客户端
   swiftui build [--dmg]               构建 SwiftUI 客户端（可选生成 DMG）
   swiftui open                        在文件管理器中打开 SwiftUI 构建产物目录
-  tauri dev                           在 Windows/Linux 上调试 Tauri 客户端
+  tauri dev                           在当前主机调试 Tauri 客户端（macOS 警告后继续）
   tauri build [--platform windows|linux] [--arch x64|arm64]
                                       构建 Tauri 客户端（Windows 走 MSVC）
   tauri open [--platform windows|linux] [--arch x64|arm64]
