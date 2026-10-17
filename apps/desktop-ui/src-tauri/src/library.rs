@@ -306,6 +306,7 @@ pub struct LibraryService {
     locations: BTreeMap<FontFaceId, folio_query::FontLocation>,
     preview_sources: HashMap<String, Vec<SourceDto>>,
     managed_directory: PathBuf,
+    damaged_files: usize,
 }
 
 impl LibraryService {
@@ -325,6 +326,7 @@ impl LibraryService {
         let mut query_index = FontQueryIndex::build(&catalog, &state)?;
         query_index.set_locations(locations.clone());
         let preview_sources = preview_source_index(&catalog);
+        let damaged_files = database.cached_damaged_file_count()? as usize;
         Ok(Self {
             database,
             catalog,
@@ -333,6 +335,7 @@ impl LibraryService {
             locations,
             preview_sources,
             managed_directory,
+            damaged_files,
         })
     }
 
@@ -364,6 +367,7 @@ impl LibraryService {
     pub fn refresh(&mut self) -> Result<LibrarySnapshotDto, LibraryError> {
         self.add_managed_root()?;
         self.database.refresh(RefreshMode::Incremental)?;
+        self.damaged_files = self.database.cached_damaged_file_count()? as usize;
         let local = self.database.load_cached_catalog()?;
         let unified = folio_sync::unified_library(&self.database, &local)
             .map_err(|error| LibraryError::Message(error.to_string()))?;
@@ -934,7 +938,7 @@ impl LibraryService {
             face_ids.extend(identity.face_ids.iter().copied());
             face_ids.extend(identity.duplicate_source_faces.iter().copied());
         }
-        health.damaged_files = 0;
+        health.damaged_files = self.damaged_files;
         health.duplicate_sources = duplicates.len();
         health.multiple_revisions = revisions.len();
         health.metadata_conflicts = conflicts.len();
@@ -2240,6 +2244,29 @@ mod tests {
             .roots
             .iter()
             .any(|root| root.ends_with("ManagedFonts")));
+    }
+
+    #[test]
+    fn damaged_file_count_survives_reopen_and_repair() {
+        let dir = tempfile::tempdir().unwrap();
+        let managed = dir.path().join("ManagedFonts");
+        std::fs::create_dir(&managed).unwrap();
+        let bad = managed.join("bad.ttf");
+        std::fs::write(&bad, b"invalid").unwrap();
+        let database = dir.path().join("folio.sqlite");
+        let mut library = LibraryService::open(database.clone()).unwrap();
+        assert_eq!(library.refresh().unwrap().health.damaged_files, 1);
+        drop(library);
+        let mut library = LibraryService::open(database).unwrap();
+        assert_eq!(library.snapshot().health.damaged_files, 1);
+        std::fs::copy(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../fixtures/fonts/Lato-Regular.ttf"),
+            &bad,
+        )
+        .unwrap();
+        assert_eq!(library.refresh().unwrap().health.damaged_files, 0);
+        assert_eq!(library.snapshot().face_count, 1);
     }
 
     #[cfg(target_os = "windows")]
