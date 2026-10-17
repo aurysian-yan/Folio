@@ -254,23 +254,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn timestamps_keep_nanoseconds_and_reject_unrepresentable_values() {
+    fn timestamps_keep_platform_precision_and_reject_unrepresentable_values() {
         let nanos = 1_234_567_890_123_456_789i64;
+        // Windows 的系统时间以 100 纳秒为单位。
+        let precision = if cfg!(windows) { 100 } else { 1 };
         assert_eq!(
             system_time_to_nanos(nanos_to_system_time(nanos).unwrap()),
-            Some(nanos)
+            Some(nanos / precision * precision)
         );
         assert_eq!(
-            system_time_to_nanos(UNIX_EPOCH - Duration::from_nanos(1)),
+            system_time_to_nanos(UNIX_EPOCH - Duration::from_nanos(precision as u64)),
             None
         );
         assert_eq!(nanos_to_system_time(-1), None);
-        if let Some(time) = UNIX_EPOCH.checked_add(Duration::from_nanos(i64::MAX as u64 + 1)) {
+        if let Some(time) = UNIX_EPOCH.checked_add(Duration::from_nanos(i64::MAX as u64 + 100)) {
             assert_eq!(system_time_to_nanos(time), None);
         }
         assert_eq!(
             system_time_to_nanos(nanos_to_system_time(i64::MAX).unwrap()),
-            Some(i64::MAX)
+            Some(i64::MAX / precision * precision)
         );
     }
 }

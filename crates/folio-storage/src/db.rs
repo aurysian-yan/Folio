@@ -323,7 +323,7 @@ mod tests {
             AddRootOutcome::Existing(_) => panic!("root should be new"),
         };
 
-        let good = row(root.id, Path::new("/tmp/font.ttf"), 10);
+        let good = row(root.id, &dir.path().join("font.ttf"), 10);
         let tx = db.conn.transaction().expect("tx");
         cache::upsert_row(&tx, &good).expect("insert");
         tx.commit().expect("commit");
@@ -332,7 +332,7 @@ mod tests {
         updated.file_size = 999;
         let mut bad = row(
             LibraryRootId::from_bytes([9u8; 16]),
-            Path::new("/tmp/other.ttf"),
+            &dir.path().join("other.ttf"),
             1,
         );
         bad.status = SourceStatus::Parsed;
