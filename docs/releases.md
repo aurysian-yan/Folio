@@ -28,7 +28,8 @@
 
 仓库版本以根目录 `Cargo.toml` 的 `[workspace.package].version` 为准。使用
 `pnpm manage version bump patch --build` 同步 Rust、Tauri、macOS 与移动端版本，
-并生成中文提交与 `vX.Y.Z` 标签；准备阶段可加 `--no-git`，检查变更后自行提交。
+同步 Cargo 锁文件、重新生成并校验许可目录后，才生成中文提交与 `vX.Y.Z` 标签。
+任一步失败均不创建发布提交或标签；准备阶段可加 `--no-git`，检查变更后自行提交。
 正式版本必须采用 `X.Y.Z`，不接受预发行标签。发布前执行：
 
 ```sh
@@ -43,9 +44,12 @@ pnpm i18n:validate
 字体资源及移植源码的原始版权与 NOTICE；未提供原文的来源保留实际声明与出处。
 
 ```sh
-python3 tools/about/generate-licenses.py
+python3 tools/about/generate-licenses.py --frozen-native
 node tools/about/validate.mjs
 ```
+
+`--frozen-native` 复用已提交的 iOS 原生许可快照，避免发布准备受本地 Pods 状态影响。
+升级 iOS 原生依赖并安装对应 Pods 后，去掉该参数刷新快照，再提交许可资料。
 
 Android 运行依赖快照与原始 Maven 声明保存在 `shared/about/`；原生依赖升级时，
 先用 `tools/about/android-licenses.gradle` 导出实际 `releaseRuntimeClasspath`，
@@ -63,6 +67,9 @@ OFL 字体制作的字标图形无需字体署名，依据见 [OFL FAQ 1.1.2](ht
 `Release` 手动运行只构建、打包和汇总完整发布矩阵，不创建 GitHub Release。
 先在待发布提交上手动运行，检查六个原生构建目标和 `complete-release` 产物，
 再推送对应 `vX.Y.Z` 标签触发正式发布。
+仅创建本地 tag 或只推送分支不会触发发布；标签必须指向包含最新工作流、版本与
+许可目录的提交。推送命令为 `git push origin main` 和 `git push origin vX.Y.Z`。
+正式发布在构建前检查 Android 四项签名 Secrets，缺失时直接失败。
 
 | 平台 | 原生 runner | 架构 | 安装包 |
 | --- | --- | --- | --- |
@@ -75,7 +82,9 @@ iOS 本轮不发布安装包。ARM AppImage 在 ARM Linux runner 上构建，不
 runner 上交叉打包。Node、pnpm、Rust、Java、NDK 与 Xcode 固定版本；外部 Actions
 固定到提交。所有安装包构建、许可校验及产物检查成功后才汇总 SHA-256 和
 `folio-release.json`。先上传草稿的完整附件，再公开 Release；正式版本不覆盖。
-失败任务保留可用安装包或报告，失败草稿需要检查后删除，才能重新发布同一标签。
+失败任务保留可用安装包或报告。公开前再次检查十个安装包、许可资料、更新清单和
+全部 SHA-256；上传中断后可重跑失败任务，续传同一提交的工作流草稿。
+正式版本、其他提交创建的草稿及含未知附件的草稿禁止覆盖。
 
 客户端主动查询本仓库的最新正式 Release，再读取其中的 `folio-release.json`，
 只选择当前平台与运行架构的产物。Linux 优先 AppImage，可选 deb/rpm。

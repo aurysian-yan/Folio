@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -68,25 +68,53 @@ export function aggregate(directory, output) {
   writeFileSync(join(output,'SHA256SUMS.txt'),files.sort().map((name) => `${createHash('sha256').update(readFileSync(join(output,name))).digest('hex')}  ${name}`).join('\n')+'\n');
   return manifest;
 }
-function publish(directory) {
-  verifyVersions(process.env.GITHUB_REF_NAME);
-  assert(process.env.GITHUB_REPOSITORY === 'aurysian-yan/Folio', '只能发布到登记的项目');
-  assert(existsSync(join(directory,'folio-release.json')), '发布清单不存在');
-  const repository = process.env.GITHUB_REPOSITORY; const tag = `v${version}`;
-  // 先建立草稿，上传完整产物后才公开；已有正式版本禁止覆盖。
+export function verifyRelease(directory) {
+  const names = targets.flatMap(([platform,arch,formats]) => formats.map((format) => `Folio-v${version}-${platform}-${arch}.${format}`));
+  names.push('folio-licenses.json','LICENSE.txt','folio-release.json','SHA256SUMS.txt');
+  const files = readdirSync(directory);
+  assert(files.length === names.length && names.every((name) => files.includes(name) && statSync(join(directory,name)).isFile()), '发布附件不完整或包含额外文件');
+  const checksum = (name) => createHash('sha256').update(readFileSync(join(directory,name))).digest('hex');
+  const expected = names.filter((name) => name !== 'SHA256SUMS.txt').sort().map((name) => `${checksum(name)}  ${name}`).join('\n')+'\n';
+  assert(readFileSync(join(directory,'SHA256SUMS.txt'),'utf8') === expected, '发布附件校验值不一致');
+  const manifest = JSON.parse(readFileSync(join(directory,'folio-release.json'),'utf8'));
+  assert(manifest.schemaVersion === 1 && manifest.version === version && manifest.releaseUrl === `https://github.com/aurysian-yan/Folio/releases/tag/v${version}`, '发布清单版本或来源错误');
+  const artifacts = targets.flatMap(([platform,arch,formats]) => formats.map((format) => ({platform,arch,format})));
+  assert(Array.isArray(manifest.artifacts) && manifest.artifacts.length === artifacts.length, '发布清单矩阵不完整');
+  for (const {platform,arch,format} of artifacts) {
+    const name = `Folio-v${version}-${platform}-${arch}.${format}`;
+    const matches = manifest.artifacts.filter((item) => item.platform === platform && item.arch === arch && item.format === format);
+    assert(matches.length === 1, `发布清单产物重复或缺失：${name}`);
+    const item = matches[0]; const size = statSync(join(directory,name)).size;
+    assert(size > 0 && item.size === size && item.sha256 === checksum(name) && item.url === `https://github.com/aurysian-yan/Folio/releases/download/v${version}/${name}`, `发布清单与附件不一致：${name}`);
+  }
+  assert(readFileSync(join(directory,'folio-licenses.json')).equals(readFileSync(join(root,'shared/about/licenses.json'))), '发布许可目录不一致');
+  assert(readFileSync(join(directory,'LICENSE.txt')).equals(readFileSync(join(root,'LICENSE'))), '发布许可原文不一致');
+  return names;
+}
+export function publish(directory, { env = process.env, exec = execFileSync } = {}) {
+  assert(env.GITHUB_REF_NAME, '缺少发布标签');
+  verifyVersions(env.GITHUB_REF_NAME);
+  assert(env.GITHUB_REPOSITORY === 'aurysian-yan/Folio', '只能发布到登记的项目');
+  assert(/^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? ''), '缺少发布提交');
+  const files = verifyRelease(directory).map((name) => join(directory,name));
+  const repository = env.GITHUB_REPOSITORY; const tag = `v${version}`;
+  const marker = `<!-- folio-release:${env.GITHUB_SHA} -->`;
+  // 同一提交的失败草稿可重试；全部附件通过远端校验后才公开。
   let existing;
-  try { existing = JSON.parse(execFileSync('gh',['api',`repos/${repository}/releases/tags/${tag}`],{encoding:'utf8',stdio:['ignore','pipe','pipe']})); }
+  try { existing = JSON.parse(exec('gh',['api',`repos/${repository}/releases/tags/${tag}`],{encoding:'utf8',stdio:['ignore','pipe','pipe']})); }
   catch (error) { if (!String(error.stderr).includes('404')) throw new Error('无法确认发行版状态，已停止发布'); }
   if (existing) assert(existing.draft, '正式发行版已存在，禁止覆盖');
-  if (existing) throw new Error('存在同名草稿，请先检查并删除失败草稿后重试');
-  const notes = join(directory,'release-notes.md');
-  writeFileSync(notes,`Folio ${version}\n\n安装方式、Android 签名与桌面系统验证提示见 [发布说明](https://github.com/aurysian-yan/Folio/blob/v${version}/docs/releases.md)。\n\nSHA-256 校验值见 SHA256SUMS.txt；完整开源许可见 folio-licenses.json。\n`);
-  execFileSync('gh',['release','create',tag,'--repo',repository,'--verify-tag','--draft','--title',`Folio ${version}`,'--notes-file',notes],{stdio:'inherit'});
-  const files = readdirSync(directory).filter((file) => file !== 'release-notes.md').map((file) => join(directory,file));
-  execFileSync('gh',['release','upload',tag,'--repo',repository,...files],{stdio:'inherit'});
-  const uploaded = JSON.parse(execFileSync('gh',['api',`repos/${repository}/releases/tags/${tag}`],{encoding:'utf8'}));
+  if (existing) {
+    assert(existing.target_commitish === env.GITHUB_SHA && existing.body?.includes(marker), '同名草稿不属于当前发布提交，禁止覆盖');
+    assert(existing.assets.every((asset) => files.some((file) => basename(file) === asset.name)), '同名草稿含有未知附件，禁止覆盖');
+  } else {
+    const notes = `Folio ${version}\n\n安装方式、Android 签名与桌面系统验证提示见 [发布说明](https://github.com/aurysian-yan/Folio/blob/v${version}/docs/releases.md)。\n\nSHA-256 校验值见 SHA256SUMS.txt；完整开源许可见 folio-licenses.json。\n\n${marker}\n`;
+    exec('gh',['release','create',tag,'--repo',repository,'--verify-tag','--target',env.GITHUB_SHA,'--draft','--title',`Folio ${version}`,'--notes-file','-'],{stdio:['pipe','inherit','inherit'],input:notes});
+  }
+  exec('gh',['release','upload',tag,'--repo',repository,'--clobber',...files],{stdio:'inherit'});
+  const uploaded = JSON.parse(exec('gh',['api',`repos/${repository}/releases/tags/${tag}`],{encoding:'utf8'}));
   assert(files.length === uploaded.assets.length && files.every((file) => uploaded.assets.some((asset) => asset.name === basename(file) && asset.size === statSync(file).size && asset.digest === `sha256:${createHash('sha256').update(readFileSync(file)).digest('hex')}`)), '上传产物不完整');
-  execFileSync('gh',['release','edit',tag,'--repo',repository,'--draft=false'],{stdio:'inherit'});
+  exec('gh',['release','edit',tag,'--repo',repository,'--draft=false'],{stdio:'inherit'});
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [mode,...args] = process.argv.slice(2);

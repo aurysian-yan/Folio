@@ -22,7 +22,7 @@ jobs:
         shell: bash
         env:
           REF_NAME: ${{ github.ref_name }}
-          IS_TAG: ${{ github.ref_type == 'tag' && github.event_name == 'push' }}
+          IS_TAG: ${{ github.ref_type == 'tag' }}
         run: |
           if [ "$IS_TAG" = true ]; then
             VERSION=$(node tools/releases/release.mjs verify "$REF_NAME")
@@ -31,6 +31,20 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - run: node tools/about/validate.mjs
+      - name: Check Android release signing
+        if: github.event_name == 'push'
+        env:
+          FOLIO_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          FOLIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FOLIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FOLIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for name in FOLIO_KEYSTORE_BASE64 FOLIO_KEYSTORE_PASSWORD FOLIO_KEY_ALIAS FOLIO_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing Android signing secret: $name"
+              exit 1
+            fi
+          done
       - run: pnpm i18n:validate
       - run: pnpm --dir apps/desktop-ui typecheck && pnpm --dir apps/desktop-ui lint && pnpm --dir apps/desktop-ui test && pnpm --dir apps/desktop-ui build
       - run: pnpm --dir experiments/mobile typecheck && pnpm --dir experiments/mobile lint && pnpm --dir experiments/mobile test
@@ -73,7 +87,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: ./.github/actions/toolchain
       - if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev libfontconfig1-dev libfreetype6-dev patchelf rpm
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libfontconfig1-dev libfreetype6-dev libfuse2 patchelf rpm xdg-utils
       - if: matrix.platform != 'macos'
         run: rustup target add '${{ matrix.target }}' --toolchain 1.98.1
       - if: matrix.platform == 'macos'
@@ -86,8 +100,16 @@ jobs:
           node tools/releases/check-native.mjs macos apps/macos/.build/DerivedData/Build/Products/Release/Folio.app
           node tools/releases/release.mjs stage macos arm64 apps/macos/.build release-stage
       - if: matrix.platform != 'macos'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          NO_STRIP: 'true'
         run: |
-          pnpm manage tauri build --platform '${{ matrix.platform }}' --arch '${{ matrix.arch }}'
+          if [ '${{ matrix.platform }}' = windows ]; then
+            BUNDLES=nsis
+          else
+            BUNDLES=appimage,deb,rpm
+          fi
+          pnpm --dir apps/desktop-ui exec tauri build --ci --target '${{ matrix.target }}' --bundles "$BUNDLES" -- --locked
           node tools/releases/check-native.mjs '${{ matrix.platform }}' 'apps/desktop-ui/src-tauri/target/${{ matrix.target }}/release' '${{ matrix.arch }}'
           node tools/releases/release.mjs stage '${{ matrix.platform }}' '${{ matrix.arch }}' 'apps/desktop-ui/src-tauri/target/${{ matrix.target }}/release/bundle' release-stage
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -112,7 +134,6 @@ jobs:
       APP_VARIANT: production
       FOLIO_BUILD_NUMBER: ${{ github.run_number }}
       FOLIO_BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
-      FOLIO_KEYSTORE_PATH: ${{ github.workspace }}/.release-signing/folio.jks
       FOLIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       FOLIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       FOLIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -126,9 +147,17 @@ jobs:
       - name: Prepare signing
         env:
           FOLIO_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          FOLIO_KEYSTORE_PATH: ${{ runner.temp }}/folio-release-signing/folio.jks
         shell: bash
-        run: node tools/releases/signing.mjs
-      - run: sdkmanager 'ndk;29.0.13846066' 'ndk;27.1.12297006' 'platforms;android-36' 'build-tools;36.0.0'
+        run: |
+          echo "FOLIO_KEYSTORE_PATH=$FOLIO_KEYSTORE_PATH" >> "$GITHUB_ENV"
+          node tools/releases/signing.mjs
+      - name: Prepare Android toolchain
+        shell: bash
+        run: |
+          sdkmanager 'ndk;29.0.13846066' 'ndk;27.1.12297006' 'platforms;android-36' 'build-tools;36.0.0'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.13846066" >> "$GITHUB_ENV"
+      - run: rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.98.1
       - run: pnpm --dir experiments/mobile install --frozen-lockfile
       - run: pnpm --dir experiments/mobile bindings kotlin
       - run: pnpm manage expo build --platform android
@@ -149,7 +178,8 @@ jobs:
             experiments/mobile/android/build/reports/**
           retention-days: 7
       - if: always()
-        run: rm -rf .release-signing
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/folio-release-signing"
   assemble:
     needs: [validate, desktop, android]
     runs-on: ubuntu-24.04

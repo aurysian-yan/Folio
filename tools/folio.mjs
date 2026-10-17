@@ -397,7 +397,7 @@ function syncCargoLocks() {
   for (const cwd of [REPO_ROOT, join(DESKTOP_DIR, 'src-tauri')]) {
     const result = spawnSync('cargo', ['update', '--workspace'], { cwd, stdio: 'inherit' });
     if (result.error || result.status !== 0) {
-      warn(`同步 ${shorten(join(cwd, 'Cargo.lock'))} 失败，构建时会自动更新。`);
+      fail(`同步 ${shorten(join(cwd, 'Cargo.lock'))} 失败，已停止创建发布提交与标签。`);
     }
   }
 }
@@ -423,6 +423,9 @@ function executeVersionBump(plan, args) {
   }
 
   syncCargoLocks();
+  run('python3', ['tools/about/generate-licenses.py', '--frozen-native']);
+  run('node', ['tools/about/validate.mjs']);
+  run('node', ['tools/releases/release.mjs', 'verify', `v${plan.next}`]);
   log('\n已将全部版本字段更新为一致值。');
 
   if (args['no-git']) {
@@ -435,6 +438,7 @@ function executeVersionBump(plan, args) {
     ...BUILD_MANIFESTS.map((manifest) => manifest.path),
     'Cargo.lock',
     TAURI_LOCK,
+    'shared/about/licenses.json',
   ];
   run('git', ['add', ...new Set(files)]);
   run('git', ['commit', '-m', `chore: 发布 v${plan.next}`]);

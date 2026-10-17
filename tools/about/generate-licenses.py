@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # 收集锁定依赖的原始许可、版权与声明，生成离线阅读目录。
-import hashlib,json,os,pathlib,re,subprocess,plistlib,xml.etree.ElementTree as ET
+import hashlib,json,os,pathlib,re,subprocess,plistlib,sys,xml.etree.ElementTree as ET
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 OUT=ROOT/'shared/about/licenses.json'
 entries={}; texts={}
@@ -66,7 +66,9 @@ for manifest,platform,targets,roots in [
         for ident in sorted(active):
             pkg=packages[ident]
             if pkg['source'] is None: continue
-            put(pkg['name'],pkg['version'],pkg['license'],pkg.get('repository') or 'https://crates.io/crates/'+pkg['name']+'/'+pkg['version'],[platform],documents(pathlib.Path(pkg['manifest_path']).parent))
+            source=pkg.get('repository') or ''
+            if not source.startswith('https://'): source='https://crates.io/crates/'+pkg['name']+'/'+pkg['version']
+            put(pkg['name'],pkg['version'],pkg['license'],source,[platform],documents(pathlib.Path(pkg['manifest_path']).parent))
 put('Folio',json.loads((ROOT/'apps/desktop-ui/package.json').read_text())['version'],'AGPL-3.0-only','https://github.com/aurysian-yan/Folio',['macos','windows','linux','ios','android'],[('LICENSE',(ROOT/'LICENSE').read_text())])
 for name,licensefile,url in [('Inter','fixtures/fonts/licenses/Inter-OFL.txt','https://github.com/rsms/inter'),('Source Serif 4','fixtures/fonts/licenses/SourceSerif-OFL.txt','https://github.com/adobe-fonts/source-serif'),('JetBrains Mono','apps/desktop-ui/src/assets/fonts/JetBrainsMono-OFL.txt','https://github.com/JetBrains/JetBrainsMono')]:
     put(name,'','OFL-1.1',url,['macos','windows','linux','ios','android'],[('OFL',(ROOT/licensefile).read_text())])
@@ -88,7 +90,7 @@ put('Claralight Slider','7b98a2bf93234847cc19ac040fc29c9323159047','MIT','https:
 entries[next(k for k in entries if k[0]=='Claralight Slider')]['declarationOnly']=True
 pods=ROOT/'experiments/mobile/ios/Pods/Target Support Files/Pods-FolioDev/Pods-FolioDev-acknowledgements.plist'
 iosSnapshot=ROOT/'shared/about/ios-notices.json'
-if pods.exists():
+if pods.exists() and '--frozen-native' not in sys.argv:
     iosItems=plistlib.loads(pods.read_bytes()).get('PreferenceSpecifiers',[])
     iosSnapshot.write_text(json.dumps(iosItems,ensure_ascii=False,indent=2)+'\n')
 elif iosSnapshot.exists(): iosItems=json.loads(iosSnapshot.read_text())

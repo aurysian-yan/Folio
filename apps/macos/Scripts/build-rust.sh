@@ -23,6 +23,7 @@ for ARCHITECTURE in ${=ARCHS}; do
     TARGET_CFLAGS="CFLAGS_${RUST_TARGET//-/_}=-mmacosx-version-min=$MINIMUM_MACOS_VERSION"
     TARGETS+=("$RUST_TARGET")
     env "$TARGET_CFLAGS" "$CARGO_EXECUTABLE" build \
+        --locked \
         --manifest-path "$REPOSITORY_ROOT/Cargo.toml" \
         --package folio-ffi \
         --lib \
