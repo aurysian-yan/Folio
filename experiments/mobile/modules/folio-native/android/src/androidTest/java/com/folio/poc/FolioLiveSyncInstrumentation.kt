@@ -9,15 +9,21 @@ import android.os.Bundle
 import com.folio.poc.ffi.FolioEngine
 import com.folio.poc.ffi.FolioSync
 import com.folio.poc.ffi.SyncResolutionDto
+import com.folio.poc.ffi.SyncProfileDto
 import java.io.File
 import java.util.UUID
 
 // 实网测试只读取已授权的连接，在独立子目录与临时库执行，不导出凭据。
 class FolioLiveSyncInstrumentation : Instrumentation() {
+    private var localServer: String? = null
     // 原生实网回归不启动开发客户端或 Metro 连接。
     override fun newApplication(loader: ClassLoader, name: String, context: Context): Application =
         super.newApplication(loader, Application::class.java.name, context)
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
+    override fun onCreate(arguments: Bundle?) {
+        localServer = arguments?.getString("localServer")
+        super.onCreate(arguments)
+        start()
+    }
     override fun onStart() {
         val root = File(targetContext.filesDir, "FolioMobilePoC")
         val id = "validation-${UUID.randomUUID()}"
@@ -53,9 +59,16 @@ class FolioLiveSyncInstrumentation : Instrumentation() {
         }
         try {
             FolioTls.initialize(targetContext.applicationContext)
-            val saved = FolioSync.open(File(root, "folio.sqlite").path, File(root, "fonts").path)
-            val profile = try { checkNotNull(saved.profile()) } finally { saved.destroy() }
-            password = checkNotNull(FolioSyncCredentials(targetContext).read(profile))
+            val profile = localServer?.let { address ->
+                val uri = java.net.URI(address)
+                check(uri.scheme == "https" && uri.host in listOf("127.0.0.1", "localhost", "10.0.2.2"))
+                password = "folio-local-test"
+                SyncProfileDto(address, "local-validation", "folio", false)
+            } ?: run {
+                val saved = FolioSync.open(File(root, "folio.sqlite").path, File(root, "fonts").path)
+                try { checkNotNull(saved.profile()) } finally { saved.destroy() }
+            }
+            if (localServer == null) password = checkNotNull(FolioSyncCredentials(targetContext).read(profile))
             username = profile.username; server = profile.serverUrl
             val scoped = profile.copy(remoteDirectory = "${profile.remoteDirectory.trimEnd('/')}/$id", automatic = false)
             check(temporary.mkdirs())
@@ -65,26 +78,37 @@ class FolioLiveSyncInstrumentation : Instrumentation() {
                 val engine = FolioEngine.open(database.path)
                 val sync = FolioSync.open(database.path, directory.path)
                 peers.add(Pair(engine, sync)); sync.saveProfile(scoped)
+                sync.setAutomaticDownload(true)
                 engine.addLibraryRoot(directory.path)
             }
             val (a, sa) = peers[0]; val (b, sb) = peers[1]
             stage = "sample import"
-            for (name in listOf("Lato-Collection.ttc", "Inter-Variable.ttf")) {
+            for (name in listOf("Lato-Collection.ttc", "Inter-Variable.ttf", "Lato-Regular.ttf", "SourceSerif4-Regular.otf")) {
                 context.assets.open(name).use { input -> File(temporary, "a/FolioMobilePoC/fonts/$name").outputStream().use { input.copyTo(it) } }
             }
-            check(a.refreshLibrary().snapshot.faceCount == 3uL)
+            check(a.refreshLibrary().snapshot.faceCount == 5uL)
             val family = a.libraryFaceSources().first { it.paths.any { path -> path.endsWith(".ttc", true) } }.familyId
-            val identities = a.familyDetails(family).faces.map { it.identityId }
+            val identities = a.familyDetails(family).faces.map { it.identityId }.distinctBy { it.value }
             val collection = a.createCollection("Validation")
             a.setFavorite(identities, true); a.setCollectionMembers(collection.id, identities, true); a.recordRecent(identities.last())
             stage = "upload and receive"
             exchange(sa); exchange(sb)
-            check(b.refreshLibrary().snapshot.faceCount == 3uL)
-            report("123PAN upload, second replica download and catalog refresh")
+            check(b.refreshLibrary().snapshot.faceCount == 5uL)
+            check(b.libraryFaceSources().flatMap { it.paths }.distinct().size == 4)
+            report("${if (localServer == null) "saved provider" else "local HTTPS WebDAV"} upload, second replica download and catalog refresh")
             stage = "downloaded native preview"
-            for ((index, name, axes) in listOf(Triple(1, "Lato", emptyMap<String, Double>()),
-                Triple(0, "Inter", mapOf("wght" to 700.0)))) {
-                val source = b.libraryFaceSources().first { it.paths.any { path -> File(path).name.contains(name, true) } }.paths.first()
+            for ((sample, values) in listOf(
+                "Lato-Collection.ttc" to Triple(1, "Lato", emptyMap<String, Double>()),
+                "Inter-Variable.ttf" to Triple(0, "Inter", mapOf("wght" to 700.0)),
+                "Lato-Regular.ttf" to Triple(0, "Lato", emptyMap<String, Double>()),
+                "SourceSerif4-Regular.otf" to Triple(0, "Source Serif", emptyMap<String, Double>()))) {
+                val (index, name, axes) = values
+                stage = "downloaded native preview $sample ($name)"
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                val expected = context.assets.open(sample).use { digest.digest(it.readBytes()) }
+                val source = b.libraryFaceSources().flatMap { it.paths }.distinct().first { path ->
+                    expected.contentEquals(digest.digest(File(path).readBytes()))
+                }
                 val selection = FolioPreviewSelection().apply {
                     sourcePath = source; faceIndex = index; this.axes = axes; text = "Folio Preview"
                 }
@@ -103,32 +127,34 @@ class FolioLiveSyncInstrumentation : Instrumentation() {
                 bitmap.getPixels(pixels, 0, 1024, 0, 0, 1024, 128)
                 check(pixels.any { it != 0 }); bitmap.recycle()
             }
-            report("downloaded TTC member 1 and variable wght=700 use actual source glyphs")
+            report("TTF, OTF, TTC member 1 and variable wght=700 preserve bytes and use actual source glyphs")
             val font = sa.cloudFonts().first { it.filename.endsWith(".ttc", true) }
             stage = "cloud-only and redownload"
             sa.setCloudOnly(font.fingerprint)
-            check(a.loadCachedLibrary().faceCount == 1uL)
+            check(a.loadCachedLibrary().faceCount == 5uL)
             check(a.libraryFaceSources().none { it.paths.any { path -> path.endsWith(".ttc", true) } })
-            exchange(sa); check(b.loadCachedLibrary().faceCount == 3uL)
+            exchange(sa); check(b.loadCachedLibrary().faceCount == 5uL)
             sa.restoreCloudFont(font.fingerprint); exchange(sa)
-            check(a.refreshLibrary().snapshot.faceCount == 3uL)
+            check(a.refreshLibrary().snapshot.faceCount == 5uL)
             report("cloud-only removes source cache, peer retained, redownload reparsed")
             stage = "delete and restore"
-            sa.deleteEverywhere(font.fingerprint); check(a.loadCachedLibrary().faceCount == 1uL)
-            exchange(sa); exchange(sb); check(b.refreshLibrary().snapshot.faceCount == 1uL)
+            sa.deleteEverywhere(font.fingerprint); check(a.loadCachedLibrary().faceCount == 3uL)
+            exchange(sa); exchange(sb); check(b.refreshLibrary().snapshot.faceCount == 3uL)
             check(sb.cloudFonts().first { it.fingerprint == font.fingerprint }.deleted)
             sb.restoreDeletedFont(font.fingerprint); exchange(sb); exchange(sa)
             for ((engine, _) in peers) {
                 val snapshot = engine.refreshLibrary().snapshot
-                check(snapshot.faceCount == 3uL && snapshot.recentCount == 1uL)
+                check(snapshot.faceCount == 5uL && snapshot.recentCount == 1uL)
                 check(snapshot.collections.single().memberCount == identities.size.toULong())
                 check(engine.familyDetails(family).isFavorite)
             }
             report("delete propagates, recent deletion restore and collection/recent state retained")
             stage = "concurrent conflict decisions"
             for (resolution in SyncResolutionDto.entries) {
-                a.renameCollection(collection.id, "local-${resolution.name}")
-                b.renameCollection(collection.id, "remote-${resolution.name}")
+                val candidate = a.createCollection("conflict-${resolution.name}")
+                exchange(sa); exchange(sb)
+                a.renameCollection(candidate.id, "local-${resolution.name}")
+                b.renameCollection(candidate.id, "remote-${resolution.name}")
                 exchange(sa); exchange(sb); exchange(sa)
                 val conflict = sa.conflicts().first { it.kind == "collection" }
                 sa.resolveConflict(conflict.id, resolution); exchange(sa); exchange(sb); exchange(sa)
@@ -140,7 +166,7 @@ class FolioLiveSyncInstrumentation : Instrumentation() {
             val deadline = System.currentTimeMillis() + 30000
             while (sb.status().isRunning && System.currentTimeMillis() < deadline) Thread.sleep(100)
             check(sb.status().phase == "同步失败" && sb.status().errorMessage?.contains("认证失败") == true)
-            check(b.refreshLibrary().snapshot.faceCount == 3uL)
+            check(b.refreshLibrary().snapshot.faceCount == 5uL)
             exchange(sb); report("invalid credentials preserve local assets, corrected credentials retry")
             stage = "cancel and resume"
             check(sb.startSync(password)); sb.cancel()

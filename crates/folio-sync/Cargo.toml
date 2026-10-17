@@ -6,6 +6,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+local-webdav-test = []
+
 [dependencies]
 blake3.workspace = true
 folio-core = { path = "../folio-core" }

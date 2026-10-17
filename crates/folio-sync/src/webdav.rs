@@ -51,11 +51,19 @@ impl WebDavClient {
                 .pop_if_empty()
                 .push(segment);
         }
-        let http = reqwest::Client::builder()
+        let builder = reqwest::Client::builder()
             .timeout(Duration::from_secs(90))
             .connect_timeout(Duration::from_secs(15))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
+            .redirect(reqwest::redirect::Policy::none());
+        // 仅显式验收构建为回环服务加入指定根证书，仍校验链与主机名。
+        #[cfg(feature = "local-webdav-test")]
+        let builder = match (server.host_str(), option_env!("FOLIO_LOCAL_DAV_CA_PEM")) {
+            (Some("localhost" | "127.0.0.1" | "10.0.2.2"), Some(pem)) => {
+                builder.tls_certs_only([reqwest::Certificate::from_pem(pem.as_bytes())?])
+            }
+            _ => builder,
+        };
+        let http = builder.build()?;
         Ok(Self {
             http,
             server,

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,8 +17,12 @@ function run(executable, args, env = process.env) {
 }
 
 function build(target, output, env = process.env) {
+  const testFeatures = env.FOLIO_LOCAL_DAV_CA
+    ? ['--features', 'folio-sync/local-webdav-test'] : [];
+  const buildEnv = env.FOLIO_LOCAL_DAV_CA
+    ? { ...env, FOLIO_LOCAL_DAV_CA_PEM: readFileSync(env.FOLIO_LOCAL_DAV_CA, 'utf8') } : env;
   run(cargo, ['build', '--locked', '--manifest-path', manifest, '-p', 'folio-ffi',
-    '--lib', '--release', '--target', target, '--target-dir', output], env);
+    '--lib', '--release', '--target', target, '--target-dir', output, ...testFeatures], buildEnv);
 }
 
 function bindings() {
