@@ -107,7 +107,7 @@ jobs:
       - if: matrix.platform == 'macos'
         run: |
           export DEVELOPER_DIR=/Applications/Xcode_27.0.app/Contents/Developer
-          xcodebuild -version | head -1 | grep -E '^Xcode 27\.0$'
+          xcodebuild -version | grep -E '^Xcode 27\.0$'
           node tools/about/test-swift.mjs
           node tools/i18n/test-swift.mjs
           pnpm manage swiftui build --dmg
