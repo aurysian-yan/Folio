@@ -160,6 +160,17 @@ body {
     overflow: hidden;
     font-size: var(--text-sm);
     line-height: var(--text-sm--line-height);
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* 输入控件与许可正文保留选择与复制能力。 */
+input,
+textarea,
+[contenteditable="true"],
+.about-license-text {
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 /* 初始化前隐藏原生滚动条，所有滚动区域使用同一主题。 */

@@ -51,6 +51,12 @@ beforeEach(() => {
 });
 afterEach(() => { window.history.replaceState(null, "", "/"); });
 
+it("界面禁用无意义的右键菜单，输入框保留原生菜单", () => {
+  const { getByRole } = render(<App />);
+  expect(fireEvent.contextMenu(document.body)).toBe(false);
+  expect(fireEvent.contextMenu(getByRole("searchbox"))).toBe(true);
+});
+
 it("macOS 上标题栏警告入口打开独立菜单并显示平台提示", async () => {
   const userAgent = vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15");
   try {

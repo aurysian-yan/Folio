@@ -679,6 +679,23 @@ export default function App() {
     document.documentElement.dataset.uiReady = "true";
   }, []);
 
+  // UI 文本默认不可选中；输入框与许可正文保留原生复制，其他位置禁用右键菜单。
+  useEffect(() => {
+    const handleContextMenu = (event: globalThis.MouseEvent) => {
+      if (event.defaultPrevented) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("input, textarea, [contenteditable='true'], .about-license-text")
+      ) {
+        return;
+      }
+      event.preventDefault();
+    };
+    document.addEventListener("contextmenu", handleContextMenu);
+    return () => document.removeEventListener("contextmenu", handleContextMenu);
+  }, []);
+
   const settingsWindow = isSettingsWindow();
   const macOSHost = isMacOSHost();
   const platformWarningCount = macOSHost ? 1 : 0;
