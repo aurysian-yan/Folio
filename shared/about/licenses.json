@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "fingerprints": {
-    "Cargo.lock": "19b3eb948509ac3fdf3df00ac248dc6eddec54df42920e8d4b54ba963ec2c1b0",
-    "apps/desktop-ui/src-tauri/Cargo.lock": "935a239d24d408e6ebded72e862bc39f038760cf19df8baff188446a13b94260",
+    "Cargo.lock": "1b8a3fe320a752794dbd13dca7defe4a0b109c8b54da2da4ac41f173b2b04998",
+    "apps/desktop-ui/src-tauri/Cargo.lock": "eafdd4020857b875e8bb9326036c1bb354b83ea636ba395ef160b60c554ff8a8",
     "pnpm-lock.yaml": "cff8f09b990fb74d2c8645a941a1bcae4f9962ee8aa57b96c0e77119695a75b3",
     "experiments/mobile/pnpm-lock.yaml": "e8e55039fe1c5231b0f5d82fd53bc2703b4d0465376ef9eeb92667f701354405",
     "experiments/mobile/modules/folio-native/android/build.gradle": "06e318cb2990cf5bbcf74167d34e27b5223c44327129dc42bf9f12af0b05a2e7",
@@ -12543,9 +12543,9 @@
       "declarationOnly": false
     },
     {
-      "id": "b6dda6deeee88cbd",
+      "id": "fd35e0b17d124944",
       "name": "Folio",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "license": "AGPL-3.0-only",
       "source": "https://github.com/aurysian-yan/Folio",
       "platforms": [
