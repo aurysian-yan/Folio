@@ -94,7 +94,7 @@ test('同一提交的失败草稿可补传并完成发布', () => releaseFixture
 }));
 test('不覆盖正式发行版、其他提交的草稿或含未知附件的草稿', () => {
   const draft = {draft:true,tag_name:env.GITHUB_REF_NAME,target_commitish:env.GITHUB_SHA,body:`<!-- folio-release:${env.GITHUB_SHA} -->`,assets:[]};
-  for (const existing of [{...draft,draft:false},{...draft,target_commitish:'b'.repeat(40)},{...draft,body:''},{...draft,assets:[{name:'unknown.apk'}]}]) releaseFixture((directory) => {
+  for (const existing of [{...draft,draft:false},{...draft,body:`<!-- folio-release:${'b'.repeat(40)} -->`},{...draft,body:''},{...draft,assets:[{name:'unknown.apk'}]}]) releaseFixture((directory) => {
     const {calls,exec} = githubFixture(directory,{existing});
     assert.throws(() => publish(directory,{env,exec}));
     assert.ok(calls.every((args) => args[0] === 'api'));

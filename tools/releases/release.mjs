@@ -111,7 +111,8 @@ export function publish(directory, { env = process.env, exec = execFileSync } = 
   assert(existing.length <= 1, '同名草稿数量异常，禁止覆盖');
   if (existing.length) {
     const draft = existing[0];
-    assert(draft.target_commitish === env.GITHUB_SHA && draft.body?.includes(marker), '同名草稿不属于当前发布提交，禁止覆盖');
+    // 不带 --target 创建草稿时 target_commitish 为默认分支名，改用发布提交标记确认归属。
+    assert(draft.body?.includes(marker), '同名草稿不属于当前发布提交，禁止覆盖');
     assert(draft.assets.every((asset) => files.some((file) => basename(file) === asset.name)), '同名草稿含有未知附件，禁止覆盖');
   } else {
     const notes = `Folio ${version}\n\n安装方式、Android 签名与桌面系统验证提示见 [发布说明](https://github.com/aurysian-yan/Folio/blob/v${version}/docs/releases.md)。\n\nSHA-256 校验值见 SHA256SUMS.txt；完整开源许可见 folio-licenses.json。\n\n${marker}\n`;
