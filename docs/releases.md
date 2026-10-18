@@ -40,7 +40,9 @@ node tools/about/validate.mjs
 pnpm i18n:validate
 ```
 
-版本或依赖变动后重新生成许可目录。目录同时保留 npm、Rust、Android、iOS、
+Validate 与 Release 工作流会在校验前自动生成许可目录。Release 将生成结果作为构建产物传给各平台打包、汇总与发布任务，确保安装包和发布附件使用同一份目录。
+
+本地版本或依赖变动后，也可重新生成并提交许可目录。目录同时保留 npm、Rust、Android、iOS、
 字体资源及移植源码的原始版权与 NOTICE；未提供原文的来源保留实际声明与出处。
 
 ```sh
