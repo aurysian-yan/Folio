@@ -1166,6 +1166,7 @@ pub fn run() {
             about::about_info,
             about::request_release,
             about::open_about_link,
+            about::open_macos_guide,
             quit_app,
         ])
         .build(context)

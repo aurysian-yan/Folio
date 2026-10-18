@@ -305,6 +305,49 @@ body {
 .window-brand svg path {
     fill: var(--text);
 }
+/* macOS 上 Tauri 端不受支持，警告入口使用独立菜单说明原因。 */
+.titlebar-warning-anchor {
+    position: relative;
+    display: flex;
+    height: 100%;
+    align-items: center;
+}
+.titlebar-warning-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    height: 24px;
+    min-width: 30px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 6px;
+    color: var(--warning-soft-foreground);
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    transition: background 140ms ease, transform 0.15s ease-out;
+}
+.titlebar-warning-button:hover,
+.titlebar-warning-button[aria-expanded="true"] {
+    background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.titlebar-warning-button:active {
+    transform: scale(0.95);
+}
+.titlebar-warning-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.titlebar-warning-button svg {
+    width: 15px;
+    height: 15px;
+    flex: none;
+}
+.titlebar-warning-button span {
+    color: var(--text-muted);
+}
 .brand-mark {
     display: grid;
     width: 14px;
@@ -531,6 +574,54 @@ body {
     height: 1px;
     margin: 3px 4px;
     background: var(--line);
+}
+.titlebar .menu-shell.platform-warning-menu {
+    width: 320px;
+    max-width: calc(100vw - 24px);
+}
+.menu-warning {
+    display: grid;
+    gap: 4px;
+    padding: 7px 8px 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: normal;
+}
+.menu-warning strong {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--warning-soft-foreground);
+    font-size: 11px;
+    font-weight: 600;
+}
+.menu-warning strong svg {
+    width: 13px;
+    height: 13px;
+    flex: none;
+}
+.menu-warning p {
+    margin: 0;
+}
+.menu-warning-link {
+    margin-top: 2px;
+}
+.menu-warning-link .menu-warning-link-label {
+    flex: 1;
+    color: var(--accent);
+}
+.menu-warning-link svg {
+    width: 12px;
+    height: 12px;
+    flex: none;
+    color: var(--accent);
+}
+.menu-warning-link:not(:disabled):hover .menu-warning-link-label,
+.menu-warning-link:not(:disabled):focus-visible .menu-warning-link-label,
+.menu-warning-link:not(:disabled):hover svg,
+.menu-warning-link:not(:disabled):focus-visible svg {
+    color: #fff;
 }
 .menu-status {
     margin-left: auto;
@@ -2392,9 +2483,10 @@ button.sidebar-pages:hover .sidebar-page {
 }
 /* 分组卡片对应 macOS 的 FacetDisclosureGroupView，使用主文字色微透明衬底。 */
 .facet-group {
-    padding: 10px;
+    padding: 6px;
     border-radius: 10px;
     background: color-mix(in srgb, var(--text) 6%, transparent);
+    overflow: hidden;
 }
 .facet-group-header {
     display: flex;
@@ -2402,7 +2494,7 @@ button.sidebar-pages:hover .sidebar-page {
     justify-content: space-between;
     gap: 8px;
     width: 100%;
-    padding: 0;
+    padding: 3px 4px;
     border: 0;
     color: var(--text);
     background: transparent;
@@ -2441,7 +2533,7 @@ button.sidebar-pages:hover .sidebar-page {
     min-height: 26px;
     padding: 0 7px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 6px;
     color: var(--text);
     background: color-mix(in srgb, var(--text) 9%, transparent);
     cursor: pointer;
@@ -2477,6 +2569,29 @@ button.sidebar-pages:hover .sidebar-page {
 .facet-chip:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+}
+/* 隐藏系统字体条件沿用筛选标签外观，并以 macOS 图标与提示说明当前平台不可用。 */
+.system-fonts-filter {
+    padding: 0;
+}
+.system-fonts-chip {
+    width: 100%;
+}
+.system-fonts-chip[aria-disabled="true"] {
+    cursor: default;
+}
+.system-fonts-chip[aria-disabled="true"]:not(.selected) {
+    color: var(--text-muted);
+}
+.system-fonts-chip[aria-disabled="true"]:not(.selected):hover {
+    background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+.system-fonts-chip-icon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    margin-left: auto;
+    opacity: 0.85;
 }
 .hero-select {
     min-width: 0;
@@ -3346,6 +3461,7 @@ button.sidebar-pages:hover .sidebar-page {
 .about-wordmark:hover, .about-wordmark[data-hovered="true"] { background: transparent; box-shadow: none; transform: none; }
 .about-glyph-layer { transition: opacity 150ms ease; }
 .about-license-scroll { max-height: 50svh; overflow: auto; }
+.about-platform-warning { text-align: left; }
 .about-license-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: .875rem; line-height: 1.6; margin-block: 1rem; }
 @media (prefers-reduced-motion: reduce) { .about-glyph-layer { transition: none; } }
 

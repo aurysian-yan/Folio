@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { family } from "./test/fixtures";
 import App from "./App";
-import { characterMap, clearCatalogCache, getStorageUsage, getSyncProfile, getSyncStatus, listSyncConflicts, listSmartFolders, saveSmartFolder, openSettings, queryLibrary, quitApp, rebuildSyncIndexes, recordRecent } from "./api";
+import { characterMap, clearCatalogCache, getStorageUsage, getSyncProfile, getSyncStatus, listSyncConflicts, listSmartFolders, openMacOSGuide, saveSmartFolder, openSettings, queryLibrary, quitApp, rebuildSyncIndexes, recordRecent } from "./api";
 
 vi.mock("./components/FontPreview", () => ({ FontPreview: ({ size, label, color }: { size: number; label: string; color?: string | null }) => <span data-testid="preview-font-size" data-size={size} data-color={color ?? "default"} aria-label={label} /> }));
 vi.mock("./components/SidebarPageIndicator", () => ({ SidebarPageIndicator: () => <span aria-hidden="true" /> }));
@@ -27,6 +27,7 @@ vi.mock("./api", async (importOriginal) => {
       health: { damagedFiles: 0, duplicateSources: 0, multipleRevisions: 0, metadataConflicts: 0 } })),
     recordRecent: vi.fn(async () => 1),
     openSettings: vi.fn(async () => {}),
+    openMacOSGuide: vi.fn(async () => {}),
     quitApp: vi.fn(async () => {}),
     listCollections: vi.fn(async () => []), listSmartFolders: vi.fn(async () => []),
     saveSmartFolder: vi.fn(),
@@ -49,6 +50,21 @@ beforeEach(() => {
   vi.mocked(rebuildSyncIndexes).mockClear();
 });
 afterEach(() => { window.history.replaceState(null, "", "/"); });
+
+it("macOS 上标题栏警告入口打开独立菜单并显示平台提示", async () => {
+  const userAgent = vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15");
+  try {
+    const { getByRole, findByRole } = render(<App />);
+    fireEvent.click(getByRole("button", { name: "1 条平台提示" }));
+    const menu = await findByRole("menu", { name: "1 条平台提示" });
+    expect(within(menu).getByText("macOS 请使用原生应用")).toBeTruthy();
+    expect(within(menu).getByText(/你当前正在 Mac 上运行 Tauri 端/)).toBeTruthy();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "了解更多" }));
+    expect(openMacOSGuide).toHaveBeenCalledTimes(1);
+  } finally {
+    userAgent.mockRestore();
+  }
+});
 
 it.each([null, "invalid"])("未设置或无效退出快捷键 %s 时默认使用 Ctrl+Q", async (stored) => {
   if (stored !== null) localStorage.setItem("folio-quit-shortcut", stored);
@@ -489,17 +505,17 @@ it("同步的隐藏系统字体条件显示为禁用，编辑收藏夹后保留�
   const folderButton = await findByRole("button", { name: /用户字体/ });
   fireEvent.click(folderButton);
   fireEvent.click(getByRole("button", { name: "导航 / 筛选" }));
-  const filter = getByRole("switch", { name: "隐藏系统字体" }) as HTMLInputElement;
-  expect(filter.disabled).toBe(true);
-  expect(filter.checked).toBe(true);
+  const filter = getByRole("button", { name: "隐藏系统字体" });
+  expect(filter.getAttribute("aria-disabled")).toBe("true");
+  expect(filter.getAttribute("aria-pressed")).toBe("true");
   fireEvent.click(getByRole("button", { name: "导航 / 筛选" }));
   fireEvent.contextMenu(getByRole("button", { name: /用户字体/ }));
   fireEvent.click(getByRole("menuitem", { name: "编辑收藏夹…" }));
   const dialog = within(await findByRole("dialog"));
   fireEvent.click(dialog.getByRole("tab", { name: "筛选条件" }));
-  const condition = dialog.getByRole("switch", { name: "隐藏系统字体" }) as HTMLInputElement;
-  expect(condition.disabled).toBe(true);
-  expect(condition.checked).toBe(true);
+  const condition = dialog.getByRole("button", { name: "隐藏系统字体" });
+  expect(condition.getAttribute("aria-disabled")).toBe("true");
+  expect(condition.getAttribute("aria-pressed")).toBe("true");
   fireEvent.click(dialog.getByRole("button", { name: "保存" }));
   await waitFor(() => expect(saveSmartFolder).toHaveBeenCalledWith(expect.objectContaining({ id: folder.id, facets: { hideSystemFonts: ["true"] } })));
 });

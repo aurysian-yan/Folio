@@ -5,6 +5,7 @@ import { locallyAvailable, locationFilters, locationLabel, transferLabel } from 
 import { removeCloudDownload, setFontUploadExcluded, revealFontSource, getAutomaticDownload, setAutomaticDownload, deleteCloudFont } from "./api";
 import {
   ArrowClockwiseIcon,
+  ArrowUpRightIcon,
   CaretDownIcon,
   CheckIcon,
   CloudCheckIcon,
@@ -50,6 +51,7 @@ import { OptionSelect, SettingChoiceField, SettingSelect, SettingSliderField, Se
 import { SegmentedTabs } from "./components/SegmentedTabs";
 import { SidebarPageIndicator } from "./components/SidebarPageIndicator";
 import { FacetGroup } from "./components/FacetGroup";
+import { SystemFontsFilterChip } from "./components/SystemFontsFilterChip";
 import { ClaralightSlider } from "./components/ClaralightSlider";
 import { PreviewColorPicker } from "./components/PreviewColorPicker";
 import { PreviewPresetMenu } from "./components/PreviewPresetMenu";
@@ -96,6 +98,7 @@ import {
   listCollections,
   listSmartFolders,
   listSyncConflicts,
+  openMacOSGuide,
   openSettings,
   queryLibrary,
   quitApp,
@@ -598,6 +601,34 @@ function MenuItem({
   );
 }
 
+// 平台提示菜单中的了解更多按钮复用菜单项圆角。
+function WarningMenuLink({
+  label,
+  onSelect,
+}: {
+  label: string;
+  onSelect: () => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useSmoothCorners(ref, menuItemCorners, {
+    autoEffects: false,
+    fallbackBorderRadius: "6px",
+  });
+  return (
+    <button
+      ref={ref}
+      type="button"
+      role="menuitem"
+      className="menu-warning-link"
+      style={{ borderRadius: menuItemCorners.radius }}
+      onClick={onSelect}
+    >
+      <span className="menu-warning-link-label">{label}</span>
+      <ArrowUpRightIcon aria-hidden="true" />
+    </button>
+  );
+}
+
 // 侧边栏可点击项：在原生 button 上应用 lisse 平滑圆角，保持原有的 flex 布局。
 function SidebarItem({
   className,
@@ -628,6 +659,11 @@ function isSettingsWindow() {
   );
 }
 
+// Tauri 端在 macOS 上不受支持，用 UA 识别宿主平台以显示平台提示入口。
+function isMacOSHost() {
+  return /Macintosh|Mac OS X/.test(navigator.userAgent);
+}
+
 function FolioWordmark() {
   return (
     <svg height="12" viewBox="0 0 1024 364" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -644,6 +680,8 @@ export default function App() {
   }, []);
 
   const settingsWindow = isSettingsWindow();
+  const macOSHost = isMacOSHost();
+  const platformWarningCount = macOSHost ? 1 : 0;
   const [languageSetting, setLanguage] = useState<LanguageSetting>(() => currentLanguageSetting());
   const [viewMode, setViewMode] = useState<ViewMode>(
     () =>
@@ -2088,6 +2126,60 @@ export default function App() {
               >
                 <FolioWordmark />
               </button>
+              {macOSHost && (
+                <div className="titlebar-warning-anchor">
+                  <button
+                    type="button"
+                    className="titlebar-warning-button"
+                    aria-label={t("desktop.platformNotice", { count: platformWarningCount })}
+                    aria-haspopup="menu"
+                    aria-expanded={menuMode && menuOpen === "warning"}
+                    aria-controls="platform-warning-menu"
+                    onClick={() => {
+                      if (menuMode && menuOpen === "warning") closeMenu();
+                      else {
+                        setMenuMode(true);
+                        setMenuOpen("warning");
+                      }
+                    }}
+                    onMouseEnter={() => {
+                      if (menuMode) setMenuOpen("warning");
+                    }}
+                  >
+                    <WarningIcon aria-hidden="true" />
+                    <span aria-hidden="true">{platformWarningCount}</span>
+                  </button>
+                  {menuMode && menuOpen === "warning" && (
+                    <MenuPopover
+                      backdropRoot={appWindowRef.current}
+                      className="platform-warning-menu"
+                      id="platform-warning-menu"
+                      label={t("desktop.platformNotice", { count: platformWarningCount })}
+                    >
+                      <div
+                        className="menu-warning"
+                        role="group"
+                        aria-label={t("about.macosTauriWarningTitle")}
+                      >
+                        <strong>
+                          <WarningIcon aria-hidden="true" />
+                          {t("about.macosTauriWarningTitle")}
+                        </strong>
+                        <p>{t("about.macosTauriWarning")}</p>
+                      </div>
+                      <WarningMenuLink
+                        label={t("common.learnMore")}
+                        onSelect={() => {
+                          closeMenu();
+                          void openMacOSGuide().catch(() =>
+                            setWindowActionError(t("common.openLinkFailed")),
+                          );
+                        }}
+                      />
+                    </MenuPopover>
+                  )}
+                </div>
+              )}
               {menuMode && menuOpen === "file" && (
                 <MenuPopover
                   backdropRoot={appWindowRef.current}
@@ -2930,13 +3022,12 @@ export default function App() {
                 ) : (
                   <>
                     <div className="sidebar-section-label">{t("navigation.filters")}</div>
-                    <Switch isSelected={selectedFacets.hideSystemFonts?.includes("true") ?? false} isDisabled>
-                      <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>{t("filters.hideSystemFonts")}</Switch.Content>
-                    </Switch>
-                    <p className="settings-note">{t("filters.macosOnly")}</p>
-                    {page?.facets.length ? (
-                      <div className="facet-groups">
-                        {facetGroups(page.facets).map(([kind, options]) => (
+                    <div className="facet-groups">
+                      <SystemFontsFilterChip
+                        isSelected={selectedFacets.hideSystemFonts?.includes("true") ?? false}
+                      />
+                      {page?.facets.length ? (
+                        facetGroups(page.facets).map(([kind, options]) => (
                           <FacetGroup
                             key={kind}
                             title={facetGroupTitle(kind)}
@@ -2949,13 +3040,13 @@ export default function App() {
                               )
                             }
                           />
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="sidebar-empty">
-                        {t("filters.empty")}
-                      </p>
-                    )}
+                        ))
+                      ) : (
+                        <p className="sidebar-empty">
+                          {t("filters.empty")}
+                        </p>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -3403,13 +3494,12 @@ function FavoriteFolderEditor({
                       {t("filters.smartHint")}
                     </p>
                   </div>
-                  <Switch isSelected={facets.hideSystemFonts?.includes("true") ?? false} isDisabled>
-                    <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>{t("filters.hideSystemFonts")}</Switch.Content>
-                  </Switch>
-                  <p className="favorite-editor-hint">{t("filters.macosOnly")}</p>
-                  {groups.length ? (
-                    <div className="facet-groups">
-                      {groups.map(([kind, options]) => (
+                  <div className="facet-groups">
+                    <SystemFontsFilterChip
+                      isSelected={facets.hideSystemFonts?.includes("true") ?? false}
+                    />
+                    {groups.length ? (
+                      groups.map(([kind, options]) => (
                         <FacetGroup
                           key={kind}
                           title={facetGroupTitle(kind)}
@@ -3422,13 +3512,13 @@ function FavoriteFolderEditor({
                             )
                           }
                         />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="sidebar-empty">
-                      {t("filters.empty")}
-                    </p>
-                  )}
+                      ))
+                    ) : (
+                      <p className="sidebar-empty">
+                        {t("filters.empty")}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

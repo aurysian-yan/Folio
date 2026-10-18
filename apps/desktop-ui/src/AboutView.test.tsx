@@ -33,6 +33,12 @@ describe('关于页', () => {
     expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('Source Serif');
     expect(list.scrollTop).toBe(120);
   });
+  it('macOS 上运行 Tauri 端时提示改用原生应用', async () => {
+    vi.mocked(getAboutInfo).mockResolvedValueOnce({ version: '1.0.0', build: '2', platform: 'macos', arch: 'arm64' });
+    render(<AboutView />);
+    expect(await screen.findByText('macOS 请使用原生应用')).toBeTruthy();
+    expect(screen.getByText(/你当前正在 Mac 上运行 Tauri 端/)).toBeTruthy();
+  });
   it('重复检查只发起一次请求，完成后可以重试', async () => {
     let finish: (value: {status:number;body:string}) => void = () => {};
     vi.mocked(requestRelease).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));

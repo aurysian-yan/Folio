@@ -32,6 +32,8 @@
     "milliseconds": "毫秒",
     "rebuild": "重建",
     "openSettings": "打开设置",
+    "learnMore": "了解更多",
+    "openLinkFailed": "无法打开链接，请重试",
     "unknownVersion": "版本未知",
     "loading": "正在读取…",
     "loadingLibrary": "正在读取字体库…",
@@ -248,7 +250,8 @@
     "facetOption": "{{name}}，{{count}} 个字族",
     "empty": "当前字体库没有可用的筛选项。",
     "hideSystemFonts": "隐藏系统字体",
-    "macosOnly": "仅在 macOS 生效"
+    "macosOnly": "仅在 macOS 生效",
+    "macosOnlyTooltip": "该功能仅在 macOS 可用，Windows 及 Linux 无法可靠地区分是否为系统字体"
   },
   "collection": {
     "collection": "收藏夹",
@@ -665,6 +668,7 @@
     "appMenuPreview": "应用菜单预览",
     "fileMenu": "文件菜单",
     "fileMenuPreview": "文件菜单预览",
+    "platformNotice": "{{count}} 条平台提示",
     "windowControls": "窗口控制",
     "shortcuts": "快捷键",
     "quit": "退出 Folio",
@@ -992,6 +996,8 @@
     "logoLabel": "Folio 字标",
     "logoHint": "点击切换下一个字标",
     "platform": "{{platform}} · {{arch}}",
+    "macosTauriWarningTitle": "macOS 请使用原生应用",
+    "macosTauriWarning": "你当前正在 Mac 上运行 Tauri 端，此应用仅面向 Windows 与 Linux。Mac 上使用可能会遇见异常情况，请改用原生版本 Folio 应用。",
     "nexio": "液态玻璃导航与交互参考",
     "kyant": "液态玻璃、平滑胶囊与着色器",
     "meilox": "导航交互与玻璃效果参考",

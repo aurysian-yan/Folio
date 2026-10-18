@@ -180,3 +180,4 @@ export function deleteCloudFont(fingerprint: string): Promise<void> {
 export function getAboutInfo(): Promise<import("../../../shared/about/update").AppInfo> { return invoke("about_info"); }
 export function requestRelease(url: string): Promise<import("../../../shared/about/update").HttpResult> { return invoke("request_release", { url }); }
 export function openAboutLink(url: string): Promise<void> { return invoke("open_about_link", { url }); }
+export function openMacOSGuide(): Promise<void> { return invoke("open_macos_guide"); }

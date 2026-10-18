@@ -32,6 +32,8 @@
     "milliseconds": "ms",
     "rebuild": "Rebuild",
     "openSettings": "Open Settings",
+    "learnMore": "Learn more",
+    "openLinkFailed": "Couldn't open the link. Try again.",
     "unknownVersion": "Version unknown",
     "loading": "Loading…",
     "loadingLibrary": "Loading library…",
@@ -250,7 +252,8 @@
     "facetOption": "{{name}}, {{count}} families",
     "empty": "No filters are available for the current library.",
     "hideSystemFonts": "Hide system fonts",
-    "macosOnly": "Only applies on macOS"
+    "macosOnly": "Only applies on macOS",
+    "macosOnlyTooltip": "This feature is only available on macOS. Windows and Linux cannot reliably distinguish system fonts."
   },
   "collection": {
     "collection": "Collection",
@@ -678,6 +681,8 @@
     "appMenuPreview": "App Menu Preview",
     "fileMenu": "File Menu",
     "fileMenuPreview": "File Menu Preview",
+    "platformNotice_one": "{{count}} platform notice",
+    "platformNotice_other": "{{count}} platform notices",
     "windowControls": "Window Controls",
     "shortcuts": "Keyboard Shortcuts",
     "quit": "Quit Folio",
@@ -1005,6 +1010,8 @@
     "logoLabel": "Folio wordmark",
     "logoHint": "Activate to switch to the next wordmark",
     "platform": "{{platform}} · {{arch}}",
+    "macosTauriWarningTitle": "Use the native app on macOS",
+    "macosTauriWarning": "You are running the Tauri build on a Mac. This app only targets Windows and Linux. Unexpected issues may occur on Mac, so please use the native Folio app.",
     "nexio": "Liquid glass navigation and interaction reference",
     "kyant": "Liquid glass, smooth capsules and shaders",
     "meilox": "Navigation interactions and glass reference",

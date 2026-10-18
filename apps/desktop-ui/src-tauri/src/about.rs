@@ -2,8 +2,9 @@ use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::WebviewWindow;
 
-// 关于接口仅服务设置窗口，联网入口固定到本项目的正式发行版。
+// 关于接口仅服务设置窗口；macOS 平台说明入口同时服务主窗口。
 const REPOSITORY: &str = "https://github.com/aurysian-yan/Folio";
+const MACOS_GUIDE: &str = "https://github.com/aurysian-yan/Folio#macos";
 static REQUESTING: AtomicBool = AtomicBool::new(false);
 struct RequestGuard;
 impl Drop for RequestGuard {
@@ -147,16 +148,29 @@ pub fn open_about_link(window: WebviewWindow, url: String) -> Result<(), String>
     if !registered && !release_link(&url, false) && !release_link(&url, true) {
         return Err("不允许的外部链接".into());
     }
-    let parsed = reqwest::Url::parse(&url).map_err(|_| "failed")?;
+    open_external(&url)
+}
+
+// macOS 提示菜单只打开固定的平台说明地址，主窗口与设置窗口均可调用。
+#[tauri::command]
+pub fn open_macos_guide(window: WebviewWindow) -> Result<(), String> {
+    if !matches!(window.label(), "main" | "settings") {
+        return Err("此操作仅允许从 Folio 窗口执行".into());
+    }
+    open_external(MACOS_GUIDE)
+}
+
+fn open_external(url: &str) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| "failed")?;
     if parsed.scheme() != "https" || !parsed.username().is_empty() || parsed.password().is_some() {
         return Err("不允许的外部链接".into());
     }
     #[cfg(target_os = "windows")]
-    let result = std::process::Command::new("explorer.exe").arg(&url).spawn();
+    let result = std::process::Command::new("explorer.exe").arg(url).spawn();
     #[cfg(target_os = "linux")]
-    let result = std::process::Command::new("xdg-open").arg(&url).spawn();
+    let result = std::process::Command::new("xdg-open").arg(url).spawn();
     #[cfg(target_os = "macos")]
-    let result = std::process::Command::new("open").arg(&url).spawn();
+    let result = std::process::Command::new("open").arg(url).spawn();
     result.map(|_| ()).map_err(|_| "failed".into())
 }
 

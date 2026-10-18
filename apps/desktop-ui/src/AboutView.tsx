@@ -1,5 +1,5 @@
-import { Button, Input, Label, Modal, SearchField } from '@heroui/react';
-import { ArrowLeftIcon, ArrowUpRightIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
+import { Alert, Button, Input, Label, Modal, SearchField } from '@heroui/react';
+import { ArrowLeftIcon, ArrowUpRightIcon, MagnifyingGlassIcon, WarningIcon } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import content from '../../../shared/about/content.json';
@@ -69,6 +69,13 @@ export function AboutView() {
         <span className="sr-only" role="status">{t('about.logoVariant', { current: frame + 1, total: glyphs.length })}</span>
         <p className="tabular-nums">{app ? t('macos.versionWithBuild', { version: app.version, build: app.build }) : t('common.unknownVersion')}</p>
         {app && <p>{t('about.platform', { platform: t(`about.platformNames.${app.platform}`), arch: app.arch })}</p>}
+        {app?.platform === 'macos' && <Alert status="warning" className="about-platform-warning">
+          <Alert.Indicator><WarningIcon /></Alert.Indicator>
+          <Alert.Content>
+            <Alert.Title>{t('about.macosTauriWarningTitle')}</Alert.Title>
+            <Alert.Description>{t('about.macosTauriWarning')}</Alert.Description>
+          </Alert.Content>
+        </Alert>}
         <Button size="sm" variant="secondary" isDisabled={!app || update.status === 'checking'} onPress={() => void check()}>
           {t(update.status === 'checking' ? 'about.checking' : 'about.check')}
         </Button>
