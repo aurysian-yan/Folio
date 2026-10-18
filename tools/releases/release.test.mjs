@@ -21,14 +21,14 @@ function releaseFixture(callback) {
 }
 const env = { GITHUB_REF_NAME: `v${version}`, GITHUB_REPOSITORY: 'aurysian-yan/Folio', GITHUB_SHA: 'a'.repeat(40) };
 function githubFixture(directory, { existing, incomplete = false, corruptDigest = false, failUpload = false, apiError = '404' } = {}) {
-  const calls = []; let queried = false;
+  const calls = []; let listed = 0;
   const exec = (command, args, options) => {
     assert.equal(command,'gh'); calls.push(args);
-    if (args[0] === 'api') {
-      if (!queried) {
-        queried = true;
-        if (existing) return JSON.stringify(existing);
-        throw Object.assign(new Error('API error'),{stderr:apiError});
+    if (args[0] === 'api' && args[1] === '--paginate') {
+      listed += 1;
+      if (listed === 1) {
+        if (apiError !== '404') throw Object.assign(new Error('API error'),{stderr:apiError});
+        return JSON.stringify([existing ? [existing] : []]);
       }
       const assets = verifyRelease(directory).map((name) => {
         const bytes = readFileSync(join(directory,name));
@@ -36,9 +36,17 @@ function githubFixture(directory, { existing, incomplete = false, corruptDigest 
       });
       if (incomplete) assets.pop();
       if (corruptDigest) assets[0].digest = `sha256:${'0'.repeat(64)}`;
-      return JSON.stringify({assets});
+      return JSON.stringify([[{id:1,draft:true,tag_name:env.GITHUB_REF_NAME,assets}]]);
     }
-    if (args[1] === 'create') assert.ok(options.input.includes(`<!-- folio-release:${env.GITHUB_SHA} -->`));
+    if (args[0] === 'api' && args[1] === '-X') {
+      assert.equal(args[2],'PATCH');
+      assert.ok(args.includes('draft=false'));
+      return JSON.stringify({id:1,draft:false,tag_name:env.GITHUB_REF_NAME});
+    }
+    if (args[1] === 'create') {
+      assert.ok(options.input.includes(`<!-- folio-release:${env.GITHUB_SHA} -->`));
+      assert.ok(!args.includes('--target'));
+    }
     if (args[1] === 'upload') {
       assert.ok(args.includes('--clobber'));
       const files = args.filter((arg) => arg.startsWith(directory));
@@ -53,9 +61,11 @@ function githubFixture(directory, { existing, incomplete = false, corruptDigest 
 test('完整附件通过远端哈希校验后才公开发行版', () => releaseFixture((directory) => {
   const {calls,exec} = githubFixture(directory);
   publish(directory,{env,exec});
-  assert.deepEqual(calls.filter((args) => args[0] === 'release').map((args) => args[1]),['create','upload','edit']);
-  assert.ok(calls.find((args) => args[1] === 'create').includes(env.GITHUB_SHA));
-  assert.ok(calls.at(-1).includes('--draft=false'));
+  assert.deepEqual(calls.filter((args) => args[0] === 'release').map((args) => args[1]),['create','upload']);
+  const create = calls.find((args) => args[1] === 'create');
+  assert.ok(create.includes(env.GITHUB_REF_NAME));
+  assert.ok(!create.includes('--target'));
+  assert.ok(calls.at(-1).includes('draft=false'));
 }));
 test('附件损坏、缺失或混入额外文件时禁止调用发布接口', () => {
   for (const mode of ['corrupt','missing','extra']) releaseFixture((directory) => {
@@ -72,17 +82,18 @@ test('上传中断、远端附件缺失或哈希不一致时保留草稿，不�
   for (const options of [{failUpload:true},{incomplete:true},{corruptDigest:true}]) releaseFixture((directory) => {
     const {calls,exec} = githubFixture(directory,options);
     assert.throws(() => publish(directory,{env,exec}));
-    assert.ok(!calls.some((args) => args[1] === 'edit'));
+    assert.ok(!calls.some((args) => args[1] === '-X'));
   });
 });
 test('同一提交的失败草稿可补传并完成发布', () => releaseFixture((directory) => {
-  const existing = {draft:true,target_commitish:env.GITHUB_SHA,body:`<!-- folio-release:${env.GITHUB_SHA} -->`,assets:[]};
+  const existing = {id:1,draft:true,tag_name:env.GITHUB_REF_NAME,target_commitish:env.GITHUB_SHA,body:`<!-- folio-release:${env.GITHUB_SHA} -->`,assets:[]};
   const {calls,exec} = githubFixture(directory,{existing});
   publish(directory,{env,exec});
-  assert.deepEqual(calls.filter((args) => args[0] === 'release').map((args) => args[1]),['upload','edit']);
+  assert.deepEqual(calls.filter((args) => args[0] === 'release').map((args) => args[1]),['upload']);
+  assert.ok(calls.at(-1).includes('draft=false'));
 }));
 test('不覆盖正式发行版、其他提交的草稿或含未知附件的草稿', () => {
-  const draft = {draft:true,target_commitish:env.GITHUB_SHA,body:`<!-- folio-release:${env.GITHUB_SHA} -->`,assets:[]};
+  const draft = {draft:true,tag_name:env.GITHUB_REF_NAME,target_commitish:env.GITHUB_SHA,body:`<!-- folio-release:${env.GITHUB_SHA} -->`,assets:[]};
   for (const existing of [{...draft,draft:false},{...draft,target_commitish:'b'.repeat(40)},{...draft,body:''},{...draft,assets:[{name:'unknown.apk'}]}]) releaseFixture((directory) => {
     const {calls,exec} = githubFixture(directory,{existing});
     assert.throws(() => publish(directory,{env,exec}));

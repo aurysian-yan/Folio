@@ -99,22 +99,32 @@ export function publish(directory, { env = process.env, exec = execFileSync } = 
   const files = verifyRelease(directory).map((name) => join(directory,name));
   const repository = env.GITHUB_REPOSITORY; const tag = `v${version}`;
   const marker = `<!-- folio-release:${env.GITHUB_SHA} -->`;
-  // 同一提交的失败草稿可重试；全部附件通过远端校验后才公开。
-  let existing;
-  try { existing = JSON.parse(exec('gh',['api',`repos/${repository}/releases/tags/${tag}`],{encoding:'utf8',stdio:['ignore','pipe','pipe']})); }
-  catch (error) { if (!String(error.stderr).includes('404')) throw new Error('无法确认发行版状态，已停止发布'); }
-  if (existing) assert(existing.draft, '正式发行版已存在，禁止覆盖');
-  if (existing) {
-    assert(existing.target_commitish === env.GITHUB_SHA && existing.body?.includes(marker), '同名草稿不属于当前发布提交，禁止覆盖');
-    assert(existing.assets.every((asset) => files.some((file) => basename(file) === asset.name)), '同名草稿含有未知附件，禁止覆盖');
+  // 草稿无法按标签查询，改为分页列出全部发行版后定位；同一提交的失败草稿可重试，正式版禁止覆盖。
+  const list = () => {
+    let pages;
+    try { pages = JSON.parse(exec('gh',['api','--paginate','--slurp',`repos/${repository}/releases?per_page=100`],{encoding:'utf8',stdio:['ignore','pipe','pipe']})); }
+    catch { throw new Error('无法确认发行版状态，已停止发布'); }
+    return pages.flat();
+  };
+  const existing = list().filter((release) => release.tag_name === tag);
+  assert(!existing.some((release) => !release.draft), '正式发行版已存在，禁止覆盖');
+  assert(existing.length <= 1, '同名草稿数量异常，禁止覆盖');
+  if (existing.length) {
+    const draft = existing[0];
+    assert(draft.target_commitish === env.GITHUB_SHA && draft.body?.includes(marker), '同名草稿不属于当前发布提交，禁止覆盖');
+    assert(draft.assets.every((asset) => files.some((file) => basename(file) === asset.name)), '同名草稿含有未知附件，禁止覆盖');
   } else {
     const notes = `Folio ${version}\n\n安装方式、Android 签名与桌面系统验证提示见 [发布说明](https://github.com/aurysian-yan/Folio/blob/v${version}/docs/releases.md)。\n\nSHA-256 校验值见 SHA256SUMS.txt；完整开源许可见 folio-licenses.json。\n\n${marker}\n`;
-    exec('gh',['release','create',tag,'--repo',repository,'--verify-tag','--target',env.GITHUB_SHA,'--draft','--title',`Folio ${version}`,'--notes-file','-'],{stdio:['pipe','inherit','inherit'],input:notes});
+    // 标签已存在，不再传 --target，避免默认令牌被要求额外的 workflows 权限。
+    exec('gh',['release','create',tag,'--repo',repository,'--verify-tag','--draft','--title',`Folio ${version}`,'--notes-file','-'],{stdio:['pipe','inherit','inherit'],input:notes});
   }
   exec('gh',['release','upload',tag,'--repo',repository,'--clobber',...files],{stdio:'inherit'});
-  const uploaded = JSON.parse(exec('gh',['api',`repos/${repository}/releases/tags/${tag}`],{encoding:'utf8'}));
-  assert(files.length === uploaded.assets.length && files.every((file) => uploaded.assets.some((asset) => asset.name === basename(file) && asset.size === statSync(file).size && asset.digest === `sha256:${createHash('sha256').update(readFileSync(file)).digest('hex')}`)), '上传产物不完整');
-  exec('gh',['release','edit',tag,'--repo',repository,'--draft=false'],{stdio:'inherit'});
+  const uploaded = list().filter((release) => release.tag_name === tag);
+  assert(uploaded.length === 1 && uploaded[0].draft, '无法确认发布草稿');
+  const draft = uploaded[0];
+  assert(files.length === draft.assets.length && files.every((file) => draft.assets.some((asset) => asset.name === basename(file) && asset.size === statSync(file).size && asset.digest === `sha256:${createHash('sha256').update(readFileSync(file)).digest('hex')}`)), '上传产物不完整');
+  const published = JSON.parse(exec('gh',['api','-X','PATCH',`repos/${repository}/releases/${draft.id}`,'-F','draft=false'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}));
+  assert(published.draft === false && published.tag_name === tag, '发行版公开失败');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [mode,...args] = process.argv.slice(2);
