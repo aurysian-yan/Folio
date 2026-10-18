@@ -150,6 +150,8 @@ adb -s <真机序列号> shell am instrument -w com.folio.poc.test/com.folio.poc
 
 真机更新前核对构建变体与 APK 的 applicationId：开发包必须是 `com.folio.mobile.poc.dev`，与前台 Folio Dev 一致；生产包 `com.folio.mobile.poc` 不能代替开发包验收。保留数据安装，页面验收须另外确认四个导航 Tab、输入退出和详情返回，不能由 instrumentation PASS 推断。
 
+安卓导航绘制回归使用 `./gradlew :folio-native:assembleDebugAndroidTest -PfolioPreviewTest=true` 构建并安装测试 APK，再执行 `adb shell am instrument -w -e navigationSmoke true com.folio.poc.test/com.folio.poc.FolioPreviewInstrumentation`。测试覆盖首帧、延迟布局、主题压暗、返回取消、立即关闭及卸载重挂载；实际页面与玻璃菜单仍需真机逐帧录屏验收。
+
 测试 APK 使用自己的私有目录和随机测试凭据，不接触 Folio Dev 字体库。回环 WebDAV 使用测试注入客户端；生产连接仍强制 HTTPS，不放宽 TLS 或地址检查。独立服务商 WebDAV 的移动／桌面实网验收尚待配置，不能用回环测试代替；完整范围见 [VALIDATION.md](VALIDATION.md#cloud-sync-foundation-batch-5)。
 
 ## Cloud Sync Cycle (Batch 6)

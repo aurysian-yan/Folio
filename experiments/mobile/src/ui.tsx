@@ -17,6 +17,7 @@ export const themes = {
   light: {
     heroNormal: '#26BF4D', heroDamaged: '#F5234B', heroUpdate: '#0078F0', heroCloud: '#F58625', heroConflict: '#CB30E0',
     dark: false,
+    navigationDimOpacity: 0.2,
     background: systemBackground ?? '#FFFFFF', onAccent: '#FFFFFF', surface: '#EFEFEF', raised: '#FFFFFF', label: '#1A1A1A',
     secondary: '#727272', muted: '#999999', border: '#E4E4E4', accent: '#F06835',
     backButtonBorder: '#E4E4E4',
@@ -29,6 +30,7 @@ export const themes = {
   dark: {
     heroNormal: '#26BF4D', heroDamaged: '#F5234B', heroUpdate: '#0078F0', heroCloud: '#F58625', heroConflict: '#CB30E0',
     dark: true,
+    navigationDimOpacity: 0.48,
     background: systemBackground ?? '#121212', onAccent: '#121212', surface: '#242424', raised: '#2C2C2E', label: '#F2F2F2',
     secondary: '#AEAEAE', muted: '#8E8E93', border: '#38383A', accent: '#FF8758',
     backButtonBorder: '#38383A',
@@ -51,6 +53,7 @@ const androidColors = {
   },
   dark: {
     background: '#000000', surface: '#242424', raised: '#303030', label: '#F4F4F4',
+    scrim: 'rgba(0, 0, 0, 0.64)',
     secondary: '#929292', muted: '#8C8C8C', border: '#363636', backButtonBorder: '#363636',
     listCardSurface: '#242424', listCardBorder: 'rgba(255, 255, 255, 0.08)',
   },

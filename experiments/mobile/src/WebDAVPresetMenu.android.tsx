@@ -1,6 +1,6 @@
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
-import { Keyboard, type NativeSyntheticEvent, type ViewProps } from 'react-native';
+import { Keyboard, processColor, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import { matchingWebdavPreset, webdavPresets } from './sync';
 import type { WebDAVPresetMenuProps } from './WebDAVPresetMenu';
 
@@ -9,7 +9,7 @@ interface NativePresetMenuProps extends ViewProps {
   selectedId: string;
   disabled: boolean;
   dark: boolean;
-  colors: Pick<WebDAVPresetMenuProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'backButtonBorder' | 'raised' | 'buttonSurface' | 'buttonSurfaceOpacity' | 'buttonPressed' | 'buttonPressedLabel'>;
+  colors: Pick<WebDAVPresetMenuProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'backButtonBorder' | 'raised' | 'buttonSurface' | 'buttonSurfaceOpacity' | 'buttonPressed' | 'buttonPressedLabel'> & { scrim: number };
   items: { id: string; label: string; icon: string }[];
   labels: { title: string; expanded: string; collapsed: string };
   onSelectionChange: (event: NativeSyntheticEvent<{ id: string }>) => void;
@@ -23,7 +23,7 @@ export function WebDAVPresetMenu({ theme, serverUrl, disabled, sourceId = '', on
   const { t } = useTranslation();
   const { label, secondary, muted, accent, tab, border, backButtonBorder, surface: raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
   return <PresetMenu sourceId={sourceId} selectedId={matchingWebdavPreset(serverUrl)} disabled={disabled} dark={theme.dark}
-    colors={{ label, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}
+    colors={{ scrim: processColor(theme.scrim) as number, label, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}
     items={webdavPresets.map((preset) => ({ id: preset.id, label: t(preset.label), icon: '' }))}
     labels={{ title: t('cloud.provider'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
     style={{ width: 44, height: 44 }}

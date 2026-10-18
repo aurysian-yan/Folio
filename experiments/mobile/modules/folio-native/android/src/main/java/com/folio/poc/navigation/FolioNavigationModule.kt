@@ -19,6 +19,7 @@ class FolioNavigationModule : Module() {
         View(FolioFontStackView::class) {
             Events("onDismissed")
             Prop("visible") { view: FolioFontStackView, value: Boolean -> view.visible = value }
+            Prop("dimAmount") { view: FolioFontStackView, value: Float -> view.dimAmount = value }
         }
 
         View(FolioBackdropSourceView::class) {

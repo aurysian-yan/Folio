@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -70,6 +71,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -131,6 +133,7 @@ class FolioViewMenuColors : Record {
     @Field var backButtonBorder: String = "#E4E4E4"
     @Field var raised: String = ""
     @Field var shadow: String = "#000000"
+    @Field var scrim: Int = android.graphics.Color.TRANSPARENT
     @Field var buttonSurface: String = "#F7F7F7"
     @Field var buttonSurfaceOpacity: Float = 1f
     @Field var buttonPressed: String = "#FFFFFF"
@@ -502,69 +505,104 @@ internal fun FolioGlassMenu(
                     with(density) { 16.dp.roundToPx() },
                 ) { opensAbove = it }
             }
-            Popup(popupPositionProvider = provider, onDismissRequest = { onExpandedChange(false) },
+            var menuAnchor by remember { mutableStateOf<IntRect?>(null) }
+            val windowProvider = remember {
+                object : PopupPositionProvider {
+                    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
+                        layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+                        menuAnchor = anchorBounds
+                        return IntOffset.Zero
+                    }
+                }
+            }
+            Popup(popupPositionProvider = windowProvider, onDismissRequest = { onExpandedChange(false) },
                 properties = PopupProperties(focusable = expanded, dismissOnBackPress = expanded,
-                    dismissOnClickOutside = expanded, clippingEnabled = false)) {
+                    dismissOnClickOutside = expanded, clippingEnabled = false, excludeFromSystemGesture = false)) {
                 val animationScope = rememberCoroutineScope()
                 val drag = remember(animationScope) { InteractiveHighlight(animationScope) }
                 val motionEnabled = (animationScope.coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f) > 0f
                 val touchSlop = LocalViewConfiguration.current.touchSlop
-                // 外壳为弹簧回弹和玻璃边缘留白，留白点击也能关闭菜单。
-                Box(Modifier.width(menuWidth + margin * 2)
-                    .clickable(enabled = expanded, interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                        if (!motionEnabled || drag.offset.getDistance() <= touchSlop) onExpandedChange(false)
-                    }
-                    .padding(margin)) {
-                    val fraction = progress.value.coerceIn(0f, 1f)
-                    val shape = ContinuousRoundedRectangle(HeaderButtonHeight / 2)
-                    // 长字款和脚本列表在原玻璃外壳内滚动，避免超出窗口。
-                    val maximumHeight = (LocalConfiguration.current.screenHeightDp.dp - margin * 2 - 32.dp).coerceAtLeast(HeaderButtonHeight)
-                    Column(Modifier.width(menuWidth).heightIn(max = maximumHeight)
-                        .drawWithContent { backdrop.contentVersion; drawContent() }
-                        .drawBackdrop(backdrop = backdrop, shape = { shape },
-                            effects = {
-                                vibrancy()
-                                blur(if (dark) 12.dp.toPx() else 16.dp.toPx())
-                                lens(12.dp.toPx() * fraction, 24.dp.toPx() * fraction)
-                            },
-                            highlight = null,
-                            shadow = { Shadow.Default.copy(alpha = fraction) },
-                            onDrawBehind = { drawRect(colors.raised.menuColor()) },
-                            layerBlock = {
-                                val corner = if (opensAbove) 1f else 0f
-                                transformOrigin = TransformOrigin(lerp(1f, 0.5f, fraction), lerp(corner, 0.5f, fraction))
-                                // 拖动只改变形状与位移，背景采样共用完整变换。
-                                val offset = if (motionEnabled) drag.offset else Offset.Zero
-                                val pressed = if (motionEnabled) drag.pressProgress.coerceIn(0f, 1f) else 0f
-                                val height = size.height.coerceAtLeast(1f)
-                                val width = size.width.coerceAtLeast(1f)
-                                val stretch = 4.dp.toPx() / height
-                                val pressScale = 1f + stretch * pressed
-                                val transitionScale = 0.24f + 0.76f * progress.value
-                                scaleX = transitionScale * (pressScale + stretch * (abs(offset.x) / width).coerceAtMost(1f))
-                                scaleY = transitionScale * (pressScale + stretch * (abs(offset.y) / height).coerceAtMost(1f))
-                                val limit = size.minDimension.coerceAtLeast(1f)
-                                translationX = transitionScale * limit * tanh(0.05f * offset.x / limit)
-                                translationY = transitionScale * limit * tanh(0.05f * offset.y / limit)
-                                alpha = opacity.value.coerceIn(0f, 1f)
-                            },
-                            onDrawSurface = {
-                                drawRect(colors.raised.menuColor().copy(alpha = if (Build.VERSION.SDK_INT >= 31) 0.70f else 0.96f))
-                            })
-                        .then(if (expanded && motionEnabled) drag.gestureModifier else Modifier)
-                        .glassOutline(shape, colors)
-                        .selectableGroup()
-                        .semantics { paneTitle = title }
-                        .then(if (expanded) Modifier else Modifier.clearAndSetSemantics {})
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 6.dp)) {
-                        BasicText(title, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            style = TextStyle(color = colors.secondary.menuColor(), fontSize = 12.sp))
-                        options.forEach { option ->
-                            ViewMenuRow(option.icon, option.label, selectedValue == option.id, expanded, colors) {
-                                if (!motionEnabled || drag.offset.getDistance() <= touchSlop) onSelect(option.id)
+                // 全窗遮罩与菜单共用开合进度，玻璃仍采样原始页面。
+                Layout(content = {
+                    Box(Modifier.fillMaxSize()
+                        .drawBehind {
+                            if (dark) {
+                                val scrim = Color(colors.scrim)
+                                drawRect(scrim.copy(alpha = scrim.alpha * opacity.value.coerceIn(0f, 1f)))
                             }
                         }
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                            if (expanded) onExpandedChange(false)
+                        }
+                        .clearAndSetSemantics {})
+                    // 外壳为弹簧回弹和玻璃边缘留白，留白点击也能关闭菜单。
+                    Box(Modifier.width(menuWidth + margin * 2)
+                        .clickable(enabled = expanded, interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                            if (!motionEnabled || drag.offset.getDistance() <= touchSlop) onExpandedChange(false)
+                        }
+                        .padding(margin)) {
+                        val fraction = progress.value.coerceIn(0f, 1f)
+                        val shape = ContinuousRoundedRectangle(HeaderButtonHeight / 2)
+                        // 长字款和脚本列表在原玻璃外壳内滚动，避免超出窗口。
+                        val maximumHeight = (LocalConfiguration.current.screenHeightDp.dp - margin * 2 - 32.dp).coerceAtLeast(HeaderButtonHeight)
+                        Column(Modifier.width(menuWidth).heightIn(max = maximumHeight)
+                            .drawWithContent { backdrop.contentVersion; drawContent() }
+                            .drawBackdrop(backdrop = backdrop, shape = { shape },
+                                effects = {
+                                    vibrancy()
+                                    blur(if (dark) 12.dp.toPx() else 16.dp.toPx())
+                                    lens(12.dp.toPx() * fraction, 24.dp.toPx() * fraction)
+                                },
+                                highlight = null,
+                                shadow = { Shadow.Default.copy(alpha = fraction) },
+                                onDrawBehind = { drawRect(colors.raised.menuColor()) },
+                                layerBlock = {
+                                    val corner = if (opensAbove) 1f else 0f
+                                    transformOrigin = TransformOrigin(lerp(1f, 0.5f, fraction), lerp(corner, 0.5f, fraction))
+                                    // 拖动只改变形状与位移，背景采样共用完整变换。
+                                    val offset = if (motionEnabled) drag.offset else Offset.Zero
+                                    val pressed = if (motionEnabled) drag.pressProgress.coerceIn(0f, 1f) else 0f
+                                    val height = size.height.coerceAtLeast(1f)
+                                    val width = size.width.coerceAtLeast(1f)
+                                    val stretch = 4.dp.toPx() / height
+                                    val pressScale = 1f + stretch * pressed
+                                    val transitionScale = 0.24f + 0.76f * progress.value
+                                    scaleX = transitionScale * (pressScale + stretch * (abs(offset.x) / width).coerceAtMost(1f))
+                                    scaleY = transitionScale * (pressScale + stretch * (abs(offset.y) / height).coerceAtMost(1f))
+                                    val limit = size.minDimension.coerceAtLeast(1f)
+                                    translationX = transitionScale * limit * tanh(0.05f * offset.x / limit)
+                                    translationY = transitionScale * limit * tanh(0.05f * offset.y / limit)
+                                    alpha = if (menuAnchor == null) 0f else opacity.value.coerceIn(0f, 1f)
+                                },
+                                onDrawSurface = {
+                                    drawRect(colors.raised.menuColor().copy(alpha = if (Build.VERSION.SDK_INT >= 31) 0.70f else 0.96f))
+                                })
+                            .then(if (expanded && motionEnabled) drag.gestureModifier else Modifier)
+                            .glassOutline(shape, colors)
+                            .selectableGroup()
+                            .semantics { paneTitle = title }
+                            .then(if (expanded) Modifier else Modifier.clearAndSetSemantics {})
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 6.dp)) {
+                            BasicText(title, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = TextStyle(color = colors.secondary.menuColor(), fontSize = 12.sp))
+                            options.forEach { option ->
+                                ViewMenuRow(option.icon, option.label, selectedValue == option.id, expanded, colors) {
+                                    if (!motionEnabled || drag.offset.getDistance() <= touchSlop) onSelect(option.id)
+                                }
+                            }
+                        }
+                    }
+                }) { measurables, constraints ->
+                    val scrim = measurables[0].measure(constraints)
+                    val menu = measurables[1].measure(constraints.copy(minWidth = 0, minHeight = 0))
+                    val position = menuAnchor?.let { anchor ->
+                        provider.calculatePosition(anchor, IntSize(scrim.width, scrim.height), layoutDirection,
+                            IntSize(menu.width, menu.height))
+                    } ?: IntOffset.Zero
+                    layout(scrim.width, scrim.height) {
+                        scrim.place(0, 0)
+                        menu.place(position.x, position.y)
                     }
                 }
             }

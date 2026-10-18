@@ -27,11 +27,13 @@ class FolioPreviewInstrumentation : Instrumentation() {
     private var pageSmoke = false
     private var characterMapSmoke = false
     private var copyFeedbackSmoke = false
+    private var navigationSmoke = false
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         pageSmoke = arguments?.getString("pageSmoke") == "true"
         characterMapSmoke = arguments?.getString("characterMapSmoke") == "true"
         copyFeedbackSmoke = arguments?.getString("copyFeedbackSmoke") == "true"
+        navigationSmoke = arguments?.getString("navigationSmoke") == "true"
         start()
     }
 
@@ -39,6 +41,12 @@ class FolioPreviewInstrumentation : Instrumentation() {
         val result = Bundle()
         val files = mutableListOf<File>()
         try {
+            if (navigationSmoke) {
+                FolioNavigationSmoke.run(this)
+                result.putString("stream", "PASS: navigation first draw, delayed layout, dimming and dismissal cleanup\n")
+                finish(Activity.RESULT_OK, result)
+                return
+            }
             if (characterMapSmoke || copyFeedbackSmoke) {
                 FolioCharacterMapPageSmoke.run(this, copyFeedbackSmoke)
                 result.putString("stream", if (copyFeedbackSmoke) "PASS: character map and detail copy feedback, transitions and two-second restoration\n"

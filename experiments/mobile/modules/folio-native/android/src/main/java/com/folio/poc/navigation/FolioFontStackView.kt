@@ -33,15 +33,30 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
     private var animator: ValueAnimator? = null
     private var callbackRegistered = false
     private var updateScheduled = false
+    private var dismissalSent = true
     private var backgroundDim = 0f
     private val dimPaint = Paint().apply { color = Color.BLACK }
     private val cornerPath = Path()
     private val cornerBounds = RectF()
     private val cornerRadii = FloatArray(8)
+    private val pageLayoutListener = OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> scheduleUpdate() }
+    private val updateTask = Runnable {
+        updateScheduled = false
+        updatePresentation()
+    }
+
+    var dimAmount = 0.2f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            if (presented && (animator != null || backInProgress || dismissing)) {
+                detail?.let { applyTranslation(it, it.translationX) }
+            }
+        }
 
     var visible = false
         set(value) {
             field = value
+            if (value) dismissalSent = false
             scheduleUpdate()
         }
 
@@ -90,6 +105,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
 
     // 遮罩仅覆盖底层页面，前层圆角随位移一起裁剪。
     override fun drawChild(canvas: Canvas, child: View, drawingTime: Long): Boolean {
+        if (child === detail && !presented) return false
         val saveCount = canvas.save()
         try {
             if (child === detail && child.translationX != 0f && cornerRadii.any { it > 0f }) {
@@ -130,12 +146,18 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
 
     override fun onViewAdded(child: View) {
         super.onViewAdded(child)
+        if (child === detail) {
+            child.visibility = INVISIBLE
+            child.addOnLayoutChangeListener(pageLayoutListener)
+        }
         scheduleUpdate()
     }
 
     override fun onViewRemoved(child: View) {
+        child.removeOnLayoutChangeListener(pageLayoutListener)
         super.onViewRemoved(child)
         if (childCount < 2) {
+            cancelUpdate()
             cancelAnimation()
             presented = false
             dismissing = false
@@ -149,16 +171,24 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         super.onAttachedToWindow()
         updateCornerRadii(rootWindowInsets)
         registerBackCallback()
+        detail?.addOnLayoutChangeListener(pageLayoutListener)
         scheduleUpdate()
     }
 
     override fun onDetachedFromWindow() {
+        cancelUpdate()
         cancelAnimation()
         backCallback.remove()
         callbackRegistered = false
         backInProgress = false
         dismissing = false
-        detail?.translationX = 0f
+        presented = false
+        backCallback.isEnabled = false
+        detail?.let {
+            it.removeOnLayoutChangeListener(pageLayoutListener)
+            it.visibility = INVISIBLE
+            it.translationX = 0f
+        }
         restoreRoot()
         super.onDetachedFromWindow()
     }
@@ -179,18 +209,30 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
     private fun scheduleUpdate() {
         if (updateScheduled) return
         updateScheduled = true
-        post {
-            updateScheduled = false
-            registerBackCallback()
-            if (!isAttachedToWindow || width <= 0 || height <= 0 || detail == null) return@post
-            if (visible && !presented) present()
-            else if (!visible && presented && !dismissing) dismiss()
-            else if (visible && presented && animator == null && !backInProgress && !dismissing) {
-                detail?.let { applyTranslation(it, 0f) }
-                root?.visibility = INVISIBLE
-                root?.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-                backgroundDim = 0f
-            }
+        post(updateTask)
+    }
+
+    private fun cancelUpdate() {
+        removeCallbacks(updateTask)
+        updateScheduled = false
+    }
+
+    private fun updatePresentation() {
+        registerBackCallback()
+        if (!isAttachedToWindow) return
+        val page = detail ?: return
+        if (!visible && !presented) {
+            if (!dismissalSent) finishDismissal(page)
+            return
+        }
+        if (width <= 0 || height <= 0 || page.width <= 0 || page.height <= 0) return
+        if (visible && !presented) present()
+        else if (!visible && presented && !dismissing) dismiss()
+        else if (visible && presented && animator == null && !backInProgress && !dismissing) {
+            applyTranslation(page, 0f)
+            root?.visibility = INVISIBLE
+            root?.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            backgroundDim = 0f
         }
     }
 
@@ -201,6 +243,8 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         backCallback.isEnabled = true
         root?.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         root?.visibility = VISIBLE
+        // 起始位置先于可见状态提交，避免首次绘制落在终点。
+        applyTranslation(page, width.toFloat())
         page.visibility = VISIBLE
         animate({ fraction -> applyTranslation(page, width * (1f - fraction)) }) {
             root?.visibility = INVISIBLE
@@ -220,7 +264,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         page.translationX = translation
         val fraction = (translation / width.coerceAtLeast(1)).coerceIn(0f, 1f)
         root?.translationX = -width / 3f * (1f - fraction)
-        backgroundDim = 0.2f * (1f - fraction)
+        backgroundDim = dimAmount * (1f - fraction)
         invalidate()
     }
 
@@ -232,14 +276,19 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         val startX = page.translationX
         animate({ fraction ->
             applyTranslation(page, startX + (width - startX) * fraction)
-        }) {
-            page.visibility = INVISIBLE
-            presented = false
-            dismissing = false
-            backInProgress = false
-            visible = false
-            backCallback.isEnabled = false
-            restoreRoot()
+        }) { finishDismissal(page) }
+    }
+
+    private fun finishDismissal(page: View) {
+        page.visibility = INVISIBLE
+        presented = false
+        dismissing = false
+        backInProgress = false
+        if (visible) visible = false
+        backCallback.isEnabled = false
+        restoreRoot()
+        if (!dismissalSent) {
+            dismissalSent = true
             onDismissed(emptyMap<String, Any>())
         }
     }

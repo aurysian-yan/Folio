@@ -13,6 +13,7 @@ export interface FontNavigationProps {
 
 interface NativeStackProps extends ViewProps {
   visible: boolean;
+  dimAmount: number;
   onDismissed: () => void;
 }
 
@@ -20,7 +21,7 @@ const NativeStack = requireNativeView<NativeStackProps>('FolioNavigation', 'Foli
 
 // 安卓返回进度与转场由原生容器处理，上一页保持挂载。
 export function FontNavigation({ children, detail, visible, theme, onDismissed }: FontNavigationProps) {
-  return <NativeStack visible={visible} onDismissed={onDismissed}
+  return <NativeStack visible={visible} dimAmount={theme.navigationDimOpacity} onDismissed={onDismissed}
     style={[styles.stack, { backgroundColor: theme.background }]}>
     <View collapsable={false} pointerEvents={detail ? 'none' : 'auto'} style={StyleSheet.absoluteFill}>
       {children}
