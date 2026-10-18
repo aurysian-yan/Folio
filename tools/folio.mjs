@@ -443,7 +443,13 @@ function executeVersionBump(plan, args) {
   run('git', ['add', ...new Set(files)]);
   run('git', ['commit', '-m', `chore: 发布 v${plan.next}`]);
   run('git', ['tag', `v${plan.next}`]);
-  log(`\n已提交并创建标签 v${plan.next}（未推送远端）。`);
+  // 推送标签即触发 Release；失败时保留本地标签并给出重试命令。
+  const pushed = run('git', ['push', 'origin', `v${plan.next}`], { allowFailure: true });
+  if (pushed.error || pushed.status !== 0) {
+    fail(`标签 v${plan.next} 已创建但推送失败，请重试：git push origin v${plan.next}`);
+  }
+  log(`\n已提交并推送标签 v${plan.next}，Release 工作流会由标签触发。`);
+  log('main 分支仍需单独推送：git push origin main');
 }
 
 function bumpVersion(args) {
@@ -865,7 +871,7 @@ async function tuiVersionBump(c) {
   }
   c.note(formatVersionPlan(plan).join('\n'), '版本改动计划');
 
-  const confirmed = await c.confirm({ message: '确认写入并提交、打标签？', initialValue: true });
+  const confirmed = await c.confirm({ message: '确认写入、提交并推送标签？', initialValue: true });
   if (c.isCancel(confirmed) || !confirmed) return;
   await runAction(c, '提高版本号', () => executeVersionBump(plan, args));
 }
@@ -941,7 +947,7 @@ function printHelp() {
   expo open --platform ios|android    打开 Expo 构建产物目录
   version show                        查看各文件当前版本
   version bump <major|minor|patch|x.y.z> [--build] [--dry-run] [--no-git]
-                                      批量提高版本号
+                                      批量提高版本号并推送标签
   doctor                              检查当前主机的构建前置条件
 
 环境变量：

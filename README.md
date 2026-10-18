@@ -120,7 +120,7 @@ node tools/folio.mjs doctor                       # 检查构建前置条件
 node tools/folio.mjs swiftui build                # 构建 macOS 客户端
 node tools/folio.mjs tauri build --platform windows
 node tools/folio.mjs expo build --platform android
-node tools/folio.mjs version bump patch --build   # 提高版本号并提交打标签
+node tools/folio.mjs version bump patch --build   # 提高版本号、提交并推送标签
 ```
 
 脚本使用 Node.js 实现，不产出也不依赖 cmd/ps1；交互式界面依赖 `@clack/prompts`，
