@@ -523,12 +523,16 @@ private struct FavoriteFolderEditorView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                 }
+                Toggle(L.text("filters.hideSystemFonts"), isOn: Binding(
+                    get: { selectedFacets.contains(where: { $0.kind == .hideSystemFonts }) },
+                    set: { _ in toggle(FacetOption(kind: .hideSystemFonts, value: "true", label: L.text("filters.hideSystemFonts"), familyCount: 0)) }
+                ))
                 if isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: 100)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(FacetKind.allCases, id: \.self) { kind in
+                        ForEach(FacetKind.allCases.filter { $0 != .hideSystemFonts }, id: \.self) { kind in
                             let facetOptions = options.filter { $0.kind == kind }
                             if !facetOptions.isEmpty {
                                 FacetDisclosureGroupView(

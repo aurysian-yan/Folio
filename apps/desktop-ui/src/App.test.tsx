@@ -443,3 +443,27 @@ it('字符表自动选择偏好默认开启，保存关闭值并同步其他窗�
   fireEvent(window, new StorageEvent('storage', { key: 'folio-character-map-auto-select-first-non-empty', newValue: 'true' }));
   await waitFor(() => expect((next.getByRole('switch', { name: '自动选择首个非空字符' }) as HTMLInputElement).checked).toBe(true));
 });
+
+it("同步的隐藏系统字体条件显示为禁用，编辑收藏夹后保留勾选", async () => {
+  const folder = { id: "synced-system-filter", name: "用户字体", icon: "folder", color: "gray", queryJson: '{"hide_system_fonts":true}', queryText: null,
+    facets: { hideSystemFonts: ["true"] }, matchCount: 3 };
+  vi.mocked(listSmartFolders).mockResolvedValueOnce([folder]);
+  vi.mocked(saveSmartFolder).mockResolvedValueOnce(folder);
+  const { getByRole, findByRole } = render(<App />);
+  const folderButton = await findByRole("button", { name: /用户字体/ });
+  fireEvent.click(folderButton);
+  fireEvent.click(getByRole("button", { name: "导航 / 筛选" }));
+  const filter = getByRole("switch", { name: "隐藏系统字体" }) as HTMLInputElement;
+  expect(filter.disabled).toBe(true);
+  expect(filter.checked).toBe(true);
+  fireEvent.click(getByRole("button", { name: "导航 / 筛选" }));
+  fireEvent.contextMenu(getByRole("button", { name: /用户字体/ }));
+  fireEvent.click(getByRole("menuitem", { name: "编辑收藏夹…" }));
+  const dialog = within(await findByRole("dialog"));
+  fireEvent.click(dialog.getByRole("tab", { name: "筛选条件" }));
+  const condition = dialog.getByRole("switch", { name: "隐藏系统字体" }) as HTMLInputElement;
+  expect(condition.disabled).toBe(true);
+  expect(condition.checked).toBe(true);
+  fireEvent.click(dialog.getByRole("button", { name: "保存" }));
+  await waitFor(() => expect(saveSmartFolder).toHaveBeenCalledWith(expect.objectContaining({ id: folder.id, facets: { hideSystemFonts: ["true"] } })));
+});

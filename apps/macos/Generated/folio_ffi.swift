@@ -4441,6 +4441,7 @@ public enum FacetKindDto: Equatable, Hashable {
     case feature
     case state
     case multipleVariants
+    case hideSystemFonts
 
 
 
@@ -4479,6 +4480,8 @@ public struct FfiConverterTypeFacetKindDto: FfiConverterRustBuffer {
         case 8: return .state
 
         case 9: return .multipleVariants
+
+        case 10: return .hideSystemFonts
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -4522,6 +4525,10 @@ public struct FfiConverterTypeFacetKindDto: FfiConverterRustBuffer {
 
         case .multipleVariants:
             writeInt(&buf, Int32(9))
+
+
+        case .hideSystemFonts:
+            writeInt(&buf, Int32(10))
 
         }
     }

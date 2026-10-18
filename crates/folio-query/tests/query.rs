@@ -1,6 +1,7 @@
 //! 共享查询语义与确定性验收。
 use folio_core::*;
 use folio_query::*;
+use std::collections::BTreeSet;
 fn fixture(name: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/fonts")
@@ -635,4 +636,135 @@ fn build_rejects_inconsistent_catalog_ids() {
         FontQueryIndex::build(&c, &Default::default()),
         Err(QueryError::InvalidFace(_))
     ));
+}
+
+#[test]
+fn system_font_filter_applies_before_counts_and_pagination_in_every_scope() {
+    let mut c = catalog();
+    let mut system_faces = BTreeSet::new();
+    for family in &mut c.families {
+        for face in &mut family.faces {
+            if family.display_name.as_deref() == Some("Source Serif 4")
+                || face.metadata.postscript_name.as_deref() == Some("Lato-Regular")
+            {
+                system_faces.insert(face.id);
+                face.sources = vec![FontSource::local_file(
+                    "/System/Library/Fonts/Example.ttf",
+                    0,
+                    1,
+                    None,
+                )];
+            }
+        }
+    }
+    assert!(!system_faces.is_empty());
+    let identities: Vec<_> = c
+        .families
+        .iter()
+        .flat_map(|f| f.faces.iter().map(|f| f.identity_id))
+        .collect();
+    let collection = CollectionId::from_bytes([9; 16]);
+    let state = LibraryStateSnapshot {
+        favorites: identities.clone(),
+        recent: identities
+            .iter()
+            .map(|id| RecentFont {
+                identity_id: *id,
+                last_accessed_at_ns: 1,
+            })
+            .collect(),
+        collections: vec![CollectionMembers {
+            collection_id: collection,
+            identities,
+        }],
+        ..Default::default()
+    };
+    let index = FontQueryIndex::build(&c, &state).unwrap();
+    for scope in [
+        QueryScope::All,
+        QueryScope::Favorites,
+        QueryScope::Recent,
+        QueryScope::Collection(collection),
+    ] {
+        let result = index
+            .query(&FontQuery {
+                scope: scope.clone(),
+                facets: FacetFilter {
+                    hide_system_fonts: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .unwrap();
+        let expected = c
+            .families
+            .iter()
+            .filter(|family| {
+                family
+                    .faces
+                    .iter()
+                    .any(|face| !cfg!(target_os = "macos") || !system_faces.contains(&face.id))
+            })
+            .count();
+        assert_eq!(result.total_matches, expected);
+        assert!(result
+            .families
+            .iter()
+            .flat_map(|family| &family.matched_face_ids)
+            .all(|id| !cfg!(target_os = "macos") || !system_faces.contains(id)));
+        let page = index
+            .query(&FontQuery {
+                scope,
+                facets: FacetFilter {
+                    hide_system_fonts: true,
+                    ..Default::default()
+                },
+                offset: 1,
+                limit: Some(1),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(page.total_matches, result.total_matches);
+        assert_eq!(page.families, result.families[1..2]);
+        assert_eq!(page.facet_summary, result.facet_summary);
+    }
+}
+
+#[test]
+fn system_font_filter_preserves_user_copies_cloud_faces_and_saved_state() {
+    let mut c = catalog();
+    let face = &mut c.families[0].faces[0];
+    face.sources = vec![
+        FontSource::local_file("/System/Library/Fonts/Example.ttf", 0, 1, None),
+        FontSource::local_file("/Library/Fonts/Example.ttf", 0, 1, None),
+    ];
+    assert!(!is_macos_system_font(face));
+    face.sources.clear();
+    assert!(!is_macos_system_font(face));
+    face.sources = vec![FontSource::local_file(
+        "/System/LibraryExtra/Fonts/Example.ttf",
+        0,
+        1,
+        None,
+    )];
+    assert!(!is_macos_system_font(face));
+    let saved = SavedFontQuery::from_filter(
+        None,
+        FacetFilter {
+            hide_system_fonts: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let json = serde_json::to_string(&saved).unwrap();
+    let restored: SavedFontQuery = serde_json::from_str(&json).unwrap();
+    assert!(
+        restored
+            .into_query(0, None)
+            .unwrap()
+            .facets
+            .hide_system_fonts
+    );
+    let legacy: SavedFontQuery = serde_json::from_str("{}").unwrap();
+    assert!(!legacy.hide_system_fonts);
 }

@@ -129,6 +129,8 @@ pub struct QueryFacets {
     pub roots: Vec<String>,
     #[serde(default)]
     pub multiple_variants: Vec<String>,
+    #[serde(default)]
+    pub hide_system_fonts: Vec<String>,
 }
 
 fn default_page_size() -> usize {
@@ -1295,6 +1297,7 @@ fn query_facets(facets: QueryFacets) -> FacetFilter {
         widths,
         roots,
         multiple_variants: facets.multiple_variants.iter().any(|value| value == "true"),
+        hide_system_fonts: facets.hide_system_fonts.iter().any(|value| value == "true"),
         ..FacetFilter::default()
     }
 }
@@ -1481,6 +1484,11 @@ fn smart_folder_dto(
                 .map(|value| value.to_string())
                 .collect(),
             roots: Vec::new(),
+            hide_system_fonts: if saved.hide_system_fonts {
+                vec!["true".to_owned()]
+            } else {
+                Vec::new()
+            },
             multiple_variants: if saved.multiple_variants {
                 vec!["true".to_owned()]
             } else {
@@ -1713,6 +1721,21 @@ fn default_font_roots() -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn synced_system_font_condition_survives_desktop_editor_roundtrip() {
+        let facets: QueryFacets = serde_json::from_value(serde_json::json!({ "hideSystemFonts": ["true"] })).unwrap();
+        let saved = SavedFontQuery::from_filter(None, query_facets(facets)).unwrap();
+        assert!(saved.hide_system_fonts);
+        let folder = SmartFolder {
+            id: SmartFolderId::from_bytes([8; 16]), name: "用户字体".into(), icon: CollectionIcon::Folder, color: CollectionColor::Gray,
+            query_json: serde_json::to_string(&saved).unwrap(), created_at_ns: 1, updated_at_ns: 1,
+        };
+        let dto = smart_folder_dto(folder, 0, saved);
+        assert_eq!(dto.facets.hide_system_fonts, vec!["true"]);
+        let edited = SavedFontQuery::from_filter(None, query_facets(dto.facets)).unwrap();
+        assert!(edited.hide_system_fonts);
+    }
 
     fn decoded_preview(source: &SourceDto) -> Vec<u8> {
         load_preview_font(source).unwrap().bytes

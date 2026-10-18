@@ -32,7 +32,7 @@ export interface FontFamily {
 
 export const facetTitles = {
   category: i18n.t('filters.category'), script: i18n.t('filters.script'), foundry: i18n.t('filters.foundry'), license: i18n.t('filters.license'),
-  weight: i18n.t('filters.weight'), width: i18n.t('filters.width'), feature: i18n.t('filters.feature'), state: i18n.t('filters.state'), multipleVariants: i18n.t('font.family'),
+  weight: i18n.t('filters.weight'), width: i18n.t('filters.width'), feature: i18n.t('filters.feature'), state: i18n.t('filters.state'), multipleVariants: i18n.t('font.family'), hideSystemFonts: i18n.t('filters.hideSystemFonts'),
 } as const;
 
 export type FacetKind = keyof typeof facetTitles;

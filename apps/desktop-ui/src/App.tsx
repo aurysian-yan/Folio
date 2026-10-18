@@ -2939,6 +2939,10 @@ export default function App() {
                 ) : (
                   <>
                     <div className="sidebar-section-label">{t("navigation.filters")}</div>
+                    <Switch isSelected={selectedFacets.hideSystemFonts?.includes("true") ?? false} isDisabled>
+                      <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>{t("filters.hideSystemFonts")}</Switch.Content>
+                    </Switch>
+                    <p className="settings-note">{t("filters.macosOnly")}</p>
                     {page?.facets.length ? (
                       <div className="facet-groups">
                         {facetGroups(page.facets).map(([kind, options]) => (
@@ -3408,6 +3412,10 @@ function FavoriteFolderEditor({
                       {t("filters.smartHint")}
                     </p>
                   </div>
+                  <Switch isSelected={facets.hideSystemFonts?.includes("true") ?? false} isDisabled>
+                    <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>{t("filters.hideSystemFonts")}</Switch.Content>
+                  </Switch>
+                  <p className="favorite-editor-hint">{t("filters.macosOnly")}</p>
                   {groups.length ? (
                     <div className="facet-groups">
                       {groups.map(([kind, options]) => (

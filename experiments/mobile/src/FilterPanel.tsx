@@ -6,17 +6,18 @@ import { facetTitles, mergeFacetOptions, normalizeFacets, type FacetKind, type F
 import { FilterDrawer, FilterList } from './FilterDrawer';
 import { PanelAction, PanelSection, panelStyles } from './panel-content';
 import type { Theme } from './ui';
+import { SettingsSwitchRow } from './settings-ui';
 
 // 筛选直接更新当前查询，候选与计数保持 Rust 语义。
-export function FilterPanel({ visible, theme, options, counts, selected, loading, error, totalMatches, onChange, onClose, onRetry, locationFilter, onLocationChange }: {
+export function FilterPanel({ visible, theme, options, counts, selected, loading, error, totalMatches, onChange, onClose, onRetry, locationFilter, onLocationChange, savedHideSystemFonts }: {
   visible: boolean; theme: Theme; options: FacetOption[]; counts: FacetOption[]; selected: FacetSelection[];
-  locationFilter?: string; onLocationChange?: (filter: string) => void;
+  locationFilter?: string; onLocationChange?: (filter: string) => void; savedHideSystemFonts?: boolean;
   loading: boolean; error: string | null; totalMatches: number;
   onChange: (facets: FacetSelection[]) => void; onClose: () => void; onRetry: () => void;
 }) {
   const { t } = useTranslation();
   const available = mergeFacetOptions(options, counts, selected);
-  const sections = (Object.keys(facetTitles) as FacetKind[]).map((kind) => ({
+  const sections = (Object.keys(facetTitles) as FacetKind[]).filter((kind) => kind !== 'hideSystemFonts').map((kind) => ({
     kind, title: facetTitles[kind], data: available.filter((option) => option.kind === kind),
   })).filter((section) => section.data.length > 0);
   function toggle(option: FacetSelection) {
@@ -28,6 +29,9 @@ export function FilterPanel({ visible, theme, options, counts, selected, loading
     <FilterList data={sections} keyExtractor={(section) => section.kind}
       contentContainerStyle={panelStyles.content} keyboardShouldPersistTaps="handled"
       ListHeaderComponent={<View>
+        <SettingsSwitchRow theme={theme} title={t('filters.hideSystemFonts')} detail={t('filters.macosOnly')}
+          value={!!savedHideSystemFonts || selected.some((facet) => facet.kind === 'hideSystemFonts' && facet.value === 'true')}
+          disabled onChange={() => {}} />
         {onLocationChange && <PanelSection title={t('fontLocation.title')} theme={theme} initiallyExpanded>
           <View style={styles.options}>{locationFilters.map((filter) => <Pressable key={filter} accessibilityRole="radio" accessibilityState={{selected:filter === locationFilter}} onPress={() => onLocationChange(filter)} style={[styles.chip,{backgroundColor:filter === locationFilter ? theme.accent : theme.raised}]}><Text style={[styles.label,{color:filter === locationFilter ? theme.onAccent : theme.label}]}>{t(`fontLocation.${filter}`)}</Text></Pressable>)}</View>
         </PanelSection>}
@@ -35,7 +39,9 @@ export function FilterPanel({ visible, theme, options, counts, selected, loading
           <Text accessibilityLiveRegion="polite" style={[panelStyles.label, { color: theme.secondary }]}>
             {loading ? t('mobile.loadingFiltering') : t('mobile.matchCount', { total: totalMatches })}
           </Text>
-          <PanelAction label={t('mobile.clearFilters')} theme={theme} disabled={selected.length === 0} onPress={() => onChange([])} />
+          <PanelAction label={t('mobile.clearFilters')} theme={theme}
+            disabled={!selected.some((facet) => facet.kind !== 'hideSystemFonts')}
+            onPress={() => onChange(selected.filter((facet) => facet.kind === 'hideSystemFonts'))} />
         </View>
         {error && <View style={[panelStyles.row, { borderColor: theme.border }]}>
           <Text accessibilityRole="alert" style={[panelStyles.label, { color: theme.danger }]}>{error}</Text>

@@ -220,7 +220,11 @@ struct SidebarView: View {
                 }
             case .filters:
                 Section {
-                    ForEach(FacetKind.allCases, id: \.self) { kind in
+                    Toggle(L.text("filters.hideSystemFonts"), isOn: Binding(
+                        get: { model.selectedFacets.contains(where: { $0.kind == .hideSystemFonts }) },
+                        set: { _ in model.toggleFacet(FacetOption(kind: .hideSystemFonts, value: "true", label: L.text("filters.hideSystemFonts"), familyCount: 0)) }
+                    ))
+                    ForEach(FacetKind.allCases.filter { $0 != .hideSystemFonts }, id: \.self) { kind in
                         let options = model.facetOptions.filter { $0.kind == kind }
                         if !options.isEmpty {
                             FacetDisclosureGroupView(

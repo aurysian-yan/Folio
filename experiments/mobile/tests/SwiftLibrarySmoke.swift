@@ -51,7 +51,7 @@ enum SwiftLibrarySmoke {
         try require(try reopened.loadCachedLibrary().collections.isEmpty)
         try require(try reopened.queryLibrary(query: query(scope: "favorites")).families.contains { $0.id == family.id })
         try require(try reopened.queryLibrary(query: query()).totalMatches == all.totalMatches)
-        for key in ["category", "script", "foundry", "license", "weight", "width", "feature", "state", "multipleVariants"] {
+        for key in ["category", "script", "foundry", "license", "weight", "width", "feature", "state", "multipleVariants", "hideSystemFonts"] {
             _ = try query(facets: [(key, "value")])
         }
         for invalid in [

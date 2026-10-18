@@ -63,6 +63,7 @@ pub struct FacetFilter {
     pub roots: Vec<LibraryRootKey>,
     pub states: Vec<FontState>,
     pub multiple_variants: bool,
+    pub hide_system_fonts: bool,
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct FontQuery {
@@ -96,6 +97,8 @@ pub struct SavedFontQuery {
     pub states: Vec<FontState>,
     #[serde(default)]
     pub multiple_variants: bool,
+    #[serde(default)]
+    pub hide_system_fonts: bool,
 }
 
 impl SavedFontQuery {
@@ -118,6 +121,7 @@ impl SavedFontQuery {
             features: facets.features,
             states: facets.states,
             multiple_variants: facets.multiple_variants,
+            hide_system_fonts: facets.hide_system_fonts,
         };
         query.categories.sort();
         query.categories.dedup();
@@ -167,6 +171,7 @@ impl SavedFontQuery {
                 roots: Vec::new(),
                 states: self.states,
                 multiple_variants: self.multiple_variants,
+                hide_system_fonts: self.hide_system_fonts,
             },
             sort: QuerySort::Auto,
             offset,
@@ -247,6 +252,7 @@ struct Document {
     states: BTreeSet<FontState>,
     recent: Option<i64>,
     multiple_variants: bool,
+    system_font: bool,
 }
 #[derive(Debug)]
 pub struct FontQueryIndex {
@@ -426,6 +432,7 @@ impl FontQueryIndex {
                     states: BTreeSet::new(),
                     recent: None,
                     multiple_variants,
+                    system_font: is_macos_system_font(face),
                 });
             }
         }
@@ -533,6 +540,7 @@ impl FontQueryIndex {
         for d in &self.documents {
             if face_ids.is_some_and(|ids| !ids.contains(&d.face))
                 || allowed.is_some_and(|ids| !ids.contains(&d.identity))
+                || (query.facets.hide_system_fonts && d.system_font)
                 || !d.matches(&query.facets)
                 || (self
                     .locations
@@ -697,4 +705,14 @@ impl Document {
         }
         values
     }
+}
+
+/// 仅隐藏 macOS 系统目录中的字款；用户目录中的副本仍可见。
+pub fn is_macos_system_font(face: &FontFace) -> bool {
+    cfg!(target_os = "macos")
+        && !face.sources.is_empty()
+        && face
+            .sources
+            .iter()
+            .all(|source| source.path().starts_with("/System/Library"))
 }

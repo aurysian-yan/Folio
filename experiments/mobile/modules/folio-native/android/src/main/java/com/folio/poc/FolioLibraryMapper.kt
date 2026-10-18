@@ -98,6 +98,7 @@ internal object FolioLibraryMapper {
         "feature" -> FacetKindDto.FEATURE
         "state" -> FacetKindDto.STATE
         "multipleVariants" -> FacetKindDto.MULTIPLE_VARIANTS
+        "hideSystemFonts" -> FacetKindDto.HIDE_SYSTEM_FONTS
         else -> throw IllegalArgumentException("筛选条件无效。")
     }
 
@@ -111,5 +112,6 @@ internal object FolioLibraryMapper {
         FacetKindDto.FEATURE -> "feature"
         FacetKindDto.STATE -> "state"
         FacetKindDto.MULTIPLE_VARIANTS -> "multipleVariants"
+        FacetKindDto.HIDE_SYSTEM_FONTS -> "hideSystemFonts"
     }
 }

@@ -58,7 +58,7 @@ class FolioLibraryMapperTest {
     }
 
     @Test fun allFacetKindsAndInvalidRequestsAreMapped() {
-        for (kind in listOf("category", "script", "foundry", "license", "weight", "width", "feature", "state", "multipleVariants")) {
+        for (kind in listOf("category", "script", "foundry", "license", "weight", "width", "feature", "state", "multipleVariants", "hideSystemFonts")) {
             assertEquals("value", query(facets = listOf(kind to "value")).facets.single().value)
         }
         for (invalid in listOf(

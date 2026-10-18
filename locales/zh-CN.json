@@ -246,7 +246,9 @@
     "smartUnsupportedSource": "智慧收藏夹暂不支持按来源目录筛选，请先清除该条件。",
     "smartHint": "添加筛选条件后，符合条件的字体会自动显示在此收藏夹中。",
     "facetOption": "{{name}}，{{count}} 个字族",
-    "empty": "当前字体库没有可用的筛选项。"
+    "empty": "当前字体库没有可用的筛选项。",
+    "hideSystemFonts": "隐藏系统字体",
+    "macosOnly": "仅在 macOS 生效"
   },
   "collection": {
     "collection": "收藏夹",

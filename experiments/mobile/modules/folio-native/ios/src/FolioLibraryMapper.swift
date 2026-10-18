@@ -109,6 +109,7 @@ enum FolioLibraryMapper {
         case "feature": return .feature
         case "state": return .state
         case "multipleVariants": return .multipleVariants
+        case "hideSystemFonts": return .hideSystemFonts
         default: throw invalidQuery()
         }
     }
@@ -124,6 +125,7 @@ enum FolioLibraryMapper {
         case .feature: return "feature"
         case .state: return "state"
         case .multipleVariants: return "multipleVariants"
+        case .hideSystemFonts: return "hideSystemFonts"
         }
     }
 }

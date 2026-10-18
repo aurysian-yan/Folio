@@ -513,6 +513,7 @@ private extension FacetKind {
         case .feature: .feature
         case .state: .state
         case .multipleVariants: .multipleVariants
+        case .hideSystemFonts: .hideSystemFonts
         }
     }
 }
@@ -529,6 +530,7 @@ private extension FacetKindDto {
         case .feature: .feature
         case .state: .state
         case .multipleVariants: .multipleVariants
+        case .hideSystemFonts: .hideSystemFonts
         }
     }
 }
@@ -571,6 +573,7 @@ private func selectionLabel(kind: FacetKind, value: String) -> String {
         default: L.text("fontConflict.metadataConflict")
         }
     case .multipleVariants: L.text("fontConflict.multipleVariants")
+    case .hideSystemFonts: L.text("filters.hideSystemFonts")
     default: value
     }
 }

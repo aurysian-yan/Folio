@@ -228,3 +228,10 @@ test('统一编辑器按条件区分手动与智慧，新建继承智慧范围�
   merged.facets[1]!.value = '900';
   assert.equal(original.facets[0]!.value, '400');
 });
+
+test('macOS 隐藏系统字体条件可保存并在移动端编辑时保留', () => {
+  const conditions = savedConditions({ text: '', facets: [{ kind: 'hideSystemFonts', value: 'true' }] });
+  assert.equal(hasSmartConditions(conditions), true);
+  const edited = mergeSmartConditions(conditions, { text: 'Lato', facets: [{ kind: 'weight', value: '400' }] });
+  assert.ok(edited.facets.some((facet) => facet.kind === 'hideSystemFonts' && facet.value === 'true'));
+});

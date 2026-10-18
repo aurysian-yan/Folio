@@ -96,7 +96,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const setSearchText = (value: string) => updateBrowse({ searchText: value });
   const [filterOpen, setFilterOpen] = useState(false);
   const [collectionsOpen, setCollectionsOpen] = useState(false);
-  const [facetOptions, setFacetOptions] = useState<{ key: string; options: FacetOption[] }>({ key: '', options: [] });
+  const [facetOptions, setFacetOptions] = useState<{ key: string; options: FacetOption[]; hideSystemFonts?: boolean }>({ key: '', options: [] });
   const [facetFailure, setFacetFailure] = useState<{ key: string; message: string } | null>(null);
   const [heroHeight, setHeroHeight] = useState(128);
   const list = useRef<Animated.FlatList<FontFamily>>(null);
@@ -175,9 +175,12 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
     const controller = new AbortController();
     const queryTarget: LibraryTarget = smartFolderId ? { scope: 'smart', smartFolderId }
       : collectionId ? { scope: 'collection', collectionId } : { scope: scope as 'all' | 'favorites' | 'recent' };
-    library.query({ ...queryTarget, text: queryText, facets: [], offset: 0, limit: 1 }, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) setFacetOptions({ key: optionsKey, options: result.facets });
+    Promise.all([
+      library.query({ ...queryTarget, text: queryText, facets: [], offset: 0, limit: 1 }, controller.signal),
+      smartFolderId ? library.getSmartFolder(smartFolderId) : Promise.resolve(null),
+    ]).then(([result, folder]) => {
+        if (!controller.signal.aborted) setFacetOptions({ key: optionsKey, options: result.facets,
+          hideSystemFonts: folder?.query.facets.some((facet) => facet.kind === 'hideSystemFonts' && facet.value === 'true') });
       }).catch(() => {
         if (!controller.signal.aborted) setFacetFailure({ key: optionsKey, message: t('mobile.errorFilters') });
       });
@@ -412,7 +415,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
         active={active} theme={theme} style={styles.screen}>{fontList}</NavigationBackdrop> : fontList}
       <FilterPanel locationFilter={locationFilter} onLocationChange={(locationFilter) => updateBrowse({locationFilter})} visible={filterOpen && active} theme={theme}
         options={facetOptions.key === optionsKey ? facetOptions.options : page.facets} counts={page.facets}
-        selected={selectedFacets} loading={loading || optionsLoading || waitingForSearch} error={shownError ?? facetError}
+        selected={selectedFacets} savedHideSystemFonts={facetOptions.key === optionsKey && facetOptions.hideSystemFonts} loading={loading || optionsLoading || waitingForSearch} error={shownError ?? facetError}
         totalMatches={page.totalMatches} onChange={(facets) => updateBrowse({ facets })}
         onClose={() => setFilterOpen(false)} onRetry={retryQuery} />
       <CollectionsPanel visible={collectionsOpen && active} theme={theme} target={target} snapshot={snapshot}

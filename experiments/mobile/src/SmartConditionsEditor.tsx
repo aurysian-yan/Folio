@@ -6,6 +6,7 @@ import { facetTitles, mergeFacetOptions, normalizeFacets, type FacetKind, type L
 import { library } from './native';
 import { PanelAction, panelStyles } from './panel-content';
 import type { Theme } from './ui';
+import { SettingsSwitchRow } from './settings-ui';
 
 // 编辑条件仅更新草稿；预览查询不写入持久状态。
 export function SmartConditionsEditor({ value, theme, version, disabled, onChange }: {
@@ -32,6 +33,9 @@ export function SmartConditionsEditor({ value, theme, version, disabled, onChang
   const available = mergeFacetOptions(result?.options ?? [], result?.page.facets ?? [], value.facets);
   return <View pointerEvents={disabled ? 'none' : 'auto'} accessibilityElementsHidden={disabled}>
     <View style={[panelStyles.card, { backgroundColor: theme.surface }]}>
+      <SettingsSwitchRow theme={theme} title={t('filters.hideSystemFonts')} detail={t('filters.macosOnly')}
+        value={value.facets.some((facet) => facet.kind === 'hideSystemFonts' && facet.value === 'true')}
+        disabled onChange={() => {}} />
       <Text style={[panelStyles.section, { color: theme.secondary }]}>{t('filters.keyword')}</Text>
       <TextInput accessibilityLabel={t('filters.keyword')} placeholder={t('filters.inputKeyword')}
         placeholderTextColor={theme.muted} value={value.text} editable={!disabled} autoCorrect={false} autoCapitalize="none"
@@ -44,9 +48,9 @@ export function SmartConditionsEditor({ value, theme, version, disabled, onChang
         {loading ? t('mobile.loadingFiltering') : failure === key ? t('mobile.errorFilters') : t('mobile.matchCount', { total: result?.page.totalMatches ?? 0 })}
       </Text>
       {failure === key ? <PanelAction label={t('common.retry')} theme={theme} onPress={() => setRetry((count) => count + 1)} />
-        : <PanelAction label={t('mobile.clearFilters')} theme={theme} disabled={!value.facets.length || disabled} onPress={() => onChange({ ...value, facets: [] })} />}
+        : <PanelAction label={t('mobile.clearFilters')} theme={theme} disabled={!value.facets.some((facet) => facet.kind !== 'hideSystemFonts') || disabled} onPress={() => onChange({ ...value, facets: value.facets.filter((facet) => facet.kind === 'hideSystemFonts') })} />}
     </View>
-    {(Object.keys(facetTitles) as FacetKind[]).map((kind) => {
+    {(Object.keys(facetTitles) as FacetKind[]).filter((kind) => kind !== 'hideSystemFonts').map((kind) => {
       const options = available.filter((option) => option.kind === kind);
       return options.length ? <FilterGroup key={kind} title={facetTitles[kind]} options={options} selected={value.facets}
         theme={theme} loading={loading} onToggle={(option) => {

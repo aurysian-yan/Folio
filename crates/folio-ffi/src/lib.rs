@@ -100,6 +100,7 @@ pub enum FacetKindDto {
     Feature,
     State,
     MultipleVariants,
+    HideSystemFonts,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -1398,6 +1399,7 @@ impl FolioEngine {
                         &state.database,
                         allowed_source_paths.as_ref(),
                         &state.index,
+                        query.facets.hide_system_fonts,
                     )
                 })
             })
@@ -2038,6 +2040,12 @@ fn facet_filter_from_dto(selections: Vec<FacetSelectionDto>) -> Result<FacetFilt
             }
             FacetKindDto::Feature => facets.features.push(parse_feature(&selection.value)?),
             FacetKindDto::State => facets.states.push(parse_state(&selection.value)?),
+            FacetKindDto::HideSystemFonts => {
+                if selection.value != "true" {
+                    return Err(FolioFfiError::operation("invalid hide-system-fonts facet"));
+                }
+                facets.hide_system_fonts = true;
+            }
             FacetKindDto::MultipleVariants => {
                 if selection.value != "multiple" {
                     return Err(FolioFfiError::operation("invalid multiple-variant facet"));
@@ -2060,6 +2068,7 @@ fn merge_facet_filters(target: &mut FacetFilter, extra: FacetFilter) {
     target.roots.extend(extra.roots);
     target.states.extend(extra.states);
     target.multiple_variants |= extra.multiple_variants;
+    target.hide_system_fonts |= extra.hide_system_fonts;
 }
 
 fn merge_search_text(saved: Option<String>, current: Option<String>) -> Option<String> {
@@ -2102,6 +2111,7 @@ fn query_page(
                     &state.database,
                     allowed_source_paths,
                     &state.index,
+                    query.facets.hide_system_fonts,
                 )
             })
         })
@@ -2184,6 +2194,12 @@ fn saved_query_to_dto(query: SavedFontQuery) -> SmartFolderQueryDto {
             value: "multiple".to_owned(),
         });
     }
+    if query.hide_system_fonts {
+        facets.push(FacetSelectionDto {
+            kind: FacetKindDto::HideSystemFonts,
+            value: "true".to_owned(),
+        });
+    }
     SmartFolderQueryDto {
         text: query.text,
         facets,
@@ -2197,13 +2213,24 @@ fn family_card(
     database: &FolioDatabase,
     source_paths: Option<&BTreeSet<String>>,
     index: &FontQueryIndex,
+    hide_system_fonts: bool,
 ) -> Result<FamilyCardDto, FolioFfiError> {
-    let identities = family_identities(family);
     let shown_faces: Vec<_> = family
         .faces
         .iter()
         .filter(|face| source_paths.is_none() || matched_faces.contains(&face.id))
+        .filter(|face| !hide_system_fonts || !folio_query::is_macos_system_font(face))
         .collect();
+    let identities = if hide_system_fonts && cfg!(target_os = "macos") {
+        shown_faces
+            .iter()
+            .map(|face| face.identity_id)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    } else {
+        family_identities(family)
+    };
     Ok(FamilyCardDto {
         location: folio_query::FontFamilyLocation::from_locations(
             shown_faces
@@ -2614,6 +2641,32 @@ fn root_dto(root: &folio_storage::LibraryRoot) -> RootDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hide_system_fonts_survives_smart_folder_dto_roundtrip_and_merging() {
+        let saved = saved_query_from_dto(SmartFolderQueryDto {
+            text: None,
+            facets: vec![FacetSelectionDto {
+                kind: FacetKindDto::HideSystemFonts,
+                value: "true".into(),
+            }],
+        })
+        .unwrap();
+        assert!(saved.hide_system_fonts);
+        let dto = saved_query_to_dto(saved);
+        assert!(matches!(dto.facets[0].kind, FacetKindDto::HideSystemFonts));
+        assert!(saved_query_from_dto(dto).unwrap().hide_system_fonts);
+        let mut filters = FacetFilter::default();
+        merge_facet_filters(
+            &mut filters,
+            FacetFilter {
+                hide_system_fonts: true,
+                ..Default::default()
+            },
+        );
+        merge_facet_filters(&mut filters, FacetFilter::default());
+        assert!(filters.hide_system_fonts);
+    }
 
     #[test]
     fn character_map_bridge_rejects_invalid_requests_and_unknown_faces() {

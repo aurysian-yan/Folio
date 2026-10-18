@@ -1191,7 +1191,7 @@ pub(crate) mod tests {
         let folder = first
             .create_smart_folder_with_style(
                 "可变拉丁字体",
-                r#"{"text":"Inter","scripts":["Latin"],"multiple_variants":false}"#,
+                r#"{"text":"Inter","scripts":["Latin"],"multiple_variants":false,"hide_system_fonts":true}"#,
                 CollectionIcon::Type,
                 CollectionColor::Blue,
             )
@@ -1229,7 +1229,7 @@ pub(crate) mod tests {
             .update_smart_folder_with_style(
                 folder.id,
                 "拉丁字体",
-                r#"{"text":"Inter","scripts":["Latin"],"multiple_variants":true}"#,
+                r#"{"text":"Inter","scripts":["Latin"],"multiple_variants":true,"hide_system_fonts":true}"#,
                 CollectionIcon::Star,
                 CollectionColor::Purple,
             )
@@ -1254,6 +1254,7 @@ pub(crate) mod tests {
         assert_eq!(synced.icon, CollectionIcon::Star);
         assert_eq!(synced.color, CollectionColor::Purple);
         assert!(synced.query_json.contains("multiple_variants\":true"));
+        assert!(synced.query_json.contains("hide_system_fonts\":true"));
 
         let converted_member = FontIdentityId::from_bytes([77; 16]);
         first

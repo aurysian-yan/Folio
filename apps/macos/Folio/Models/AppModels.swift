@@ -219,6 +219,7 @@ enum FacetKind: String, Hashable, CaseIterable, Sendable {
     case feature
     case state
     case multipleVariants
+    case hideSystemFonts
 
     var title: String {
         switch self {
@@ -231,6 +232,7 @@ enum FacetKind: String, Hashable, CaseIterable, Sendable {
         case .feature: L.text("filters.feature")
         case .state: L.text("filters.state")
         case .multipleVariants: L.text("font.family")
+        case .hideSystemFonts: L.text("filters.hideSystemFonts")
         }
     }
 }

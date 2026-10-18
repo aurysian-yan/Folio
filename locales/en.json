@@ -248,7 +248,9 @@
     "smartUnsupportedSource": "Smart collections can't filter by source folder yet; clear that filter first.",
     "smartHint": "Add filters and matching fonts will appear in this collection automatically.",
     "facetOption": "{{name}}, {{count}} families",
-    "empty": "No filters are available for the current library."
+    "empty": "No filters are available for the current library.",
+    "hideSystemFonts": "Hide system fonts",
+    "macosOnly": "Only applies on macOS"
   },
   "collection": {
     "collection": "Collection",

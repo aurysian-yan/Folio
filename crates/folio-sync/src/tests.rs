@@ -297,3 +297,22 @@ async fn cancelled_transfer_stops_before_completion() {
         Err(SyncError::Cancelled)
     ));
 }
+
+#[test]
+fn smart_folder_sync_preserves_macos_system_font_condition() {
+    let folder = WireSmartFolder {
+        id: SmartFolderId::from_bytes([7; 16]).to_string(),
+        name: "用户字体".into(),
+        icon: "folder".into(),
+        color: "gray".into(),
+        query_json: r#"{"hide_system_fonts":true}"#.into(),
+        created_at_ns: 1,
+        updated_at_ns: 2,
+    };
+    let encoded = serde_json::to_string(&folder).unwrap();
+    let received: WireSmartFolder = serde_json::from_str(&encoded).unwrap();
+    let decoded = received.decode().unwrap();
+    assert_eq!(decoded.query_json, folder.query_json);
+    let resent = WireSmartFolder::from(decoded);
+    assert_eq!(resent.query_json, folder.query_json);
+}
