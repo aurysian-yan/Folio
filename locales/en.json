@@ -365,7 +365,9 @@
     "appearanceDescription": "Choose light or dark mode, an accent color, and preview text size.",
     "shortcutsDescription": "Choose the shortcut used to quit Folio.",
     "importDescription": "Copy keeps a font file managed by Folio; Reference reads fonts from the original folder.",
-    "cloudDescription": "Connect WebDAV or 123PAN to sync font files and favorites."
+    "cloudDescription": "Connect WebDAV or 123PAN to sync font files and favorites.",
+    "general": "General",
+    "browsing": "Browsing"
   },
   "theme": {
     "default": "Default Theme Color",
@@ -717,7 +719,13 @@
     "closePanel": "Close panel",
     "closeViewOptions": "Close view options",
     "filterDrawerHandle": "Filter panel drag handle",
-    "closeFilterPanel": "Close filter panel"
+    "closeFilterPanel": "Close filter panel",
+    "uiBlur": "Enable interface background blur",
+    "uiBlurDescription": "Blur backgrounds behind menus, dialogs, and the sidebar status card. Turn off to use solid backgrounds.",
+    "windowMaterial": "Window material",
+    "micaEffect": "Enable Windows 11 Mica effect",
+    "micaDescription": "Use a Mica window background that adapts to the system theme and desktop wallpaper.",
+    "micaUnavailable": "Mica is available only on Windows 11 systems that support this material."
   },
   "mobile": {
     "localFonts": "Local Fonts",

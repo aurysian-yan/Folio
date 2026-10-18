@@ -3,9 +3,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { family } from "./test/fixtures";
 import App from "./App";
-import { characterMap, clearCatalogCache, getStorageUsage, getSyncProfile, getSyncStatus, listSyncConflicts, openSettings, queryLibrary, quitApp, rebuildSyncIndexes, recordRecent } from "./api";
+import { characterMap, clearCatalogCache, getStorageUsage, getSyncProfile, getSyncStatus, listSyncConflicts, listSmartFolders, saveSmartFolder, openSettings, queryLibrary, quitApp, rebuildSyncIndexes, recordRecent } from "./api";
 
 vi.mock("./components/FontPreview", () => ({ FontPreview: ({ size, label, color }: { size: number; label: string; color?: string | null }) => <span data-testid="preview-font-size" data-size={size} data-color={color ?? "default"} aria-label={label} /> }));
+vi.mock("./components/SidebarPageIndicator", () => ({ SidebarPageIndicator: () => <span aria-hidden="true" /> }));
 vi.mock("@lisse/react", () => ({ useSmoothCorners: () => {}, SmoothCorners: ({ children }: { children: ReactNode }) => children }));
 // 字符滚动由浏览器验证，单元测试检查字号传递与设置同步。
 vi.mock("@scritto/react", () => ({ default: ({ value }: { value: number }) => <span data-testid="preview-size-readout" aria-hidden="true">{value}</span> }));
@@ -28,6 +29,7 @@ vi.mock("./api", async (importOriginal) => {
     openSettings: vi.fn(async () => {}),
     quitApp: vi.fn(async () => {}),
     listCollections: vi.fn(async () => []), listSmartFolders: vi.fn(async () => []),
+    saveSmartFolder: vi.fn(),
     getSyncProfile: vi.fn(async () => null), listCloudFonts: vi.fn(async () => []), listSyncConflicts: vi.fn(async () => []),
     getSyncStatus: vi.fn(async () => ({ configured: false, running: false, phase: "", stage: "", percent: 0, stageCompleted: 0, stageTotal: 0,
       uploadedFiles: 0, downloadedFiles: 0, publishedEvents: 0, items: [], error: null })),
@@ -39,6 +41,9 @@ vi.mock("./api", async (importOriginal) => {
 
 beforeEach(() => {
   localStorage.clear();
+  delete document.documentElement.dataset.windowMaterial;
+  delete document.documentElement.dataset.uiMica;
+  delete document.documentElement.dataset.uiBlur;
   vi.mocked(quitApp).mockClear();
   vi.mocked(clearCatalogCache).mockClear();
   vi.mocked(rebuildSyncIndexes).mockClear();
@@ -49,7 +54,7 @@ it.each([null, "invalid"])("未设置或无效退出快捷键 %s 时默认使用
   if (stored !== null) localStorage.setItem("folio-quit-shortcut", stored);
   window.history.replaceState(null, "", "?window=settings");
   const { getByRole } = render(<App />);
-  fireEvent.click(getByRole("tab", { name: "快捷键" }));
+  fireEvent.click(getByRole("tab", { name: "通用" }));
   expect(getByRole("button", { name: /退出应用快捷键/ }).textContent).toBe("Ctrl+Q");
   await waitFor(() => expect(localStorage.getItem("folio-quit-shortcut")).toBe("Control+Q"));
   fireEvent.keyDown(window, { key: "w", ctrlKey: true });
@@ -145,7 +150,7 @@ it("独立设置窗口读取保存的字号，并同步主窗口发来的更新"
   localStorage.setItem("folio-preview-size", "72");
   window.history.replaceState(null, "", "?window=settings");
   const { getByRole, container } = render(<App />);
-  fireEvent.click(getByRole("tab", { name: "显示" }));
+  fireEvent.click(getByRole("tab", { name: "浏览" }));
   const slider = getByRole("slider", { name: "预览字号" });
   expect(slider.getAttribute("aria-valuenow")).toBe("72");
   expect(slider.getAttribute("aria-valuemin")).toBe("18");
@@ -183,10 +188,26 @@ it("存储页统计占用并确认重建同步索引", async () => {
   await waitFor(() => expect(rebuildSyncIndexes).toHaveBeenCalledTimes(1));
 });
 
+it("模糊预览复用侧栏圆角项和云同步卡片，连接入口切换到云同步设置", () => {
+  window.history.replaceState(null, "", "?window=settings");
+  const { getByRole } = render(<App />);
+  fireEvent.click(getByRole("tab", { name: "外观" }));
+  const preview = getByRole("complementary", { name: "侧边栏预览" });
+  const items = preview.querySelectorAll<HTMLButtonElement>(".sidebar-link");
+  expect(items).toHaveLength(7);
+  for (const item of items) {
+    expect(item.tagName).toBe("BUTTON");
+    expect(item.style.borderRadius).toBe("8px");
+  }
+  expect(preview.querySelector(".sidebar-status-card")).toBeTruthy();
+  fireEvent.click(within(preview).getByRole("button", { name: "在设置中连接 WebDAV" }));
+  expect(getByRole("tab", { name: "云同步" }).getAttribute("aria-selected")).toBe("true");
+});
+
 it("设置滑块保留上下限、连续调节和禁用行为", async () => {
   window.history.replaceState(null, "", "?window=settings");
   const { getByRole } = render(<App />);
-  fireEvent.click(getByRole("tab", { name: "显示" }));
+  fireEvent.click(getByRole("tab", { name: "外观" }));
   const blur = getByRole("slider", { name: "模糊度" });
   fireEvent.keyDown(blur, { key: "Home" });
   expect(blur.getAttribute("aria-valuenow")).toBe("1");
@@ -199,7 +220,7 @@ it("设置滑块保留上下限、连续调节和禁用行为", async () => {
   fireEvent.keyDown(blur, { key: "ArrowRight" });
   expect(blur.getAttribute("aria-valuenow")).toBe("12");
 
-  fireEvent.click(getByRole("tab", { name: "字体卡片" }));
+  fireEvent.click(getByRole("tab", { name: "浏览" }));
   const delay = getByRole("slider", { name: "悬停选中延时" });
   expect(delay.getAttribute("aria-valuenow")).toBe("180");
   fireEvent.keyDown(delay, { key: "ArrowRight" });
@@ -217,7 +238,7 @@ it("滚轮速度与 SwiftUI 使用相同范围和步长，并同步到主窗口"
   localStorage.setItem("folio-expanded-card-wheel-speed", "1.7");
   window.history.replaceState(null, "", "?window=settings");
   const { getByRole, getByText } = render(<App />);
-  fireEvent.click(getByRole("tab", { name: "字体卡片" }));
+  fireEvent.click(getByRole("tab", { name: "浏览" }));
   const speed = getByRole("slider", { name: "滚轮滚动速度" });
   expect(speed.getAttribute("aria-valuemin")).toBe("0.5");
   expect(speed.getAttribute("aria-valuemax")).toBe("2");
@@ -431,17 +452,32 @@ it("键盘聚焦与悬停切换后始终只有一个选中卡片", async () => {
 it('字符表自动选择偏好默认开启，保存关闭值并同步其他窗口', async () => {
   window.history.replaceState(null, "", "?window=settings");
   const screen = render(<App />);
-  fireEvent.click(screen.getByRole('tab', { name: '显示' }));
+  fireEvent.click(screen.getByRole('tab', { name: '浏览' }));
   const toggle = screen.getByRole('switch', { name: '自动选择首个非空字符' });
   expect((toggle as HTMLInputElement).checked).toBe(true);
   fireEvent.click(toggle);
   await waitFor(() => expect(localStorage.getItem('folio-character-map-auto-select-first-non-empty')).toBe('false'));
   screen.unmount();
   const next = render(<App />);
-  fireEvent.click(next.getByRole('tab', { name: '显示' }));
+  fireEvent.click(next.getByRole('tab', { name: '浏览' }));
   expect((next.getByRole('switch', { name: '自动选择首个非空字符' }) as HTMLInputElement).checked).toBe(false);
   fireEvent(window, new StorageEvent('storage', { key: 'folio-character-map-auto-select-first-non-empty', newValue: 'true' }));
   await waitFor(() => expect((next.getByRole('switch', { name: '自动选择首个非空字符' }) as HTMLInputElement).checked).toBe(true));
+});
+
+it("侧栏分页使用单个按钮，两个文字、分页符和按钮空白均可切换", () => {
+  const { getByRole } = render(<App />);
+  const toggle = getByRole("button", { name: "导航 / 筛选" });
+  expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  expect(toggle.querySelector("button")).toBeNull();
+  fireEvent.click(within(toggle).getByText("导航"));
+  expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(within(toggle).getByText("筛选"));
+  expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  fireEvent.click(toggle.querySelector('[aria-hidden="true"]')!);
+  expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-pressed")).toBe("false");
 });
 
 it("同步的隐藏系统字体条件显示为禁用，编辑收藏夹后保留勾选", async () => {
@@ -466,4 +502,106 @@ it("同步的隐藏系统字体条件显示为禁用，编辑收藏夹后保留�
   expect(condition.checked).toBe(true);
   fireEvent.click(dialog.getByRole("button", { name: "保存" }));
   await waitFor(() => expect(saveSmartFolder).toHaveBeenCalledWith(expect.objectContaining({ id: folder.id, facets: { hideSystemFonts: ["true"] } })));
+});
+
+it("设置整合为六个大项，语言、导入和快捷键统一放入通用卡片", () => {
+  window.history.replaceState(null, "", "?window=settings");
+  const { getAllByRole, getByRole } = render(<App />);
+  expect(getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["通用", "外观", "浏览", "云同步", "存储", "关于"]);
+  for (const name of ["界面语言", "导入", "快捷键"]) {
+    expect(getByRole("heading", { name, level: 2 }).closest(".settings-group")).toBeTruthy();
+  }
+  fireEvent.click(getByRole("tab", { name: "浏览" }));
+  expect(getByRole("slider", { name: "预览字号" })).toBeTruthy();
+  expect(getByRole("switch", { name: "自动选择首个非空字符" })).toBeTruthy();
+  expect(getByRole("switch", { name: "悬停时选中字体卡片" })).toBeTruthy();
+});
+
+it("界面模糊独立保存，关闭后禁用强度调节并保留原值", async () => {
+  window.history.replaceState(null, "", "?window=settings&page=display");
+  localStorage.setItem("folio-sidebar-status-blur", "8");
+  const screen = render(<App />);
+  const toggle = screen.getByRole("switch", { name: "开启界面背景模糊" });
+  const slider = screen.getByRole("slider", { name: "模糊度" });
+  expect((toggle as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(toggle);
+  expect(localStorage.getItem("folio-ui-blur-enabled")).toBe("false");
+  expect(document.documentElement.dataset.uiBlur).toBe("disabled");
+  expect(slider.getAttribute("aria-disabled")).toBe("true");
+  expect(slider.getAttribute("aria-valuenow")).toBe("8");
+  fireEvent.keyDown(slider, { key: "ArrowRight" });
+  expect(localStorage.getItem("folio-sidebar-status-blur")).toBe("8");
+  screen.unmount();
+  const reopened = render(<App />);
+  expect((reopened.getByRole("switch", { name: "开启界面背景模糊" }) as HTMLInputElement).checked).toBe(false);
+  fireEvent.click(reopened.getByRole("switch", { name: "开启界面背景模糊" }));
+  expect(reopened.getByRole("slider", { name: "模糊度" }).getAttribute("aria-disabled")).not.toBe("true");
+  expect(document.documentElement.dataset.uiBlur).toBe("enabled");
+});
+
+it("主窗口同步视觉效果偏好，云母切换保留原生材质支持标记", async () => {
+  document.documentElement.dataset.windowMaterial = "mica";
+  const screen = render(<App />);
+  expect(document.documentElement.dataset.uiMica).toBe("enabled");
+  fireEvent(window, new StorageEvent("storage", { key: "folio-ui-blur-enabled", newValue: "false" }));
+  fireEvent(window, new StorageEvent("storage", { key: "folio-mica-enabled", newValue: "false" }));
+  expect(document.documentElement.dataset.uiBlur).toBe("disabled");
+  expect(document.documentElement.dataset.uiMica).toBe("disabled");
+  expect(document.documentElement.dataset.windowMaterial).toBe("mica");
+  screen.unmount();
+  localStorage.setItem("folio-mica-enabled", "false");
+  window.history.replaceState(null, "", "?window=settings&page=display");
+  const settings = render(<App />);
+  const mica = settings.getByRole("switch", { name: "开启 Windows 11 云母效果" }) as HTMLInputElement;
+  expect(mica.checked).toBe(false);
+  expect(mica.disabled).toBe(false);
+  fireEvent.click(mica);
+  expect(mica.checked).toBe(true);
+  expect(localStorage.getItem("folio-mica-enabled")).toBe("true");
+  expect(document.documentElement.dataset.uiMica).toBe("enabled");
+  expect(document.documentElement.dataset.uiBlur).toBe("enabled");
+  fireEvent.click(mica);
+  expect(document.documentElement.dataset.uiBlur).toBe("enabled");
+  expect(document.documentElement.dataset.uiMica).toBe("disabled");
+});
+
+it("云母不可用时禁用开关，原生材质初始化后自动更新可用状态", async () => {
+  window.history.replaceState(null, "", "?window=settings&page=display");
+  const { getByRole } = render(<App />);
+  const mica = getByRole("switch", { name: "开启 Windows 11 云母效果" }) as HTMLInputElement;
+  expect(mica.disabled).toBe(true);
+  expect(mica.checked).toBe(false);
+  await act(async () => { document.documentElement.dataset.windowMaterial = "mica"; });
+  expect(mica.disabled).toBe(false);
+  expect(mica.checked).toBe(true);
+  await act(async () => { document.documentElement.dataset.windowMaterial = "solid"; });
+  expect(mica.disabled).toBe(true);
+  expect(mica.checked).toBe(false);
+});
+
+it.each(["shortcuts", "importing"])("旧设置入口 %s 打开合并后的通用页", (page) => {
+  window.history.replaceState(null, "", `?window=settings&page=${page}`);
+  const { getByRole } = render(<App />);
+  expect(getByRole("tab", { name: "通用" }).getAttribute("aria-selected")).toBe("true");
+  expect(getByRole("button", { name: /退出应用快捷键/ })).toBeTruthy();
+});
+
+it("云同步封装控件保留服务商预设、受控输入与保存按钮状态", async () => {
+  window.history.replaceState(null, "", "?window=settings&page=cloud");
+  const { getByRole, getByLabelText } = render(<App />);
+  await act(async () => {});
+  const server = getByRole("textbox", { name: "服务器地址" }) as HTMLInputElement;
+  fireEvent.click(getByRole("button", { name: "123 云盘" }));
+  expect(server.value).toBe("https://webdav.123pan.cn/webdav");
+  expect(getByRole("button", { name: "123 云盘" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.change(server, { target: { value: "https://example.com/dav" } });
+  expect(server.value).toBe("https://example.com/dav");
+  expect(getByRole("button", { name: "无" }).getAttribute("aria-pressed")).toBe("true");
+  const directory = getByRole("textbox", { name: "远端目录" }) as HTMLInputElement;
+  fireEvent.change(directory, { target: { value: "Fonts" } });
+  fireEvent.click(getByRole("switch", { name: "自动同步" }));
+  expect(directory.value).toBe("Fonts");
+  expect((getByRole("button", { name: "保存" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(getByLabelText("密码或应用密码"), { target: { value: "fixture-password" } });
+  expect((getByRole("button", { name: "保存" }) as HTMLButtonElement).disabled).toBe(false);
 });

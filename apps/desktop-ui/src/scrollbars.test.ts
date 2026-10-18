@@ -83,3 +83,87 @@ it("左栏留白随状态卡高度变化，预览导航不受影响，卸载恢�
   dispose();
   expect(sidebar.style.getPropertyValue("--sidebar-status-clearance")).toBe("72px");
 });
+
+it("侧栏遮罩随滚动位置显示，顶部和回弹时隐藏，卸载后停止监听", () => {
+  const root = document.createElement("div");
+  root.innerHTML = '<nav class="sidebar-scroll"></nav><nav class="sidebar-scroll blur-preview-nav"></nav><div class="font-grid"></div>';
+  const sidebar = root.querySelector<HTMLElement>(".sidebar-scroll")!;
+  const preview = root.querySelector<HTMLElement>(".blur-preview-nav")!;
+  sidebar.scrollTop = 40;
+  document.body.append(root);
+  cleanup.push(() => root.remove());
+  const dispose = installAppScrollbars(root);
+  cleanup.push(dispose);
+  expect(sidebar.hasAttribute("data-scrolled")).toBe(true);
+  expect(preview.hasAttribute("data-scrolled")).toBe(false);
+  for (const top of [0, -5, 1, 120, 0]) {
+    sidebar.scrollTop = top;
+    sidebar.dispatchEvent(new Event("scroll"));
+    expect(sidebar.hasAttribute("data-scrolled")).toBe(top > 0);
+  }
+  preview.scrollTop = 20;
+  preview.dispatchEvent(new Event("scroll"));
+  expect(preview.hasAttribute("data-scrolled")).toBe(true);
+  expect(root.querySelector(".font-grid")?.hasAttribute("data-scrolled")).toBe(false);
+  cleanup.pop()!();
+  expect(preview.hasAttribute("data-scrolled")).toBe(false);
+  sidebar.scrollTop = 20;
+  sidebar.dispatchEvent(new Event("scroll"));
+  expect(sidebar.hasAttribute("data-scrolled")).toBe(false);
+});
+
+it("设置预览侧栏根据底部云同步卡片高度预留空间", () => {
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains("sidebar-status") ? 52 : 0;
+  });
+  const root = setup('<div class="blur-preview-sidebar-inner"><nav class="sidebar-scroll blur-preview-nav"></nav><div class="sidebar-status"></div></div>');
+  const preview = root.querySelector<HTMLElement>(".blur-preview-nav")!;
+  expect(preview.style.getPropertyValue("--sidebar-status-clearance")).toBe("60px");
+  cleanup.pop()!();
+  expect(preview.style.getPropertyValue("--sidebar-status-clearance")).toBe("");
+});
+
+async function setupAutoPreview() {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(680);
+  const root = setup('<nav class="sidebar-scroll blur-preview-nav"><button>字体</button></nav><nav class="sidebar-scroll"></nav>');
+  await Promise.resolve();
+  return {
+    preview: root.querySelector<HTMLElement>(".blur-preview-nav")!,
+    sidebar: root.querySelector<HTMLElement>(".sidebar-scroll:not(.blur-preview-nav)")!,
+  };
+}
+
+it("只有设置预览自动平滑往返滚动，卸载后停止", async () => {
+  const { preview, sidebar } = await setupAutoPreview();
+  vi.advanceTimersByTime(2500);
+  expect(preview.scrollTop).toBeGreaterThan(80);
+  expect(preview.scrollTop).toBeLessThan(120);
+  expect(sidebar.scrollTop).toBe(0);
+  vi.advanceTimersByTime(2500);
+  expect(preview.scrollTop).toBeCloseTo(200, 1);
+  vi.advanceTimersByTime(5000);
+  expect(preview.scrollTop).toBeCloseTo(0, 1);
+  cleanup.pop()!();
+  preview.scrollTop = 75;
+  vi.advanceTimersByTime(5000);
+  expect(preview.scrollTop).toBe(75);
+});
+
+it.each(["wheel", "pointerdown", "touchstart", "keydown"])("用户通过 %s 接管后不再自动滚动，保留手动位置", async (event) => {
+  const { preview } = await setupAutoPreview();
+  vi.advanceTimersByTime(2000);
+  expect(preview.scrollTop).toBeGreaterThan(0);
+  preview.querySelector("button")!.dispatchEvent(new Event(event, { bubbles: true }));
+  preview.scrollTop = 60;
+  vi.advanceTimersByTime(12000);
+  expect(preview.scrollTop).toBe(60);
+});
+
+it("减少动态效果时不自动滚动", async () => {
+  const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+  vi.spyOn(window, "matchMedia").mockReturnValue({ ...media, matches: true });
+  const { preview } = await setupAutoPreview();
+  vi.advanceTimersByTime(12000);
+  expect(preview.scrollTop).toBe(0);
+});

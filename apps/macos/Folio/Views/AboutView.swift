@@ -170,7 +170,7 @@ struct AboutView: View {
                         if let date = AboutRelease.publishedDate(release.publishedAt) {
                             Text(L.format("about.published", date.formatted(date: .abbreviated, time: .omitted))).font(.caption).foregroundStyle(.secondary)
                         }
-                        HStack {
+                        VStack(spacing: 12) {
                             Button(L.text("about.notes")) { open(release.releaseUrl) }
                             if status == "newVersion", let artifact = release.artifacts.first(where: { $0.platform == "macos" && $0.arch == arch }) {
                                 Button(L.text("about.download")) { open(artifact.url) }.buttonStyle(.borderedProminent)
@@ -178,7 +178,7 @@ struct AboutView: View {
                         }
                     }
                 }.padding(.vertical, 24)
-                HStack(alignment: .top, spacing: 32) {
+                VStack(alignment: .leading, spacing: 32) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(L.text("about.links")).font(.headline)
                         ForEach(AboutResources.content.links, id: \.key) { link in
@@ -206,7 +206,7 @@ struct AboutView: View {
                 Text(L.text("about.copyright")).font(.caption).foregroundStyle(.tertiary)
             }
             .padding(32)
-            .frame(maxWidth: 800)
+            .frame(maxWidth: 368)
             .frame(maxWidth: .infinity)
         }
         .background(alignment: .top) {

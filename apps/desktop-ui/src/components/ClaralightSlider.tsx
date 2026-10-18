@@ -28,6 +28,7 @@ export interface ClaralightSliderProps
   keyboardStep?: number;
   disabled?: boolean;
   autoFocus?: boolean;
+  autoHeight?: boolean;
 }
 
 const TRACK_HEIGHT = 6;
@@ -122,6 +123,7 @@ export function ClaralightSlider({
   keyboardStep,
   disabled = false,
   autoFocus = false,
+  autoHeight = false,
   className,
   ...restProps
 }: ClaralightSliderProps) {
@@ -622,7 +624,8 @@ export function ClaralightSlider({
       onPointerCancel={handlePointerUp}
       onLostPointerCapture={handlePointerUp}
       className={[
-        "relative block w-full h-8 select-none touch-none outline-none",
+        "relative block w-full select-none touch-none outline-none",
+        autoHeight ? "self-stretch" : "h-8",
         disabled ? "cursor-default" : pressed ? "cursor-grabbing" : "cursor-grab",
         className,
       ].filter(Boolean).join(" ")}
@@ -636,7 +639,8 @@ export function ClaralightSlider({
             left: seg.start + "px",
             width: seg.length + "px",
             height: seg.fill + "px",
-            top: (HIT_HEIGHT - seg.fill) / 2 + "px",
+            top: autoHeight ? "50%" : (HIT_HEIGHT - seg.fill) / 2 + "px",
+            transform: autoHeight ? "translateY(-50%)" : undefined,
             borderRadius: seg.fill / 2 + "px",
             backgroundColor: seg.isLeading ? effectiveActiveColor : trackColor,
           }}
@@ -651,7 +655,8 @@ export function ClaralightSlider({
             left: dotX - SNAP_DOT_DIAMETER / 2 + "px",
             width: SNAP_DOT_DIAMETER + "px",
             height: SNAP_DOT_DIAMETER + "px",
-            top: (HIT_HEIGHT - SNAP_DOT_DIAMETER) / 2 + "px",
+            top: autoHeight ? "50%" : (HIT_HEIGHT - SNAP_DOT_DIAMETER) / 2 + "px",
+            transform: autoHeight ? "translateY(-50%)" : undefined,
             backgroundColor:
               dotX < handleCenter ? effectiveActiveColor : trackColor,
           }}
@@ -664,7 +669,8 @@ export function ClaralightSlider({
           left: handleLeft + "px",
           width: handleWidth + "px",
           height: handleHeight + "px",
-          top: (HIT_HEIGHT - handleHeight) / 2 + "px",
+          top: autoHeight ? "50%" : (HIT_HEIGHT - handleHeight) / 2 + "px",
+          transform: autoHeight ? "translateY(-50%)" : undefined,
           borderRadius: Math.min(handleWidth, handleHeight) / 2 + "px",
           backgroundColor: disabled
             ? "color-mix(in srgb, var(--color-on-accent) 70%, transparent)"
@@ -676,7 +682,7 @@ export function ClaralightSlider({
       />
       <div
         data-slot="slider-hover"
-        className="absolute top-0 h-8"
+        className={autoHeight ? "absolute inset-y-0" : "absolute top-0 h-8"}
         style={{
           left: hoverBoxLeft + "px",
           width: hoverBoxWidth + "px",

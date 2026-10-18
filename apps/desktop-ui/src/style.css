@@ -44,6 +44,9 @@
     --content-surface: #ffffff;
     --menu-backdrop: #ffffff;
     --window-background: var(--menu-backdrop);
+    --ui-backdrop-filter: blur(var(--sidebar-status-blur, 4px)) saturate(var(--sidebar-status-saturation, 163.6%));
+    --ui-overlay-background: color-mix(in srgb, var(--menu-backdrop) 72%, transparent);
+    --ui-status-background: color-mix(in srgb, var(--surface-raised) 62%, transparent);
     --accent: #f06835;
     --accent-foreground: #ffffff;
     --foreground: var(--text);
@@ -126,8 +129,19 @@
     }
 }
 /* 仅实际启用云母的 Windows 11 窗口透出系统材质。 */
-:root[data-window-material="mica"] {
+:root[data-window-material="mica"]:not([data-ui-mica="disabled"]) {
     --window-background: transparent;
+}
+/* 界面模糊独立于系统窗口材质，关闭后使用不透明主题底色。 */
+:root[data-ui-blur="disabled"] {
+    --ui-backdrop-filter: none;
+    --ui-overlay-background: var(--menu-backdrop);
+    --ui-status-background: var(--menu-backdrop);
+}
+:where(.select__popover, .dropdown__popover, .color-picker__popover, .popover, .modal__dialog) {
+    background: var(--ui-overlay-background);
+    backdrop-filter: var(--ui-backdrop-filter);
+    -webkit-backdrop-filter: var(--ui-backdrop-filter);
 }
 * {
     box-sizing: border-box;
@@ -166,7 +180,7 @@ body {
     --os-handle-bg-active: color-mix(in srgb, var(--text) 56%, transparent);
     --os-handle-min-size: 32px;
 }
-.sidebar-scroll:not(.blur-preview-nav) > .os-scrollbar.os-scrollbar-vertical {
+.sidebar-scroll > .os-scrollbar.os-scrollbar-vertical {
     bottom: var(--sidebar-status-clearance, 72px);
 }
 .modal__backdrop[data-overlayscrollbars] {
@@ -426,9 +440,9 @@ body {
     min-width: 180px;
     padding: 3px;
     /* 平滑圆角由 lisse 裁切绘制。 */
-    background: var(--menu-surface);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    background: var(--ui-overlay-background);
+    backdrop-filter: var(--ui-backdrop-filter);
+    -webkit-backdrop-filter: var(--ui-backdrop-filter);
 }
 .titlebar .menu-shell {
     position: absolute;
@@ -453,11 +467,9 @@ body {
     z-index: 1;
     top: auto;
     left: auto;
-    background: color-mix(in srgb, var(--menu-backdrop) 72%, transparent);
-    backdrop-filter: blur(var(--sidebar-status-blur, 4px))
-        saturate(var(--sidebar-status-saturation, 163.6%));
-    -webkit-backdrop-filter: blur(var(--sidebar-status-blur, 4px))
-        saturate(var(--sidebar-status-saturation, 163.6%));
+    background: var(--ui-overlay-background);
+    backdrop-filter: var(--ui-backdrop-filter);
+    -webkit-backdrop-filter: var(--ui-backdrop-filter);
 }
 .file-menu-popover {
     top: 36px;
@@ -627,47 +639,75 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 9px;
-    margin: 1px 3px 19px;
+    gap: 4px;
+    margin: 2px 3px;
+    padding: 2px 0;
+    border: 0;
+    background: transparent;
+}
+button.sidebar-pages {
+    cursor: pointer;
+}
+button.sidebar-pages:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 .sidebar-page {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 2px 0;
-    border: 0;
     color: var(--text-muted);
-    background: transparent;
-    cursor: pointer;
     font-size: 11px;
     font-weight: 550;
     transition: color 160ms ease;
 }
-.sidebar-page:hover {
+button.sidebar-pages:hover .sidebar-page {
     color: var(--text);
 }
-.sidebar-page[aria-selected="true"] {
+.sidebar-page[data-selected="true"] {
     color: var(--text);
     font-weight: 600;
 }
-.sidebar-page:focus-visible {
-    border-radius: 4px;
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-}
-.sidebar-page-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--text) 24%, transparent);
+.sidebar-page-label {
+    display: inline-block;
+    opacity: 0;
+    transform: translateX(3px);
+    filter: blur(1px);
+    transform-origin: right center;
     transition:
-        width 180ms ease,
-        background 160ms ease;
+        opacity 260ms ease-out,
+        filter 260ms ease-out,
+        transform 360ms cubic-bezier(0.34, 1.65, 0.64, 1);
 }
-/* 当前分页圆点拉长到 1.5 倍，形成胶囊标识。 */
-.sidebar-page[aria-selected="true"] .sidebar-page-dot {
-    width: 7.5px;
-    background: var(--accent);
+.sidebar-page:last-child .sidebar-page-label {
+    transform: translateX(-3px);
+    transform-origin: left center;
+}
+.sidebar-pages:is(:hover, :focus-visible) .sidebar-page-label {
+    opacity: 0.5;
+    filter: blur(0px);
+    transform: translateX(0);
+}
+.sidebar-page-indicator {
+    display: block;
+    width: 25px;
+    height: 9px;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+.sidebar-page-indicator svg {
+    display: block;
+    overflow: visible;
+}
+.sidebar-page-indicator[data-mirrored="true"] {
+    transform: scaleX(-1);
+}
+.sidebar-page-indicator-muted {
+    fill: color-mix(in srgb, var(--text) 24%, transparent);
+}
+.sidebar-page-indicator-accent {
+    fill: var(--accent);
 }
 .sidebar-section-label {
     margin: 2px 10px 7px;
@@ -715,6 +755,11 @@ body {
     font-size: 12px;
     line-height: 1.6;
 }
+@property --sidebar-mask-top-opacity {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
 .sidebar-scroll {
     display: flex;
     min-height: 0;
@@ -723,6 +768,12 @@ body {
     /* 内容留白与滚动条底部同步避开悬浮状态卡。 */
     padding-bottom: var(--sidebar-status-clearance, 72px);
     overflow: auto;
+    -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / var(--sidebar-mask-top-opacity)), #000 64px);
+    mask-image: linear-gradient(to bottom, rgb(0 0 0 / var(--sidebar-mask-top-opacity)), #000 64px);
+    transition: --sidebar-mask-top-opacity 220ms ease-in-out;
+}
+.sidebar-scroll[data-scrolled] {
+    --sidebar-mask-top-opacity: 0;
 }
 /* 列表项保持自身高度，内容超出时由 side-scroll 滚动而不是压缩。 */
 .sidebar-scroll > * {
@@ -1916,18 +1967,7 @@ body {
     color: var(--text-muted);
     font-size: 12px;
 }
-.settings-page > .settings-description {
-    margin: 0 0 14px;
-    line-height: 1.6;
-}
 
-.storage-summary {
-    min-height: 130px;
-}
-.storage-summary > p {
-    margin: 12px 0 0;
-    line-height: 1.6;
-}
 .storage-volume {
     width: 100%;
 }
@@ -1936,7 +1976,8 @@ body {
     align-items: baseline;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 12px;
+    margin-bottom: --spacing(3);
+    padding-inline: --spacing(1);
     font-size: 13px;
 }
 .storage-volume-heading strong {
@@ -1973,7 +2014,8 @@ body {
     display: flex;
     justify-content: space-between;
     gap: 16px;
-    margin-top: 9px;
+    margin-top: --spacing(2);
+    padding-inline: --spacing(1);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
@@ -1985,7 +2027,8 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 10px 24px;
-    margin-top: 14px;
+    margin-top: --spacing(3);
+    padding-inline: --spacing(1);
 }
 .storage-volume-legend > span {
     display: inline-flex;
@@ -1998,19 +2041,23 @@ body {
     font-weight: 500;
     font-variant-numeric: tabular-nums;
 }
-.storage-details h2 {
-    margin-bottom: 4px;
-}
 .storage-detail-row {
     display: grid;
-    grid-template-columns: 10px minmax(0, 1fr) auto auto;
+    grid-template-columns: --spacing(2.5) minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
-    min-height: 64px;
-    padding: 11px 0;
+    gap: --spacing(3);
+    padding: --spacing(3) --spacing(1);
     border-bottom: 1px solid var(--line);
 }
+.storage-detail-row:has(> .button) {
+    grid-template-columns: --spacing(2.5) minmax(0, 1fr) auto auto;
+}
+.storage-detail-row > div {
+    display: grid;
+    gap: --spacing(0.5);
+}
 .storage-detail-row:last-child {
+    padding-bottom: 0;
     border-bottom: 0;
 }
 .storage-detail-row strong {
@@ -2018,7 +2065,7 @@ body {
     font-weight: 600;
 }
 .storage-detail-row p {
-    margin: 2px 0 0;
+    margin: 0;
     line-height: 1.5;
 }
 .storage-detail-size {
@@ -2055,7 +2102,7 @@ body {
 .storage-confirm-dialog {
     padding: 24px;
     border-radius: 16px;
-    background: var(--surface);
+    background: var(--ui-overlay-background);
     color: var(--text);
 }
 .storage-confirm-dialog h2 {
@@ -2069,32 +2116,31 @@ body {
 .storage-confirm-dialog .setting-actions {
     justify-content: flex-end;
 }
-.settings-page > .settings-group {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--surface-raised) 58%, transparent);
-    box-shadow: inset 0 1px color-mix(in srgb, var(--text) 4%, transparent);
+.settings-group {
+    background: var(--surface);
 }
-.settings-group + .settings-group {
-    margin-top: 14px;
+.settings-page > .settings-group ~ .settings-group {
+    margin-top: --spacing(4);
 }
 .settings-group h2 {
-    margin: 0 0 7px;
+    margin: 0;
     font-size: 14px;
     font-weight: 600;
 }
-.settings-group > p {
+.settings-group > p:not(.settings-note) {
     margin: 0 0 12px;
 }
 .setting-field {
     display: grid;
-    grid-template-columns: 140px minmax(0, 1fr) auto;
+    grid-template-columns: --spacing(36) minmax(0, 1fr);
     align-items: center;
-    gap: 12px;
-    min-height: 43px;
-    margin-top: 12px;
+    gap: --spacing(3);
+    margin-top: --spacing(3);
     color: var(--text);
     font-size: 12px;
+}
+.setting-field--slider {
+    grid-template-columns: --spacing(36) minmax(0, 1fr) auto;
 }
 .setting-field > .input,
 .setting-field > .hero-select {
@@ -2103,12 +2149,14 @@ body {
 }
 .setting-field .input {
     min-width: 0;
-    height: 32px;
-    padding-top: 0;
-    padding-bottom: 0;
+    height: auto;
+    min-height: 0;
+    padding-block: --spacing(1);
 }
 .setting-field .hero-select-trigger {
-    min-height: 32px;
+    height: auto;
+    min-height: 0;
+    padding-block: --spacing(1);
 }
 .setting-field .settings-slider {
     width: 100%;
@@ -2118,27 +2166,34 @@ body {
 }
 .setting-field output {
     min-width: 42px;
+    padding-inline-end: --spacing(1);
     color: var(--text-muted);
     font-size: 11px;
     text-align: right;
 }
+.setting-switch {
+    margin-top: --spacing(3);
+}
+.setting-switch .settings-note,
+.setting-slider-field .settings-note {
+    margin: --spacing(2) 0 0;
+}
 .setting-toggle {
     display: flex;
     align-items: stretch;
-    margin-top: 15px;
+    margin-top: 0;
     color: var(--text);
     font-size: 12px;
 }
 .setting-toggle .switch__content {
     width: 100%;
-    min-height: 32px;
     flex-direction: row-reverse;
     justify-content: space-between;
     font-size: 12px;
     font-weight: 400;
 }
 .settings-note {
-    margin-top: 16px;
+    margin: --spacing(2) 0 0;
     line-height: 1.6;
 }
 .setting-actions {
@@ -2170,8 +2225,20 @@ body {
 }
 .sync-connection-settings,
 .sync-management-settings,
-.settings-page > .settings-group {
-    padding: 16px 18px;
+.settings-group {
+    padding: --spacing(3.5) --spacing(2.5);
+}
+.settings-page > h1 {
+    padding: --spacing(3.5);
+}
+.settings-group > h2,
+.settings-group > p,
+.settings-group .settings-note {
+    padding-inline: --spacing(1);
+}
+.setting-field > :first-child,
+.setting-toggle .setting-label {
+    padding-inline-start: --spacing(1);
 }
 .sync-management-settings > .settings-subheading {
     margin-top: 18px;
@@ -2191,8 +2258,11 @@ body {
         padding-left: 0;
     }
     .setting-field {
-        grid-template-columns: 112px minmax(0, 1fr) auto;
-        gap: 9px;
+        grid-template-columns: --spacing(28) minmax(0, 1fr);
+        gap: --spacing(2);
+    }
+    .setting-field--slider {
+        grid-template-columns: --spacing(28) minmax(0, 1fr) auto;
     }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2203,15 +2273,12 @@ body {
 .blur-preview-section {
     display: grid;
     gap: 12px;
-    margin-top: 22px;
 }
-.blur-preview-heading h2 {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 600;
+.blur-preview-preferences .setting-switch {
+    margin-top: 0;
 }
-.blur-preview-heading p {
-    margin: 4px 0 0;
+.blur-preview-preferences .settings-note {
+    margin: --spacing(2) 0 0;
 }
 .blur-preview-window {
     position: relative;
@@ -2255,6 +2322,8 @@ body {
     background: var(--menu-backdrop);
 }
 .blur-preview-sidebar-inner {
+    position: relative;
+    isolation: isolate;
     display: flex;
     height: 100%;
     min-height: 0;
@@ -2263,7 +2332,7 @@ body {
 }
 .blur-preview-sidebar .sidebar-pages {
     flex: 0 0 auto;
-    margin: 1px 3px 12px;
+    margin: 2px 3px;
 }
 .blur-preview-sidebar .sidebar-page {
     font-size: 10px;
@@ -2271,7 +2340,6 @@ body {
 .blur-preview-nav {
     min-height: 0;
     flex: 1;
-    padding-bottom: 12px;
     outline: none;
 }
 .blur-preview-nav:focus-visible {
@@ -2480,7 +2548,7 @@ body {
     padding: 10px 8px 0;
 }
 .sidebar-pages {
-    margin: 2px 6px 14px;
+    margin: 2px 6px;
 }
 .sidebar-section-label {
     margin: 11px 8px 5px;
@@ -3114,11 +3182,9 @@ body {
     padding: 6px 10px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--surface-raised) 62%, transparent);
-    backdrop-filter: blur(var(--sidebar-status-blur, 4px))
-        saturate(var(--sidebar-status-saturation, 163.6%));
-    -webkit-backdrop-filter: blur(var(--sidebar-status-blur, 4px))
-        saturate(var(--sidebar-status-saturation, 163.6%));
+    background: var(--ui-status-background);
+    backdrop-filter: var(--ui-backdrop-filter);
+    -webkit-backdrop-filter: var(--ui-backdrop-filter);
 }
 /* 与状态卡同形的纯色衬底：置于 z-index -1，让滚动列表从其上方掠过。 */
 .sidebar-status::before {
@@ -3274,8 +3340,10 @@ body {
 
 /* 关于首页的字形标本与离线许可阅读。 */
 .about-home { position: relative; isolation: isolate; display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.about-specimen { position: fixed; inset: 0; width: 100%; height: 100%; color: var(--text); opacity: .14; pointer-events: none; z-index: -1; }
+.about-specimen { position: fixed; inset: 0; width: 100%; height: 100%; color: var(--text); opacity: .06; pointer-events: none; z-index: -1; }
+.about-content { width: min(100%, 368px); margin-inline: auto; }
 .about-wordmark { position: relative; width: 12rem; height: 4.5rem; color: var(--text); }
+.about-wordmark:hover, .about-wordmark[data-hovered="true"] { background: transparent; box-shadow: none; transform: none; }
 .about-glyph-layer { transition: opacity 150ms ease; }
 .about-license-scroll { max-height: 50svh; overflow: auto; }
 .about-license-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: .875rem; line-height: 1.6; margin-block: 1rem; }
@@ -3360,4 +3428,8 @@ body {
 .copy-feedback-hint[data-copied="true"] { opacity: 1; filter: blur(0); }
 @media (prefers-reduced-motion: reduce) {
   .copy-feedback-normal, .copy-feedback-success, .copy-feedback-hint { transition: none; filter: none !important; }
+}
+
+.library-navigation {
+    padding-top: 0;
 }

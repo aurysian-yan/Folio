@@ -363,7 +363,9 @@
     "appearanceDescription": "选择深浅色、主题色与字体预览字号。",
     "shortcutsDescription": "选择退出 Folio 时使用的快捷键。",
     "importDescription": "复制会保留一份由 Folio 管理的字体文件；引用会从原目录读取字体。",
-    "cloudDescription": "连接 WebDAV 或 123 云盘，同步字体文件与收藏状态。"
+    "cloudDescription": "连接 WebDAV 或 123 云盘，同步字体文件与收藏状态。",
+    "general": "通用",
+    "browsing": "浏览"
   },
   "theme": {
     "default": "默认主题色",
@@ -704,7 +706,13 @@
     "closePanel": "关闭面板",
     "closeViewOptions": "关闭视图选项",
     "filterDrawerHandle": "筛选面板拖动柄",
-    "closeFilterPanel": "关闭筛选面板"
+    "closeFilterPanel": "关闭筛选面板",
+    "uiBlur": "开启界面背景模糊",
+    "uiBlurDescription": "为菜单、弹窗和侧栏状态卡启用模糊背景。关闭后使用实色背景。",
+    "windowMaterial": "窗口材质",
+    "micaEffect": "开启 Windows 11 云母效果",
+    "micaDescription": "让窗口背景呈现随系统主题和桌面壁纸变化的云母材质。",
+    "micaUnavailable": "云母效果仅在支持此材质的 Windows 11 系统上可用。"
   },
   "mobile": {
     "localFonts": "本地字体",

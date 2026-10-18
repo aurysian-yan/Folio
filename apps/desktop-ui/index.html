@@ -17,7 +17,7 @@
         }
       }
 
-      html[data-window-material="mica"] {
+      html[data-window-material="mica"]:not([data-ui-mica="disabled"]) {
         --window-background: transparent;
       }
 
@@ -87,6 +87,8 @@
       }
     </style>
     <script>
+      document.documentElement.dataset.uiBlur = localStorage.getItem("folio-ui-blur-enabled") === "false" ? "disabled" : "enabled";
+      document.documentElement.dataset.uiMica = localStorage.getItem("folio-mica-enabled") === "false" ? "disabled" : "enabled";
       if (new URLSearchParams(location.search).get("window") === "settings") {
         document.documentElement.dataset.window = "settings";
       }

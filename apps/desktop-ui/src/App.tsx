@@ -1,3 +1,4 @@
+import { SettingsGroup } from "./components/SettingsGroup";
 import { CopyButton } from "./components/CopyButton";
 import { CharacterMap } from "./components/CharacterMap";
 import { locallyAvailable, locationFilters, locationLabel, transferLabel } from "../../../shared/font-location";
@@ -32,11 +33,8 @@ import {
 import {
   Button,
   Input,
-  Label,
-  ListBox,
   Modal,
   SearchField,
-  Select,
   Switch,
   TextField,
   Toolbar,
@@ -48,7 +46,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { OptionSelect, SettingChoiceField, SettingSelect, SettingSliderField, SettingSwitch, SettingTextField } from "./components/SettingsControls";
 import { SegmentedTabs } from "./components/SegmentedTabs";
+import { SidebarPageIndicator } from "./components/SidebarPageIndicator";
 import { FacetGroup } from "./components/FacetGroup";
 import { ClaralightSlider } from "./components/ClaralightSlider";
 import { PreviewColorPicker } from "./components/PreviewColorPicker";
@@ -148,7 +148,6 @@ type SettingsPage =
   | "importing"
   | "display"
   | "font-cards"
-  | "shortcuts"
   | "about";
 type QuitShortcut = "Control+W" | "Control+Q" | "Alt+Q" | "Alt+W";
 type MenuEntry = {
@@ -323,14 +322,19 @@ function collectionColorValue(color: string) {
 }
 
 const settingsPages: { id: SettingsPage; title: string }[] = [
+  { id: "importing", title: "settings.general" },
+  { id: "display", title: "settings.appearance" },
+  { id: "font-cards", title: "settings.browsing" },
   { id: "cloud", title: "settings.cloud" },
   { id: "storage", title: "settings.storage" },
-  { id: "importing", title: "settings.importing" },
-  { id: "display", title: "settings.display" },
-  { id: "font-cards", title: "settings.cards" },
-  { id: "shortcuts", title: "desktop.shortcuts" },
   { id: "about", title: "settings.about" },
 ];
+
+function parseSettingsPage(value: string | null): SettingsPage {
+  if (value === "shortcuts" || value === "general") return "importing";
+  if (value === "browsing") return "font-cards";
+  return settingsPages.find((page) => page.id === value)?.id ?? "importing";
+}
 
 function StorageVolumeBar({ usage }: { usage: StorageUsageDto }) {
   const { t } = useTranslation();
@@ -666,6 +670,23 @@ export default function App() {
   const [cardMetadata, setCardMetadata] = useState(
     () => localStorage.getItem("folio-card-metadata") !== "false",
   );
+  const [uiBlurEnabled, setUiBlurEnabled] = useState(
+    () => localStorage.getItem("folio-ui-blur-enabled") !== "false",
+  );
+  const [micaEnabled, setMicaEnabled] = useState(
+    () => localStorage.getItem("folio-mica-enabled") !== "false",
+  );
+  const [micaSupported, setMicaSupported] = useState(
+    () => document.documentElement.dataset.windowMaterial === "mica",
+  );
+  const updateUiBlur = (enabled: boolean) => {
+    setUiBlurEnabled(enabled);
+    localStorage.setItem("folio-ui-blur-enabled", String(enabled));
+  };
+  const updateMica = (enabled: boolean) => {
+    setMicaEnabled(enabled);
+    localStorage.setItem("folio-mica-enabled", String(enabled));
+  };
   const [sidebarBlur, setSidebarBlur] = useState(() =>
     parseSidebarBlur(localStorage.getItem("folio-sidebar-status-blur")),
   );
@@ -715,13 +736,13 @@ export default function App() {
   const [windowActionError, setWindowActionError] = useState<string | null>(
     null,
   );
-  const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => new URLSearchParams(location.search).get("page") === "about" ? "about" : "cloud");
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => parseSettingsPage(new URLSearchParams(location.search).get("page")));
   useEffect(() => {
     if (!settingsWindow) return;
     let active = true;
     let cleanup: (() => void) | undefined;
     void listen<string>("settings:navigate", ({ payload }) => {
-      if (active && settingsPages.some((page) => page.id === payload)) setSettingsPage(payload as SettingsPage);
+      if (active) setSettingsPage(parseSettingsPage(payload));
     }).then((unlisten) => { if (active) cleanup = unlisten; else unlisten(); });
     return () => { active = false; cleanup?.(); };
   }, [settingsWindow]);
@@ -997,6 +1018,23 @@ export default function App() {
   }, [expandedCardWheelSpeed]);
 
   useEffect(() => {
+    document.documentElement.dataset.uiBlur = uiBlurEnabled ? "enabled" : "disabled";
+  }, [uiBlurEnabled]);
+
+  useEffect(() => {
+    document.documentElement.dataset.uiMica = micaEnabled ? "enabled" : "disabled";
+  }, [micaEnabled]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncSupport = () => setMicaSupported(root.dataset.windowMaterial === "mica");
+    const observer = new MutationObserver(syncSupport);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-window-material"] });
+    syncSupport();
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     const saturation =
       150 +
       ((sidebarBlur - sidebarBlurRange.min) * 50) /
@@ -1027,6 +1065,10 @@ export default function App() {
         setExpandedCardWheelSpeed(parseExpandedCardWheelSpeed(event.newValue));
       if (event.key === "folio-card-metadata")
         setCardMetadata(event.newValue !== "false");
+      if (event.key === "folio-mica-enabled")
+        setMicaEnabled(event.newValue !== "false");
+      if (event.key === "folio-ui-blur-enabled")
+        setUiBlurEnabled(event.newValue !== "false");
       if (event.key === "folio-sidebar-status-blur")
         setSidebarBlur(parseSidebarBlur(event.newValue));
     };
@@ -1791,7 +1833,7 @@ export default function App() {
           : scopeTitle(scope);
   const libraryHero = createLibraryHero({ snapshot, profile: syncProfile, status: syncStatus, fonts: cloudFonts, conflicts: syncConflicts, cloudLoaded, cloudReadError });
   const handleHeroAction = (action: HeroAction) => {
-    if (action === "cloudSettings") void openSettings().catch((cause) => setError(errorMessage(cause)));
+    if (action === "cloudSettings") void openSettings("cloud").catch((cause) => setError(errorMessage(cause)));
     else selectLibraryScope(action);
   };
   const compactViewport = viewportWidth <= 860;
@@ -2277,14 +2319,13 @@ export default function App() {
             <h1>{settings ? t(settings.title) : null}</h1>
             {settingsPage === "storage" ? (
               <>
-                <p className="settings-description">{t("settings.storageDescription")}</p>
                 {storageUsage ? (
                   <>
-                    <section className="settings-group storage-summary" aria-label={t("storage.overview")}>
+                    <SettingsGroup className="storage-summary" aria-label={t("storage.overview")}>
                       <StorageVolumeBar usage={storageUsage} />
-                      <p>{t("storage.totalNote")}</p>
-                    </section>
-                    <section className="settings-group storage-details">
+                      <p className="settings-note">{t("storage.totalNote")}</p>
+                    </SettingsGroup>
+                    <SettingsGroup className="storage-details">
                       <h2>{t("storage.usageDetails")}</h2>
                       <div className="storage-detail-row">
                         <span className="storage-dot storage-fonts" aria-hidden="true" />
@@ -2302,12 +2343,11 @@ export default function App() {
                         <span className="storage-detail-size">{formatFileSize(storageUsage.catalogCacheEstimatedBytes)}</span>
                         <Button size="sm" variant="secondary" aria-label={t("storage.cleanCatalogCache")} isDisabled={storageBusy || syncStatus?.running} onPress={() => void clearStoredCatalog()}>{t("storage.clean")}</Button>
                       </div>
-                    </section>
+                    </SettingsGroup>
                   </>
-                ) : <section className="settings-group"><p className="settings-note">{t("storage.measuring")}</p></section>}
-                <section className="settings-group">
+                ) : <SettingsGroup><p className="settings-note">{t("storage.measuring")}</p></SettingsGroup>}
+                <SettingsGroup>
                   <h2>{t("cloud.syncIndex")}</h2>
-                  <p>{t("storage.syncIndexDetail")}</p>
                   <div className="setting-actions">
                     <Button
                       size="sm"
@@ -2316,146 +2356,31 @@ export default function App() {
                       onPress={() => setConfirmRebuild(true)}
                     >{t("storage.rebuildIndex")}</Button>
                   </div>
-                </section>
+                </SettingsGroup>
                 {storageMessage && <p className="settings-note" role="status">{storageMessage}</p>}
-              </>
-            ) : settingsPage === "display" ? (
-              <>
-                <section className="settings-group">
-                  <h2>{t("language.title")}</h2>
-                  <label className="setting-field">
-                    {t("language.title")}
-                    <OptionSelect
-                      label={t("language.title")}
-                      value={languageSetting}
-                      options={[
-                        { id: "system", label: t("language.system") },
-                        { id: "zh-CN", label: t("language.zhHans") },
-                        { id: "en", label: t("language.en") },
-                      ]}
-                      onChange={(value) => {
-                        const next = value as LanguageSetting;
-                        setLanguage(next);
-                        setLanguageSetting(next);
-                      }}
-                    />
-                  </label>
-                </section>
-                <section className="settings-group">
-                  <h2>{t("settings.browseTitle")}</h2>
-                  <p>{t("settings.browseDescription")}</p>
-                  <label className="setting-field">
-                    {t("settings.defaultLibraryView")}
-                    <OptionSelect
-                      label={t("settings.defaultLibraryView")}
-                      value={viewMode}
-                      options={viewModes.map(({ id, label }) => ({ id, label: t(label) }))}
-                      onChange={(value) => setViewMode(value as ViewMode)}
-                    />
-                  </label>
-                  <label className="setting-field">
-                    {t("preview.size")}
-                    <SettingSlider
-                      label={t("preview.size")}
-                      minValue={previewSizeRange.min}
-                      maxValue={previewSizeRange.max}
-                      step={1}
-                      value={previewSize}
-                      onChange={setPreviewSize}
-                      onChangeStart={previewAppearance.begin}
-                      onChangeEnd={previewAppearance.commit}
-                    />
-                    <output>{previewSize}px</output>
-                  </label>
-                  <Switch className="setting-toggle" isSelected={characterMapAutoSelectFirstNonEmpty} onChange={setCharacterMapAutoSelectFirstNonEmpty}>
-                    <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>{t("characterMap.autoSelectFirstNonEmpty")}</Switch.Content>
-                  </Switch>
-                  <p className="settings-note">{t("characterMap.autoSelectFirstNonEmptyDescription")}</p>
-                  <BlurSettingsPreview
-                    items={fileMenuItems}
-                    value={sidebarBlur}
-                    onChange={updateSidebarBlur}
-                  />
-                </section>
-              </>
-            ) : settingsPage === "font-cards" ? (
-              <>
-                <section className="settings-group">
-                  <h2>{t("settings.cardsTitle")}</h2>
-                  <p>{t("settings.cardsDescription")}</p>
-                  <Switch
-                    className="setting-toggle"
-                    isSelected={cardHover}
-                    onChange={setCardHover}
-                  >
-                    <Switch.Content>
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                      {t("cards.selectOnHover")}
-                    </Switch.Content>
-                  </Switch>
-                  <label className="setting-field">
-                    {t("cards.hoverDelay")}
-                    <SettingSlider
-                      label={t("cards.hoverDelay")}
-                      minValue={0}
-                      maxValue={1000}
-                      step={10}
-                      unit={` ${t("common.milliseconds")}`}
-                      isDisabled={!cardHover}
-                      value={cardHoverDelay}
-                      onChange={setCardHoverDelay}
-                    />
-                    <output>{cardHoverDelay} {t("common.milliseconds")}</output>
-                  </label>
-                  <p className="settings-note">{t("cards.hoverDelayNote", { delay: 180 })}</p>
-                  <label className="setting-field">
-                    {t("cards.scrollSpeed")}
-                    <SettingSlider
-                      label={t("cards.scrollSpeed")}
-                      minValue={0.5}
-                      maxValue={2}
-                      step={0.05}
-                      unit="×"
-                      value={expandedCardWheelSpeed}
-                      onChange={(value) => setExpandedCardWheelSpeed(parseExpandedCardWheelSpeed(String(value)))}
-                    />
-                    <output>{expandedCardWheelSpeed.toFixed(2)}×</output>
-                  </label>
-                  <Switch
-                    className="setting-toggle"
-                    isSelected={cardMetadata}
-                    onChange={setCardMetadata}
-                  >
-                    <Switch.Content>
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                      {t("settings.showCardMetadata")}
-                    </Switch.Content>
-                  </Switch>
-                </section>
-              </>
-            ) : settingsPage === "shortcuts" ? (
-              <>
-                <p>{t("settings.shortcutsDescription")}</p>
-                <label className="setting-field">
-                  {t("desktop.quitApp")}
-                  <OptionSelect
-                    label={t("desktop.quitShortcut")}
-                    value={quitShortcut}
-                    options={quitShortcutOptions}
-                    onChange={(value) => setQuitShortcut(parseQuitShortcut(value))}
-                  />
-                </label>
               </>
             ) : settingsPage === "importing" ? (
               <>
-                <p>{t("import.chooseMode")}</p>
-                <label className="setting-field">
-                  {t("import.mode")}
-                  <OptionSelect
+                <SettingsGroup>
+                  <h2>{t("language.title")}</h2>
+                  <SettingSelect
+                    label={t("language.title")}
+                    value={languageSetting}
+                    options={[
+                      { id: "system", label: t("language.system") },
+                      { id: "zh-CN", label: t("language.zhHans") },
+                      { id: "en", label: t("language.en") },
+                    ]}
+                    onChange={(value) => {
+                      const next = value as LanguageSetting;
+                      setLanguage(next);
+                      setLanguageSetting(next);
+                    }}
+                  />
+                </SettingsGroup>
+                <SettingsGroup>
+                  <h2>{t("settings.importing")}</h2>
+                  <SettingSelect
                     label={t("import.mode")}
                     value={importMode}
                     options={[
@@ -2464,87 +2389,157 @@ export default function App() {
                     ]}
                     onChange={setImportMode}
                   />
-                </label>
-                <p className="settings-note">{t("settings.importDescription")}</p>
+                  <p className="settings-note">{t("settings.importDescription")}</p>
+                </SettingsGroup>
+                <SettingsGroup>
+                  <h2>{t("desktop.shortcuts")}</h2>
+                  <SettingSelect
+                    label={t("desktop.quitApp")}
+                    controlLabel={t("desktop.quitShortcut")}
+                    value={quitShortcut}
+                    options={quitShortcutOptions}
+                    onChange={(value) => setQuitShortcut(parseQuitShortcut(value))}
+                  />
+                </SettingsGroup>
+              </>
+            ) : settingsPage === "display" ? (
+              <>
+                <BlurSettingsPreview
+                  items={fileMenuItems}
+                  value={sidebarBlur}
+                  enabled={uiBlurEnabled}
+                  onEnabledChange={updateUiBlur}
+                  onChange={updateSidebarBlur}
+                  cloudStatus={
+                    <CloudStatusPanel
+                      status={syncStatus}
+                      connected={syncProfile !== null}
+                      onSync={() => void startCloudSync()}
+                      onOpenSettings={() => setSettingsPage("cloud")}
+                    />
+                  }
+                />
+                <SettingsGroup>
+                  <h2>{t("desktop.windowMaterial")}</h2>
+                  <SettingSwitch
+                    label={t("desktop.micaEffect")}
+                    description={t(micaSupported ? "desktop.micaDescription" : "desktop.micaUnavailable")}
+                    isSelected={micaSupported && micaEnabled}
+                    isDisabled={!micaSupported}
+                    onChange={updateMica}
+                  />
+                </SettingsGroup>
+              </>
+            ) : settingsPage === "font-cards" ? (
+              <>
+                <SettingsGroup>
+                  <h2>{t("settings.browseTitle")}</h2>
+                  <SettingSelect
+                    label={t("settings.defaultLibraryView")}
+                    value={viewMode}
+                    options={viewModes.map(({ id, label }) => ({ id, label: t(label) }))}
+                    onChange={(value) => setViewMode(value as ViewMode)}
+                  />
+                  <SettingSliderField
+                    label={t("preview.size")}
+                    minValue={previewSizeRange.min}
+                    maxValue={previewSizeRange.max}
+                    step={1}
+                    value={previewSize}
+                    onChange={setPreviewSize}
+                    onChangeStart={previewAppearance.begin}
+                    onChangeEnd={previewAppearance.commit}
+                  />
+                  <SettingSwitch
+                    label={t("characterMap.autoSelectFirstNonEmpty")}
+                    description={t("characterMap.autoSelectFirstNonEmptyDescription")}
+                    isSelected={characterMapAutoSelectFirstNonEmpty}
+                    onChange={setCharacterMapAutoSelectFirstNonEmpty}
+                  />
+                </SettingsGroup>
+                <SettingsGroup>
+                  <h2>{t("settings.cardsTitle")}</h2>
+                  <SettingSwitch
+                    label={t("cards.selectOnHover")}
+                    isSelected={cardHover}
+                    onChange={setCardHover}
+                  />
+                  <SettingSliderField
+                    label={t("cards.hoverDelay")}
+                    description={t("cards.hoverDelayNote", { delay: 180 })}
+                    minValue={0}
+                    maxValue={1000}
+                    step={10}
+                    unit={` ${t("common.milliseconds")}`}
+                    isDisabled={!cardHover}
+                    value={cardHoverDelay}
+                    onChange={setCardHoverDelay}
+                  />
+                  <SettingSliderField
+                    label={t("cards.scrollSpeed")}
+                    formatValue={(value) => `${value.toFixed(2)}×`}
+                    minValue={0.5}
+                    maxValue={2}
+                    step={0.05}
+                    unit="×"
+                    value={expandedCardWheelSpeed}
+                    onChange={(value) => setExpandedCardWheelSpeed(parseExpandedCardWheelSpeed(String(value)))}
+                  />
+                  <SettingSwitch
+                    label={t("settings.showCardMetadata")}
+                    isSelected={cardMetadata}
+                    onChange={setCardMetadata}
+                  />
+                </SettingsGroup>
               </>
             ) : settingsPage === "cloud" ? (
               <>
-                <p className="settings-description">{t("settings.cloudDescription")}</p>
-                <section className="settings-group sync-connection-settings">
+                <SettingsGroup className="sync-connection-settings">
                   <h2>{t("cloud.connection")}</h2>
-                  <div className="setting-field">
-                    <span>{t("cloud.provider")}</span>
-                    <div className="setting-choice-row setting-preset-row">
-                      {webdavPresets.map((preset) => (
-                        <Button
-                          key={preset.id}
-                          size="sm"
-                          className="h-8"
-                          variant={
-                            matchingWebdavPreset(syncServerUrl) === preset.id
-                              ? "primary"
-                              : "secondary"
-                          }
-                          onPress={() => setSyncServerUrl(preset.url ?? "")}
-                        >
-                          {t(preset.label)}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <TextField className="setting-field">
-                    <Label>{t("cloud.serverURL")}</Label>
-                    <Input
-                      type="url"
-                      autoComplete="url"
-                      placeholder="https://"
-                      value={syncServerUrl}
-                      onChange={(event) => setSyncServerUrl(event.target.value)}
-                    />
-                  </TextField>
-                  <TextField className="setting-field">
-                    <Label>{t("cloud.remoteDirectory")}</Label>
-                    <Input
-                      value={syncDirectory}
-                      onChange={(event) => setSyncDirectory(event.target.value)}
-                    />
-                  </TextField>
-                  <TextField className="setting-field">
-                    <Label>{t("cloud.username")}</Label>
-                    <Input
-                      autoComplete="username"
-                      value={syncUsername}
-                      onChange={(event) => setSyncUsername(event.target.value)}
-                    />
-                  </TextField>
-                  <TextField className="setting-field">
-                    <Label>{t("cloud.password")}</Label>
-                    <Input
-                      type="password"
-                      autoComplete="current-password"
-                      value={syncPassword}
-                      onChange={(event) => setSyncPassword(event.target.value)}
-                      placeholder={
-                        syncProfile ? t("cloud.passwordStored") : t("cloud.password")
-                      }
-                    />
-                  </TextField>
-                  <Switch isSelected={automaticDownload} onChange={(enabled) => { void setAutomaticDownload(enabled).then(() => updateAutomaticDownload(enabled)).catch((cause) => setSyncMessage(errorMessage(cause))); }}>
-                    <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>{t("fontLocation.autoDownload")}</Switch.Content>
-                  </Switch>
-                  <p>{t("fontLocation.autoDownloadHint")}</p>
-                  <Switch
-                    className="setting-toggle"
+                  <SettingChoiceField
+                    label={t("cloud.provider")}
+                    value={matchingWebdavPreset(syncServerUrl)}
+                    options={webdavPresets.map((preset) => ({ id: preset.id, label: t(preset.label) }))}
+                    onChange={(id) => setSyncServerUrl(webdavPresets.find((preset) => preset.id === id)?.url ?? "")}
+                  />
+                  <SettingTextField
+                    label={t("cloud.serverURL")}
+                    type="url"
+                    autoComplete="url"
+                    placeholder="https://"
+                    value={syncServerUrl}
+                    onChange={setSyncServerUrl}
+                  />
+                  <SettingTextField
+                    label={t("cloud.remoteDirectory")}
+                    value={syncDirectory}
+                    onChange={setSyncDirectory}
+                  />
+                  <SettingTextField
+                    label={t("cloud.username")}
+                    autoComplete="username"
+                    value={syncUsername}
+                    onChange={setSyncUsername}
+                  />
+                  <SettingTextField
+                    label={t("cloud.password")}
+                    type="password"
+                    autoComplete="current-password"
+                    value={syncPassword}
+                    onChange={setSyncPassword}
+                    placeholder={syncProfile ? t("cloud.passwordStored") : t("cloud.password")}
+                  />
+                  <SettingSwitch
+                    label={t("fontLocation.autoDownload")}
+                    description={t("fontLocation.autoDownloadHint")}
+                    isSelected={automaticDownload}
+                    onChange={(enabled) => { void setAutomaticDownload(enabled).then(() => updateAutomaticDownload(enabled)).catch((cause) => setSyncMessage(errorMessage(cause))); }}
+                  />
+                  <SettingSwitch
+                    label={t("cloud.autoSync")}
                     isSelected={syncAutomatic}
                     onChange={setSyncAutomatic}
-                  >
-                    <Switch.Content>
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                      {t("cloud.autoSync")}
-                    </Switch.Content>
-                  </Switch>
+                  />
                   <div className="setting-actions">
                     <Button
                       size="sm"
@@ -2563,8 +2558,8 @@ export default function App() {
                       {t("common.save")}
                     </Button>
                   </div>
-                </section>
-                <section className="settings-group sync-management-settings">
+                </SettingsGroup>
+                <SettingsGroup className="sync-management-settings">
                   <h2>{t("cloud.syncStatus")}</h2>
                   {syncStatus && (
                     <div
@@ -2710,7 +2705,7 @@ export default function App() {
                 ) : (
                   <p className="settings-note">{t("cloud.noPendingConflicts")}</p>
                 )}
-                </section>
+                </SettingsGroup>
               </>
             ) : null}
           </article>
@@ -2739,33 +2734,29 @@ export default function App() {
           >
             <div ref={setCharacterLeftHost} className="character-map-sidebar inspector-inner" hidden={!characterMapTarget} />
             <div className="sidebar-inner library-navigation" inert={!!characterMapTarget} aria-hidden={!!characterMapTarget}>
-              <div
+              <button
+                type="button"
                 className="sidebar-pages"
-                role="tablist"
-                aria-label={t("desktop.sidebarPage")}
+                aria-label={`${t("navigation.navigation")} / ${t("navigation.filters")}`}
+                aria-pressed={sidebarPage === "filters"}
+                aria-controls="sidebar-page-content"
+                onClick={() => setSidebarPage((page) => page === "navigation" ? "filters" : "navigation")}
               >
-                <button
-                  type="button"
+                <span
                   className="sidebar-page"
-                  role="tab"
-                  aria-selected={sidebarPage === "navigation"}
-                  onClick={() => setSidebarPage("navigation")}
+                  data-selected={sidebarPage === "navigation"}
                 >
                   <span className="sidebar-page-label">{t("navigation.navigation")}</span>
-                  <span className="sidebar-page-dot" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
+                </span>
+                <SidebarPageIndicator page={sidebarPage} />
+                <span
                   className="sidebar-page"
-                  role="tab"
-                  aria-selected={sidebarPage === "filters"}
-                  onClick={() => setSidebarPage("filters")}
+                  data-selected={sidebarPage === "filters"}
                 >
-                  <span className="sidebar-page-dot" aria-hidden="true" />
                   <span className="sidebar-page-label">{t("navigation.filters")}</span>
-                </button>
-              </div>
-              <div className="sidebar-scroll">
+                </span>
+              </button>
+              <div id="sidebar-page-content" className="sidebar-scroll">
                 {sidebarPage === "navigation" ? (
                   <>
                     <div className="sidebar-section-label">{t("navigation.local")}</div>
@@ -2973,7 +2964,7 @@ export default function App() {
                   status={syncStatus}
                   connected={syncProfile !== null}
                   onSync={() => void startCloudSync()}
-                  onOpenSettings={() => void openSettings()}
+                  onOpenSettings={() => void openSettings("cloud")}
                 />
               </div>
             </div>
@@ -3003,7 +2994,7 @@ export default function App() {
                 status={syncStatus}
                 onSync={() => void startCloudSync()}
                 onRestore={(font) => void restoreCloudCopy(font)}
-                onOpenSettings={() => void openSettings()}
+                onOpenSettings={() => void openSettings("cloud")}
                 onRemove={(font) => void changeFile(font.fingerprint, "remove")}
                 onDelete={async (font) => { await deleteCloudFont(font.fingerprint); await startCloudSync(); await runRefresh(); setCloudFonts(await listCloudFonts()); }}
               />
@@ -3948,48 +3939,6 @@ function Inspector({
   );
 }
 
-function OptionSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: { id: string; label: string }[];
-  onChange: (value: string) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Select.Root
-      className="hero-select"
-      aria-label={label}
-      selectedKey={value}
-      onSelectionChange={(key) => {
-        if (key !== null) onChange(String(key));
-      }}
-    >
-      <Select.Trigger className="hero-select-trigger items-center">
-        <Select.Value />
-        <Select.Indicator />
-      </Select.Trigger>
-      <Select.Popover>
-        <ListBox aria-label={t("desktop.labelOptions", { label })}>
-          {options.map((option) => (
-            <ListBox.Item
-              key={option.id}
-              id={option.id}
-              textValue={option.label}
-            >
-              {option.label}
-            </ListBox.Item>
-          ))}
-        </ListBox>
-      </Select.Popover>
-    </Select.Root>
-  );
-}
-
 function SettingSlider({
   label,
   minValue,
@@ -4045,19 +3994,22 @@ function BlurSettingsPreview({
   items,
   value,
   onChange,
+  cloudStatus,
+  enabled,
+  onEnabledChange,
 }: {
   items: MenuEntry[];
   value: number;
   onChange: (value: number) => void;
+  cloudStatus: ReactNode;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [previewRoot, setPreviewRoot] = useState<HTMLDivElement | null>(null);
   return (
-    <section className="blur-preview-section" aria-labelledby="blur-preview-title">
-      <div className="blur-preview-heading">
-        <h2 id="blur-preview-title">{t("desktop.blurEffect")}</h2>
-        <p>{t("desktop.blurDescription")}</p>
-      </div>
+    <SettingsGroup className="blur-preview-section" aria-labelledby="blur-preview-title">
+      <h2 id="blur-preview-title">{t("desktop.blurEffect")}</h2>
       <div className="blur-preview-window" ref={setPreviewRoot}>
         <header className="titlebar blur-preview-titlebar">
           <button
@@ -4109,12 +4061,11 @@ function BlurSettingsPreview({
           <aside className="blur-preview-sidebar" aria-label={t("navigation.sidebarPreview")}>
             <div className="blur-preview-sidebar-inner">
               <div className="sidebar-pages" aria-hidden="true">
-                <span className="sidebar-page" aria-selected="true">
+                <span className="sidebar-page" data-selected="true">
                   <span className="sidebar-page-label">{t("navigation.navigation")}</span>
-                  <span className="sidebar-page-dot" />
                 </span>
-                <span className="sidebar-page" aria-selected="false">
-                  <span className="sidebar-page-dot" />
+                <SidebarPageIndicator page="navigation" />
+                <span className="sidebar-page" data-selected="false">
                   <span className="sidebar-page-label">{t("navigation.filters")}</span>
                 </span>
               </div>
@@ -4124,51 +4075,60 @@ function BlurSettingsPreview({
                 tabIndex={0}
               >
                 <div className="sidebar-section-label">{t("navigation.local")}</div>
-                <div className="sidebar-link selected">
+                <SidebarItem className="sidebar-link selected" tabIndex={-1}>
                   <AnimatedIcon name="text-aa" />
                   {t("navigation.allFonts")}<span>1,248</span>
-                </div>
-                <div className="sidebar-link">
+                </SidebarItem>
+                <SidebarItem className="sidebar-link" tabIndex={-1}>
                   <AnimatedIcon name="clock-counter-clockwise" />
                   {t("navigation.recent")}
-                </div>
-                <div className="sidebar-link">
+                </SidebarItem>
+                <SidebarItem className="sidebar-link" tabIndex={-1}>
                   <AnimatedIcon name="star" />
                   {t("navigation.favorites")}
-                </div>
+                </SidebarItem>
                 <div className="sidebar-section-label sidebar-section-heading">
                   {t("navigation.collections")}
                 </div>
-                <div className="sidebar-link sidebar-folder">
+                <SidebarItem className="sidebar-link sidebar-folder" tabIndex={-1}>
                   <span className="sidebar-link-icon">
                     <AnimatedIcon name="star" />
                   </span>
                   <span className="sidebar-folder-name">{t("desktop.demoFavoriteFonts")}</span>
                   <span>24</span>
-                </div>
-                <div className="sidebar-link sidebar-folder">
+                </SidebarItem>
+                <SidebarItem className="sidebar-link sidebar-folder" tabIndex={-1}>
                   <span className="sidebar-link-icon">
                     <AnimatedIcon name="folder" />
                   </span>
                   <span className="sidebar-folder-name">{t("desktop.demoTitlingFonts")}</span>
                   <span>16</span>
-                </div>
+                </SidebarItem>
                 <div className="sidebar-section-label sidebar-section-heading">
                   {t("desktop.fontManagement")}
                 </div>
-                <div className="sidebar-link">
+                <SidebarItem className="sidebar-link" tabIndex={-1}>
                   <AnimatedIcon name="sparkle" />
                   {t("navigation.fontHealth")}
-                </div>
-                <div className="sidebar-link">
+                </SidebarItem>
+                <SidebarItem className="sidebar-link" tabIndex={-1}>
                   <AnimatedIcon name="hard-drives" />
                   {t("cloud.cloudFiles")}
-                </div>
+                </SidebarItem>
               </nav>
+              <div className="sidebar-status">{cloudStatus}</div>
             </div>
           </aside>
           <section className="blur-preview-library" aria-hidden="true" />
         </div>
+      </div>
+      <div className="blur-preview-preferences">
+        <SettingSwitch
+          label={t("desktop.uiBlur")}
+          description={t("desktop.uiBlurDescription")}
+          isSelected={enabled}
+          onChange={onEnabledChange}
+        />
       </div>
       <div className="blur-preview-controls">
         <span className="blur-preview-icon" aria-hidden="true">
@@ -4176,6 +4136,7 @@ function BlurSettingsPreview({
         </span>
         <SettingSlider
           label={t("desktop.blur")}
+          isDisabled={!enabled}
           minValue={sidebarBlurRange.min}
           maxValue={sidebarBlurRange.max}
           keyboardStep={0.1}
@@ -4193,7 +4154,7 @@ function BlurSettingsPreview({
       <p className="settings-note">
         {t("desktop.blurScrollHint")}
       </p>
-    </section>
+    </SettingsGroup>
   );
 }
 

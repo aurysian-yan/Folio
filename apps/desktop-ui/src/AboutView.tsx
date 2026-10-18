@@ -57,8 +57,8 @@ export function AboutView() {
     </svg>
     <article id="settings-panel" className="settings-page relative" role="tabpanel" aria-labelledby="settings-tab-about" tabIndex={0}>
     <h1>{t('settings.about')}</h1>
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col items-center gap-3 py-8 text-center">
+    <div className="about-content flex flex-col gap-6">
+      <header className="flex flex-col items-center gap-3 text-center">
         <Button variant="ghost" className="about-wordmark" aria-label={t('about.logoLabel')} aria-description={t('about.logoHint')}
           onPress={() => variation.current?.activate()}>
           {glyphs.map((glyph, index) => <svg key={glyph.name} viewBox={`0 0 ${glyph.width} ${glyph.height}`} aria-hidden="true"
@@ -82,7 +82,7 @@ export function AboutView() {
           </>}
         </div>
       </header>
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+      <div className="flex flex-col gap-6">
         <section className="flex flex-col gap-3">
           <h2>{t('about.links')}</h2>
           {content.links.map((link) => <Button key={link.key} className="w-full justify-between" variant="secondary" onPress={() => void open(link.url)}>{t(`about.${link.key}`)}<ArrowUpRightIcon /></Button>)}

@@ -19,8 +19,65 @@ const scrollAreas = [
   ".modal__backdrop:has(.modal__container--scroll-outside)",
 ].join(", ");
 
+function trackSidebarScroll(target: HTMLElement) {
+  if (!target.matches(".sidebar-scroll")) return () => {};
+  const update = () => target.toggleAttribute("data-scrolled", target.scrollTop > 0);
+  update();
+  target.addEventListener("scroll", update, { passive: true });
+  return () => {
+    target.removeEventListener("scroll", update);
+    target.removeAttribute("data-scrolled");
+  };
+}
+
+// 仅设置预览自动往返滚动，用户接管后本次预览不再自动播放。
+function autoScrollPreview(target: HTMLElement) {
+  if (!target.matches(".blur-preview-nav")) return () => {};
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let stopped = false;
+  let visible = false;
+  let frame = 0;
+  let elapsed = 0;
+  let previousTime: number | null = null;
+  const animate = (time: number) => {
+    if (previousTime !== null) elapsed += Math.min(time - previousTime, 64);
+    previousTime = time;
+    const distance = Math.max(0, target.scrollHeight - target.clientHeight);
+    const duration = Math.max(4000, distance / 40 * 1000);
+    target.scrollTop = distance * (1 - Math.cos(Math.PI * elapsed / duration)) / 2;
+    frame = window.requestAnimationFrame(animate);
+  };
+  const updateMotion = () => {
+    window.cancelAnimationFrame(frame);
+    previousTime = null;
+    if (!stopped && visible && !reducedMotion.matches) {
+      frame = window.requestAnimationFrame(animate);
+    }
+  };
+  const stop = () => {
+    stopped = true;
+    updateMotion();
+  };
+  const interactionEvents = ["wheel", "pointerdown", "touchstart", "keydown"] as const;
+  for (const event of interactionEvents) {
+    target.addEventListener(event, stop, { capture: true, passive: true });
+  }
+  reducedMotion.addEventListener("change", updateMotion);
+  const observer = new IntersectionObserver(([entry]) => {
+    visible = entry.isIntersecting;
+    updateMotion();
+  });
+  observer.observe(target);
+  return () => {
+    stop();
+    observer.disconnect();
+    reducedMotion.removeEventListener("change", updateMotion);
+    for (const event of interactionEvents) target.removeEventListener(event, stop, true);
+  };
+}
+
 function reserveSidebarStatus(target: HTMLElement, instance: OverlayScrollbars) {
-  const status = target.closest(".sidebar-inner")?.querySelector<HTMLElement>(".sidebar-status");
+  const status = target.closest(".sidebar-inner, .blur-preview-sidebar-inner")?.querySelector<HTMLElement>(".sidebar-status");
   if (!target.matches(".sidebar-scroll") || !status) return () => {};
   const previous = target.style.getPropertyValue("--sidebar-status-clearance");
   const measure = () => {
@@ -71,7 +128,10 @@ export function installAppScrollbars(root: HTMLElement) {
           clickScroll: "instant",
         },
       });
-      instances.set(target, { instance, cleanup: reserveSidebarStatus(target, instance) });
+      const cleanupStatus = reserveSidebarStatus(target, instance);
+      const cleanupScroll = trackSidebarScroll(target);
+      const cleanupAutoScroll = autoScrollPreview(target);
+      instances.set(target, { instance, cleanup: () => { cleanupAutoScroll(); cleanupStatus(); cleanupScroll(); } });
     }
   };
   scan();
