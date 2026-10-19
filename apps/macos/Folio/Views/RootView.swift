@@ -40,7 +40,7 @@ struct RootView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             ZStack {
-                SidebarView(model: model, selectedPage: $sidebarPage)
+                SidebarView(model: model, selectedPage: $sidebarPage, columnVisibility: $columnVisibility)
                     .opacity(model.characterMap == nil ? 1 : 0)
                     .allowsHitTesting(model.characterMap == nil)
                     .accessibilityHidden(model.characterMap != nil)
@@ -48,6 +48,8 @@ struct RootView: View {
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.characterMap != nil)
             .navigationSplitViewColumnWidth(240)
+            // 侧栏改为点击已选中的分页按钮折叠，不再显示独立开关。
+            .toolbar(removing: .sidebarToggle)
         } detail: {
             if model.selectedDestination == .onlineFonts {
                 OnlineFontsView(model: model)
@@ -55,6 +57,14 @@ struct RootView: View {
                 CloudLibraryView(model: model)
             } else {
                 LibraryView(model: model)
+            }
+        }
+        .toolbar {
+            // 侧栏收起后分页控件仍停留在窗口前端，再次点击当前分页即可展开。
+            if model.characterMap == nil, columnVisibility == .detailOnly {
+                ToolbarItem(placement: .navigation) {
+                    SidebarPagePicker(selection: $sidebarPage, columnVisibility: $columnVisibility)
+                }
             }
         }
         .inspector(isPresented: $model.inspectorPresented) {

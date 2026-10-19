@@ -22,9 +22,49 @@ enum SidebarPage: String, CaseIterable, Identifiable {
     }
 }
 
+/// 侧栏分页切换控件；再次点击当前分页时折叠或展开侧栏。
+struct SidebarPagePicker: View {
+    @Binding var selection: SidebarPage
+    @Binding var columnVisibility: NavigationSplitViewVisibility
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Picker(L.text("navigation.sidebarCategory"), selection: pageSelection) {
+            ForEach(SidebarPage.allCases) { page in
+                Image.englishSystemName(page.symbolName)
+                    .accessibilityLabel(page.title)
+                    .tag(page)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 76)
+    }
+
+    private var pageSelection: Binding<SidebarPage> {
+        Binding(
+            get: { selection },
+            set: { page in
+                if page == selection {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                    }
+                    return
+                }
+                selection = page
+                guard columnVisibility == .detailOnly else { return }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
+                    columnVisibility = .all
+                }
+            }
+        )
+    }
+}
+
 struct SidebarView: View {
     @Bindable var model: LibraryViewModel
     @Binding var selectedPage: SidebarPage
+    @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var cloud = CloudSyncModel.shared
     @State private var dismissedCloudStatusKey: String?
     @State private var isRenamingCloud = false
@@ -37,27 +77,6 @@ struct SidebarView: View {
         selectedPage = page
     }
 
-    /// 侧栏分页切换控件；放进侧栏列工具栏，使用系统原生的玻璃分段样式。
-    private var sidebarPagePicker: some View {
-        Picker(L.text("navigation.sidebarCategory"), selection: sidebarPageSelection) {
-            ForEach(SidebarPage.allCases) { page in
-                Image.englishSystemName(page.symbolName)
-                    .accessibilityLabel(page.title)
-                    .tag(page)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .frame(width: 76)
-    }
-
-    private var sidebarPageSelection: Binding<SidebarPage> {
-        Binding(
-            get: { selectedPage },
-            set: { selectPage($0) }
-        )
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             sidebarPageContent
@@ -68,8 +87,11 @@ struct SidebarView: View {
         .environment(\.appearsActive, true)
         .navigationTitle("Folio")
         .toolbar {
-            if model.characterMap == nil {
-                ToolbarItem(placement: .automatic) { sidebarPagePicker }
+            // 侧栏可见时将分页控件放在前端工具栏，与折叠后的位置保持一致。
+            if model.characterMap == nil, columnVisibility != .detailOnly {
+                ToolbarItem(placement: .automatic) {
+                    SidebarPagePicker(selection: $selectedPage, columnVisibility: $columnVisibility)
+                }
             }
         }
         .onAppear {
@@ -612,7 +634,7 @@ private final class SidebarSelectionHighlightView: NSView {
 #Preview("侧边栏") {
     @Previewable @State var model = SidebarPreviewModel.make()
     @Previewable @State var selectedPage = SidebarPage.navigation
-    SidebarView(model: model, selectedPage: $selectedPage)
+    SidebarView(model: model, selectedPage: $selectedPage, columnVisibility: .constant(.all))
         .frame(width: 240, height: 720)
 }
 
