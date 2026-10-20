@@ -207,6 +207,7 @@ pnpm -C apps/desktop-ui test
 
 - [项目路线图](FOLIO_ROADMAP.md)：当前能力、验证缺口和后续阶段。
 - [产品工作流架构](docs/product-workflows.md)：来源与六种动作、独立字体安装窗口、平台文件互操作、Font Health 与产品 v2 格式计划。
+- [在线字体浏览器规划](docs/online-font-browser.md)：系统 WebView 来源 tab + 网页内容、网盘下载衔接、统一传输引擎与用户脚本边界（待实施）。
 - [官方 Release 赞助计划](docs/sponsor-release-plan.md)：高级版在线激活与云端续验、离线宽限、自行编译全开及交付门槛（待实施）。
 - [多端同步架构](docs/sync-architecture.md)：多 WebDAV、局域网设备配对、统一事件、兼容迁移与验收（待实施）。
 - [管理脚本](docs/management-script.md)：多框架调试、构建与版本号批量提高。
