@@ -610,7 +610,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "folio-cli"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "clap",
  "folio-core",
@@ -622,7 +622,7 @@ dependencies = [
 
 [[package]]
 name = "folio-core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "blake3",
  "font-test-data",
@@ -640,7 +640,7 @@ dependencies = [
 
 [[package]]
 name = "folio-ffi"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "folio-core",
  "folio-online",
@@ -659,7 +659,7 @@ dependencies = [
 
 [[package]]
 name = "folio-online"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "folio-core",
  "reqwest",
@@ -673,7 +673,7 @@ dependencies = [
 
 [[package]]
 name = "folio-query"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "folio-core",
  "folio-storage",
@@ -685,7 +685,7 @@ dependencies = [
 
 [[package]]
 name = "folio-render"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",
@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "folio-storage"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "bincode",
  "blake3",
@@ -724,7 +724,7 @@ dependencies = [
 
 [[package]]
 name = "folio-sync"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "blake3",
  "folio-core",

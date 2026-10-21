@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.folio.filecaller">
+  <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="37" />
+  <queries><intent><action android:name="android.intent.action.GET_CONTENT" /><data android:mimeType="font/ttf" /></intent></queries>
+  <application android:label="Folio File Test" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <activity android:name=".CallerActivity" android:exported="true" />
+  </application>
+</manifest>

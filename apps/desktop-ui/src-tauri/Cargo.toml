@@ -1,6 +1,6 @@
 [package]
 name = "folio-desktop"
-version = "1.1.0"
+version = "1.2.0"
 description = "Folio desktop application"
 authors = ["Folio"]
 edition = "2021"
@@ -46,3 +46,6 @@ font-test-data = "=0.9.1"
 # 优化大 TTC 重建时的表校验和，应用代码仍保留开发调试信息。
 [profile.dev.package.read-fonts]
 opt-level = 2
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Graphics_Gdi", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
