@@ -45,6 +45,39 @@ async fn exchange(db: &mut FolioDatabase, directory: &Path, remote: &WebDavClien
 }
 
 #[tokio::test]
+async fn browser_font_origin_survives_webdav_without_browser_settings() {
+    let server = DavServer::start();
+    let remote = server.client("p");
+    let mobile = tempfile::tempdir().unwrap();
+    let desktop = tempfile::tempdir().unwrap();
+    let first = mobile.path().join("fonts");
+    let second = desktop.path().join("fonts");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    let source = first.join("font.ttf");
+    std::fs::copy(sample("Lato-Regular.ttf"), &source).unwrap();
+    let fingerprint = parse_font_file(&source).unwrap().fingerprint.to_hex();
+    let mut a = FolioDatabase::open(mobile.path().join("folio.sqlite")).unwrap();
+    let mut b = FolioDatabase::open(desktop.path().join("folio.sqlite")).unwrap();
+    let origin = folio_core::OnlineFontOrigin {
+        provider_id: Some("custom".into()),
+        provider_name: "字体来源".into(),
+        source_page_url: "https://example.com/font".into(),
+        download_host: "cdn.example.com".into(),
+    };
+    a.save_online_origin(&fingerprint, "download", &serde_json::to_string(&origin).unwrap()).unwrap();
+    a.save_online_setting("providers", "private browser settings").unwrap();
+    exchange(&mut a, &first, &remote).await;
+    let result = exchange(&mut b, &second, &remote).await;
+    assert_eq!(result.downloaded_files, 1);
+    assert_eq!(b.online_origins(&fingerprint).unwrap(), vec![origin.clone()]);
+    assert_eq!(b.online_setting("providers").unwrap(), None);
+    let result = exchange(&mut b, &second, &remote).await;
+    assert_eq!(result.uploaded_files, 0);
+    assert_eq!(b.online_origins(&fingerprint).unwrap(), vec![origin]);
+}
+
+#[tokio::test]
 async fn mobile_and_desktop_exchange_fonts_and_all_user_state_without_duplicate_imports() {
     let server = DavServer::start();
     let remote = server.client("p");
@@ -936,4 +969,97 @@ async fn collection_members_share_one_download_and_keep_distinct_families() {
         .values()
         .all(|location| location.state == "both"));
     assert_eq!(list_cloud_fonts(b.path()).unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn provider_materializes_only_the_requested_file_and_cancellation_is_caller_local() {
+    let server = DavServer::start();
+    let remote = server.client("p");
+    let a = tempfile::tempdir().unwrap();
+    let b = tempfile::tempdir().unwrap();
+    let a_fonts = a.path().join("ManagedFonts");
+    let b_fonts = b.path().join("ManagedFonts");
+    std::fs::create_dir_all(&a_fonts).unwrap();
+    for name in ["Lato-Regular.ttf", "Inter-Variable.ttf"] {
+        std::fs::copy(sample(name), a_fonts.join(name)).unwrap();
+    }
+    let a_path = a.path().join("folio.sqlite");
+    let b_path = b.path().join("folio.sqlite");
+    save_profile(&a_path, &profile()).unwrap();
+    save_profile(&b_path, &profile()).unwrap();
+    let mut first = FolioDatabase::open(&a_path).unwrap();
+    first.add_root(&a_fonts, true).unwrap();
+    first.refresh(RefreshMode::Incremental).unwrap();
+    assert_eq!(
+        exchange(&mut first, &a_fonts, &remote).await.uploaded_files,
+        2
+    );
+    let mut second = FolioDatabase::open(&b_path).unwrap();
+    let report: Arc<dyn Fn(SyncProgress) + Send + Sync> = Arc::new(|_| {});
+    synchronize_with_client(
+        &mut second,
+        &b_fonts,
+        &profile(),
+        &remote,
+        &AtomicBool::new(false),
+        &report,
+    )
+    .await
+    .unwrap();
+    let assets = second.list_sync_assets().unwrap();
+    assert_eq!(assets.len(), 2);
+    assert!(assets.iter().all(|asset| asset.local_path.is_none()));
+    let fingerprint = assets
+        .iter()
+        .find(|asset| asset.filename == "Lato-Regular.ttf")
+        .unwrap()
+        .fingerprint
+        .clone();
+    let lock = folio_storage::ResourceGuard::acquire(&b_path, &format!("file:{fingerprint}"), true)
+        .unwrap();
+    let cancelled = AtomicBool::new(false);
+    let active = AtomicBool::new(false);
+    let settings = profile();
+    let first_request = documents::materialize_with_client(
+        &b_path,
+        &b_fonts,
+        &fingerprint,
+        &settings,
+        &remote,
+        &cancelled,
+    );
+    let second_request = documents::materialize_with_client(
+        &b_path,
+        &b_fonts,
+        &fingerprint,
+        &settings,
+        &remote,
+        &active,
+    );
+    let release = async {
+        tokio::time::sleep(std::time::Duration::from_millis(75)).await;
+        cancelled.store(true, Ordering::Release);
+        tokio::time::sleep(std::time::Duration::from_millis(75)).await;
+        drop(lock);
+    };
+    let (cancelled_result, loaded, _) = tokio::join!(first_request, second_request, release);
+    assert!(matches!(cancelled_result, Err(SyncError::Cancelled)));
+    let loaded = loaded.unwrap();
+    assert_eq!(
+        std::fs::read(loaded).unwrap(),
+        std::fs::read(sample("Lato-Regular.ttf")).unwrap()
+    );
+    let assets = second.list_sync_assets().unwrap();
+    assert_eq!(
+        assets
+            .iter()
+            .filter(|asset| asset.local_path.is_some())
+            .count(),
+        1
+    );
+    assert_eq!(std::fs::read_dir(&b_fonts).unwrap().count(), 1);
+    assert!(assets
+        .iter()
+        .filter(|asset| asset.fingerprint != fingerprint)
+        .all(|asset| asset.local_path.is_none()));
 }

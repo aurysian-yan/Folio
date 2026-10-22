@@ -74,6 +74,19 @@ public enum FolioPaths {
     while let data = try file.read(upToCount: 65_536), !data.isEmpty { hash.update(data: data) }
     return hash.finalize()
   }
+  public static func previewFont(_ path: String) throws -> URL {
+    let directory = try root().appendingPathComponent("transfers", isDirectory: true).resolvingSymlinksInPath()
+    let source = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+    if source.path.hasPrefix(directory.path + "/") {
+      let id = source.path.dropFirst(directory.path.count + 1).split(separator: "/").first.map(String.init)
+      let data = try FolioFileRuntime.shared().browser.state()
+      guard let state = try JSONSerialization.jsonObject(with: Data(data.utf8)) as? [String: Any],
+        let jobs = state["jobs"] as? [[String: Any]], jobs.contains(where: { $0["id"] as? String == id && $0["state"] as? String == "ready" }),
+        FileManager.default.isReadableFile(atPath: source.path) else { throw failure() }
+      return source
+    }
+    return try managedFont(path)
+  }
   public static func managedFont(_ path: String) throws -> URL {
     let root = try root().resolvingSymlinksInPath()
     let source = URL(fileURLWithPath: path).resolvingSymlinksInPath()

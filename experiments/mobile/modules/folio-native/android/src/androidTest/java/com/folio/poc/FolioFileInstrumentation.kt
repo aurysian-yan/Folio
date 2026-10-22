@@ -56,6 +56,13 @@ class FolioFileInstrumentation:Instrumentation() {
         val deadline=SystemClock.uptimeMillis()+20_000
         while(SystemClock.uptimeMillis()<deadline) {
             val root=uiAutomation.rootInActiveWindow
+            // 仅清理模拟器启动时遗留的系统界面弹窗，应用自身无响应仍视为失败。
+            if(root?.findAccessibilityNodeInfosByText("System UI isn't responding")?.isNotEmpty()==true) {
+                root.findAccessibilityNodeInfosByText("Close app").firstOrNull()?.let {close ->
+                    var current:AccessibilityNodeInfo?=close
+                    while(current!=null){if(current.isClickable&&current.performAction(AccessibilityNodeInfo.ACTION_CLICK))break;current=current.parent}
+                }
+            }
             val node=root?.findAccessibilityNodeInfosByText(text)?.firstOrNull {it.text?.toString()==text}
             if(node!=null){var current:AccessibilityNodeInfo?=node;while(current!=null){if(current.isClickable&&current.performAction(AccessibilityNodeInfo.ACTION_CLICK))return;current=current.parent}}
             Thread.sleep(100)

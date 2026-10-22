@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+import { FontHealthIssues } from "./FontHealthIssues";
 import { SettingsGroup } from "./components/SettingsGroup";
 import { CopyButton } from "./components/CopyButton";
 import { CharacterMap } from "./components/CharacterMap";
@@ -1573,6 +1575,8 @@ export default function App() {
     }
   };
 
+  useEffect(() => { if (settingsWindow) return; const off = listen("library-changed", () => { void runRefresh(); }); return () => { void off.then((stop) => stop()); }; }, [settingsWindow, runRefresh]);
+
   const chooseFolder = useCallback(async () => {
     try {
       const selectedPath = await open({
@@ -2241,6 +2245,7 @@ export default function App() {
             </div>
           </>
         )}
+        {!settingsWindow && <Button size="sm" onPress={() => { void invoke("open_font_workflow"); }}>{t("workflow.title")}</Button>}
         {!settingsWindow && <div className="titlebar-center" hidden={menuMode || !!characterMapTarget} inert={!!characterMapTarget}>
           <div className="titlebar-drag-space" aria-hidden="true" />
           <Toolbar className="titlebar-actions" aria-label={t("desktop.tools")}>
@@ -3121,6 +3126,7 @@ export default function App() {
               onSelect={selectFamily} onOpenCharacterMap={(family) => openCharacterMap(family, currentPreviewStyle(family, family.id === selected?.id ? selectedStyleKey : null))} onPreviewSelect={previewSelectFamily} onFavorite={favoriteFamily} onDownload={(fingerprint) => void downloadFontFile(fingerprint)}
               header={
                 <div className="library-overview">
+                  {scope === "fontHealth" && <FontHealthIssues onRecheck={runRefresh} />}
                   <div className="library-title-row">
                     <LibraryHero
                       presentation={scope === "all" && !fileFingerprint ? libraryHero : {
@@ -3130,6 +3136,8 @@ export default function App() {
                       }}
                       onAction={handleHeroAction}
                     />
+                    <Button size="sm" onPress={() => { void invoke("font_workflow_from_library", { request: { text:search,scope,facets:selectedFacets,sort,collectionId,smartFolderId,fontState,locationFilter,fileFingerprint }, faceIds:null }).catch((cause)=>setError(errorMessage(cause))); }}>{t("workflow.exportScope")}</Button>
+                    {selected && <Button size="sm" onPress={() => { void invoke("font_workflow_from_library", { request: { text: "",scope:"all" }, faceIds: selected.faces.map((face)=>face.id) }).catch((cause)=>setError(errorMessage(cause))); }}>{t("workflow.selectedActions")}</Button>}
                     <OptionSelect label={t("fontLocation.title")} value={locationFilter} options={locationFilters.map((id) => ({ id,label:t(`fontLocation.${id}`) }))} onChange={(value) => { setFileFingerprint(undefined); setLocationFilter(value); }} />
                     <div className="sort-button">
                       <span>{t("library.sortBy")}</span>

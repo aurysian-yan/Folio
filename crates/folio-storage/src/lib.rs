@@ -49,6 +49,8 @@ mod root;
 mod schema;
 mod storage_usage;
 mod sync;
+mod workflow;
+mod online;
 
 pub use db::FolioDatabase;
 pub use error::StorageError;
@@ -60,6 +62,10 @@ pub use refresh::{
 pub use root::{AddRootOutcome, LibraryRoot, LibraryRootKind};
 pub use storage_usage::{directory_bytes, StorageUsage};
 pub use sync::{StoredFilePolicy, StoredSyncAsset, StoredSyncConflict, StoredSyncEvent};
+pub use workflow::{
+    new_operation_id, ExternalSource, OperationBatch, OperationItem, OperationStatus,
+    PlatformFontOperation, ResourceGuard,
+};
 
 /// 序列化解析缓存载荷的版本号。
 pub const CACHE_PAYLOAD_VERSION: u32 = cache_payload::CACHE_PAYLOAD_VERSION;

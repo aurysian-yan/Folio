@@ -13,6 +13,10 @@ use crate::path_codec::PathCodecError;
 /// 致命的存储或缓存错误。
 #[derive(Debug, Error)]
 pub enum StorageError {
+    #[error("workflow.error.busy")]
+    ResourceBusy,
+    #[error("workflow.error.invalidRequest")]
+    InvalidOperation,
     #[error("sync event sequence is exhausted")]
     SyncSequenceExhausted,
     #[error("storage file access failed: {0}")]

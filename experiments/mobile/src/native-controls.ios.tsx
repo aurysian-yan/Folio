@@ -41,7 +41,7 @@ function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = fa
 }
 
 // iPad 常规窗口使用原生分栏，紧凑窗口沿用 iPhone 标签栏。
-export function NativeNavigation({ children, settings, search, cloud, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
+export function NativeNavigation({ children, settings, search, cloud, online, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
   const { t } = useTranslation();
   const [visibility, setVisibility] = useState<NavigationSplitViewVisibility>('all');
   const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
@@ -64,7 +64,7 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
           <NavigationSplitView.Sidebar>
             <List selection={[destination]} onSelectionChange={(selection) => {
               const value = selection[0];
-              if (value === 'local' || value === 'search' || value === 'favorites' || value === 'cloud' || value === 'settings' || (typeof value === 'string' && (value.startsWith('collection:') || value.startsWith('smart:')))) {
+              if (value === 'local' || value === 'search' || value === 'favorites' || value === 'online' || value === 'cloud' || value === 'settings' || (typeof value === 'string' && (value.startsWith('collection:') || value.startsWith('smart:')))) {
                 onDestinationChange(value as NativeDestination);
                 setCompactColumn('detail');
               }
@@ -80,11 +80,13 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
                   collectionSystemImage(collection.icon) as ButtonProps['systemImage'], collection.memberCount, collectionColorValue(collection.color)))}
               </Section>}
               <Section>{row('search', t('common.search'), 'magnifyingglass')}</Section>
+              <Section>{row('online', t('online.title'), 'globe')}</Section>
               <Section title={t('navigation.cloud')}>{row('cloud', t('mobile.cloudFonts'), 'cloud')}</Section>
               <Section>{row('settings', t('navigation.settings'), 'gear')}</Section>
             </List>
           </NavigationSplitView.Sidebar>
           <NavigationSplitView.Detail>{destination === 'settings' ? settings : destination === 'search' ? search
+            : destination === 'online' ? <RNHostView><View style={styles.fill}>{online}</View></RNHostView>
             : destination === 'cloud' ? <RNHostView><View style={styles.fill}>{cloud}</View></RNHostView> : children}</NavigationSplitView.Detail>
         </NavigationSplitView>
       </Host>
@@ -94,7 +96,7 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
   return (
     <Host style={styles.fill} modifiers={[background(theme.background)]}>
       <TabView selection={destination} onSelectionChange={(value) => {
-        if (value === 'local' || value === 'search' || value === 'cloud' || value === 'settings') onDestinationChange(value);
+        if (value === 'local' || value === 'search' || value === 'online' || value === 'cloud' || value === 'settings') onDestinationChange(value);
       }}
         modifiers={[tabViewStyle({ type: 'automatic' }), tint(theme.accent), background(theme.background)]}>
         <TabView.Tab value="local" label={t('navigation.local')} systemImage="textformat.alt">
@@ -104,6 +106,9 @@ export function NativeNavigation({ children, settings, search, cloud, theme, sid
         </TabView.Tab>
         <TabView.Tab value="search" label={t('common.search')} systemImage="magnifyingglass">
           <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{search}</View></RNHostView></NativeTabContent>
+        </TabView.Tab>
+        <TabView.Tab value="online" label={t('online.title')} systemImage="globe">
+          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{online}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="cloud" label={t('navigation.cloud')} systemImage="cloud">
           <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{cloud}</View></RNHostView></NativeTabContent>

@@ -2,7 +2,12 @@
 
 #![forbid(unsafe_code)]
 
+mod documents;
 mod library;
+pub use documents::{
+    materialize_document, provided_document, provided_documents, readable_document,
+    ProvidedDocument,
+};
 #[cfg(test)]
 mod local_dav_tests;
 mod managed;
@@ -293,6 +298,8 @@ struct RemoteAsset {
     faces: Vec<RemoteFace>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     online_origin: Option<OnlineOrigin>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    source_metadata: Vec<folio_core::OnlineFontOrigin>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1061,6 +1068,10 @@ fn owned_managed_path(db: &FolioDatabase, path: &Path) -> bool {
 
 /// 应用重启后中断的传输进入可重试状态。
 pub fn recover_transfers(database_path: impl AsRef<Path>) -> Result<(), SyncError> {
+    let database_path = database_path.as_ref();
+    let Ok(_guard) = folio_storage::ResourceGuard::acquire(database_path, "sync", true) else {
+        return Ok(());
+    };
     let db = FolioDatabase::open(database_path)?;
     for policy in db.file_policies()? {
         if policy.transfer_status.as_deref() == Some("running") {
@@ -1122,6 +1133,9 @@ fn save_transfer(
 }
 
 pub fn set_cloud_only(database_path: impl AsRef<Path>, fingerprint: &str) -> Result<(), SyncError> {
+    let database_path = database_path.as_ref();
+    let _guard =
+        folio_storage::ResourceGuard::acquire(database_path, &format!("file:{fingerprint}"), true)?;
     let mut db = FolioDatabase::open(database_path)?;
     stage_cached_cloud_metadata(&mut db)?;
     let mut asset = db
@@ -1327,6 +1341,8 @@ pub async fn synchronize(
     cancelled: Arc<AtomicBool>,
     report: Arc<dyn Fn(SyncProgress) + Send + Sync>,
 ) -> Result<SyncProgress, SyncError> {
+    let database_path = database_path.as_ref();
+    let _sync_guard = folio_storage::ResourceGuard::acquire(database_path, "sync", true)?;
     let mut db = FolioDatabase::open(database_path)?;
     let profile: SyncProfile = db
         .sync_metadata(PROFILE_KEY)?
@@ -1803,6 +1819,7 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
                 })
                 .collect(),
             online_origin: origins.get(&filename).cloned(),
+            source_metadata: db.online_origins(&fingerprint)?,
         };
         let metadata_added = assets
             .get(&fingerprint)
@@ -1816,7 +1833,10 @@ fn stage_managed_fonts(db: &mut FolioDatabase, directory: &Path) -> Result<(), S
                 .as_ref()
                 != Some(origin)
         });
-        if (asset_add_tags(&known, &fingerprint).is_empty() || origin_added || metadata_added)
+        let sources_added = assets.get(&fingerprint)
+            .and_then(|asset| serde_json::from_str::<RemoteAsset>(&asset.remote_payload).ok())
+            .is_none_or(|asset| asset.source_metadata != remote_asset.source_metadata);
+        if (asset_add_tags(&known, &fingerprint).is_empty() || origin_added || metadata_added || sources_added)
             && staged.insert(fingerprint.clone())
         {
             stage_change(db, &Change::FontAdded(remote_asset.clone()))?;
@@ -2581,7 +2601,7 @@ async fn apply_remote_events_inner(
             save_transfer(db, fingerprint, "download", "running", None)?;
             progress.set_item_status(fingerprint, SyncItemStatus::Running);
             emit_progress(progress, report);
-            match download_asset(remote, directory, remote_asset, cancelled).await {
+            match download_asset(db.path(), remote, directory, remote_asset, cancelled).await {
                 Ok(path) => {
                     asset.local_path = Some(path.to_string_lossy().into_owned());
                     asset.cloud_only = false;
@@ -2645,7 +2665,42 @@ fn record_conflict(db: &FolioDatabase, conflict: SyncConflict) -> Result<(), Syn
     Ok(())
 }
 
+async fn object_write_guard(
+    database: &Path,
+    fingerprint: &str,
+    cancelled: &AtomicBool,
+) -> Result<folio_storage::ResourceGuard, SyncError> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        if cancelled.load(Ordering::Acquire) {
+            return Err(SyncError::Cancelled);
+        }
+        match folio_storage::ResourceGuard::acquire(database, &format!("file:{fingerprint}"), true)
+        {
+            Ok(guard) => return Ok(guard),
+            Err(folio_storage::StorageError::ResourceBusy)
+                if std::time::Instant::now() < deadline =>
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
 async fn download_asset(
+    database: &Path,
+    remote: &WebDavClient,
+    directory: &Path,
+    asset: &RemoteAsset,
+    cancelled: &AtomicBool,
+) -> Result<PathBuf, SyncError> {
+    let _guard = object_write_guard(database, &asset.fingerprint, cancelled).await?;
+    download_asset_unlocked(database, remote, directory, asset, cancelled).await
+}
+
+async fn download_asset_unlocked(
+    database: &Path,
     remote: &WebDavClient,
     directory: &Path,
     asset: &RemoteAsset,
@@ -2687,14 +2742,37 @@ async fn download_asset(
     if actual != expected {
         return Err(SyncError::InvalidFont);
     }
+    let db = FolioDatabase::open(database)?;
+    for origin in &asset.source_metadata {
+        let mut origin = origin.clone();
+        let Ok(mut url) = reqwest::Url::parse(&origin.source_page_url) else { continue };
+        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() { continue; }
+        url.set_query(None);
+        url.set_fragment(None);
+        origin.source_page_url = url.into();
+        let payload = serde_json::to_string(&origin)?;
+        let key = ContentFingerprint::from_bytes(payload.as_bytes()).to_hex();
+        db.save_online_origin(&asset.fingerprint, &key, &payload)?;
+    }
     let temporary = directory.join(format!(
         ".{}.{}.part",
         asset.fingerprint,
-        std::process::id()
+        folio_storage::new_operation_id()?
     ));
     std::fs::write(&temporary, bytes)?;
     if destination.exists() {
-        std::fs::remove_file(&destination)?;
+        if parse_font_file(&destination)
+            .is_ok_and(|value| value.fingerprint.to_hex() == asset.fingerprint)
+        {
+            std::fs::remove_file(&temporary)?;
+            return Ok(destination);
+        }
+        let recovery = directory.join(".recovery");
+        std::fs::create_dir_all(&recovery)?;
+        std::fs::rename(
+            &destination,
+            recovery.join(folio_storage::new_operation_id()?),
+        )?;
     }
     std::fs::rename(&temporary, &destination)?;
     if let Some(origin) = &asset.online_origin {
@@ -2707,6 +2785,11 @@ async fn download_asset(
 
 // 删除作用于内容一致的全部托管副本，系统和引用来源继续保留。
 fn remove_managed_copies(db: &FolioDatabase, asset: &StoredSyncAsset) -> Result<(), SyncError> {
+    let _guard = folio_storage::ResourceGuard::acquire(
+        db.path(),
+        &format!("file:{}", asset.fingerprint),
+        true,
+    )?;
     let mut paths = db
         .readable_font_files()?
         .into_iter()

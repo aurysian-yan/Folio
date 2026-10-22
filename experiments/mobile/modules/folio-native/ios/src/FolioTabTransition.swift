@@ -1,3 +1,6 @@
+#if canImport(FolioFileServices)
+import FolioFileServices
+#endif
 import SwiftUI
 import UIKit
 

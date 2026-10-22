@@ -16,10 +16,10 @@ import java.util.zip.ZipFile
 internal data class SelectedImportFile(val uri: String, val name: String)
 internal data class FontImportItem(
     val name: String, val archiveName: String?, val status: String, val message: String? = null,
-    val messageKey: String? = null
+    val messageKey: String? = null, val analysis: String? = null
 ) {
     fun dictionary() = mapOf("name" to name, "archiveName" to archiveName, "status" to status,
-        "message" to message, "messageKey" to messageKey)
+        "message" to message, "messageKey" to messageKey, "analysis" to analysis)
 }
 internal data class FontImportReport(val snapshot: LibrarySnapshotDto, val items: List<FontImportItem>)
 internal data class FontImportLimits(val batchFonts: Int = 1_000) {
@@ -44,12 +44,12 @@ internal class FolioFontImporter(
     private val items = mutableListOf<FontImportItem>()
     private val prepared = mutableListOf<PreparedFont>()
 
-    fun importFiles(files: List<SelectedImportFile>): FontImportReport {
+    fun importFiles(files: List<SelectedImportFile>, analyzeOnly: Boolean = false): FontImportReport {
         check(directory.isDirectory || directory.mkdirs())
         check(temporary.mkdirs())
         try {
             var snapshot = engine.loadCachedLibrary()
-            indexExistingFiles()
+            if (!analyzeOnly) indexExistingFiles()
             var stopped = false
             for (file in files) {
                 if (stopped) {
@@ -76,6 +76,14 @@ internal class FolioFontImporter(
                 } finally {
                     if (!queued) staged.delete()
                 }
+            }
+            if (analyzeOnly) {
+                for (font in prepared) {
+                    val item=items[font.index]
+                    items[font.index]=try { item.copy(status="analyzed",messageKey=null,analysis=engine.analyzeFontFile(font.file.path)) }
+                    catch(error:Exception){failure(item.name,item.archiveName,error,"invalidFont")}
+                }
+                return FontImportReport(snapshot,items.toList())
             }
             if (!stopped) {
                 for (start in prepared.indices step limits.batchFonts) {

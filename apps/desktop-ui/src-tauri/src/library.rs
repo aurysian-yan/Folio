@@ -1724,12 +1724,18 @@ mod tests {
 
     #[test]
     fn synced_system_font_condition_survives_desktop_editor_roundtrip() {
-        let facets: QueryFacets = serde_json::from_value(serde_json::json!({ "hideSystemFonts": ["true"] })).unwrap();
+        let facets: QueryFacets =
+            serde_json::from_value(serde_json::json!({ "hideSystemFonts": ["true"] })).unwrap();
         let saved = SavedFontQuery::from_filter(None, query_facets(facets)).unwrap();
         assert!(saved.hide_system_fonts);
         let folder = SmartFolder {
-            id: SmartFolderId::from_bytes([8; 16]), name: "用户字体".into(), icon: CollectionIcon::Folder, color: CollectionColor::Gray,
-            query_json: serde_json::to_string(&saved).unwrap(), created_at_ns: 1, updated_at_ns: 1,
+            id: SmartFolderId::from_bytes([8; 16]),
+            name: "用户字体".into(),
+            icon: CollectionIcon::Folder,
+            color: CollectionColor::Gray,
+            query_json: serde_json::to_string(&saved).unwrap(),
+            created_at_ns: 1,
+            updated_at_ns: 1,
         };
         let dto = smart_folder_dto(folder, 0, saved);
         assert_eq!(dto.facets.hide_system_fonts, vec!["true"]);

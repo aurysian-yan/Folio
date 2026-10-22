@@ -1,3 +1,6 @@
+#if canImport(FolioFileServices)
+import FolioFileServices
+#endif
 import ExpoModulesCore
 import SwiftUI
 import UIKit

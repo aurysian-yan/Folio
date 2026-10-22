@@ -119,7 +119,7 @@ class FolioNavigationModule : Module() {
             Prop("surfaceColor") { view: FolioLiquidTabsView, value: String -> view.surfaceColor = value }
             Prop("items") { view: FolioLiquidTabsView, value: List<FolioNavigationItem> ->
                 val ids = value.map { it.id }.toSet()
-                if ((value.size == 4 && ids == setOf("local", "search", "cloud", "settings"))
+                if ((value.size == 5 && ids == setOf("local", "search", "online", "cloud", "settings"))
                     || (value.size == 2 && ids.size == 2 && ids.none { it.isBlank() })) {
                     view.items = value
                 }

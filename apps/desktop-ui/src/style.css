@@ -174,10 +174,10 @@ textarea,
 }
 
 /* 初始化前隐藏原生滚动条，所有滚动区域使用同一主题。 */
-:where(.sidebar-scroll, .font-grid, .character-map-grid, .character-map-detail, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop) {
+:where(.workflow-list, .sidebar-scroll, .font-grid, .character-map-grid, .character-map-detail, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop) {
     scrollbar-width: none;
 }
-:where(.sidebar-scroll, .font-grid, .character-map-grid, .character-map-detail, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop)::-webkit-scrollbar {
+:where(.workflow-list, .sidebar-scroll, .font-grid, .character-map-grid, .character-map-detail, .inspector-inner, .settings-page, .facet-groups, .favorite-editor-body, .cloud-pane, .select__popover, .dropdown__popover, .color-picker__popover, .modal__body--scroll-inside, .modal__backdrop)::-webkit-scrollbar {
     display: none;
 }
 .os-theme-folio {
@@ -3560,3 +3560,8 @@ button.sidebar-pages:hover .sidebar-page {
 .library-navigation {
     padding-top: 0;
 }
+
+/* 字体安装窗口使用既有语义主题和控件尺度。 */
+.workflow-window { display: flex; flex-direction: column; height: 100dvh; gap: 1rem; padding: 1rem; background: var(--background); color: var(--foreground); }
+.workflow-list { flex: 1; min-height: 0; overflow: auto; }
+.workflow-item { display: flex; flex-direction: column; gap: 0.5rem; padding-block: 1rem; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }

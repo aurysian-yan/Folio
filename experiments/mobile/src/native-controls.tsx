@@ -6,7 +6,7 @@ import type { Theme } from './ui';
 export const usesNativeControls = false;
 export const usesNativeSidebar = false;
 
-export type NativeDestination = 'local' | 'search' | 'favorites' | 'cloud' | 'settings' | `collection:${string}` | `smart:${string}`;
+export type NativeDestination = 'local' | 'search' | 'favorites' | 'online' | 'cloud' | 'settings' | `collection:${string}` | `smart:${string}`;
 
 export interface NativeNavigationProps {
   children: ReactNode;
@@ -14,6 +14,7 @@ export interface NativeNavigationProps {
   settings?: ReactNode;
   search?: ReactNode;
   cloud?: ReactNode;
+  online?: ReactNode;
   theme: Theme;
   sidebar: boolean;
   destination: NativeDestination;

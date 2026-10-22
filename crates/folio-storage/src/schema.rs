@@ -14,7 +14,7 @@ use rusqlite::{Connection, Transaction};
 use crate::error::StorageError;
 
 /// 当前构建支持的最高 schema 版本。
-pub const CURRENT_SCHEMA_VERSION: i32 = 11;
+pub const CURRENT_SCHEMA_VERSION: i32 = 13;
 
 /// 将新打开的连接迁移到 [`CURRENT_SCHEMA_VERSION`]。
 pub fn migrate(conn: &mut Connection) -> Result<(), StorageError> {
@@ -63,8 +63,26 @@ fn apply_step(tx: &Transaction<'_>, target: i32) -> Result<(), rusqlite::Error> 
         9 => migrate_to_v9(tx),
         10 => migrate_to_v10(tx),
         11 => migrate_to_v11(tx),
+        12 => migrate_to_v12(tx),
+        13 => migrate_to_v13(tx),
         _ => Ok(()),
     }
+}
+
+fn migrate_to_v13(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(r#"
+        CREATE TABLE IF NOT EXISTS online_settings (
+            key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS transfer_jobs (
+            id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS online_font_origins (
+            fingerprint TEXT NOT NULL, origin_id TEXT NOT NULL, payload TEXT NOT NULL,
+            PRIMARY KEY(fingerprint, origin_id)
+        );
+    "#)
 }
 
 fn migrate_to_v1(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
@@ -313,4 +331,29 @@ fn migrate_to_v11(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
             SELECT source_platform,source_bytes,MAX(upload_excluded) FROM font_file_policies
             WHERE source_platform IS NOT NULL AND source_bytes IS NOT NULL GROUP BY source_platform,source_bytes;
     "#)
+}
+
+fn migrate_to_v12(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS local_sources (
+            id TEXT PRIMARY KEY NOT NULL,
+            platform TEXT NOT NULL,
+            locator TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            snapshot_path TEXT NOT NULL,
+            available INTEGER NOT NULL CHECK(available IN (0,1)),
+            UNIQUE(platform,locator)
+        );
+        CREATE TABLE IF NOT EXISTS operation_batches (
+            id TEXT PRIMARY KEY NOT NULL,
+            payload TEXT NOT NULL,
+            updated_at_ms INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS platform_font_operations (
+            id TEXT PRIMARY KEY NOT NULL,
+            payload TEXT NOT NULL
+        );
+    "#,
+    )
 }

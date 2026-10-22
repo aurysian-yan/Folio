@@ -14,7 +14,7 @@ fn empty_database_migrates_to_current() {
         db.schema_version().expect("version"),
         CURRENT_SCHEMA_VERSION
     );
-    assert_eq!(CURRENT_SCHEMA_VERSION, 11);
+    assert_eq!(CURRENT_SCHEMA_VERSION, 13);
 }
 
 #[test]
@@ -34,6 +34,26 @@ fn reopening_current_schema_is_not_destructive() {
     let roots = reopened.list_roots().expect("roots");
     assert_eq!(roots.len(), 1);
     assert_eq!(roots[0].id, id);
+}
+
+#[test]
+fn v12_upgrade_preserves_library_and_adds_local_online_records() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("folio.sqlite");
+    let id = {
+        let mut db = FolioDatabase::open(&path).unwrap();
+        db.create_collection("已有收藏").unwrap().id
+    };
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.execute_batch("DROP TABLE online_settings; DROP TABLE transfer_jobs; DROP TABLE online_font_origins; PRAGMA user_version=12;").unwrap();
+    drop(connection);
+    let db = FolioDatabase::open(&path).unwrap();
+    assert_eq!(db.list_collections().unwrap()[0].id, id);
+    db.save_online_setting("disclaimer", "1").unwrap();
+    db.insert_transfer_record("job", "{\"state\":\"queued\"}").unwrap();
+    assert!(db.update_transfer_record("job", 0, "{\"state\":\"cancelled\"}").unwrap());
+    assert!(!db.update_transfer_record("job", 0, "{\"state\":\"ready\"}").unwrap());
+    assert_eq!(db.transfer_record("job").unwrap().unwrap().1, 1);
 }
 
 #[test]

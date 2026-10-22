@@ -255,9 +255,7 @@ class FolioFontPreview(context: Context, appContext: AppContext) : ExpoView(cont
 
     companion object {
         internal fun shapeSelection(context: Context, value: FolioPreviewSelection, fontCache: PreviewFontCache? = null): Pair<List<PositionedGlyphs>, Boolean> {
-            val source = File(value.sourcePath).canonicalFile
-            val directory = File(context.filesDir, "FolioMobilePoC/fonts").canonicalFile
-            require(source.path.startsWith(directory.path + File.separator) && source.canRead())
+            val source = FolioFileRuntime.get(context).previewFont(value.sourcePath)
             require(value.faceIndex >= 0)
             require(value.fontSize.isFinite() && value.fontSize in 8.0..160.0)
             require(value.wrapWidth.isFinite() && value.wrapWidth >= 0)

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { MagnifyingGlassIcon, CloudIcon, GearIcon, TextAaIcon } from './icons';
+import { MagnifyingGlassIcon, GlobeIcon, CloudIcon, GearIcon, TextAaIcon } from './icons';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle, type ViewProps } from 'react-native';
 import i18n from './i18n/instance';
 import type { Theme } from './ui';
@@ -7,6 +7,7 @@ import type { Theme } from './ui';
 export const navigationItems = [
   { id: 'local', label: i18n.t('navigation.local'), icon: 'text-aa' },
   { id: 'search', label: i18n.t('common.search'), icon: 'search' },
+  { id: 'online', label: i18n.t('online.title'), icon: 'globe' },
   { id: 'cloud', label: i18n.t('navigation.cloud'), icon: 'cloud' },
   { id: 'settings', label: i18n.t('navigation.settings'), icon: 'gear' },
 ] as const;
@@ -39,7 +40,7 @@ export function NavigationBackdrop({ children, style }: NavigationBackdropProps)
   return <View style={style}>{children}</View>;
 }
 
-const icons = { local: TextAaIcon, search: MagnifyingGlassIcon, cloud: CloudIcon, settings: GearIcon };
+const icons = { local: TextAaIcon, search: MagnifyingGlassIcon, online: GlobeIcon, cloud: CloudIcon, settings: GearIcon };
 
 export function BottomNavigation({ hidden = false, selectedId, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
   return <View pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden}

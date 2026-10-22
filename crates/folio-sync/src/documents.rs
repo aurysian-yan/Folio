@@ -39,7 +39,7 @@ pub fn provided_documents(
     if parent == "root" {
         return Ok(vec![
             folder("local", "root", "", Some("workflow.local")),
-            folder("favorites", "root", "", Some("library.favorites")),
+            folder("favorites", "root", "", Some("workflow.favorites")),
             folder("collections", "root", "", Some("workflow.collections")),
             folder("cloud", "root", "", Some("workflow.cloud")),
         ]);
@@ -182,14 +182,32 @@ pub async fn materialize_document(
     if let Some(path) = readable_document(database, fingerprint)? {
         return Ok(path);
     }
+    let profile = load_profile(database)?.ok_or(SyncError::NotConfigured)?;
+    let remote = WebDavClient::new(&profile, password)?;
+    materialize_with_client(
+        database,
+        directory,
+        fingerprint,
+        &profile,
+        &remote,
+        cancelled,
+    )
+    .await
+}
+
+pub(crate) async fn materialize_with_client(
+    database: &Path,
+    directory: &Path,
+    fingerprint: &str,
+    profile: &SyncProfile,
+    remote: &WebDavClient,
+    cancelled: &AtomicBool,
+) -> Result<PathBuf, SyncError> {
     // 单文件锁串行同一对象的落盘；取消只作用于当前调用，不共享取消标记。
     let _guard = object_write_guard(database, fingerprint, cancelled).await?;
-
     if let Some(path) = readable_document(database, fingerprint)? {
         return Ok(path);
     }
-    let profile = load_profile(database)?.ok_or(SyncError::NotConfigured)?;
-    let remote = WebDavClient::new(&profile, password)?;
     let mut db = FolioDatabase::open(database)?;
     let mut asset = db
         .list_sync_assets()?
@@ -204,9 +222,9 @@ pub async fn materialize_document(
     }
     let metadata: RemoteAsset = serde_json::from_str(&asset.remote_payload)?;
     std::fs::create_dir_all(directory)?;
-    let path = download_asset_unlocked(database, &remote, directory, &metadata, cancelled).await?;
+    let path = download_asset_unlocked(database, remote, directory, &metadata, cancelled).await?;
     // 下载期间断开或切换连接，不将旧连接对象提交到新连接。
-    if load_profile(database)?.as_ref() != Some(&profile) {
+    if load_profile(database)?.as_ref() != Some(profile) {
         return Err(SyncError::Cancelled);
     }
     if db

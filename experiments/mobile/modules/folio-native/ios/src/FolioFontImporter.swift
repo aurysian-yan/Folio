@@ -1,3 +1,6 @@
+#if canImport(FolioFileServices)
+import FolioFileServices
+#endif
 import CryptoKit
 import Foundation
 import ZIPFoundation
@@ -14,10 +17,11 @@ struct FontImportItem {
     var status: String
     var message: String? = nil
     var messageKey: String? = nil
+    var analysis: String? = nil
 
     var dictionary: [String: Any] {
         ["name": name, "archiveName": archiveName as Any? ?? NSNull(), "status": status,
-         "message": message as Any? ?? NSNull(), "messageKey": messageKey as Any? ?? NSNull()]
+         "message": message as Any? ?? NSNull(), "messageKey": messageKey as Any? ?? NSNull(), "analysis": analysis as Any? ?? NSNull()]
     }
 }
 
@@ -61,12 +65,12 @@ final class FolioFontImporter {
         self.refresh = refresh ?? { try engine.refreshLibrary().snapshot }
     }
 
-    func importFiles(_ files: [SelectedImportFile]) throws -> FontImportReport {
+    func importFiles(_ files: [SelectedImportFile], analyzeOnly: Bool = false) throws -> FontImportReport {
         try manager.createDirectory(at: directory, withIntermediateDirectories: true)
         try manager.createDirectory(at: temporary, withIntermediateDirectories: true)
         defer { try? manager.removeItem(at: temporary) }
         var snapshot = try engine.loadCachedLibrary()
-        try indexExistingFiles()
+        if !analyzeOnly { try indexExistingFiles() }
         var stopped = false
         for file in files {
             if stopped {
@@ -87,7 +91,11 @@ final class FolioFontImporter {
                 }
                 let scoped = source.startAccessingSecurityScopedResource()
                 defer { if scoped { source.stopAccessingSecurityScopedResource() } }
-                try copy(source, to: staged)
+                var coordinationError:NSError?
+                var copyResult:Result<Void,Error> = .failure(FontImportFailure(detail:key("read")))
+                NSFileCoordinator().coordinate(readingItemAt:source,options:[],error:&coordinationError){readable in copyResult=Result {try self.copy(readable,to:staged)}}
+                if let coordinationError {throw coordinationError}
+                try copyResult.get()
                 if archive {
                     fallback = "invalidArchive"
                     try prepareArchive(staged, name: file.name)
@@ -101,6 +109,14 @@ final class FolioFontImporter {
                     items.append(failure(file.name, archiveName: nil, error: error, fallback: fallback))
                 }
             }
+        }
+        if analyzeOnly {
+            for font in prepared {
+                let item=items[font.index]
+                do { items[font.index].analysis=try engine.analyzeFontFile(path: font.file.path); items[font.index].status="analyzed"; items[font.index].messageKey=nil }
+                catch { items[font.index]=failure(item.name,archiveName:item.archiveName,error:error,fallback:"invalidFont") }
+            }
+            return FontImportReport(snapshot:snapshot,items:items)
         }
         if !stopped {
             for start in stride(from: 0, to: prepared.count, by: limits.batchFonts) {

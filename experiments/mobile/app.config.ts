@@ -106,5 +106,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         },
       },
     ],
+    './plugins/with-file-workflows',
   ],
 });

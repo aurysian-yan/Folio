@@ -20,6 +20,7 @@ import java.util.concurrent.Executors
 internal class FolioFileRuntime private constructor(val context: Context) {
     val root = File(context.filesDir, "FolioMobilePoC").apply { mkdirs() }
     val engine = FolioEngine.open(File(root, "folio.sqlite").absolutePath)
+    val browser = com.folio.poc.ffi.FolioBrowser.open(File(root, "folio.sqlite").absolutePath, File(root, "transfers").absolutePath)
     val files = FolioFileService.open(File(root, "folio.sqlite").absolutePath, File(root, "fonts").absolutePath)
     val sync: FolioSync by lazy {
         FolioTls.initialize(context)
@@ -83,6 +84,18 @@ internal class FolioFileRuntime private constructor(val context: Context) {
         }
         directory.walkTopDown().filter {it.isFile && it.relativeTo(directory).path !in retained}.forEach {it.delete()}
         File(directory,".origins.json").writeText(origins.toString())
+    }
+    fun previewFont(path:String):File {
+        val file=File(path).canonicalFile
+        val transfers=File(root,"transfers").canonicalFile
+        if(file.path.startsWith(transfers.path+File.separator)) {
+            val parts=file.relativeTo(transfers).path.split(File.separatorChar)
+            val jobs=JSONObject(browser.state()).getJSONArray("jobs")
+            check((0 until jobs.length()).any {jobs.getJSONObject(it).let {job->job.getString("id")==parts[0] && job.getString("state")=="ready"}})
+            check(file.isFile && file.canRead())
+            return file
+        }
+        return readableFont(path)
     }
     fun readableFont(path:String):File {
         val file=File(path).canonicalFile

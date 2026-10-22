@@ -49,6 +49,11 @@ function bindings() {
   if (!argumentsAfterCommand.length || argumentsAfterCommand.includes('swift')) {
     copyFileSync(join(native, 'ios/generated/folio_ffiFFI.modulemap'),
       join(native, 'ios/generated/module.modulemap'));
+    const strings = join(native, 'ios/generated/locales');
+    mkdirSync(strings, { recursive: true });
+    for (const language of ['zh-CN', 'en']) {
+      copyFileSync(join(repository, 'locales', `${language}.json`), join(strings, `${language}.json`));
+    }
   }
 }
 

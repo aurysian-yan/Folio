@@ -10,6 +10,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::ser::Serializer;
 use serde::Serialize;
 
+/// 字体网页来源，不包含 Cookie、账号或临时下载令牌。
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnlineFontOrigin {
+    pub provider_id: Option<String>,
+    pub provider_name: String,
+    pub source_page_url: String,
+    pub download_host: String,
+}
+
 /// Origin of a parsed face.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FontSource {

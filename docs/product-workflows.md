@@ -1,7 +1,7 @@
 # Product Workflow Architecture
 
-审计与规划日期：2026-10-17。本文是当前产品工作流契约，区分已有源码与待交付能力，
-不改变生产实现。阶段与优先级见 [Roadmap](../FOLIO_ROADMAP.md)，同步协议见
+审计与规划日期：2026-10-17；P2/P3 实施更新：2026-10-20。本文是当前产品工作流契约，
+实现与分批验收见 [P2/P3 验证记录](p2-p3-validation.md)。阶段与优先级见 [Roadmap](../FOLIO_ROADMAP.md)，同步协议见
 [同步架构](sync-architecture.md)，官方构建范围见 [赞助计划](sponsor-release-plan.md)。
 
 ## 1. Audit Findings
@@ -36,7 +36,7 @@ Activate／Install 对应的停用／卸载只撤销 Folio 有权管理的注册
 Export 按文件去重，TTC／OTC 默认导出整个集合文件，不把单个 Face 拆成伪造字体；
 Face 导出转换另行决策。云端占位先实际下载和校验，外部失效来源无其他可用副本时
 逐项失败。选择／收藏夹导出采用执行时固定清单，智慧收藏夹先按共享查询形成快照。
-保持原格式与字节，不附带用户绝对路径或账号；名字冲突须选择跳过、改名或明确覆盖。
+保持原格式与字节，不附带用户绝对路径或账号；名字冲突逐项选择跳过、改名或取消剩余任务，不提供覆盖。
 
 ## 3. Source, Offline and Deletion Matrix
 
@@ -135,15 +135,29 @@ Retry 仅处理失败项及失败阶段，执行前重新校验文件、权限�
 - Files import/export 与系统 Share workflow 分别交付：文件／目录授权、复制与引用
   能力、云占位下载、导出取消、长文件名和 iPad 多窗口／分享锚点单独验证。
   只支持复制的入口明确使用 Collect，不伪造持久 Reference。
-- 导出分享使用系统 Share Sheet；从其他应用“分享到 Folio”单独评估 Share Extension，
-  记录采用／不采用及替代入口。若采用，扩展原生接收附件并写 App Group 收件区，
-  主应用接收后分析；不在扩展内安装字体或要求 RN runtime 先启动。
-- File Provider Extension 保留正式评估项：只有需要其他应用在 Files 中持续浏览
-  Folio 云端树与按需打开时才实施；Files 导出与 Share 不算 File Provider 已交付。
-- 若采用 File Provider，它是独立原生进程／target，直接依赖受控 Rust／原生同步
+- 导出分享使用系统 Share Sheet；采用 Share Extension，原生接收字体／ZIP 并写
+  App Group 收件区，完成系统分享请求。主应用下次进入前台后分析并等待用户确认，
+  确认前不登记为库字体；扩展不启动主应用或要求 RN runtime 先启动。
+- 采用只读 `NSFileProviderReplicatedExtension`，提供本地、收藏夹及云端树的枚举与
+  按需读取；Files 导出、Share Extension 与 File Provider 分别验收。
+- File Provider 是独立原生进程／target，直接依赖受控 Rust／原生同步
   服务。App Group、跨进程文件协调／数据库访问、钥匙串共享、凭据可访问性、
   materialization、取消、系统重启、资源限制与错误映射必须先通过 PoC。
   不持有主应用内存引擎，不假定 RN JS runtime 存活；进程间串行写入与通知另立 ADR。
+
+### 5.4 Shared Local State
+
+schema v12 增加本机来源授权、固定任务清单和平台操作账本。URI、系统书签、安装路径、
+来源快照与账本不进入 wire v1 同步资料。外部来源快照只用于受授权的读取；读取前检查
+原始来源，撤权、移动或离线后不得使用旧缓存冒充原件可用。
+
+任务逐项、逐阶段落盘；收集成功后的启用失败只重试启用。跨进程资源锁分别保护执行批次、
+同步和正在读取的文件；网络等待、系统选择器与同名询问不持有数据库写事务。
+云端读取按请求的实际文件下载、验证和复用结果，不启动全库同步；调用方各自持有取消状态。
+
+Windows 临时启用使用当前会话的非私有字体注册和字体变更通知，退出时撤销，重启应用时
+核对遗留账本，系统重启后不自动恢复。持久安装仅限当前用户；停用／卸载只处理经过路径、
+指纹和注册归属核对的 Folio 副本。两种行为均需目标 Windows 运行验收。
 
 ### 5.3 Windows and Linux
 
@@ -206,7 +220,7 @@ WOFF→TTF／OTF 恢复／转换与转换后的授权呈现保留范围评估，
 | Files／Share／两种 Extension | D 的采用 ADR；E 的分项交付 | Share Extension 与 File Provider 是否采用、跨进程写入与凭据设计 |
 | Font Health | A1；E／F1 | 文件级明细、统计口径和全部平台恢复闭环 |
 | WOFF／WOFF2 | 产品 v2 F2 | 解码／身份 ADR、样本、渲染与全同步格式互操作；转换另议 |
-| Online Fonts | F4 | 现有 macOS 浏览／下载的跨端范围、许可展示、来源／镜像可用性验收 |
+| Online Fonts | F4 | 改为来源 tab + 网页内容（本地壳 + 单内容视图）、网盘下载衔接与统一传输引擎；现有 Google Fonts 目录方向退场，范围见 [在线字体浏览器规划](online-font-browser.md)，许可展示、来源与跨端验收仍需完成 |
 | iOS 系统字体安装 | D 平台能力评估、E 根据结论呈现 | 不继承 macOS 安装承诺；无平台依据时保留 Files／Share 路径 |
 | iCloud／CloudKit | Roadmap Explicit Exclusions | 沿用历史排除，不把它误写成遗漏或待开发能力 |
 

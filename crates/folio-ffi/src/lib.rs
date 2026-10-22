@@ -34,6 +34,11 @@ pub struct StorageUsageDto {
     pub catalog_cache_estimated_bytes: u64,
 }
 
+mod files;
+pub use files::{FolioFileRead, FolioFileService};
+mod browser;
+pub use browser::FolioBrowser;
+
 uniffi::setup_scaffolding!();
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]

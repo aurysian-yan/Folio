@@ -1,3 +1,4 @@
+import { OnlineFontsScreen } from './OnlineFontsScreen';
 import { getDocumentAsync } from 'expo-document-picker';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -19,13 +20,14 @@ import { FontCard } from './FontCard';
 import { FontDetails } from './FontDetails';
 import { FontNavigation } from './FontNavigation';
 import { ImportResults } from './ImportResults';
+import { FileWorkflowPanel } from './FileWorkflowPanel';
 import { ViewModeMenu } from './ViewModeMenu';
 import { AndroidHeaderControls } from './HeaderControls';
 import { PageHeader, usePageHeader } from './PageHeader';
 import { HeaderScrollContext } from './HeaderButtonShadow';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
-import { cloudSync, library, materialPalette, syncSession, wallpaperSeed } from './native';
+import { cloudSync, fileState, library, materialPalette, syncSession, wallpaperSeed } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
   usesNativeControls, usesNativeSidebar, type NativeDestination,
@@ -114,6 +116,15 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const [importError, setImportError] = useState<string | null>(null);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [importDetailsOpen, setImportDetailsOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  useEffect(() => {
+    if (!ready || !active || scope !== 'all') return;
+    let alive = true;
+    const checkInbox = () => { void fileState().then((value) => { if (alive && (JSON.parse(value) as {inbox?:unknown[]}).inbox?.length) setFilesOpen(true); }).catch(() => {}); };
+    checkInbox();
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') checkInbox(); });
+    return () => { alive = false; subscription.remove(); };
+  }, [ready, active, scope]);
   const [mode, setMode] = useState<'grid' | 'list'>(defaultMode);
   const modeInitialized = useRef(false);
   const searchInput = useRef<TextInput>(null);
@@ -226,7 +237,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
     return () => controller.abort();
   }, [ready, queryText, scope, collectionId, smartFolderId, selectedFacets, locationFilter, fileFingerprint, offset, queryKey, requestKey, libraryVersion, t]);
 
-  async function importFont() {
+  function importFont() { setFilesOpen(true); }
+
+  async function collectFont() {
     if (!ready || syncBlocked || importInFlight.current) return;
     const releaseImport = syncSession.reserveImport();
     if (!releaseImport) return;
@@ -421,6 +434,9 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       <CollectionsPanel visible={collectionsOpen && active} theme={theme} target={target} snapshot={snapshot}
         currentConditions={savedConditions({ text: searchText, facets: selectedFacets })} libraryVersion={libraryVersion}
         onSnapshot={onSnapshotChange} onSelect={onTargetChange} onClose={() => setCollectionsOpen(false)} />
+      <FileWorkflowPanel visible={filesOpen && active} theme={theme} onClose={() => setFilesOpen(false)}
+        onCollect={() => { setFilesOpen(false); void collectFont(); }} parent={scope === "collection" ? `collection:${collectionId}` : scope === "smart" ? `smart:${smartFolderId}` : scope === "favorites" ? "favorites" : "local"}
+        onChanged={() => { void library.snapshot().then(onSnapshotChange); }} />
       <ImportResults report={importReport} visible={importDetailsOpen && active} theme={theme}
         onClose={() => setImportDetailsOpen(false)} />
     </NativeScrollContainer>
@@ -588,6 +604,7 @@ function MobileApp() {
   const cloudContent = <CloudScreen onOpenFont={(font) => void openCloudFont(font)} theme={theme} sourceId={sourceId}
     active={(usesNativeControls ? nativeDestination === 'cloud' : tab === 'cloud') && !settingsPageVisible}
     snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
+  const onlineContent = <OnlineFontsScreen theme={theme} active={usesNativeControls ? nativeDestination === 'online' : tab === 'online'} onSnapshotChange={applySnapshot} />;
   const settingsContent = <SettingsScreen theme={theme} sourceId={sourceId} controller={syncController}
     active={(usesNativeControls ? nativeDestination === 'settings' : tab === 'settings') && !settingsPageVisible}
     onOpenPage={openSettingsPage} />;
@@ -605,7 +622,7 @@ function MobileApp() {
     <View style={[styles.app, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
       <NativeNavigation theme={theme} sidebar={sidebar} destination={destination} snapshot={snapshot}
-        settings={settingsContent} search={searchContent} cloud={cloudContent} onDestinationChange={navigate}>
+        settings={settingsContent} search={searchContent} cloud={cloudContent} online={onlineContent} onDestinationChange={navigate}>
         <LibraryScreen cloudFile={focusedCloudFile} syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} bottomInset={0} sidebar={sidebar} destination={destination} onSnapshotChange={applySnapshot}
           target={screenTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
           defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
@@ -626,6 +643,7 @@ function MobileApp() {
             onSnapshotChange={applySnapshot} onTargetChange={selectTarget}
             onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />,
         search: searchContent,
+        online: onlineContent,
         cloud: cloudContent,
         settings: settingsContent,
       }} />

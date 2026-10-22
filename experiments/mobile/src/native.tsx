@@ -6,6 +6,7 @@ import type { MaterialRoles } from './material-theme';
 import { createSyncClient, type SyncBridge } from './sync';
 import { ForegroundSyncSession } from './sync-session';
 import { createStorageClient, type StorageBridge } from './storage';
+import { createOnlineClient, type BrowserState, type OnlineBridge } from './online';
 
 // 安卓外观主题桥接：壁纸种子与 Material3 语义色。
 interface MaterialBridge {
@@ -17,7 +18,17 @@ interface AndroidWindowBridge {
   screenCornerRadius(): number;
 }
 
-const nativeModule = requireNativeModule<LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & AndroidWindowBridge & CharacterMapBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
+interface FileWorkflowBridge { cancelFileWorkflow(id:string):Promise<boolean>; fileWorkflow(request: string): Promise<string>; fileState(): Promise<string>; removeExternalSource(id: string): Promise<void>; }
+
+const nativeModule = requireNativeModule<OnlineBridge & FileWorkflowBridge & LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & AndroidWindowBridge & CharacterMapBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
+export const online = createOnlineClient(nativeModule);
+export const NativeOnlineBrowser = requireNativeViewManager<ViewProps & {
+  provider: string;
+  command: string;
+  active: boolean;
+  onBrowserState: (event: NativeSyntheticEvent<BrowserState>) => void;
+  onDownloadIntent: (event: NativeSyntheticEvent<{ id: string; name: string }>) => void;
+}>('FolioNative', 'FolioOnlineView');
 export const characterMap = createCharacterMapClient(nativeModule);
 export const cloudSync = createSyncClient(nativeModule);
 export const syncSession = new ForegroundSyncSession(cloudSync, () => nativeModule.snapshot());
@@ -59,3 +70,8 @@ interface PreviewProps extends ViewProps {
 export const NativeFontPreview = requireNativeViewManager<PreviewProps>('FolioNative', 'FolioFontPreview');
 
 export const getAboutInfo = () => nativeModule.aboutInfo();
+
+export const cancelFileWorkflow = (id:string) => nativeModule.cancelFileWorkflow(id);
+export const fileWorkflow = (request: string) => nativeModule.fileWorkflow(request);
+export const fileState = () => nativeModule.fileState();
+export const removeExternalSource = (id: string) => nativeModule.removeExternalSource(id);

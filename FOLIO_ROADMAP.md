@@ -18,12 +18,12 @@
 | macOS UI | PARTIAL | `apps/macos/Folio.xcodeproj`、SwiftUI 四种浏览模式、查询/筛选、Inspector、预览、云库、在线字体与智慧收藏夹均有源码；[Phase 3 UI 报告](docs/PHASE3_UI_REPORT.md) 证明其当时的构建及基础交互。后续功能缺一份覆盖当前提交的整体验收报告。 |
 | macOS 字体导入、启用、安装 | PARTIAL | `FontOperations.swift` 与 `LibraryViewModel.swift` 已有复制/引用、批量结果和重试、CoreText 会话注册及持久注册、Finder 打开入口。属于已实现路径，不应重做 Phase 3C；仍需针对当前版本做真实文件、权限、失败恢复和卸载边界的回归。 |
 | WebDAV | PARTIAL | 现有单连接与 wire v1 已有上传下载、取消重试、云端占位及冲突；macOS、Tauri 均有入口。移动第六批已接通前台自动同步、云端保留、重下、删除恢复与冲突，并记录受控双库往返／故障回归。123PAN 连接已验证，但完整真机往返、独立服务商及真实桌面／移动双端矩阵仍有缺口，见 [移动同步记录](experiments/mobile/VALIDATION.md#cloud-sync-cycle-batch-6)。多端点和 LAN 尚未实现。 |
-| Tauri / Windows baseline | PARTIAL | `apps/desktop-ui` 已有完整 React 页面、四种浏览样式、分页/预览、收藏/智慧收藏夹、同步设置；`src-tauri` 直接使用 Rust crates，并有 Windows 默认目录、渲染和命令。旧文档的“只有依赖基线”已失效。尚无完整 Explorer 批量导入、Windows 字体启用/安装流程及本轮 Windows 打包/运行验收；Linux 更未实测。 |
+| Tauri / Windows baseline | PARTIAL | `apps/desktop-ui` 已有完整 React 页面、查询、预览、收藏与同步；P2 已接入 Explorer／单实例转交、独立安装窗口、批次恢复、会话启用、当前用户安装和 Export。共享宿主测试及 Windows 交叉编译通过，Windows x64／arm64 原生测试与应用构建已纳入 CI；目标系统实际运行待验收，Linux 未实测。见 [P2/P3 验证记录](docs/p2-p3-validation.md)。 |
 | Character Map | PARTIAL | Core 字符映射、`folio-render` 共享渲染与 UniFFI/Tauri/Expo 四项会话接口已收尾，格式、快照与分页测试通过。桌面二级三栏、移动详情下三级页面与连续滚动已接入；2026-10-17 又有轴值刷新、自动选择及部分页面验证。剩余为目标设备、生命周期与性能验收，不重建共享接口或导航；见 [字符表验证记录](docs/character-map-validation.md)。 |
-| Android / iOS | PARTIAL（隔离 PoC） | `experiments/mobile` 已建立 RN/Expo、UniFFI 本地模块、导入/查询与原生预览基础；已有批量／ZIP 导入、查询、手动／智慧收藏夹、最近、单 WebDAV 前台同步、详情及字符表；Android 真机与模拟器有分项运行记录，iOS 主要是模拟器／主机验证。双端 Rust 打包、Android APK 和 arm64 iOS Simulator App 构建已通过，见 [验证记录](experiments/mobile/VALIDATION.md)。未交付正式移动客户端、`DocumentsProvider` 或 File Provider；架构 go/no-go 与实机验收仍待完成。 |
-| 在线字体 | PARTIAL | `folio-online`、macOS 在线浏览与下载已有实现；旧 README 仍称未实现。镜像可用性、来源许可和跨平台范围需另验。 |
+| Android / iOS | PARTIAL（平台验收中） | RN/Expo、UniFFI 查询／预览／收藏／单 WebDAV 基础继续复用。P2/P3 已接入无 JS 原生文件服务、Android DocumentsProvider／Picker／SAF、iOS App Group／Files／Share Extension／只读 File Provider。构建、自动测试及模拟器分项结果见 [P2/P3 验证记录](docs/p2-p3-validation.md)；File Provider 系统物化链路、ROM／OTG、Apple 实机及生产签名仍须分别验收。既有记录见 [移动验证](experiments/mobile/VALIDATION.md)。 |
+| 在线字体 | PARTIAL | `folio-online`、macOS 在线浏览与下载已有实现；旧 README 仍称未实现。2026-10-20 规划改为基于系统 WebView 的来源 tab + 网页内容与统一传输引擎，现有 Google Fonts 目录方向退场；范围、Tauri 本地壳/内容视图、网盘/用户脚本边界见 [在线字体浏览器规划](docs/online-font-browser.md)。镜像可用性、来源许可和跨平台范围需另验。 |
 | Font Health | PARTIAL | 已补共享文件级缓存诊断和按文件去重的损坏统计，重开保留；修正 Tauri 固定零，macOS 接入问题明细、定位与重新检测，未完成首次扫描时不显示零损坏摘要。移动健康动作、跨平台未知／离线口径及完整恢复链仍待验收，见 [P0/P1 首批记录](docs/p0-p1-validation.md)。 |
-| 桌面独立字体安装窗口 | PARTIAL | macOS 已迁出 Sheet，使用 SwiftUI `Window`；只读分析、来源选择、字体操作、逐项结果、失败重试与 Export 已接入。真实场景测试确认独立、非模态、关闭／重开；持久批次恢复和完整人工操作矩阵仍待验收。Windows／Linux 窗口尚未交付。 |
+| 桌面独立字体安装窗口 | PARTIAL | macOS 使用独立 SwiftUI Window；Windows 已接入独立 WebviewWindow、最小命令权限、宿主批次、逐项结果、失败阶段重试与 Export。macOS 完整人工矩阵、Windows 实际窗口／系统操作待验收；Linux 留 P7。 |
 | WOFF / WOFF2 | NOT STARTED（产品 v2 Planned） | 当前仅 magic 识别并报告 known unsupported；Metadata、Library、Preview、Search、Collections、Sync 纳入 P7 的独立格式工作线。管理支持不等于 OS 可直接安装。 |
 | 多 WebDAV 同步 | NOT STARTED | 当前只有单 profile、全局发布标记与设备 cursor；同库多副本、端点独立进度和故障切换按 P4／P5 实施，见 [同步架构](docs/sync-architecture.md)。 |
 | 局域网多设备同步 | NOT STARTED | 发现、配对、设备信任、直接传输及与 WebDAV 混合同步按 P4／P6 实施；移动首期只保证前台。 |
@@ -114,6 +114,8 @@ Font Health 在本阶段先补**共享文件级问题、真实统计与最小恢
 
 ### P2 — Android and Windows Product Workflows
 
+**2026-10-20 实施：**共享 schema v12 本机来源／任务／账本、文件读取保护与单文件云读取已接入；Android 原生文件服务和 Windows 安装工作流已有实现。自动测试、模拟器和目标环境按 [分批验证记录](docs/p2-p3-validation.md) 分开判定，未把 ROM／OTG 或 Windows 实际运行标为通过。
+
 **两条同优先级平台线并行。资源冲突时先补 Android 对外文件链路，再补 Windows 操作缺口；Windows 不等待 Android 完成，Android 也不等待 Windows 或 macOS 全部收尾。** 理由是移动已有可运行共享层，需要尽早验证无 JS 的原生文件服务；Windows 已有完整页面，补系统操作的收益高于新增同步架构。
 
 | 项目 | Android | Windows |
@@ -137,6 +139,8 @@ Font Health 在本阶段先补**共享文件级问题、真实统计与最小恢
 | Smart Collections | P0 验证真实同步／并发／迁移，P1–P3 验证各端创建／编辑／互转、离线与刷新后的动态匹配，沿用 Rust 查询；已有受控测试不重复建模块 | 仅相关查询／数据保留缺陷阻塞对应能力；不等待 Linux、格式 v2 或高级同步才收尾。可与 Character Map、Provider、Windows 适配并行 |
 
 ### P3 — iOS/iPadOS Files and Share
+
+**2026-10-20 采用决策：**同时采用 Share Extension 与只读 `NSFileProviderReplicatedExtension`，两个扩展直接链接独立 Rust／原生文件服务。App Group 可恢复迁移、Files 复制／持久引用、收件确认和导出已接入；File Provider 系统读取与实机矩阵仍按 [分批验证记录](docs/p2-p3-validation.md) 验收。
 
 - **Why now：**已有共享页面与模拟器导入证据；先补真实设备 Files／Share，能验证共享移动层和原生扩展边界。PoC 可在 P0–P2 提前，不必机械等 Android 全部完成。
 - **Dependency：**现有 RN/Expo／Swift 原生模块、iOS 准确字体及生命周期验证、本平台生产采用记录；完整云端流程依赖 P0 的 iOS 实际客户端矩阵。复用 Android 已验证的共享能力，不以其 ROM／OTG 验收作为 iOS 前置。
@@ -241,9 +245,9 @@ Font Health 在本阶段先补**共享文件级问题、真实统计与最小恢
 | WOFF／WOFF2 | 产品 v2 独立范围；当前 TTF／OTF／TTC／OTC 的操作链未闭环 | 来源／身份／解压／渲染条件就绪；不与 Linux 或 wire v2 互锁 |
 | Directory Watch／Hot Reload | P8 效率增强，已有增量刷新可覆盖基本管理；不是纯 UI polish | 来源／修订与在用文件保护稳定后独立推进 |
 | Cover Flow／Liquid Glass／动画 polish | P9 presentation，不验证关键数据假设，也不补平台文件链路 | 独立资源，不占用核心闭环；功能／无障碍缺陷仍即时处理 |
-| iOS File Provider 完整产品化 | 先提前做高风险跨进程 PoC，完整实现待采用决策；不与 Files／Share 捆绑 | 原生无 JS 读取、协调、凭据与取消通过，且采用 ADR 明确 |
+| iOS File Provider 完整产品化 | P3 已决定采用只读复制式扩展，独立原生服务与 target 已接入；按系统链路和实机分别验收 | 原生无 JS 读取、协调、凭据、取消与主应用退出后读取通过；当前系统物化问题须解决 |
 | S2／S3、自动赞助发放服务 | 跟随对应高级能力；分发策略不能替代核心产品价值 | 功能验收＋S1 在线验证服务与客户端就绪；可人工登记权益／发放激活码，完整账号／支付自动化后置 |
-| 在线字体跨端扩展（旧 F4） | 保留现有实现；后续覆盖排在本地／同步／文件工作流之后 | 来源／镜像／许可与下载→Collect／独立窗口衔接可验收；不重建 folio-online |
+| 在线字体跨端扩展（旧 F4） | 改为系统 WebView 来源 tab + 网页内容（本地壳 + 单内容视图）、网盘 deeplink 直通与统一传输引擎；Google Fonts 目录拉取退场，不继续扩建 `folio-online` 目录 | 来源／许可、一壳一内容隔离、字体判定、下载→Collect／保存及云同步共用传输可验收 |
 
 ## Changes From Previous Roadmap
 

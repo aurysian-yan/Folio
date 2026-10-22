@@ -15,12 +15,12 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 // 密钥由 Keystore 管理，密文存放于不参与备份的应用私有目录。
-internal class FolioSyncCredentials(private val context: Context) {
-    private val alias = "${context.packageName}.webdav"
+internal class FolioSyncCredentials(private val context: Context, private val purpose: String = "webdav") {
+    private val alias = "${context.packageName}.$purpose"
     private fun file(profile: SyncProfileDto): AtomicFile {
         val scope = JSONArray(listOf(profile.serverUrl, profile.remoteDirectory, profile.username)).toString()
         val name = MessageDigest.getInstance("SHA-256").digest(scope.toByteArray()).joinToString("") { "%02x".format(it) }
-        return AtomicFile(File(context.noBackupFilesDir, "webdav-$name.bin"))
+        return AtomicFile(File(context.noBackupFilesDir, "$purpose-$name.bin"))
     }
     private fun key(create: Boolean): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

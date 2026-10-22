@@ -1,3 +1,6 @@
+#if canImport(FolioFileServices)
+import FolioFileServices
+#endif
 import ExpoModulesCore
 import Foundation
 import UIKit
@@ -63,45 +66,49 @@ struct FolioPreviewSelection: Record {
     @Field var foregroundColor: String = ""
 }
 
-enum FolioPaths {
-    static func root() throws -> URL {
-        try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                    appropriateFor: nil, create: true)
-            .appendingPathComponent("FolioMobilePoC", isDirectory: true)
-    }
-
-    static func managedFont(_ path: String) throws -> URL {
-        let fonts = try root().appendingPathComponent("fonts", isDirectory: true).resolvingSymlinksInPath()
-        let source = URL(fileURLWithPath: path).resolvingSymlinksInPath()
-        guard source.path.hasPrefix(fonts.path + "/"), FileManager.default.isReadableFile(atPath: source.path) else {
-            throw Exception(name: "FolioSource", description: "字体文件不可用。", code: "ERR_FOLIO_SOURCE")
-        }
-        return source
-    }
-
-    // 应用更新后只重定位实验沙盒内的托管字体。
-    static func relocatedFont(_ path: String) throws -> URL? {
-        guard let range = path.range(of: "/FolioMobilePoC/fonts/", options: .backwards) else { return nil }
-        let name = String(path[range.upperBound...])
-        guard !name.isEmpty, !name.contains("/"), name != ".", name != ".." else { return nil }
-        let candidate = try root().appendingPathComponent("fonts", isDirectory: true).appendingPathComponent(name)
-        guard candidate.path != path, FileManager.default.isReadableFile(atPath: candidate.path) else { return nil }
-        return try managedFont(candidate.path)
-    }
-}
-
 public final class FolioNativeModule: Module {
     private let queue = DispatchQueue(label: "com.folio.mobile.poc.library", qos: .userInitiated)
     private let characterQueue = DispatchQueue(label: "com.folio.mobile.character-map", qos: .userInitiated)
-    private var engine: FolioEngine?
-    private var sync: FolioSync?
+    private var engine: FolioEngine? { try? FolioFileRuntime.shared().engine }
+    private var sync: FolioSync? { try? FolioFileRuntime.shared().sync }
+    private var fileControllers: [String:FolioFileUI] = [:]
     private let lifecycleLock = NSLock()
     private var foreground = true
 
     public func definition() -> ModuleDefinition {
         Name("FolioNative")
+        AsyncFunction("onlineState") { () throws -> String in try FolioFileRuntime.shared().browser.state() }.runOnQueue(queue)
+        AsyncFunction("onlineImportIcon") { (uri: String) throws -> String in try FolioOnlineIcons.importFile(uri) }.runOnQueue(queue)
+        AsyncFunction("onlineAcceptDisclaimer") { () throws in try FolioFileRuntime.shared().browser.acceptDisclaimer() }.runOnQueue(queue)
+        AsyncFunction("onlineSaveProviders") { (value: String) throws in try FolioFileRuntime.shared().browser.saveProviders(value: value) }.runOnQueue(queue)
+        AsyncFunction("onlineSearch") { (id: String, query: String) throws -> String in try FolioFileRuntime.shared().browser.search(providerId: id, query: query) }.runOnQueue(queue)
+        AsyncFunction("onlineDownload") { (id: String) throws -> String in try FolioOnlineTransfers.shared.start(id) }.runOnQueue(queue)
+        AsyncFunction("onlinePause") { (id: String) throws in try FolioOnlineTransfers.shared.pause(id) }.runOnQueue(queue)
+        AsyncFunction("onlineCancel") { (id: String) throws in try FolioOnlineTransfers.shared.cancel(id) }.runOnQueue(queue)
+        AsyncFunction("onlineRetry") { (id: String) throws in try FolioOnlineTransfers.shared.retry(id) }.runOnQueue(queue)
+        AsyncFunction("onlineInspect") { (id: String) throws -> String in try FolioOnlineFiles.inspect(id) }.runOnQueue(queue)
+        AsyncFunction("onlineImport") { (id: String, selection: [String]) throws -> [String: Any] in try FolioOnlineFiles.collect(id, selection: selection) }.runOnQueue(queue)
+        AsyncFunction("onlineSave") { (id: String) throws in
+            let url = try FolioOnlineFiles.exportURL(id)
+            var presented = false
+            DispatchQueue.main.sync {
+                if let presenter = self.appContext?.utilities?.currentViewController() {
+                    presenter.present(UIDocumentPickerViewController(forExporting: [url], asCopy: true), animated: true)
+                    presented = true
+                }
+            }
+            if !presented { throw FolioPaths.failure() }
+        }.runOnQueue(queue)
+        View(FolioOnlineView.self) {
+            Prop("active") { (view: FolioOnlineView, value: Bool) in view.setActive(value) }
+            Events("onBrowserState", "onDownloadIntent")
+            Prop("provider") { (view: FolioOnlineView, value: String) in view.setProvider(value) }
+            Prop("command") { (view: FolioOnlineView, value: String) in view.command(value) }
+        }
         AsyncFunction("openCharacterMap") { (request: String) throws -> String in
-            try self.requireEngine().openCharacterMap(request: request)
+            guard let value=try JSONSerialization.jsonObject(with:Data(request.utf8)) as? [String:Any], let path=value["sourcePath"] as? String else {throw FolioPaths.failure()}
+            _=try FolioPaths.managedFont(path)
+            return try self.requireEngine().openCharacterMap(request: request)
         }.runOnQueue(characterQueue)
         AsyncFunction("queryCharacterMap") { (request: String) throws -> String in
             try self.requireEngine().queryCharacterMap(request: request)
@@ -118,20 +125,29 @@ public final class FolioNativeModule: Module {
              "platform": "ios", "arch": "arm64"]
         }
 
+        AsyncFunction("cancelFileWorkflow") { (id:String) in self.fileControllers[id]?.cancel(); return true }.runOnQueue(.main)
+        AsyncFunction("fileState") { () throws -> String in try FolioFileRuntime.shared().state() }.runOnQueue(queue)
+        AsyncFunction("removeExternalSource") { (id: String) throws in try FolioFileRuntime.shared().files.removeSource(id: id) }.runOnQueue(queue)
+        AsyncFunction("fileWorkflow") { (request: String, promise: Promise) in
+            do {
+                guard let presenter = self.appContext?.utilities?.currentViewController(), let value = try JSONSerialization.jsonObject(with: Data(request.utf8)) as? [String: Any] else { throw FolioPaths.failure() }
+                let id=value["requestId"] as? String ?? UUID().uuidString
+                let controller = FolioFileUI(presenter: presenter, request: value) { result in
+                    self.fileControllers.removeValue(forKey:id)
+                    switch result { case .success(let value): promise.resolve(value); case .failure(let error): promise.reject(error) }
+                }
+                self.fileControllers[id] = controller; try controller.launch()
+            } catch { promise.reject(error) }
+        }.runOnQueue(.main)
         AsyncFunction("initialize") { () throws -> [String: Any] in
-            if self.engine == nil {
-                let root = try FolioPaths.root()
-                try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-                let engine = try FolioEngine.open(databasePath: root.appendingPathComponent("folio.sqlite").path)
-                self.lifecycleLock.lock(); self.engine = engine; self.lifecycleLock.unlock()
-            }
-            let engine = try self.requireEngine()
+            try FolioFileRuntime.shared().refreshReferences()
             try self.syncEngine().prepareManagedSources()
-            return self.snapshot(try engine.refreshLibrary().snapshot)
+            return self.snapshot(try self.requireEngine().refreshLibrary().snapshot)
         }.runOnQueue(queue)
 
         AsyncFunction("snapshot") { () throws -> [String: Any] in
-            self.snapshot(try self.syncEngine().status().isRunning ? self.requireEngine().loadCachedLibrary() : self.requireEngine().refreshLibrary().snapshot)
+            try FolioFileRuntime.shared().refreshReferences()
+            return self.snapshot(try self.syncEngine().status().isRunning ? self.requireEngine().loadCachedLibrary() : self.requireEngine().refreshLibrary().snapshot)
         }.runOnQueue(queue)
 
         AsyncFunction("query") { (request: FolioQuery) throws -> [String: Any] in
@@ -345,7 +361,7 @@ public final class FolioNativeModule: Module {
         }.runOnQueue(.main)
 
         OnDestroy {
-            self.queue.async { self.sync?.cancel(); self.sync = nil; self.lifecycleLock.lock(); self.engine = nil; self.lifecycleLock.unlock() }
+            self.queue.async {}
         }
 
         View(FolioFontPreview.self) {
@@ -385,13 +401,7 @@ public final class FolioNativeModule: Module {
 
     // 存储维护与同步共用同一实例及运行状态。
     private func syncEngine() throws -> FolioSync {
-        if let sync { return sync }
-        let root = try FolioPaths.root()
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let opened = try FolioSync.open(databasePath: root.appendingPathComponent("folio.sqlite").path,
-                                  managedDirectory: root.appendingPathComponent("fonts", isDirectory: true).path)
-        self.sync = opened
-        return opened
+        return try FolioFileRuntime.shared().sync
     }
 
     private func syncOperation<T>(_ action: () throws -> T) throws -> T {
@@ -446,6 +456,7 @@ public final class FolioNativeModule: Module {
     }
 
     private func snapshot(_ value: LibrarySnapshotDto) -> [String: Any] {
-        FolioLibraryMapper.snapshot(value)
+        DispatchQueue.main.async { FolioFileUI.signalChanges() }
+        return FolioLibraryMapper.snapshot(value)
     }
 }

@@ -1,6 +1,8 @@
 mod about;
 mod library;
+mod operations;
 mod preview;
+mod workflow;
 
 use std::{
     path::PathBuf,
@@ -29,6 +31,7 @@ struct StorageUsageDto {
 }
 
 struct AppState {
+    operations: Arc<operations::WorkflowService>,
     library: Arc<Mutex<LibraryService>>,
     previews: Arc<preview::PreviewService>,
     character_maps: Arc<folio_render::CharacterMapService>,
@@ -1009,11 +1012,30 @@ fn require_sync_window(window: &WebviewWindow) -> Result<(), String> {
 
 // 必须为 async：创建窗口需回主线程执行，同步命令在主线程内会自锁。
 #[tauri::command]
-async fn open_settings(window: WebviewWindow, app: tauri::AppHandle, page: Option<String>) -> Result<(), String> {
+async fn open_settings(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    page: Option<String>,
+) -> Result<(), String> {
     require_main_window(&window)?;
-    let page = page.filter(|page| ["cloud", "storage", "importing", "display", "font-cards", "shortcuts", "about"].contains(&page.as_str()));
+    let page = page.filter(|page| {
+        [
+            "cloud",
+            "storage",
+            "importing",
+            "display",
+            "font-cards",
+            "shortcuts",
+            "about",
+        ]
+        .contains(&page.as_str())
+    });
     if let Some(window) = app.get_webview_window("settings") {
-        if let Some(page) = &page { window.emit("settings:navigate", page).map_err(|error| error.to_string())?; }
+        if let Some(page) = &page {
+            window
+                .emit("settings:navigate", page)
+                .map_err(|error| error.to_string())?;
+        }
         window.show().map_err(|error| error.to_string())?;
         window.set_focus().map_err(|error| error.to_string())?;
         return Ok(());
@@ -1022,7 +1044,13 @@ async fn open_settings(window: WebviewWindow, app: tauri::AppHandle, page: Optio
     let window = WebviewWindowBuilder::new(
         &app,
         "settings",
-        WebviewUrl::App(format!("index.html?window=settings{}", page.map(|page| format!("&page={page}")).unwrap_or_default()).into()),
+        WebviewUrl::App(
+            format!(
+                "index.html?window=settings{}",
+                page.map(|page| format!("&page={page}")).unwrap_or_default()
+            )
+            .into(),
+        ),
     )
     .title("Folio 设置")
     .inner_size(840.0, 640.0)
@@ -1057,7 +1085,9 @@ fn apply_window_material(window: &tauri::Window) -> bool {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn apply_window_material(_window: &tauri::Window) -> bool { false }
+fn apply_window_material(_window: &tauri::Window) -> bool {
+    false
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -1070,7 +1100,12 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder
-            .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+                workflow::receive(
+                    app,
+                    args.into_iter().skip(1).collect(),
+                    std::path::Path::new(&cwd),
+                );
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.unminimize();
                     let _ = window.show();
@@ -1091,10 +1126,18 @@ pub fn run() {
     let app_state = builder
         .plugin(tauri_plugin_dialog::init())
         .on_page_load(|webview, payload| {
-            if payload.event() != tauri::webview::PageLoadEvent::Finished { return; }
-            let material = if apply_window_material(&webview.window()) { "mica" } else { "solid" };
+            if payload.event() != tauri::webview::PageLoadEvent::Finished {
+                return;
+            }
+            let material = if apply_window_material(&webview.window()) {
+                "mica"
+            } else {
+                "solid"
+            };
             // 页面重载后同步实际材质，默认实色避免不支持云母时透出桌面。
-            let _ = webview.eval(format!("document.documentElement.dataset.windowMaterial = '{material}';"));
+            let _ = webview.eval(format!(
+                "document.documentElement.dataset.windowMaterial = '{material}';"
+            ));
         })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
@@ -1104,7 +1147,13 @@ pub fn run() {
             folio_sync::recover_transfers(&database_path)?;
             let mut library = LibraryService::open(database_path.clone())?;
             library.add_default_roots()?;
+            let operations = Arc::new(operations::WorkflowService::new(
+                database_path.clone(),
+                managed_directory.clone(),
+            ));
+            operations.recover().map_err(std::io::Error::other)?;
             app.manage(AppState {
+                operations,
                 library: Arc::new(Mutex::new(library)),
                 previews: Arc::new(preview::PreviewService::default()),
                 character_maps: Arc::new(folio_render::CharacterMapService::default()),
@@ -1115,12 +1164,44 @@ pub fn run() {
                 sync_pending: Arc::new(AtomicBool::new(false)),
             });
 
+            let inputs = std::env::args_os()
+                .skip(1)
+                .map(|value| value.to_string_lossy().into_owned())
+                .collect();
+            workflow::receive(app.handle(), inputs, &std::env::current_dir()?);
+            workflow::flush(app.handle());
             if let Some(window) = app.get_webview_window("main") {
                 window.show()?;
             }
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if window.label() == "installation" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if window
+                        .state::<AppState>()
+                        .operations
+                        .snapshot()
+                        .is_ok_and(|state| state.running)
+                    {
+                        let _ = window.emit("workflow-close-requested", ());
+                    } else {
+                        let _ = window.hide();
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            workflow::font_workflow_from_library,
+            workflow::font_health_issues,
+            workflow::open_font_workflow,
+            workflow::analyze_font_inputs,
+            workflow::workflow_snapshot,
+            workflow::execute_font_batch,
+            workflow::cancel_font_batch,
+            workflow::resolve_export_conflict,
+            workflow::hide_font_workflow,
             open_character_map,
             query_character_map,
             render_character_map,
@@ -1172,5 +1253,9 @@ pub fn run() {
         .build(context)
         .expect("启动 Folio 桌面应用失败");
 
-    app_state.run(|_, _| {});
+    app_state.run(|app, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            app.state::<AppState>().operations.shutdown();
+        }
+    });
 }

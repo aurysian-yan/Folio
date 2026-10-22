@@ -64,8 +64,9 @@ pub fn flush(app: &tauri::AppHandle) {
     let service = state.operations.clone();
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        if service.analyze(paths).is_ok() {
+        if let Ok(batch) = service.analyze(paths) {
             let _ = show(&app);
+            let _ = app.emit("workflow-inputs", &batch.id);
             let _ = app.emit("workflow-changed", ());
         }
     });
@@ -81,17 +82,18 @@ pub async fn analyze_font_inputs(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
     paths: Vec<String>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     allowed(&window)?;
     let service = state.operations.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let batch = tauri::async_runtime::spawn_blocking(move || {
         service.analyze(paths.into_iter().map(PathBuf::from).collect())
     })
     .await
     .map_err(|_| "workflow.error.operationFailed")??;
     show(&app)?;
     let _ = app.emit("workflow-changed", ());
-    Ok(())
+    let _ = app.emit("workflow-inputs", &batch.id);
+    Ok(batch.id)
 }
 #[tauri::command]
 pub fn workflow_snapshot(

@@ -87,15 +87,40 @@ class FolioPreviewSelection : Record {
 class FolioNativeModule : Module() {
     private val executor = Executors.newSingleThreadExecutor()
     private val characterExecutor = Executors.newSingleThreadExecutor()
-    @Volatile private var engine: FolioEngine? = null
-    private var sync: FolioSync? = null
+    private val engine: FolioEngine? get() = appContext.reactContext?.let { FolioFileRuntime.get(it).engine }
+    private val sync: FolioSync? get() = appContext.reactContext?.let { FolioFileRuntime.get(it).sync }
     private val lifecycleLock = Any()
     private var foreground = true
 
     override fun definition() = ModuleDefinition {
         Name("FolioNative")
+        AsyncFunction("onlineState") { promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.state()} }
+        AsyncFunction("onlineImportIcon") { uri:String,promise:Promise -> perform(promise) {FolioOnlineIcons.importFile(context(),uri)} }
+        AsyncFunction("onlineAcceptDisclaimer") { promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.acceptDisclaimer();true} }
+        AsyncFunction("onlineSaveProviders") { value:String,promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.saveProviders(value);true} }
+        AsyncFunction("onlineSearch") { id:String,query:String,promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.search(id,query)} }
+        AsyncFunction("onlineDownload") { id:String,promise:Promise -> perform(promise) {FolioOnlineTransfers.start(context(),id)} }
+        AsyncFunction("onlinePause") { id:String,promise:Promise -> perform(promise) {FolioOnlineTransfers.pause(context(),id);true} }
+        AsyncFunction("onlineCancel") { id:String,promise:Promise -> perform(promise) {FolioOnlineTransfers.cancel(context(),id);true} }
+        AsyncFunction("onlineRetry") { id:String,promise:Promise -> perform(promise) {FolioOnlineTransfers.retry(context(),id);true} }
+        AsyncFunction("onlineInspect") { id:String,promise:Promise -> perform(promise) {FolioOnlineFiles.inspect(context(),id)} }
+        AsyncFunction("onlineImport") { id:String,selection:List<String>,promise:Promise -> perform(promise) {FolioOnlineFiles.collect(context(),id,selection)} }
+        AsyncFunction("onlineSave") { id:String ->
+            val intent=android.content.Intent(context(),FolioOnlineExportActivity::class.java).putExtra("id",id).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context().startActivity(intent)
+        }
+        View(FolioOnlineView::class) {
+            OnViewDestroys { view: FolioOnlineView -> view.dispose() }
+            Prop("active") { view: FolioOnlineView, value: Boolean -> view.setActive(value) }
+            Events("onBrowserState","onDownloadIntent")
+            Prop("provider") {view:FolioOnlineView,value:String->view.setProvider(value)}
+            Prop("command") {view:FolioOnlineView,value:String->view.command(value)}
+        }
         AsyncFunction("openCharacterMap") { request: String, promise: Promise ->
-            performCharacterMap(promise) { requireEngine().openCharacterMap(request) }
+            performCharacterMap(promise) {
+                FolioFileRuntime.get(context()).readableFont(org.json.JSONObject(request).getString("sourcePath"))
+                requireEngine().openCharacterMap(request)
+            }
         }
         AsyncFunction("queryCharacterMap") { request: String, promise: Promise ->
             performCharacterMap(promise) { requireEngine().queryCharacterMap(request) }
@@ -129,13 +154,22 @@ class FolioNativeModule : Module() {
             }
         }
 
+        AsyncFunction("fileWorkflow") { request: String, promise: Promise ->
+            val activity = appContext.currentActivity
+            if (activity == null) promise.reject("ERR_FOLIO_FILES", "workflow.error.invalidRequest", null)
+            else FolioFileRuntime.get(context()).launch(activity,request) { value,error ->
+                if(error==null) promise.resolve(value ?: "{}") else promise.reject("ERR_FOLIO_FILES",error.message ?: "workflow.error.operationFailed",error)
+            }
+        }
+        AsyncFunction("cancelFileWorkflow") { id:String -> FolioFileRuntime.activeFiles.values.mapNotNull {it.get()}.filter {it.isRequest(id)}.forEach {it.cancelWorkflow()}; true }
+        AsyncFunction("fileState") { promise: Promise -> perform(promise) {
+            val runtime=FolioFileRuntime.get(context())
+            org.json.JSONObject().put("sources",org.json.JSONArray(runtime.files.sources())).put("batches",org.json.JSONArray(runtime.files.batches())).put("health",org.json.JSONObject(runtime.files.health())).put("inbox",runtime.inbox()).toString()
+        } }
+        AsyncFunction("removeExternalSource") { id: String, promise: Promise -> perform(promise) { FolioFileRuntime.get(context()).files.removeSource(id);true } }
         AsyncFunction("initialize") { promise: Promise ->
             perform(promise) {
-                if (engine == null) {
-                    val root = File(context().filesDir, "FolioMobilePoC")
-                    check(root.isDirectory || root.mkdirs())
-                    engine = FolioEngine.open(File(root, "folio.sqlite").absolutePath)
-                }
+                FolioFileRuntime.get(context()).refreshReferences()
                 syncEngine().prepareManagedSources()
                 snapshot(requireEngine().refreshLibrary().snapshot)
             }
@@ -365,11 +399,7 @@ class FolioNativeModule : Module() {
         OnDestroy {
             characterExecutor.shutdown()
             executor.execute {
-                sync?.cancel()
-                sync?.destroy()
-                sync = null
-                engine?.destroy()
-                engine = null
+
             }
             executor.shutdown()
         }
@@ -400,10 +430,7 @@ class FolioNativeModule : Module() {
     }
 
     private fun syncEngine(): FolioSync {
-        sync?.let { return it }
-        FolioTls.initialize(context().applicationContext)
-        return FolioSync.open(File(rootDirectory(), "folio.sqlite").absolutePath,
-            File(rootDirectory(), "fonts").absolutePath).also { sync = it }
+        return FolioFileRuntime.get(context()).sync
     }
 
     private fun requireSyncIdle() {

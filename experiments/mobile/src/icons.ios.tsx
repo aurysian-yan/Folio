@@ -101,3 +101,5 @@ export const NumberSquareSixIcon = symbol('6.square', '6.square.fill');
 export const NumberSquareSevenIcon = symbol('7.square', '7.square.fill');
 export const NumberSquareEightIcon = symbol('8.square', '8.square.fill');
 export const NumberSquareNineIcon = symbol('9.square', '9.square.fill');
+
+export const GlobeIcon = symbol('globe');

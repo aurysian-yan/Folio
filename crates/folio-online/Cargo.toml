@@ -7,6 +7,9 @@ rust-version.workspace = true
 
 [dependencies]
 folio-core = { path = "../folio-core" }
+folio-storage = { path = "../folio-storage" }
+blake3.workspace = true
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp", "ico"] }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

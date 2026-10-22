@@ -27,13 +27,17 @@ final class FolioProviderItem: NSObject, NSFileProviderItem {
     value["directory"] as? Bool == true
       ? .folder : UTType(filenameExtension: (filename as NSString).pathExtension) ?? .data
   }
-  var documentSize: NSNumber? { value["size"] as? NSNumber }
-  var isDownloaded: Bool { value["available"] as? Bool == true }
-  var isMostRecentVersionDownloaded: Bool { isDownloaded }
+  var documentSize: NSNumber? {
+    value["directory"] as? Bool == true ? nil : value["size"] as? NSNumber
+  }
   var itemVersion: NSFileProviderItemVersion {
-    NSFileProviderItemVersion(
+    let metadata =
+      (try? JSONSerialization.data(
+        withJSONObject: ["document": value, "filename": filename], options: [.sortedKeys]))
+      ?? Data(filename.utf8)
+    return NSFileProviderItemVersion(
       contentVersion: Data((value["fingerprint"] as? String ?? "folder").utf8),
-      metadataVersion: Data(filename.utf8))
+      metadataVersion: Data(SHA256.hash(data: metadata)))
   }
 }
 

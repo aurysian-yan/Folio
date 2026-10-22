@@ -63,7 +63,7 @@ impl WorkflowService {
             items: Vec::new(),
             cancel_requested: false,
         };
-        let mut seen=std::collections::BTreeSet::new();
+        let mut seen = std::collections::BTreeSet::new();
         for path in paths.into_iter().take(10_000) {
             let mut item = OperationItem {
                 id: new_operation_id().map_err(err)?,
@@ -83,7 +83,9 @@ impl WorkflowService {
             };
             match parse_font_file(&path) {
                 Ok(parsed) => {
-                    if !seen.insert(parsed.fingerprint.to_hex()) {continue;}
+                    if !seen.insert(parsed.fingerprint.to_hex()) {
+                        continue;
+                    }
                     item.fingerprint = Some(parsed.fingerprint.to_hex());
                     item.analysis = Some(
                         serde_json::json!({"format":parsed.format.label(),"faces":parsed.faces.iter().map(|face|serde_json::json!({"family":face.metadata.family_name,"style":face.metadata.subfamily_name,"faceIndex":face.face_index,"duplicate":catalog.faces().any(|value|value.revision_id==face.revision.id),"conflict":catalog.faces().any(|value|value.identity_id==face.identity.id && value.revision_id!=face.revision.id)})).collect::<Vec<_>>(),"problemCount":parsed.problems.len()}),
@@ -91,7 +93,14 @@ impl WorkflowService {
                 }
                 Err(cause) => {
                     item.status = OperationStatus::Failed;
-                    item.error_key = Some(if matches!(cause,folio_core::FontError::UnsupportedFormat{..}){"import.issueKinds.known_unsupported_format"}else{"workflow.error.invalidFont"}.into());
+                    item.error_key = Some(
+                        if matches!(cause, folio_core::FontError::UnsupportedFormat { .. }) {
+                            "import.issueKinds.known_unsupported_format"
+                        } else {
+                            "workflow.error.invalidFont"
+                        }
+                        .into(),
+                    );
                 }
             }
             batch.items.push(item);
@@ -288,11 +297,19 @@ impl WorkflowService {
                 Ok(()) => item.status = OperationStatus::Succeeded,
                 Err(key) if key == "workflow.error.nameConflict" => {
                     item.status = OperationStatus::AwaitingDecision;
-                    item.error_key = Some(if key.starts_with("workflow.error."){key}else{"workflow.error.operationFailed".into()});
+                    item.error_key = Some(if key.starts_with("workflow.error.") {
+                        key
+                    } else {
+                        "workflow.error.operationFailed".into()
+                    });
                 }
                 Err(key) => {
                     item.status = OperationStatus::Failed;
-                    item.error_key = Some(if key.starts_with("workflow.error."){key}else{"workflow.error.operationFailed".into()});
+                    item.error_key = Some(if key.starts_with("workflow.error.") {
+                        key
+                    } else {
+                        "workflow.error.operationFailed".into()
+                    });
                 }
             }
             self.update(id, &item)?;

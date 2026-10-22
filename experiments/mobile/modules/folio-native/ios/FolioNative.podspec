@@ -11,9 +11,10 @@ Pod::Spec.new do |s|
   s.swift_version = '5.9'
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
+  s.dependency 'FolioFileServices'
   s.dependency 'ZIPFoundation', '0.9.20'
-  s.source_files = 'src/**/*.swift', 'generated/*.swift'
-  s.vendored_frameworks = 'Frameworks/FolioFFI.xcframework'
-  s.frameworks = 'CoreText', 'Security', 'SystemConfiguration'
+  s.source_files = 'src/**/*.swift'
+  s.exclude_files = 'src/FolioSyncCredentials.swift'
+  s.frameworks = 'CoreText', 'Security', 'SystemConfiguration', 'WebKit'
   s.libraries = 'c++', 'resolv'
 end

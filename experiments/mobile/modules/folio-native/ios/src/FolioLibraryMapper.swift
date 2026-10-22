@@ -1,3 +1,6 @@
+#if canImport(FolioFileServices)
+import FolioFileServices
+#endif
 import Foundation
 
 // 移动查询与返回值统一映射到既有 Rust 契约。

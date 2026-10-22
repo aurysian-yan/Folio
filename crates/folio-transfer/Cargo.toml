@@ -1,0 +1,21 @@
+[package]
+name = "folio-transfer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+folio-core = { path = "../folio-core" }
+folio-storage = { path = "../folio-storage" }
+folio-online = { path = "../folio-online" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+zip = { version = "=6.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

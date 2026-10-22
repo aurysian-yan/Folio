@@ -1,3 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <application>
+    <activity android:name="com.folio.poc.FolioOnlineExportActivity" android:exported="false" />
+    <service android:name="com.folio.poc.FolioOnlineJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
+    <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" xmlns:tools="http://schemas.android.com/tools" tools:node="merge" />
+    <receiver android:name="com.folio.poc.FolioOnlineCancelReceiver" android:exported="false" />
+    <provider android:name="com.folio.poc.FolioDocumentsProvider" android:authorities="${applicationId}.documents" android:exported="true" android:grantUriPermissions="true" android:permission="android.permission.MANAGE_DOCUMENTS">
+      <intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter>
+    </provider>
+    <activity android:name="com.folio.poc.FolioFileActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden|uiMode">
+      <intent-filter><action android:name="android.intent.action.SEND" /><action android:name="android.intent.action.SEND_MULTIPLE" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="font/*" /><data android:mimeType="application/zip" /><data android:mimeType="application/octet-stream" /></intent-filter>
+      <intent-filter><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><data android:mimeType="font/*" /></intent-filter>
+      <intent-filter><action android:name="android.intent.action.GET_CONTENT" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.OPENABLE" /><data android:mimeType="font/*" /><data android:mimeType="application/octet-stream" /></intent-filter>
+    </activity>
+  </application>
 </manifest>

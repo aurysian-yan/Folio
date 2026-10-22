@@ -10,6 +10,8 @@ export function TabScenes({ selectedId, scenes }: {
   const [opacity] = useState(() => Object.fromEntries(navigationItems.map(({ id }) =>
     [id, new Animated.Value(id === selectedId ? 1 : 0)])) as Record<MobileTab, Animated.Value>);
   const [pages, setPages] = useState({ selectedId, displayed: [selectedId] as MobileTab[] });
+  const [onlineVisited, setOnlineVisited] = useState(selectedId === 'online');
+  if (selectedId === 'online' && !onlineVisited) setOnlineVisited(true);
   const [reduceMotion, setReduceMotion] = useState(false);
 
   if (pages.selectedId !== selectedId) {
@@ -46,7 +48,7 @@ export function TabScenes({ selectedId, scenes }: {
       return <Animated.View key={id} pointerEvents={active ? 'auto' : 'none'}
         accessibilityElementsHidden={!active} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}
         style={[StyleSheet.absoluteFill, { opacity: opacity[id] }, !visible && styles.hidden]}>
-        {(visible || id === 'local' || id === 'search') && scenes[id]}
+        {(visible || id === 'local' || id === 'search' || (id === 'online' && onlineVisited)) && scenes[id]}
       </Animated.View>;
     })}
   </View>;

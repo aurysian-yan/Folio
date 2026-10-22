@@ -26,3 +26,18 @@ jobs:
       - run: pnpm --dir experiments/mobile typecheck && pnpm --dir experiments/mobile lint && pnpm --dir experiments/mobile test
       - run: node --test tools/releases/release.test.mjs
       - run: cargo test --locked --workspace
+  windows-workflows:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/toolchain
+      - run: cargo test --locked -p folio-storage -p folio-query -p folio-sync
+      - run: cargo test --locked --manifest-path apps/desktop-ui/src-tauri/Cargo.toml
+      - run: pnpm --dir apps/desktop-ui typecheck
+      - run: pnpm --dir apps/desktop-ui test
+      - run: pnpm --dir apps/desktop-ui exec tauri build --ci --bundles nsis -- --locked

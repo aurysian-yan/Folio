@@ -215,6 +215,7 @@ impl FolioDatabase {
             ))
         })?;
         let mut result = std::collections::BTreeMap::new();
+        let external = self.external_sources()?;
         for row in rows {
             let (platform, bytes, display, hash, size, mtime) = row?;
             let path = crate::path_codec::decode_path(
@@ -223,6 +224,12 @@ impl FolioDatabase {
                 &display,
             )?
             .path;
+            if external
+                .iter()
+                .any(|source| !source.available && path.starts_with(&source.snapshot_path))
+            {
+                continue;
+            }
             let Ok(meta) = std::fs::metadata(&path) else {
                 continue;
             };
@@ -290,7 +297,9 @@ impl FolioDatabase {
     /// 刷新全部库根目录。
     pub fn refresh(&mut self, mode: RefreshMode) -> Result<RefreshResult, StorageError> {
         let roots = root::list_roots(&self.conn)?;
-        refresh::refresh_roots(&mut self.conn, &roots, mode)
+        let result = refresh::refresh_roots(&mut self.conn, &roots, mode)?;
+        self.set_sync_metadata("local_scan_completed", "true")?;
+        Ok(result)
     }
 
     /// 按标识刷新单个库根目录，返回目录仅包含该根范围。

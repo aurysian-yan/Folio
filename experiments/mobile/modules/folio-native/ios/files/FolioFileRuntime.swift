@@ -17,6 +17,7 @@ public final class FolioFileRuntime {
   public let engine: FolioEngine
   public let files: FolioFileService
   public let sync: FolioSync
+  public let browser: FolioBrowser
   public let queue = DispatchQueue(label: "com.folio.files", qos: .userInitiated)
   private let sourceLock = NSRecursiveLock()
   private init() throws {
@@ -25,6 +26,7 @@ public final class FolioFileRuntime {
     files = try FolioFileService.open(
       databasePath: database, managedDirectory: root.appendingPathComponent("fonts").path)
     engine = try FolioEngine.open(databasePath: database)
+    browser = try FolioBrowser.open(databasePath: database, transferDirectory: root.appendingPathComponent("transfers").path)
     sync = try FolioSync.open(
       databasePath: database, managedDirectory: root.appendingPathComponent("fonts").path)
   }

@@ -1,3 +1,6 @@
+#if canImport(FolioFileServices)
+import FolioFileServices
+#endif
 import CoreText
 import ExpoModulesCore
 import UIKit
@@ -135,7 +138,7 @@ final class FolioFontPreview: ExpoView, UITextViewDelegate {
                   value.wrapWidth.isFinite, value.wrapWidth >= 0 else {
                 throw NSError(domain: "FolioPreview", code: 4)
             }
-            let url = try FolioPaths.managedFont(value.sourcePath)
+            let url = try FolioPaths.previewFont(value.sourcePath)
             let identity = "\(value.sourcePath)|\(value.faceIndex)|\(value.revisionId)"
             if baseFontKey != identity {
                 guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],

@@ -6,6 +6,8 @@ import type { FontFace, FontFamily } from './library';
 import { HardDriveIcon } from './icons';
 import { SettingsGroup, SettingsIcon, settingsLayout, settingsTypography } from './settings-ui';
 import type { Theme } from './ui';
+import { FileWorkflowPanel } from './FileWorkflowPanel';
+import { PanelAction } from './panel-content';
 
 export type FontFileAction = 'download' | 'cloudOnly' | 'excludeUpload' | 'includeUpload';
 
@@ -37,6 +39,7 @@ function FileLocation({ file, theme, onAction }: {
   const inFlight = useRef(false);
   const [pending, setPending] = useState<FontFileAction | null>(null);
   const [error, setError] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   const local = file.localSources.length > 0;
   const transfer = transferLabel(file, t);
   const actions: { action: FontFileAction; label: string; primary?: boolean }[] = [];
@@ -58,6 +61,8 @@ function FileLocation({ file, theme, onAction }: {
       {local && <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('fontLocation.localLibrary')}</Text>}
       {!!transfer && <Text accessibilityLiveRegion="polite" style={[settingsTypography.detail, { color: theme.secondary }]}>{transfer}</Text>}
     </View>
+    <View style={styles.actions}><PanelAction label={t("workflow.filesTitle")} theme={theme} onPress={() => setFilesOpen(true)} /></View>
+    <FileWorkflowPanel visible={filesOpen} theme={theme} onClose={() => setFilesOpen(false)} ids={[`${local ? "local" : "cloud"}/${file.fingerprint}`]} onChanged={() => {}} />
     {actions.length > 0 && <View style={styles.actions}>
       {actions.map(({ action, label, primary }) => <Pressable key={action} accessibilityRole="button"
         accessibilityState={{ disabled: pending !== null, busy: pending === action }} disabled={pending !== null}

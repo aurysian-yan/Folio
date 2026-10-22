@@ -63,73 +63,99 @@ export default function FontWorkflow() {
     }, []);
     useEffect(() => {
         let alive = true;
-        const unsubscribers = [listen("workflow-changed", () => { if (alive)
-                void read().catch(report); }), listen("workflow-close-requested", () => { if (alive)
-                setClosing(true); })];
-        void invoke<Snapshot>("workflow_snapshot").then((value) => { if (alive) {
-            setSnapshot(value);
-            setSelected(value.batches[0]?.id ?? "");
-        } }).catch(report);
-        return () => { alive = false; for (const pending of unsubscribers)
-            void pending.then((off) => off()); };
+        const unsubscribers = [listen<string>("workflow-inputs", (event) => { if (alive) {
+                setSelected(event.payload);
+                void read().catch(report);
+            } }), listen("workflow-changed", () => {
+                if (alive)
+                    void read().catch(report);
+            }), listen("workflow-close-requested", () => {
+                if (alive)
+                    setClosing(true);
+            })];
+        void invoke<Snapshot>("workflow_snapshot").then((value) => {
+            if (alive) {
+                setSnapshot(value);
+                setSelected(value.batches[0]?.id ?? "");
+            }
+        }).catch(report);
+        return () => {
+            alive = false;
+            for (const pending of unsubscribers)
+                void pending.then((off) => off());
+        };
     }, [read, report]);
     const batch = snapshot.batches.find((value) => value.id === selected) ?? snapshot.batches[0];
     const conflict = batch?.items.find((item) => item.status === "awaitingDecision");
-    async function add() { try {
-        const paths = await open({ multiple: true, filters: [{ name: t("workflow.fontFiles"), extensions: ["ttf", "otf", "ttc", "otc"] }] });
-        if (!paths)
-            return;
-        await invoke("analyze_font_inputs", { paths: typeof paths === "string" ? [paths] : paths });
-        await read();
-    }
-    catch (cause) {
-        report(cause);
-    } }
-    async function execute(retry = false) { if (!batch)
-        return; try {
-        setError(null);
-        let destination: string | null = null;
-        if (action === "export" && !retry) {
-            const selected = await open({ directory: true });
-            if (typeof selected !== "string")
+    async function add() {
+        try {
+            const paths = await open({ multiple: true, filters: [{ name: t("workflow.fontFiles"), extensions: ["ttf", "otf", "ttc", "otc"] }] });
+            if (!paths)
                 return;
-            destination = selected;
+            const target = await invoke<string>("analyze_font_inputs", { paths: typeof paths === "string" ? [paths] : paths });
+            setSelected(target);
+            await read();
         }
-        const target = await invoke<string>("execute_font_batch", { id: batch.id, action, destination, retry });
-        setSelected(target);
-        await read();
+        catch (cause) {
+            report(cause);
+        }
     }
-    catch (cause) {
-        report(cause);
-    } }
-    async function resolve(name: string | null) { if (!batch || !conflict)
-        return; try {
-        await invoke("resolve_export_conflict", { id: batch.id, itemId: conflict.id, name });
-        setRename("");
-        await read();
+    async function execute(retry = false) {
+        if (!batch)
+            return;
+        try {
+            setError(null);
+            let destination: string | null = null;
+            if (action === "export" && !retry) {
+                const selected = await open({ directory: true });
+                if (typeof selected !== "string")
+                    return;
+                destination = selected;
+            }
+            const target = await invoke<string>("execute_font_batch", { id: batch.id, action, destination, retry });
+            setSelected(target);
+            await read();
+        }
+        catch (cause) {
+            report(cause);
+        }
     }
-    catch (cause) {
-        report(cause);
-    } }
-    async function cancel() { if (!batch)
-        return; try {
-        await invoke("cancel_font_batch", { id: batch.id });
-        await read();
+    async function resolve(name: string | null) {
+        if (!batch || !conflict)
+            return;
+        try {
+            await invoke("resolve_export_conflict", { id: batch.id, itemId: conflict.id, name });
+            setRename("");
+            await read();
+        }
+        catch (cause) {
+            report(cause);
+        }
     }
-    catch (cause) {
-        report(cause);
-    } }
-    async function removeOperation(path: string, persistent: boolean) { try {
-        await invoke("analyze_font_inputs", { paths: [path] });
-        const value = await invoke<Snapshot>("workflow_snapshot");
-        const target = value.batches.find((value) => value.items.some((item) => item.source === path));
-        if (target)
-            await invoke("execute_font_batch", { id: target.id, action: persistent ? "uninstall" : "deactivate", destination: null, retry: false });
-        await read();
+    async function cancel() {
+        if (!batch)
+            return;
+        try {
+            await invoke("cancel_font_batch", { id: batch.id });
+            await read();
+        }
+        catch (cause) {
+            report(cause);
+        }
     }
-    catch (cause) {
-        report(cause);
-    } }
+    async function removeOperation(path: string, persistent: boolean) {
+        try {
+            await invoke("analyze_font_inputs", { paths: [path] });
+            const value = await invoke<Snapshot>("workflow_snapshot");
+            const target = value.batches.find((value) => value.items.some((item) => item.source === path));
+            if (target)
+                await invoke("execute_font_batch", { id: target.id, action: persistent ? "uninstall" : "deactivate", destination: null, retry: false });
+            await read();
+        }
+        catch (cause) {
+            report(cause);
+        }
+    }
     return <main className="workflow-window">
     <h1>{t("workflow.title")}</h1>
     <Toolbar aria-label={t("workflow.title")}><Button onPress={() => void add()}>{t("workflow.addFiles")}</Button>

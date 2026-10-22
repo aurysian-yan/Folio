@@ -18,7 +18,7 @@ android {
     versionCode 1
     versionName '0.1.0'
     minSdkVersion 28
-    testInstrumentationRunner project.findProperty('folioPreviewTest') ? 'com.folio.poc.FolioPreviewInstrumentation' :
+    testInstrumentationRunner project.findProperty('folioFileTest') ? 'com.folio.poc.FolioFileInstrumentation' : project.findProperty('folioPreviewTest') ? 'com.folio.poc.FolioPreviewInstrumentation' :
       project.findProperty('folioSliderTest') ? 'com.folio.poc.FolioSliderRefractionInstrumentation' :
       project.findProperty('folioSwitchTest') ? 'com.folio.poc.FolioSwitchRefractionInstrumentation' :
       project.findProperty('folioSyncTarget') ? 'com.folio.poc.FolioLiveSyncInstrumentation' : 'com.folio.poc.FolioSyncInstrumentation'
@@ -26,7 +26,7 @@ android {
   }
   sourceSets.main.java.srcDirs += 'generated'
   sourceSets.main.resources.srcDirs += 'third-party'
-  sourceSets.androidTest.assets.srcDirs += '../../../samples'
+  sourceSets.androidTest.assets.srcDirs += ['../../../samples', '../../../../../locales']
   buildFeatures { compose true }
   if (project.findProperty('folioSyncTarget')) {
     signingConfigs.debug {
@@ -49,6 +49,7 @@ def folioVerifierVersion = (folioCargoLock =~ /name = "rustls-platform-verifier-
 if (!folioVerifierVersion.find()) throw new GradleException('Cargo.lock 缺少安卓证书校验器')
 
 dependencies {
+  implementation 'androidx.work:work-runtime-ktx:2.11.2'
   implementation "org.rustls:rustls-platform-verifier:${folioVerifierVersion.group(1)}"
   implementation 'androidx.activity:activity:1.10.1'
   implementation 'net.java.dev.jna:jna:5.19.1@aar'

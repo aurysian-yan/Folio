@@ -107,7 +107,12 @@ fn add_source(
         ],
     )?;
 
-    let root = get_root(conn, id)?.ok_or(StorageError::RootNotFound { id })?;
+    let root = if changed == 0 {
+        list_roots(conn)?.into_iter().find(|root| root.path == path)
+    } else {
+        get_root(conn, id)?
+    }
+    .ok_or(StorageError::RootNotFound { id })?;
     if changed == 0 {
         Ok(AddRootOutcome::Existing(root))
     } else {

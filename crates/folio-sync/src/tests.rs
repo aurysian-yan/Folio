@@ -193,6 +193,7 @@ fn local_eviction_and_explicit_global_delete_are_distinct() {
         file_size: 4,
         faces: vec![],
         online_origin: None,
+        source_metadata: Vec::new(),
     })
     .unwrap();
     let mut db = FolioDatabase::open(&path).unwrap();
@@ -217,6 +218,7 @@ fn local_eviction_and_explicit_global_delete_are_distinct() {
             file_size: 4,
             faces: vec![],
             online_origin: None,
+        source_metadata: Vec::new(),
         }),
     )
     .unwrap();
@@ -315,4 +317,41 @@ fn smart_folder_sync_preserves_macos_system_font_condition() {
     assert_eq!(decoded.query_json, folder.query_json);
     let resent = WireSmartFolder::from(decoded);
     assert_eq!(resent.query_json, folder.query_json);
+}
+
+#[tokio::test]
+async fn cancelling_a_waiter_does_not_cancel_another_file_reader() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("folio.sqlite");
+    let owner = folio_storage::ResourceGuard::acquire(&database, "file:one", true).unwrap();
+    let first = AtomicBool::new(true);
+    let second = AtomicBool::new(false);
+    assert!(matches!(
+        object_write_guard(&database, "one", &first).await,
+        Err(SyncError::Cancelled)
+    ));
+    drop(owner);
+    let second = object_write_guard(&database, "one", &second).await.unwrap();
+    assert!(folio_storage::ResourceGuard::acquire(&database, "file:one", false).is_err());
+    drop(second);
+    assert!(folio_storage::ResourceGuard::acquire(&database, "file:one", false).is_ok());
+}
+#[test]
+fn opening_an_extension_does_not_reset_an_active_transfer() {
+    let temp = tempfile::tempdir().unwrap();
+    let database = temp.path().join("folio.sqlite");
+    let db = FolioDatabase::open(&database).unwrap();
+    save_transfer(&db, "one", "download", "running", None).unwrap();
+    let active = folio_storage::ResourceGuard::acquire(&database, "sync", true).unwrap();
+    recover_transfers(&database).unwrap();
+    assert_eq!(
+        db.file_policy("one").unwrap().transfer_status.as_deref(),
+        Some("running")
+    );
+    drop(active);
+    recover_transfers(&database).unwrap();
+    assert_ne!(
+        db.file_policy("one").unwrap().transfer_status.as_deref(),
+        Some("running")
+    );
 }

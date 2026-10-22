@@ -67,7 +67,7 @@ pub use scan::{
     rebuild_catalog, scan, scan_directory, scan_files, IssueKind, IssueSeverity, ScanInput,
     ScanIssue, ScanOptions, ScanResult, ScanStats, CANDIDATE_EXTENSIONS,
 };
-pub use source::FontSource;
+pub use source::{FontSource, OnlineFontOrigin};
 
 mod library;
 mod metadata;
