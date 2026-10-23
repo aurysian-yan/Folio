@@ -416,3 +416,14 @@ Google Fonts 和 ZeoSeven 默认 CSS 复用来源自定义样式入口，已有�
 | 共享代码 | PASS：`pnpm typecheck`、改动文件 ESLint、全量 101 项 JS 测试、`git diff --check`。 |
 | Android 原生 | PASS：清除增量缓存后 `:folio-native:compileDebugKotlin` 通过。 |
 | 运行验收 | 待执行：需核对 24dp 图标与 12sp 标签的视觉比例、紧凑圆内图标大小、起始搜索框在浅深色和不同屏幕高度下的居中位置，以及进入/关闭网页时底栏折叠与展开的时序。 |
+
+## Android Google Fonts Blob Download
+
+2026-10-23：Google Fonts 把字体包放在沙箱 `about:srcdoc` 中生成，再以 `blob:null/...` 触发下载。原流程只接受可重放的 HTTPS 地址，下载在格式识别前就失败。Android 现在在页面内安装只转发 `Blob` 对象的中继：沙箱框架创建对象时交给主文档，用户确认后按 256 KiB 分块写入缓存，再由 `createLocalDownload` 创建本地任务并走同一套字体/ZIP 校验。中继不暴露原生接口，单个 blob 限 512 MiB，未确认的暂存文件按 24 小时清理。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| 共享 Rust | PASS：`folio-transfer` 新增本地载荷测试，`folio-ffi` 新增 `createLocalDownload`；`cargo test -p folio-transfer -p folio-ffi` 通过。 |
+| Android 单元 | PASS：`:folio-native:testDebugUnitTest` 23 项通过，包含本地任务命名、状态与来源脱敏。 |
+| Android 设备 | PASS：Pixel 模拟器运行 `FolioOnlineBlobInstrumentation`，沙箱 srcdoc 生成的 1 KiB Blob 按原字节转存，文件名保持 `sample.zip`；随后用真实 Lato 字体验证本地任务变为 `ready`/`Roboto.ttf`。 |
+| 实际网站 | Chromium 复核 Google Fonts 下载为 9,817,048 字节的合法 ZIP，文件名 `Roboto.zip`；Android 端尚未在应用内完整点击该站点，需在真机回归确认页面与发布版 WebView 的 CSP、Trusted Types 行为一致。 |

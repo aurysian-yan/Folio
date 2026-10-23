@@ -643,6 +643,7 @@
       "expiredLink": "下载链接已失效或需要登录，请返回网页重新下载",
       "fileError": "无法读写下载文件",
       "invalidDownload": "文件无效、格式不受支持或超过大小限制",
+      "blobUnavailable": "无法读取页面生成的下载文件，请返回网页重新下载。",
       "networkError": "下载中断，请检查网络后重试",
       "scheduleError": "无法启动后台下载，请在应用前台重试",
       "acceptRequired": "请先阅读并同意字体版权说明",

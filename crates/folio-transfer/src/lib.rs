@@ -112,8 +112,18 @@ impl TransferService {
         origin.source_page_url =
             redacted_url(&origin.source_page_url).map_err(|_| TransferError::InvalidDownload)?;
         origin.download_host = url.host_str().unwrap_or_default().to_string();
+        self.insert(name, origin)
+    }
+    /// 网页在沙箱内生成的 blob 下载没有可重放的地址，由平台写入载荷后再完成。
+    pub fn create_local(&self, name: &str, mut origin: OnlineOrigin) -> Result<TransferJob> {
+        origin.source_page_url =
+            redacted_url(&origin.source_page_url).map_err(|_| TransferError::InvalidDownload)?;
+        self.insert(name, origin)
+    }
+    fn insert(&self, name: &str, origin: OnlineOrigin) -> Result<TransferJob> {
         if origin.provider_name.len() > 240
             || origin.provider_id.as_ref().is_some_and(|id| id.len() > 100)
+            || origin.download_host.len() > 260
         {
             return Err(TransferError::InvalidDownload);
         }
@@ -609,6 +619,36 @@ pub fn safe_name(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_payloads_finish_through_the_same_font_checks() {
+        let root = tempfile::tempdir().unwrap();
+        let service = TransferService::open(
+            root.path().join("folio.sqlite"),
+            root.path().join("transfers"),
+        )
+        .unwrap();
+        let origin: OnlineOrigin = serde_json::from_str(
+            r#"{"providerId":"google-fonts","providerName":"Google Fonts","sourcePageUrl":"https://fonts.google.com/selection?token=secret","downloadHost":"fonts.google.com"}"#,
+        )
+        .unwrap();
+        let job = service.create_local("Roboto.zip", origin).unwrap();
+        let path = service.path(&job.id).unwrap();
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts/Lato-Regular.ttf"),
+            &path,
+        )
+        .unwrap();
+        let finished = service.finish_for_attempt(&job.id, job.generation).unwrap();
+        assert_eq!(finished.state, "ready");
+        assert_eq!(finished.kind.as_deref(), Some("font"));
+        assert_eq!(finished.name, "Roboto.ttf");
+        assert!(finished.content_hash.is_some());
+        assert!(!serde_json::to_string(&service.job(&job.id).unwrap())
+            .unwrap()
+            .contains("secret"));
+    }
+
     #[test]
     fn resumed_content_must_cover_exactly_the_remaining_bytes() {
         assert_eq!(range_total("bytes 20-99/100", 20).unwrap(), 100);

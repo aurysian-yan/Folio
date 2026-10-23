@@ -71,6 +71,28 @@ class FolioOnlineTest {
         }
     }
 
+    @Test fun localPayloadCreatedFromBlobUsesTheSameTransferChecks() {
+        val root = Files.createTempDirectory("folio-online-local-test").toFile()
+        val browser = FolioBrowser.open(File(root, "folio.sqlite").absolutePath, File(root, "transfers").absolutePath)
+        try {
+            browser.acceptDisclaimer()
+            val job = browser.createLocalDownload("Roboto.zip", origin)
+            val id = requireNotNull(Regex("\"id\":\"([^\"]+)\"").find(job)?.groupValues?.get(1))
+            val generation = requireNotNull(Regex("\"generation\":(\\d+)").find(job)?.groupValues?.get(1)).toULong()
+            val path = File(browser.downloadPath(id))
+            File(samples, "Lato-Regular.ttf").copyTo(path)
+            browser.finishDownload(id, generation)
+            val state = browser.state()
+            assertTrue(state.contains("\"name\":\"Roboto.ttf\""))
+            assertTrue(state.contains("\"kind\":\"font\""))
+            assertTrue(state.contains("\"state\":\"ready\""))
+            assertFalse(state.contains("secret"))
+        } finally {
+            browser.destroy()
+            root.deleteRecursively()
+        }
+    }
+
     private fun field(value: String, key: String): String =
         requireNotNull(Regex("\"$key\":\"([^\"]+)\"").find(value)?.groupValues?.get(1))
 }

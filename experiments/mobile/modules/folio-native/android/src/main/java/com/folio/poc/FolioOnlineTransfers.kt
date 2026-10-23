@@ -10,6 +10,7 @@ import androidx.work.*
 import com.folio.poc.ffi.SyncProfileDto
 import org.json.JSONObject
 import org.json.JSONArray
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -18,15 +19,38 @@ internal object FolioOnlineTransfers {
     private val intents = ConcurrentHashMap<String, JSONObject>()
     private fun profile(id: String) = SyncProfileDto("https://transfer.folio.invalid", id, "", false)
     private fun vault(context: Context) = FolioSyncCredentials(context, "online-transfers")
-    fun intent(context: Context, url: String, name: String, origin: JSONObject, headers: JSONObject): String {
+    fun intent(context: Context, url: String, name: String, origin: JSONObject, headers: JSONObject, localPath: String? = null): String {
         val id = UUID.randomUUID().toString()
-        if (intents.size >= 20) intents.clear()
+        if (intents.size >= 20) {
+            intents.values.forEach { value ->
+                value.optString("localPath").takeIf { it.isNotEmpty() }?.let { File(it).delete() }
+            }
+            intents.clear()
+        }
         intents[id] = JSONObject().put("url",url).put("name",name).put("origin",origin).put("headers",headers)
+            .put("localPath",localPath ?: "")
         return id
     }
     fun start(context: Context, intentId: String): String {
         val request = intents.remove(intentId) ?: error("online.browser.expiredLink")
         val browser = FolioFileRuntime.get(context).browser
+        val local = request.optString("localPath").takeIf { it.isNotEmpty() }
+        if (local != null) {
+            val job = JSONObject(browser.createLocalDownload(request.getString("name"),request.getJSONObject("origin").toString()))
+            val id = job.getString("id")
+            val generation = job.getLong("generation").toULong()
+            val target = File(browser.downloadPath(id))
+            try {
+                target.parentFile?.mkdirs()
+                File(local).inputStream().use { input -> target.outputStream().use { output -> input.copyTo(output) } }
+                browser.finishDownload(id,generation)
+            } catch (error: Exception) {
+                try { browser.setDownloadState(id,"failed","online.browser.invalidDownload",generation) } catch (_: Exception) {}
+                target.delete()
+                throw error
+            } finally { File(local).delete() }
+            return id
+        }
         val job = JSONObject(browser.createDownload(request.getString("url"),request.getString("name"),request.getJSONObject("origin").toString()))
         val id = job.getString("id")
         try { vault(context).write(request.toString(),profile(id)); schedule(context,id) }

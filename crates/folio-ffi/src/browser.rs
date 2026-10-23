@@ -116,6 +116,15 @@ impl FolioBrowser {
         serde_json::to_string(&self.transfers.create(&url, &name, origin).map_err(error)?)
             .map_err(error)
     }
+    pub fn create_local_download(&self, name: String, origin: String) -> Result<String> {
+        let db = FolioDatabase::open(&self.database).map_err(error)?;
+        if db.online_setting("disclaimer").map_err(error)?.is_none() {
+            return Err(error("online.browser.acceptRequired"));
+        }
+        let origin: OnlineOrigin = serde_json::from_str(&origin).map_err(error)?;
+        serde_json::to_string(&self.transfers.create_local(&name, origin).map_err(error)?)
+            .map_err(error)
+    }
     pub fn download_path(&self, id: String) -> Result<String> {
         Ok(self
             .transfers

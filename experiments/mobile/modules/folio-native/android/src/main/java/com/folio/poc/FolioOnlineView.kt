@@ -16,6 +16,7 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     private val onBrowserState by EventDispatcher()
     private val onDownloadIntent by EventDispatcher()
     private val web = WebView(context)
+    private val blobs = FolioOnlineBlobs(web)
     private val refresh = SwipeRefreshLayout(context)
     private var commandId = ""
     private var provider = JSONObject()
@@ -67,10 +68,14 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
                 updateSource(url); emit(loading)
             }
+            override fun onPageCommitVisible(view: WebView, url: String?) {
+                blobs.install()
+            }
             override fun onPageFinished(view: WebView, url: String?) {
                 if (pageFailed || url != web.url) return
                 pageLoaded = true
                 lastThemeUrl = url ?: ""
+                blobs.install()
                 applyWebTheme()
                 updateSource(url)
                 val providerId = provider.optString("id")
@@ -115,16 +120,35 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
                 lastThemeUrl = web.url ?: ""
                 applyWebTheme()
             }
+            if (url.startsWith("blob:")) {
+                // 沙箱 frame 的 blob 不能重放，先在页面内分块转存。
+                val fallback = URLUtil.guessFileName(url, disposition, mime)?.takeIf { it.isNotBlank() } ?: "download"
+                blobs.capture(url, fallback) { file, name, error ->
+                    if (file == null || error != null) {
+                        emit(false, error ?: "online.browser.blobUnavailable")
+                        return@capture
+                    }
+                    try {
+                        val headers = JSONObject().put("User-Agent", agent)
+                        web.url?.let { headers.put("Referer", it) }
+                        val id = FolioOnlineTransfers.intent(
+                            context, "", name ?: fallback, origin(url), headers, file.absolutePath
+                        )
+                        onDownloadIntent(mapOf("id" to id, "name" to (name ?: fallback)))
+                    } catch (_: Exception) {
+                        file.delete()
+                        emit(false, "online.browser.invalidDownload")
+                    }
+                }
+                return@setDownloadListener
+            }
             try {
                 FolioFileRuntime.get(context).browser.validateAddress(url)
                 val name = URLUtil.guessFileName(url, disposition, mime)
-                val origin = JSONObject().put("providerId", provider.optString("id").ifEmpty { null })
-                    .put("providerName", provider.optString("name"))
-                    .put("sourcePageUrl", sourcePage.ifEmpty { web.url ?: url }).put("downloadHost", Uri.parse(url).host ?: "")
                 val headers = JSONObject().put("User-Agent", agent)
                 CookieManager.getInstance().getCookie(url)?.let { headers.put("Cookie", it) }
                 web.url?.let { headers.put("Referer", it) }
-                val id = FolioOnlineTransfers.intent(context, url, name, origin, headers)
+                val id = FolioOnlineTransfers.intent(context, url, name, origin(url), headers)
                 onDownloadIntent(mapOf("id" to id, "name" to name))
             } catch (_: Exception) { emit(false, "online.browser.invalidDownload") }
         }
@@ -232,6 +256,13 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         val home = Uri.parse(provider.optString("homepage")).host ?: return
         if (host == home || host.endsWith(".$home")) sourcePage = value ?: sourcePage
     }
+    private fun origin(url: String): JSONObject {
+        val page = sourcePage.ifEmpty { web.url ?: url }
+        val host = if (url.startsWith("blob:")) Uri.parse(page).host else Uri.parse(url).host
+        return JSONObject().put("providerId", provider.optString("id").ifEmpty { null })
+            .put("providerName", provider.optString("name"))
+            .put("sourcePageUrl", page).put("downloadHost", host ?: "")
+    }
     private fun emit(loading: Boolean, error: String? = null, force: Boolean = false) {
         val url = web.url ?: ""
         val title = web.title ?: ""
@@ -250,7 +281,7 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     fun dispose() {
         if (!disposed) {
-            disposed = true; active = false; removeCallbacks(poll)
+            disposed = true; active = false; removeCallbacks(poll); blobs.cancel()
             web.stopLoading(); web.webChromeClient = null; web.webViewClient = WebViewClient()
             refresh.removeView(web); removeView(refresh); web.destroy()
         }
