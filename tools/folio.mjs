@@ -755,16 +755,94 @@ async function choose(c, message, options) {
   return c.isCancel(result) ? BACK : result;
 }
 
-// 执行外部动作；任何异常都在此收敛为一行提示，返回菜单而不中断 TUI。
-async function runAction(c, label, action) {
+// 上一项任务结束后展示在主菜单顶部的后续建议；next 为下一次建议的生成函数。
+let suggestions = [];
+
+function recommend(label, action, next = () => []) {
+  return { label, action, next };
+}
+
+// 执行外部动作；成功结束后刷新建议，异常则收敛为一行提示并保留原建议。
+async function runAction(c, label, action, next = () => []) {
   c.log.step(label);
   try {
-    return await action();
+    await action();
+    suggestions = typeof next === 'function' ? next() : next;
+    return true;
   } catch (error) {
     c.log.error(describeError(error));
     if (debugStack(error)) c.log.info(debugStack(error));
-    return undefined;
+    return false;
   }
+}
+
+// 调试退出后建议重新调试或直接构建；构建结束后建议查看产物或启动调试。
+function expoName(platform) {
+  return platform === 'ios' ? 'iOS' : 'Android';
+}
+
+function expoDevNext(platform) {
+  const name = expoName(platform);
+  return [
+    recommend(`重新启动 ${name} 调试`, () => expoDev({ platform }), () => expoDevNext(platform)),
+    recommend(`进行 ${name} 构建`, () => expoBuild({ platform }), () => expoBuildNext(platform)),
+  ];
+}
+
+function expoBuildNext(platform) {
+  const name = expoName(platform);
+  return [
+    recommend('打开构建产物目录', () => expoOpen({ platform }), () => expoBuildNext(platform)),
+    recommend(`启动 ${name} 调试`, () => expoDev({ platform }), () => expoDevNext(platform)),
+  ];
+}
+
+function swiftuiDevNext() {
+  return [
+    recommend('重新启动 SwiftUI 调试', () => swiftuiDev(), swiftuiDevNext),
+    recommend('构建 SwiftUI（Release）', () => swiftuiBuild({}), () => swiftuiBuildNext()),
+  ];
+}
+
+function swiftuiBuildNext() {
+  return [
+    recommend('打开 SwiftUI 构建产物目录', () => swiftuiOpen(), () => swiftuiBuildNext()),
+    recommend('启动 SwiftUI 调试', () => swiftuiDev(), swiftuiDevNext),
+  ];
+}
+
+// Tauri 调试结束后按主机给出最常用的构建目标，构建结束后回到当前目标。
+function tauriName(platform) {
+  return platform === 'windows' ? 'Windows' : 'Linux';
+}
+
+function defaultTauriTarget() {
+  return HOST === 'linux'
+    ? { platform: 'linux', arch: HOST_ARCH }
+    : { platform: 'windows', arch: 'x64' };
+}
+
+function tauriDevNext() {
+  const target = defaultTauriTarget();
+  return [
+    recommend('重新启动 Tauri 调试', () => tauriDev({}), tauriDevNext),
+    recommend(
+      `进行 Tauri ${tauriName(target.platform)} 构建`,
+      () => tauriBuild(target),
+      () => tauriBuildNext(target),
+    ),
+  ];
+}
+
+function tauriBuildNext(target) {
+  return [
+    recommend(
+      `打开 ${tauriName(target.platform)} 构建产物目录`,
+      () => tauriOpen(target),
+      () => tauriBuildNext(target),
+    ),
+    recommend('启动 Tauri 调试', () => tauriDev({}), tauriDevNext),
+  ];
 }
 
 async function tuiSwiftui(c) {
@@ -776,10 +854,15 @@ async function tuiSwiftui(c) {
     { value: BACK, label: '返回主菜单' },
   ]);
   if (choice === BACK) return;
-  if (choice === 'dev') await runAction(c, 'SwiftUI 调试', () => swiftuiDev());
-  else if (choice === 'build') await runAction(c, 'SwiftUI 构建', () => swiftuiBuild({}));
-  else if (choice === 'dmg') await runAction(c, 'SwiftUI 构建（DMG）', () => swiftuiBuild({ dmg: true }));
-  else if (choice === 'open') await runAction(c, 'SwiftUI 产物目录', () => swiftuiOpen());
+  if (choice === 'dev') {
+    await runAction(c, 'SwiftUI 调试', () => swiftuiDev(), swiftuiDevNext);
+  } else if (choice === 'build') {
+    await runAction(c, 'SwiftUI 构建', () => swiftuiBuild({}), () => swiftuiBuildNext());
+  } else if (choice === 'dmg') {
+    await runAction(c, 'SwiftUI 构建（DMG）', () => swiftuiBuild({ dmg: true }), () => swiftuiBuildNext());
+  } else if (choice === 'open') {
+    await runAction(c, 'SwiftUI 产物目录', () => swiftuiOpen(), () => swiftuiBuildNext());
+  }
 }
 
 async function tuiTauri(c) {
@@ -793,12 +876,17 @@ async function tuiTauri(c) {
   ]);
   if (choice === BACK) return;
   if (choice === 'dev') {
-    await runAction(c, 'Tauri 调试', () => tauriDev({}));
+    await runAction(c, 'Tauri 调试', () => tauriDev({}), tauriDevNext);
     return;
   }
   if (choice === 'open-windows' || choice === 'open-linux') {
     const platform = choice === 'open-windows' ? 'windows' : 'linux';
-    await runAction(c, `Tauri ${platform} 产物目录`, () => tauriOpen({ platform }));
+    await runAction(
+      c,
+      `Tauri ${platform} 产物目录`,
+      () => tauriOpen({ platform }),
+      () => tauriBuildNext({ platform }),
+    );
     return;
   }
   const arch = await choose(c, `Tauri · ${choice === 'windows' ? 'Windows' : 'Linux'} 目标架构`, [
@@ -807,7 +895,12 @@ async function tuiTauri(c) {
     { value: BACK, label: '返回' },
   ]);
   if (arch === BACK) return;
-  await runAction(c, `Tauri 构建 ${choice}`, () => tauriBuild({ platform: choice, arch }));
+  await runAction(
+    c,
+    `Tauri 构建 ${choice}`,
+    () => tauriBuild({ platform: choice, arch }),
+    () => tauriBuildNext({ platform: choice, arch }),
+  );
 }
 
 async function tuiExpo(c) {
@@ -828,10 +921,20 @@ async function tuiExpo(c) {
 
   const action = await choose(c, `Expo · ${platform === 'ios' ? 'iOS' : 'Android'}`, options);
   if (action === BACK) return;
-  if (action === 'dev') await runAction(c, 'Expo 调试', () => expoDev({ platform }));
-  else if (action === 'build') await runAction(c, 'Expo 构建', () => expoBuild({ platform }));
-  else if (action === 'aab') await runAction(c, 'Expo 构建 AAB', () => expoBuild({ platform, aab: true }));
-  else if (action === 'open') await runAction(c, 'Expo 产物目录', () => expoOpen({ platform }));
+  if (action === 'dev') {
+    await runAction(c, 'Expo 调试', () => expoDev({ platform }), () => expoDevNext(platform));
+  } else if (action === 'build') {
+    await runAction(c, 'Expo 构建', () => expoBuild({ platform }), () => expoBuildNext(platform));
+  } else if (action === 'aab') {
+    await runAction(
+      c,
+      'Expo 构建 AAB',
+      () => expoBuild({ platform, aab: true }),
+      () => expoBuildNext(platform),
+    );
+  } else if (action === 'open') {
+    await runAction(c, 'Expo 产物目录', () => expoOpen({ platform }), () => expoBuildNext(platform));
+  }
 }
 
 async function tuiVersionBump(c) {
@@ -889,7 +992,13 @@ async function tuiVersion(c) {
 
 async function tuiMain(c) {
   for (;;) {
-    const choice = await choose(c, '选择要管理的目标', [
+    const offered = suggestions;
+    const choice = await choose(c, offered.length > 0 ? '选择下一步操作' : '选择要管理的目标', [
+      ...offered.map((item, index) => ({
+        value: `suggest-${index}`,
+        label: item.label,
+        hint: '建议',
+      })),
       { value: 'swiftui', label: 'SwiftUI', hint: 'macOS 客户端' },
       { value: 'tauri', label: 'Tauri', hint: 'Windows / Linux 客户端' },
       { value: 'expo', label: 'Expo', hint: 'Android / iOS 移动端' },
@@ -897,6 +1006,13 @@ async function tuiMain(c) {
       { value: 'doctor', label: '环境自检', hint: '检查构建前置条件' },
     ]);
     if (choice === BACK) return;
+    if (typeof choice === 'string' && choice.startsWith('suggest-')) {
+      const item = offered[Number.parseInt(choice.slice('suggest-'.length), 10)];
+      if (item) await runAction(c, item.label, item.action, item.next);
+      continue;
+    }
+    // 进入其他入口时收起建议，避免返回主菜单后仍显示上一任务的操作。
+    suggestions = [];
     if (choice === 'swiftui') await tuiSwiftui(c);
     else if (choice === 'tauri') await tuiTauri(c);
     else if (choice === 'expo') await tuiExpo(c);
