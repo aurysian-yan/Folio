@@ -24,6 +24,9 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var themeRevision = 0
   private var currentNavigation: WKNavigation?
   private var loadError: String?
+  private var pendingReveal = false
+  private var revealAnimator: UIViewPropertyAnimator?
+  private var blurView: UIVisualEffectView?
 
   required init(appContext: AppContext? = nil) {
     let configuration = WKWebViewConfiguration()
@@ -43,9 +46,12 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     web.frame = bounds
+    blurView?.frame = bounds
   }
   deinit {
     pollTimer?.invalidate()
+    revealAnimator?.stopAnimation(true)
+    blurView?.removeFromSuperview()
     web.stopLoading()
     web.navigationDelegate = nil
     web.uiDelegate = nil
@@ -64,7 +70,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   func setAccentColor(_ value: String) {
     refreshControl.tintColor = Self.color(from: value)
   }
-  @objc private func refreshPage() { beginLoading(); web.reload() }
+  @objc private func refreshPage() { pendingReveal = false; beginLoading(); web.reload() }
   private func startPolling() {
     guard pollTimer == nil else { return }
     pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -103,10 +109,14 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
         return
       }
       self.pendingTheme = nil
+      let wasReady = self.contentReady
       self.contentReady = true
       self.loading = false
       self.refreshControl.endRefreshing()
-      self.updateVisibility()
+      if !wasReady {
+        self.showContent(reveal: self.pendingReveal)
+        self.pendingReveal = false
+      }
       self.emit()
     }
   }
@@ -125,6 +135,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private func failLoading(error: String? = "online.browser.loadError") {
     themeRevision += 1
     pendingTheme = nil
+    pendingReveal = false
     loadError = error
     contentReady = false
     loading = false
@@ -133,8 +144,50 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     emit()
   }
   private func updateVisibility() {
+    revealAnimator?.stopAnimation(true)
+    revealAnimator = nil
+    blurView?.removeFromSuperview()
+    blurView = nil
+    web.alpha = 1
     web.isHidden = !isActive || !contentReady
     web.isUserInteractionEnabled = isActive && contentReady
+  }
+  // 只有来源切换播放模糊与透明度过渡；站内跳转和刷新直接显示网页。
+  private func showContent(reveal: Bool) {
+    updateVisibility()
+    guard isActive, contentReady else { return }
+    web.isHidden = false
+    guard reveal, !UIAccessibility.isReduceMotionEnabled else {
+      web.isUserInteractionEnabled = true
+      return
+    }
+    web.isUserInteractionEnabled = false
+    web.alpha = 0
+    let effect = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+    effect.frame = bounds
+    effect.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    effect.isUserInteractionEnabled = false
+    effect.isAccessibilityElement = false
+    addSubview(effect)
+    blurView = effect
+    let animator = UIViewPropertyAnimator(
+      duration: 0.62,
+      timingParameters: UICubicTimingParameters(
+        controlPoint1: CGPoint(x: 0.22, y: 1), controlPoint2: CGPoint(x: 0.36, y: 1)))
+    animator.addAnimations { [weak self] in
+      self?.web.alpha = 1
+      self?.blurView?.effect = nil
+    }
+    animator.addCompletion { [weak self] _ in
+      guard let self else { return }
+      self.blurView?.removeFromSuperview()
+      self.blurView = nil
+      self.web.alpha = 1
+      self.web.isUserInteractionEnabled = self.isActive && self.contentReady
+      self.revealAnimator = nil
+    }
+    revealAnimator = animator
+    animator.startAnimation()
   }
   private static func color(from value: String) -> UIColor? {
     let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -173,20 +226,24 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
         let url = try FolioFileRuntime.shared().browser.validateAddress(url: value)
         sourcePage = ""
         beginLoading()
+        pendingReveal = request["reveal"] as? Bool ?? false
         web.load(URLRequest(url: URL(string: url)!))
       } catch {
         if !contentReady { loading = false }
+        pendingReveal = false
         emit(error: "online.browser.invalidSource")
       }
-    case "back": if web.canGoBack { beginLoading(); web.goBack() }
-    case "forward": if web.canGoForward { beginLoading(); web.goForward() }
-    case "reload": refreshPage()
+    case "back": if web.canGoBack { pendingReveal = false; beginLoading(); web.goBack() }
+    case "forward": if web.canGoForward { pendingReveal = false; beginLoading(); web.goForward() }
+    case "reload": pendingReveal = false; refreshPage()
     case "stop":
+      pendingReveal = false
       web.stopLoading()
       currentNavigation = nil
       pageFailed = true
       failLoading(error: nil)
     case "clear":
+      pendingReveal = false
       web.stopLoading()
       WKWebsiteDataStore.default().removeData(
         ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
@@ -252,6 +309,12 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     _ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
   ) {
+    if response.isForMainFrame, let http = response.response as? HTTPURLResponse, http.statusCode >= 500 {
+      pageFailed = true
+      failLoading(error: "online.browser.serverError")
+      decisionHandler(.cancel)
+      return
+    }
     let disposition =
       (response.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition")
       ?? ""
@@ -351,7 +414,28 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
       return
     }
     pageFailed = true
-    failLoading()
+    failLoading(error: Self.loadErrorKey(error))
+  }
+  // 只映射通用的网络失败，其他错误仍使用整页加载失败文案。
+  private static func loadErrorKey(_ error: Error) -> String {
+    let value = error as NSError
+    guard value.domain == NSURLErrorDomain else { return "online.browser.loadError" }
+    switch value.code {
+    case NSURLErrorNotConnectedToInternet, NSURLErrorDataNotAllowed,
+      NSURLErrorInternationalRoamingOff, NSURLErrorCallIsActive:
+      return "online.browser.offline"
+    case NSURLErrorCannotFindHost, NSURLErrorCannotConnectToHost, NSURLErrorDNSLookupFailed,
+      NSURLErrorTimedOut, NSURLErrorResourceUnavailable, NSURLErrorCannotLoadFromNetwork,
+      NSURLErrorNetworkConnectionLost:
+      return "online.browser.unreachable"
+    case NSURLErrorSecureConnectionFailed, NSURLErrorServerCertificateHasBadDate,
+      NSURLErrorServerCertificateUntrusted, NSURLErrorServerCertificateHasUnknownRoot,
+      NSURLErrorServerCertificateNotYetValid, NSURLErrorClientCertificateRejected,
+      NSURLErrorClientCertificateRequired:
+      return "online.browser.secureConnection"
+    default:
+      return "online.browser.loadError"
+    }
   }
   func webView(
     _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,

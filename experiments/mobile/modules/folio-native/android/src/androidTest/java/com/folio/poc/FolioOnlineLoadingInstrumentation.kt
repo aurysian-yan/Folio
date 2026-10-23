@@ -114,6 +114,7 @@ class FolioOnlineLoadingInstrumentation : Instrumentation() {
                 return output.get()
             }
             fun ready() = field("contentReady") == true && field("loading") == false && web.visibility == View.VISIBLE
+            fun settled() = web.alpha == 1f && web.visibility == View.VISIBLE
             fun theme(color: String) = """(function(){var s=document.getElementById('folio-web-theme');if(!s){s=document.createElement('style');s.id='folio-web-theme';document.head.appendChild(s);}s.textContent='body{color:$color;}';return document.readyState==='complete'&&!!s.sheet;})();"""
             fun load(name: String) {
                 html.set("<html><head></head><body data-page='$name'>Google Fonts</body></html>")
@@ -121,6 +122,7 @@ class FolioOnlineLoadingInstrumentation : Instrumentation() {
             }
             main { browser.setWebTheme(theme("red")); load("first") }
             await(::ready)
+            await(::settled)
             val revision = main { field("themeRevision") as Long }
             main {
                 repeat(3) {

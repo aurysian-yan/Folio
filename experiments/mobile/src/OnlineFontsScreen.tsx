@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, AppState, BackHandler, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MagnifyingGlassIcon, XIcon } from './icons';
 import { NativeFontPreview, NativeOnlineBrowser, online } from './native';
 import {
-  buildWebThemeScript, extractSearchQuery, onlineErrorKey, providerCustomCss, providerThemeEnabled,
+  buildWebThemeScript, extractSearchQuery, isPageFailureKey, onlineErrorKey, providerCustomCss, providerThemeEnabled,
   type BrowserState, type OnlineEntry, type OnlineProvider, type OnlineState, type WebPalette,
 } from './online';
+import { providerRegionRisk } from './online-region';
+import { mostRecentTab } from './online-tabs';
+import { useOnlineRegion } from './useOnlineRegion';
 import { LibraryPanel } from './LibraryPanel';
 import { PanelAction } from './panel-content';
 import { formatBytes } from './settings-ui';
@@ -19,8 +22,20 @@ import type { LibrarySnapshot } from './library';
 import { OnlineHeader } from './OnlineHeader';
 import { OnlineBrowserBar } from './OnlineBrowserBar';
 import { OnlineBrowserLoading } from './OnlineBrowserLoading';
+import { OnlineBrowserFailure } from './OnlineBrowserFailure';
 
 const emptyBrowser: BrowserState = { url: '', title: '', loading: true, canGoBack: false, canGoForward: false, errorKey: null };
+
+// 每个来源保留独立标签页；切换来源只切换可见网页，不重新导航。
+interface OnlineTab {
+  providerId: string;
+  provider: OnlineProvider;
+  address: string;
+  browser: BrowserState;
+  command: string;
+  revealRequest: string;
+  activatedAt: number;
+}
 
 // 页面只控制浏览与确认，下载和导入由原生服务持有。
 export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', navigationCollapsed = false, onSnapshotChange, onOpenSettings, onOpenedChange }: {
@@ -34,14 +49,10 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
   const inset = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [state, setState] = useState<OnlineState | null>(null);
-  const [providerId, setProviderId] = useState('');
+  const [tabs, setTabs] = useState<OnlineTab[]>([]);
+  const [activeId, setActiveId] = useState('');
   const [lastProvider, setLastProvider] = useState<OnlineProvider | null>(null);
   const [query, setQuery] = useState('');
-  const [address, setAddress] = useState('');
-  const [browser, setBrowser] = useState(emptyBrowser);
-  const [command, setCommand] = useState('');
-  const [revealRequest, setRevealRequest] = useState('');
-  const [opened, setOpened] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [panel, setPanel] = useState<'downloads' | 'inspect' | null>(null);
   const [entries, setEntries] = useState<OnlineEntry[]>([]);
@@ -53,22 +64,60 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
   const [notice, setNotice] = useState<string | null>(null);
   const mounted = useRef(true);
   const serial = useRef(0);
+  const order = useRef(0);
   const operation = useRef(false);
-  const provider = state?.providers.find((item) => item.id === providerId) ?? lastProvider;
+  const navigationRequest = useRef(0);
+  const tabsRef = useRef<OnlineTab[]>([]);
+  const activeTab = tabs.find((tab) => tab.providerId === activeId) ?? null;
   const enabledProviders = state?.providers.filter((item) => item.enabled) ?? [];
-  const send = useCallback((action: string, url?: string, reveal = false) => {
-    const id = String(++serial.current);
-    if (['navigate', 'back', 'forward', 'reload'].includes(action)) {
-      setBrowser((value) => ({ ...value, loading: true, errorKey: null }));
+  const regionSensitive = enabledProviders.some(providerRegionRisk);
+  const regionKind = useOnlineRegion(!!preferences.onlineRegionHints && active && !!state?.accepted && regionSensitive);
+
+  function providerFor(tab: OnlineTab | null) {
+    if (!tab) return null;
+    return state?.providers.find((item) => item.id === tab.providerId) ?? tab.provider;
+  }
+  const activeProvider = providerFor(activeTab);
+  const provider = activeProvider ?? lastProvider;
+  const opened = activeTab !== null;
+
+  const updateTab = useCallback((id: string, update: (tab: OnlineTab) => OnlineTab) => {
+    setTabs((values) => values.map((tab) => tab.providerId === id ? update(tab) : tab));
+  }, []);
+  const sendTo = useCallback((id: string, action: string, url?: string, reveal = false) => {
+    const commandId = String(++serial.current);
+    setTabs((values) => values.map((tab) => tab.providerId === id ? {
+      ...tab,
+      address: action === 'navigate' && url ? url : tab.address,
+      command: JSON.stringify({ id: commandId, action, url, reveal }),
+      revealRequest: reveal ? commandId : '',
+      browser: ['navigate', 'back', 'forward', 'reload'].includes(action)
+        ? { ...tab.browser, loading: true, errorKey: null } : tab.browser,
+    } : tab));
+  }, []);
+  const closeTab = useCallback((id: string) => {
+    navigationRequest.current += 1;
+    const remaining = tabsRef.current.filter((tab) => tab.providerId !== id);
+    const next = mostRecentTab(remaining);
+    tabsRef.current = remaining;
+    setTabs(remaining);
+    setActiveId(next?.providerId ?? '');
+    setError(null);
+    if (!next) {
+      setPanel(null);
+      return;
     }
-    setRevealRequest(reveal ? id : '');
-    setCommand(JSON.stringify({ id, action, url }));
+    setLastProvider(next.provider);
+    const value = extractSearchQuery(next.provider, next.browser.url);
+    if (value) setQuery(value);
   }, []);
   const refresh = useCallback(async () => {
     const value = await online.state();
     if (mounted.current) setState(value);
     return value;
   }, []);
+
+  useLayoutEffect(() => { tabsRef.current = tabs; }, [tabs]);
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
@@ -88,14 +137,15 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
     return () => { current = false; clearTimeout(timer); subscription.remove(); };
   }, [active, refresh]);
   useEffect(() => {
-    if (!active || !opened) return;
+    if (!active || !activeTab) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (panel) { if (!operation.current) setPanel(null); return true; }
-      if (browser.canGoBack) send('back'); else setOpened(false);
+      if (activeTab.browser.canGoBack) sendTo(activeTab.providerId, 'back');
+      else closeTab(activeTab.providerId);
       return true;
     });
     return () => subscription.remove();
-  }, [active, browser.canGoBack, opened, panel, send]);
+  }, [active, activeTab, closeTab, panel, sendTo]);
 
   async function run(action: () => Promise<void>) {
     if (operation.current) return;
@@ -103,21 +153,62 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
     try { await action(); } catch (cause) { if (mounted.current) setError(onlineErrorKey(cause)); }
     finally { operation.current = false; if (mounted.current) setBusy(false); }
   }
+  function openPage(item: OnlineProvider, url: string, reveal: boolean) {
+    navigationRequest.current += 1;
+    const commandId = String(++serial.current);
+    const activatedAt = ++order.current;
+    const command = JSON.stringify({ id: commandId, action: 'navigate', url, reveal });
+    const revealRequest = reveal ? commandId : '';
+    setTabs((values) => {
+      const current = values.find((tab) => tab.providerId === item.id);
+      if (current) {
+        return values.map((tab) => tab.providerId === item.id ? {
+          ...tab, provider: item, address: url, command, revealRequest, activatedAt,
+          browser: { ...tab.browser, loading: true, errorKey: null },
+        } : tab);
+      }
+      return [...values, {
+        providerId: item.id, provider: item, address: url, command, revealRequest, activatedAt,
+        browser: emptyBrowser,
+      }];
+    });
+    setActiveId(item.id);
+    setLastProvider(item);
+    setSearchOpen(false);
+    Keyboard.dismiss();
+  }
   async function visit(item: OnlineProvider, search = query, reveal = false) {
+    const request = ++navigationRequest.current;
     await run(async () => {
       const url = await online.search(item.id, search.trim());
-      Keyboard.dismiss(); setProviderId(item.id); setLastProvider(item); setAddress(url); setBrowser(emptyBrowser);
-      setSearchOpen(false); setOpened(true); send('navigate', url, reveal);
+      if (request !== navigationRequest.current) return;
+      openPage(item, url, reveal);
     });
+  }
+  function activateTab(id: string) {
+    navigationRequest.current += 1;
+    const tab = tabs.find((value) => value.providerId === id);
+    if (!tab) return;
+    const activatedAt = ++order.current;
+    setActiveId(id);
+    setTabs((values) => values.map((value) => value.providerId === id ? { ...value, activatedAt } : value));
+    const item = providerFor(tab) ?? tab.provider;
+    setLastProvider(item);
+    setSearchOpen(false);
+    setError(null);
+    Keyboard.dismiss();
+    const next = extractSearchQuery(item, tab.browser.url);
+    if (next) setQuery(next);
   }
   function selectProvider(item: OnlineProvider) {
     Keyboard.dismiss();
     setSearchOpen(false);
-    void visit(item, query, !opened || item.id !== providerId);
+    if (tabs.some((tab) => tab.providerId === item.id)) activateTab(item.id);
+    else void visit(item, query, true);
   }
   function submitSearch() {
-    const item = provider?.enabled ? provider : enabledProviders[0];
-    if (item) void visit(item, query);
+    const item = activeProvider ?? lastProvider ?? enabledProviders[0];
+    if (item) void visit(item, query, false);
   }
   async function inspect(id: string) {
     await run(async () => {
@@ -134,11 +225,33 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
       }) },
     ]);
   }
-  const themeEnabled = provider ? providerThemeEnabled(preferences.onlineTheme[provider.id], provider.id) : false;
-  const customCss = provider ? providerCustomCss(preferences.onlineCss[provider.id], provider.id) : '';
-  const webTheme = useMemo(() => buildWebThemeScript({
-    palette: webPalette, dark: theme.dark, enabled: themeEnabled, customCss,
-  }), [customCss, theme.dark, themeEnabled, webPalette]);
+  function retryPage() {
+    if (!activeTab) return;
+    const target = (activeTab.browser.url || activeTab.address).trim();
+    if (!target) return;
+    setError(null);
+    sendTo(activeTab.providerId, 'navigate', target);
+  }
+  function switchSource() {
+    if (activeTab) closeTab(activeTab.providerId);
+  }
+  function webThemeFor(item: OnlineProvider) {
+    return buildWebThemeScript({
+      palette: webPalette, dark: theme.dark,
+      enabled: providerThemeEnabled(preferences.onlineTheme[item.id], item.id),
+      customCss: providerCustomCss(preferences.onlineCss[item.id], item.id),
+    });
+  }
+  const providerRestricted = !!provider && providerRegionRisk(provider);
+  const regionHint = providerRestricted && provider && preferences.onlineRegionHints
+    ? regionKind === 'CN'
+      ? t('online.browser.regionHint', { name: provider.name })
+      : regionKind === 'UNKNOWN' ? t('online.browser.regionHintSoft', { name: provider.name }) : null
+    : null;
+  const loadingHint = regionKind === 'CN' ? regionHint : null;
+  const browserFailure = !!activeTab && !activeTab.browser.loading && isPageFailureKey(activeTab.browser.errorKey);
+  const failureHint = activeTab && (activeTab.browser.errorKey === 'online.browser.unreachable'
+    || activeTab.browser.errorKey === 'online.browser.loadError') ? regionHint : null;
   const errorNode = error && <Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(error)}</Text>;
   const feedback = (error || notice) ? <View style={styles.feedback}>
     {errorNode}{notice && <Text accessibilityLiveRegion="polite" style={{ color: theme.secondary }}>{notice}</Text>}
@@ -152,7 +265,7 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
     : opened ? barBottom + 64 : barBottom;
 
   return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
-    {state?.accepted && <OnlineHeader theme={theme} providers={enabledProviders} selectedId={providerId}
+    {state?.accepted && <OnlineHeader theme={theme} providers={enabledProviders} selectedId={activeId}
       searchOpen={searchOpen} searchText={query} onSelect={selectProvider}
       onSearchChange={setQuery} onSearchOpen={() => { setSearchOpen(true); Keyboard.dismiss(); }}
       onSearchClose={() => { setSearchOpen(false); Keyboard.dismiss(); }} onSearchSubmit={submitSearch}
@@ -167,21 +280,39 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
       </ScrollView> : <>
         {feedback}
         <View style={[styles.browserArea, { paddingBottom: browserBottom }]}>
-          {opened ? <NavigationBackdrop sourceId={active ? sourceId : ''} active={active} theme={theme}
+          {activeTab ? <NavigationBackdrop sourceId={active ? sourceId : ''} active={active} theme={theme}
             compositingLayer style={styles.screen}>
-            <NativeOnlineBrowser style={styles.screen} active={active && panel === null}
-              provider={JSON.stringify(provider ?? {})} command={command} webTheme={webTheme} accentColor={theme.accent}
-              onBrowserState={({ nativeEvent }) => {
-                setBrowser(nativeEvent);
-                if (nativeEvent.url.startsWith('https://')) setAddress(nativeEvent.url);
-                if (nativeEvent.errorKey) setError(nativeEvent.errorKey);
-                else setError((value) => value === 'online.browser.loadError' ? null : value);
-                const next = provider ? extractSearchQuery(provider, nativeEvent.url) : null;
-                if (next && !searchOpen && next !== query) setQuery(next);
-              }}
-              onDownloadIntent={({ nativeEvent }) => confirmDownload(nativeEvent)} />
-            <OnlineBrowserLoading loading={browser.loading} failed={!!browser.errorKey}
-              active={active && panel === null} revealRequest={revealRequest} provider={provider} theme={theme} />
+            {tabs.map((tab) => {
+              const isActive = tab.providerId === activeId;
+              const item = providerFor(tab) ?? tab.provider;
+              return <NativeOnlineBrowser key={tab.providerId}
+                style={[styles.tab, { backgroundColor: theme.background, zIndex: isActive ? 1 : 0 }]}
+                active={active && panel === null && isActive}
+                pointerEvents={isActive ? 'auto' : 'none'}
+                provider={JSON.stringify(item)} command={tab.command} webTheme={webThemeFor(item)} accentColor={theme.accent}
+                onBrowserState={({ nativeEvent }) => {
+                  updateTab(tab.providerId, (value) => ({
+                    ...value,
+                    browser: nativeEvent,
+                    address: nativeEvent.url.startsWith('https://') ? nativeEvent.url : value.address,
+                  }));
+                  if (tab.providerId !== activeId) return;
+                  // 整页失败由失败页展示，其他错误仍走顶部提示。
+                  if (nativeEvent.errorKey) {
+                    if (!isPageFailureKey(nativeEvent.errorKey)) setError(nativeEvent.errorKey);
+                  } else {
+                    setError((value) => value && isPageFailureKey(value) ? null : value);
+                  }
+                  const next = extractSearchQuery(item, nativeEvent.url);
+                  if (next && !searchOpen && next !== query) setQuery(next);
+                }}
+                onDownloadIntent={({ nativeEvent }) => confirmDownload(nativeEvent)} />;
+            })}
+            <OnlineBrowserLoading key={activeId} loading={activeTab.browser.loading} failed={browserFailure} hint={loadingHint}
+              active={active && panel === null} revealRequest={activeTab.revealRequest} provider={activeProvider} theme={theme} />
+            {browserFailure && <OnlineBrowserFailure key={`failure-${activeId}`} theme={theme} provider={activeProvider} errorKey={activeTab.browser.errorKey}
+              url={activeTab.browser.url || activeTab.address} hint={failureHint} preferSwitch={!!failureHint}
+              onRetry={retryPage} onSwitchSource={switchSource} />}
           </NavigationBackdrop>
             : <View style={styles.start}>
               <View style={[styles.startSearch, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -201,10 +332,13 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
               </Pressable>
             </View>}
         </View>
-        {opened && <OnlineBrowserBar theme={theme} provider={provider} browser={browser} address={address}
+        {activeTab && <OnlineBrowserBar theme={theme} provider={activeProvider} browser={activeTab.browser} address={activeTab.address}
           sourceId={sourceId} compact={Platform.OS === 'android' && navigationCollapsed}
-          bottom={barBottom} onAddressChange={setAddress} onNavigate={() => { Keyboard.dismiss(); send('navigate', address.trim()); }}
-          onBack={() => send('back')} onForward={() => send('forward')} onClose={() => { send('stop'); setOpened(false); setPanel(null); }} />}
+          bottom={barBottom}
+          onAddressChange={(value) => updateTab(activeTab.providerId, (tab) => ({ ...tab, address: value }))}
+          onNavigate={() => { Keyboard.dismiss(); const target = activeTab.address.trim(); if (target) sendTo(activeTab.providerId, 'navigate', target); }}
+          onBack={() => sendTo(activeTab.providerId, 'back')} onForward={() => sendTo(activeTab.providerId, 'forward')}
+          onClose={() => closeTab(activeTab.providerId)} />}
       </>}
     <LibraryPanel visible={panel !== null} title={t(panel === 'inspect' ? 'online.browser.review' : 'online.browser.downloads')}
       theme={theme} busy={busy} onClose={() => setPanel(null)}>
@@ -221,7 +355,8 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
               {['queued', 'transferring'].includes(job.state) && <PanelAction label={t('online.browser.pause')} theme={theme} disabled={busy} onPress={() => void run(async () => { await online.pause(job.id); await refresh(); })} />}
               <PanelAction label={t('online.browser.openSource')} theme={theme} disabled={busy} onPress={() => {
                 const item = state.providers.find((value) => value.id === job.origin.providerId) ?? { id: job.origin.providerId ?? 'history', name: job.origin.providerName, homepage: job.origin.sourcePageUrl, searchTemplate: '', enabled: false, builtin: false };
-                setProviderId(item.id); setLastProvider(item); setAddress(job.origin.sourcePageUrl); setBrowser(emptyBrowser); setOpened(true); setPanel(null); send('navigate', job.origin.sourcePageUrl);
+                openPage(item, job.origin.sourcePageUrl, false);
+                setPanel(null);
               }} />
               {job.state === 'ready' && <>{<PanelAction label={t('online.browser.review')} theme={theme} onPress={() => void inspect(job.id)} disabled={busy} />}{<PanelAction label={t('online.browser.saveFile')} theme={theme} onPress={() => void run(() => online.save(job.id))} disabled={busy} />}</>}
               {['failed', 'paused', 'needsUser'].includes(job.state) && <PanelAction label={t('common.retry')} theme={theme} onPress={() => void run(async () => { await online.retry(job.id); await refresh(); })} disabled={busy} />}
@@ -260,6 +395,7 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  tab: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   browserArea: { flex: 1 },
   start: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28, paddingBottom: 16, gap: 14 },
   startSearch: { width: '100%', maxWidth: 420, minHeight: 52, borderRadius: 26, borderWidth: StyleSheet.hairlineWidth,

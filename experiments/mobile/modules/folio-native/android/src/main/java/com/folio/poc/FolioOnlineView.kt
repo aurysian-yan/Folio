@@ -1,9 +1,19 @@
 // 在线内容使用独立原生 WebView，不向网页暴露应用桥接。
 package com.folio.poc
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.net.ConnectivityManager
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.view.View
+import android.view.animation.PathInterpolator
 import android.webkit.*
 import android.widget.FrameLayout
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -33,6 +43,9 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     private var contentReady = false
     private var themeRevision = 0L
     private var loadError: String? = null
+    private var pendingReveal = false
+    private var revealAnimator: ValueAnimator? = null
+    private var alphaAnimator: android.view.ViewPropertyAnimator? = null
     private val poll = object : Runnable {
         override fun run() {
             if (!active || disposed) return
@@ -47,7 +60,7 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         refresh.addView(web, FrameLayout.LayoutParams(-1, -1))
         addView(refresh, FrameLayout.LayoutParams(-1, -1))
         web.visibility = android.view.View.INVISIBLE
-        refresh.setOnRefreshListener { beginLoading(); web.reload() }
+        refresh.setOnRefreshListener { pendingReveal = false; beginLoading(); web.reload() }
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -90,10 +103,17 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
                 }
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame) { pageFailed = true; failLoading() }
+                if (!request.isForMainFrame) return
+                pageFailed = true
+                failLoading(loadErrorKey(error.errorCode))
+            }
+            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+                if (!request.isForMainFrame || response.statusCode < 500) return
+                pageFailed = true
+                failLoading("online.browser.serverError")
             }
             override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
-                handler.cancel(); pageFailed = true; failLoading()
+                handler.cancel(); pageFailed = true; failLoading("online.browser.secureConnection")
             }
         }
         web.webChromeClient = object : WebChromeClient() {
@@ -184,10 +204,14 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
                 override fun onComplete(requestId: Long) {
                     if (disposed || revision != themeRevision || !pageLoaded || pageFailed) return
                     pendingTheme = null
+                    val wasReady = contentReady
                     contentReady = true
                     loading = false
                     refresh.isRefreshing = false
-                    updateVisibility()
+                    if (!wasReady) {
+                        showContent(pendingReveal)
+                        pendingReveal = false
+                    }
                     emit(false)
                 }
             })
@@ -207,6 +231,7 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     private fun failLoading(error: String? = "online.browser.loadError") {
         themeRevision++
         pendingTheme = null
+        pendingReveal = false
         loadError = error
         contentReady = false
         loading = false
@@ -215,7 +240,65 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         emit(false)
     }
     private fun updateVisibility() {
-        web.visibility = if (active && contentReady) android.view.View.VISIBLE else android.view.View.INVISIBLE
+        alphaAnimator?.cancel(); alphaAnimator = null
+        revealAnimator?.cancel(); revealAnimator = null
+        clearBlur()
+        web.alpha = 1f
+        web.visibility = if (active && contentReady) View.VISIBLE else View.INVISIBLE
+    }
+    // 只有来源切换播放模糊与透明度过渡；站内跳转和刷新直接显示网页。
+    private fun showContent(reveal: Boolean) {
+        updateVisibility()
+        if (!active || !contentReady) return
+        if (!reveal || reduceMotion()) return
+        val duration = 620L
+        web.alpha = 0f
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) startBlur(duration)
+        val animation = web.animate().alpha(1f).setDuration(duration)
+            .setInterpolator(PathInterpolator(0.22f, 1f, 0.36f, 1f))
+            .withEndAction { clearBlur(); alphaAnimator = null }
+        alphaAnimator = animation
+        animation.start()
+    }
+    private fun reduceMotion(): Boolean = try {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    } catch (_: Exception) {
+        false
+    }
+    private fun startBlur(duration: Long) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val radius = 12f * resources.displayMetrics.density
+        val animator = ValueAnimator.ofFloat(radius, 0f)
+        animator.duration = duration
+        animator.interpolator = PathInterpolator(0.22f, 1f, 0.36f, 1f)
+        animator.addUpdateListener { value ->
+            val radius = value.animatedValue as Float
+            web.setRenderEffect(
+                if (radius < 0.5f) null
+                else RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP)
+            )
+        }
+        animator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) { clearBlur() }
+        })
+        animator.start()
+        revealAnimator = animator
+    }
+    private fun clearBlur() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) web.setRenderEffect(null)
+    }
+    private fun loadErrorKey(code: Int): String = when (code) {
+        WebViewClient.ERROR_HOST_LOOKUP, WebViewClient.ERROR_CONNECT,
+        WebViewClient.ERROR_TIMEOUT, WebViewClient.ERROR_IO ->
+            if (offline()) "online.browser.offline" else "online.browser.unreachable"
+        WebViewClient.ERROR_FAILED_SSL_HANDSHAKE -> "online.browser.secureConnection"
+        else -> if (offline()) "online.browser.offline" else "online.browser.loadError"
+    }
+    private fun offline(): Boolean = try {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        manager?.activeNetwork == null
+    } catch (_: Exception) {
+        false
     }
     fun command(value: String) {
         if (disposed) return
@@ -227,17 +310,20 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
             "navigate" -> {
                 try {
                     val url = FolioFileRuntime.get(context).browser.validateAddress(request.getString("url"))
-                    sourcePage = ""; beginLoading(); web.loadUrl(url)
+                    sourcePage = ""; beginLoading()
+                    pendingReveal = request.optBoolean("reveal", false)
+                    web.loadUrl(url)
                 } catch (_: Exception) {
                     if (!contentReady) loading = false
+                    pendingReveal = false
                     emit(loading, "online.browser.invalidSource")
                 }
             }
-            "back" -> if (web.canGoBack()) { beginLoading(); web.goBack() }
-            "forward" -> if (web.canGoForward()) { beginLoading(); web.goForward() }
-            "reload" -> { beginLoading(); web.reload() }
-            "stop" -> { web.stopLoading(); pageFailed = true; failLoading(null) }
-            "clear" -> { web.stopLoading(); web.clearHistory(); web.clearCache(true); WebStorage.getInstance().deleteAllData(); CookieManager.getInstance().removeAllCookies(null); beginLoading(); web.loadUrl("about:blank") }
+            "back" -> if (web.canGoBack()) { pendingReveal = false; beginLoading(); web.goBack() }
+            "forward" -> if (web.canGoForward()) { pendingReveal = false; beginLoading(); web.goForward() }
+            "reload" -> { pendingReveal = false; beginLoading(); web.reload() }
+            "stop" -> { pendingReveal = false; web.stopLoading(); pageFailed = true; failLoading(null) }
+            "clear" -> { pendingReveal = false; web.stopLoading(); web.clearHistory(); web.clearCache(true); WebStorage.getInstance().deleteAllData(); CookieManager.getInstance().removeAllCookies(null); beginLoading(); web.loadUrl("about:blank") }
         }
     }
     private fun navigate(uri: Uri): Boolean {
@@ -282,6 +368,9 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     fun dispose() {
         if (!disposed) {
             disposed = true; active = false; removeCallbacks(poll); blobs.cancel()
+            alphaAnimator?.cancel(); alphaAnimator = null
+            revealAnimator?.cancel(); revealAnimator = null
+            clearBlur()
             web.stopLoading(); web.webChromeClient = null; web.webViewClient = WebViewClient()
             refresh.removeView(web); removeView(refresh); web.destroy()
         }

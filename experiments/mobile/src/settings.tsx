@@ -22,6 +22,8 @@ export interface Preferences {
   onlineTheme: Record<string, boolean>;
   /** 按来源保存的自定义 CSS，仅保存在本机。 */
   onlineCss: Record<string, string>;
+  /** 是否显示在线来源的区域提示，关闭后不发起出口查询。 */
+  onlineRegionHints: boolean;
 }
 
 export const defaultPreferences: Preferences = {
@@ -38,6 +40,7 @@ export const defaultPreferences: Preferences = {
   characterMapInheritAxes: true,
   onlineTheme: {},
   onlineCss: {},
+  onlineRegionHints: true,
 };
 
 // 外观页可选的预览字号，与 FontCard 的基准字号对应。
@@ -92,6 +95,7 @@ function sanitize(raw: unknown): Preferences {
     characterMapInheritAxes: typeof value.characterMapInheritAxes === 'boolean' ? value.characterMapInheritAxes : defaultPreferences.characterMapInheritAxes,
     onlineTheme: sanitizeTheme(value.onlineTheme),
     onlineCss: sanitizeCss(value.onlineCss),
+    onlineRegionHints: typeof value.onlineRegionHints === 'boolean' ? value.onlineRegionHints : defaultPreferences.onlineRegionHints,
   };
 }
 

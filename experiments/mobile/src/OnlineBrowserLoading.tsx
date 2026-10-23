@@ -18,8 +18,9 @@ const ringRadius = 34;
 const circumference = 2 * Math.PI * ringRadius;
 
 // 加载遮罩持续覆盖原生网页，就绪后从来源图标中心展开圆形窗口。
-export function OnlineBrowserLoading({ loading, failed, active, revealRequest, provider, theme }: {
+export function OnlineBrowserLoading({ loading, failed, active, revealRequest, provider, theme, hint }: {
   loading: boolean; failed: boolean; active: boolean; revealRequest: string; provider: OnlineProvider | null; theme: Theme;
+  hint?: string | null;
 }) {
   const { t } = useTranslation();
   const initialReduceMotion = useReducedMotion();
@@ -95,9 +96,10 @@ export function OnlineBrowserLoading({ loading, failed, active, revealRequest, p
   const foreground = useAnimatedStyle(() => ({ opacity: loading ? 1 : Math.max(0, 1 - reveal.value * 5) }));
 
   if (!visible && !loading) return null;
-  return <View style={StyleSheet.absoluteFill} pointerEvents="box-only" onStartShouldSetResponder={() => true}
+  const label = [t('common.loading'), provider?.name, hint].filter(Boolean).join('，');
+  return <View style={[StyleSheet.absoluteFill, styles.overlay]} pointerEvents="box-only" onStartShouldSetResponder={() => true}
     accessible accessibilityRole="progressbar"
-    accessibilityLabel={t('common.loading')} accessibilityState={{ busy: true }}
+    accessibilityLabel={label} accessibilityState={{ busy: true }}
     onLayout={({ nativeEvent }) => {
       const { width, height } = nativeEvent.layout;
       setSize((value) => value.width === width && value.height === height ? value : { width, height });
@@ -115,12 +117,15 @@ export function OnlineBrowserLoading({ loading, failed, active, revealRequest, p
     </Motion.View>
     <Motion.View pointerEvents="none" style={[styles.title, { top: centerY + ringSize / 2 + 24 }, foreground]}>
       <Text numberOfLines={2} style={[styles.name, { color: theme.label }]}>{provider?.name || t('online.title')}</Text>
+      {hint ? <Text style={[styles.hint, { color: theme.secondary }]}>{hint}</Text> : null}
     </Motion.View>
   </View>;
 }
 
 const styles = StyleSheet.create({
+  overlay: { zIndex: 2 },
   emblem: { position: 'absolute', width: ringSize, height: ringSize, alignItems: 'center', justifyContent: 'center' },
   title: { position: 'absolute', left: 16, right: 16 },
   name: { fontSize: 18, lineHeight: 26, textAlign: 'center', fontWeight: '500' },
+  hint: { marginTop: 6, fontSize: 13, lineHeight: 19, textAlign: 'center' },
 });

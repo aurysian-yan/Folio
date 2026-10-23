@@ -9,7 +9,7 @@ import { onlineErrorKey, providerCustomCss, providerThemeEnabled, type OnlinePro
 import { OnlineSourceIcon } from './OnlineSourceIcon';
 import { PanelAction } from './panel-content';
 import { usePreferences } from './settings';
-import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, settingsLayout, settingsTypography } from './settings-ui';
+import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, SettingsSwitchRow, settingsLayout, settingsTypography } from './settings-ui';
 import { GlassSwitch } from './GlassSwitch';
 import type { Theme } from './ui';
 
@@ -142,6 +142,11 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
     {notice && <SettingsNote theme={theme}>{notice}</SettingsNote>}
     <SettingsGroup theme={theme} title={t('online.browser.themeGroup')} footer={t('online.browser.themeFooter')}>
       <SettingsNote theme={theme}>{t('online.browser.themeHelp')}</SettingsNote>
+    </SettingsGroup>
+    <SettingsGroup theme={theme} footer={t('online.browser.regionHintsFooter')}>
+      <SettingsSwitchRow title={t('online.browser.regionHints')} detail={t('online.browser.regionHintsDetail')}
+        value={preferences.onlineRegionHints} theme={theme}
+        onChange={(onlineRegionHints) => update({ onlineRegionHints })} />
     </SettingsGroup>
     <SettingsGroup theme={theme} title={t('online.browser.websiteData')}>
       <SettingsActionRow destructive theme={theme} title={t('online.browser.clearData')} disabled={busy}

@@ -63,6 +63,24 @@ export function onlineErrorKey(error: unknown): string {
   return message.match(/online\.browser\.[A-Za-z]+/)?.[0] ?? 'common.operationFailed';
 }
 
+// 整页加载失败使用独立失败页；其他错误继续走顶部提示，不遮挡已加载的网页。
+const pageFailureKeys = [
+  'online.browser.loadError', 'online.browser.offline', 'online.browser.unreachable',
+  'online.browser.serverError', 'online.browser.secureConnection',
+];
+
+export function isPageFailureKey(value: string | null | undefined): boolean {
+  return !!value && pageFailureKeys.includes(value);
+}
+
+export function pageFailureDetailKey(value: string | null | undefined): string {
+  if (value === 'online.browser.offline') return 'online.browser.failureOffline';
+  if (value === 'online.browser.unreachable') return 'online.browser.failureUnreachable';
+  if (value === 'online.browser.serverError') return 'online.browser.failureServer';
+  if (value === 'online.browser.secureConnection') return 'online.browser.failureSecure';
+  return 'online.browser.failureGeneric';
+}
+
 const fallbackQueryKeys = ['query', 'q', 'keyword', 's', 'search', 'text'];
 
 function hostOf(value: string) {
