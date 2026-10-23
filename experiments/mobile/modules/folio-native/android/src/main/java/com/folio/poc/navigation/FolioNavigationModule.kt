@@ -25,6 +25,7 @@ class FolioNavigationModule : Module() {
         View(FolioBackdropSourceView::class) {
             Prop("sourceId") { view: FolioBackdropSourceView, value: String -> view.sourceId = value }
             Prop("active") { view: FolioBackdropSourceView, value: Boolean -> view.active = value }
+            Prop("compositingLayer") { view: FolioBackdropSourceView, value: Boolean -> view.compositingLayer = value }
         }
 
         View(FolioHeaderBackdropView::class) {

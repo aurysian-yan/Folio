@@ -239,7 +239,7 @@ private fun BottomSearchControl(
             },
         contentAlignment = Alignment.Center,
     ) {
-        FolioTabIcon(item.icon, tint, Modifier.size(lerpDp(28.dp, 22.dp, compactProgress)))
+        FolioTabIcon(item.icon, tint, Modifier.size(lerpDp(24.dp, 19.dp, compactProgress)))
     }
 }
 

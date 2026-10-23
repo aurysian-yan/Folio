@@ -16,7 +16,7 @@
 - 面板统一使用居中的标题、左侧关闭图标和右侧主操作图标，圆形按钮为 44 点。字体库以「本地／收藏夹」小标题分区，范围和收藏夹各保留一层卡片；手动与智慧收藏夹混排，侧滑卡片提供编辑与删除，并保留更多入口和读屏动作。iOS 面板使用系统 medium／large 两档 Sheet，半屏材质交给系统 Liquid Glass；编辑页使用原生分段控件，按钮使用原生玻璃，旧系统回退兼容样式。Android 范围继续复用 Gorhom Drawer，操作按钮沿用相同尺寸、主题色和胶囊形态。
 - iPadOS 常规宽度使用 `@expo/ui` 的原生 SwiftUI NavigationSplitView、侧边栏 List 和系统 Toolbar，提供全部字体、最近、星标与收藏夹导航；侧拉及宽度小于 600 点的窗口沿用 iPhone 的原生 TabView、顶部操作区与搜索布局。iPhone/Android 从字体库范围入口访问收藏夹，iOS 筛选和收藏夹使用系统 Sheet。Menu 和 Button 在 iOS 26 及以上使用系统 Liquid Glass，旧系统使用原生兼容样式。设置页提供云同步、存储管理、字体卡片、外观、导入与关于六个二级页，经现有原生详情导航进入；存储用量与清理复用 `folio-ffi` 的 `FolioSync`，偏好通过 `@react-native-async-storage/async-storage` 保存在设备本地。Android、iPhone 和紧凑 iPad 的最近页面复用字体列表、搜索、实时筛选和详情，按 Rust 最近访问顺序显示。仅打开详情时记录卡片代表字款身份，重复访问更新顺序，不因渲染、滚动或导入记录；详情返回保留原查询和浏览位置。最近访问与最近加入分别表达。云端页面显示共享同步引擎的字体记录及实际下载状态，云同步配置见下文。
 - 系统浅色/深色、Safe Area 和列表虚拟化。更新 iOS 开发包后重定位托管字体，保留字体库和收藏。
-- Android 底栏由本地 Expo `FolioNavigation` 模块承载 Compose，保留本地、搜索、云端、设置四项；最近记录从字体库范围入口访问。外观与动效采用 Nexio 固定提交的均衡材质，RN 内容通过独立 RenderNode 提供背景；API 33+ 支持胶囊折射、31–32 支持模糊、28–30 使用半透明兼容材质。来源及许可见 [源码记录](modules/folio-native/android/third-party/NOTICE.md)。
+- Android 底栏由本地 Expo `FolioNavigation` 模块承载 Compose，保留本地、搜索、云端、设置四项；最近记录从字体库范围入口访问。外观与动效采用 Nexio 固定提交的均衡材质，RN 内容通过独立 RenderNode 提供背景；含 WebView 的页面为该 RenderNode 启用合成层，避免 Chromium draw functor 被重复重放导致闪屏。API 33+ 支持胶囊折射、31–32 支持模糊、28–30 使用半透明兼容材质。来源及许可见 [源码记录](modules/folio-native/android/third-party/NOTICE.md)。
 
 ## Setup
 

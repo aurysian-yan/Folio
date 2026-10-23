@@ -174,6 +174,33 @@ class FolioNativeModule : Module() {
             }
         }
 
+        // 当前窗口尺寸与四角圆角，统一以 dp 返回；窗口信息不可用时退回显示指标。
+        Function("screenMetrics") {
+            val activity = appContext.currentActivity
+            val metrics = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                activity?.windowManager?.currentWindowMetrics
+            } else null
+            val density = context().resources.displayMetrics.density
+            val bounds = metrics?.bounds
+            val width = (bounds?.width() ?: context().resources.displayMetrics.widthPixels) / density
+            val height = (bounds?.height() ?: context().resources.displayMetrics.heightPixels) / density
+            val insets = metrics?.windowInsets
+            fun radius(position: Int): Float {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return 0f
+                return insets?.getRoundedCorner(position)?.radius?.toFloat() ?: 0f
+            }
+            // 圆角只有 API 31+ 的公共接口；更早版本按 0 处理，尺寸仍参与计算。
+            val top = maxOf(radius(RoundedCorner.POSITION_TOP_LEFT), radius(RoundedCorner.POSITION_TOP_RIGHT))
+            val bottom = maxOf(radius(RoundedCorner.POSITION_BOTTOM_LEFT), radius(RoundedCorner.POSITION_BOTTOM_RIGHT))
+            mapOf(
+                "width" to width.toDouble(),
+                "height" to height.toDouble(),
+                "shortestSide" to minOf(width, height).toDouble(),
+                "topCornerRadius" to (top / density).toDouble(),
+                "bottomCornerRadius" to (bottom / density).toDouble(),
+            )
+        }
+
         AsyncFunction("fileWorkflow") { request: String, promise: Promise ->
             val activity = appContext.currentActivity
             if (activity == null) promise.reject("ERR_FOLIO_FILES", "workflow.error.invalidRequest", null)

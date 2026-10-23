@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, AppState, BackHandler, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, BackHandler, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlobeIcon } from './icons';
+import { MagnifyingGlassIcon, XIcon } from './icons';
 import { NativeFontPreview, NativeOnlineBrowser, online } from './native';
 import {
   buildWebThemeScript, extractSearchQuery, onlineErrorKey, providerCustomCss, providerThemeEnabled,
@@ -13,7 +13,7 @@ import { PanelAction } from './panel-content';
 import { formatBytes } from './settings-ui';
 import { usePreferences } from './settings';
 import { type Theme } from './ui';
-import { navigationBarTopInset, navigationCompactBarFrame } from './bottom-navigation';
+import { navigationBarTopInset, navigationCompactBarFrame, NavigationBackdrop } from './bottom-navigation';
 import { usesNativeControls } from './native-controls';
 import type { LibrarySnapshot } from './library';
 import { OnlineHeader } from './OnlineHeader';
@@ -23,10 +23,11 @@ import { OnlineBrowserLoading } from './OnlineBrowserLoading';
 const emptyBrowser: BrowserState = { url: '', title: '', loading: true, canGoBack: false, canGoForward: false, errorKey: null };
 
 // 页面只控制浏览与确认，下载和导入由原生服务持有。
-export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', navigationCollapsed = false, onSnapshotChange, onOpenSettings }: {
+export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', navigationCollapsed = false, onSnapshotChange, onOpenSettings, onOpenedChange }: {
   theme: Theme; active: boolean; webPalette: WebPalette;
   sourceId?: string; navigationCollapsed?: boolean;
   onSnapshotChange: (snapshot: LibrarySnapshot) => void; onOpenSettings: () => void;
+  onOpenedChange?: (opened: boolean) => void;
 }) {
   const { t } = useTranslation();
   const { preferences } = usePreferences();
@@ -72,6 +73,8 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
+  // 只有真正打开网页后才收拢底栏，未进入页面时保持展开。
+  useEffect(() => { onOpenedChange?.(opened); }, [onOpenedChange, opened]);
   useEffect(() => {
     if (!active) return;
     let current = true;
@@ -141,8 +144,11 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
     {errorNode}{notice && <Text accessibilityLiveRegion="polite" style={{ color: theme.secondary }}>{notice}</Text>}
   </View> : null;
   const barBottom = usesNativeControls ? inset.bottom + 8 : navigationBarTopInset(inset.bottom) + 8;
+  // 未进入网页时按展开导航留白，让搜索框在内容区垂直居中；进入后固定为紧凑控件高度。
   const browserBottom = Platform.OS === 'android'
-    ? navigationCompactBarFrame(inset.bottom, width - inset.left - inset.right).bottom + 64
+    ? opened
+      ? navigationCompactBarFrame(inset.bottom, width - inset.left - inset.right).bottom + 64
+      : navigationBarTopInset(inset.bottom)
     : opened ? barBottom + 64 : barBottom;
 
   return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -161,7 +167,8 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
       </ScrollView> : <>
         {feedback}
         <View style={[styles.browserArea, { paddingBottom: browserBottom }]}>
-          {opened ? <View style={styles.screen}>
+          {opened ? <NavigationBackdrop sourceId={active ? sourceId : ''} active={active} theme={theme}
+            compositingLayer style={styles.screen}>
             <NativeOnlineBrowser style={styles.screen} active={active && panel === null}
               provider={JSON.stringify(provider ?? {})} command={command} webTheme={webTheme} accentColor={theme.accent}
               onBrowserState={({ nativeEvent }) => {
@@ -175,11 +182,23 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
               onDownloadIntent={({ nativeEvent }) => confirmDownload(nativeEvent)} />
             <OnlineBrowserLoading loading={browser.loading} failed={!!browser.errorKey}
               active={active && panel === null} revealRequest={revealRequest} provider={provider} theme={theme} />
-          </View>
-            : <View style={styles.content}>
-              <GlobeIcon size={28} color={theme.secondary} />
-              <Text style={[styles.text, { color: theme.secondary }]}>{t('online.browser.chooseSource')}</Text>
-              <PanelAction label={t('online.browser.sources')} theme={theme} onPress={onOpenSettings} />
+          </NavigationBackdrop>
+            : <View style={styles.start}>
+              <View style={[styles.startSearch, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <MagnifyingGlassIcon size={20} color={theme.secondary} />
+                <TextInput value={query} onChangeText={setQuery} onSubmitEditing={submitSearch}
+                  placeholder={t('online.search')} placeholderTextColor={theme.muted} selectionColor={theme.selection}
+                  returnKeyType="search" autoCapitalize="none" autoCorrect={false}
+                  accessibilityLabel={t('online.search')} style={[styles.startInput, { color: theme.label }]} />
+                {query.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.clearSearch')}
+                  hitSlop={10} onPress={() => setQuery('')}>
+                  <XIcon size={16} color={theme.secondary} />
+                </Pressable>}
+              </View>
+              <Pressable accessibilityRole="button" onPress={onOpenSettings}
+                style={({ pressed }) => [styles.startSources, { opacity: pressed ? 0.6 : 1 }]}>
+                <Text style={[styles.startSourcesLabel, { color: theme.secondary }]}>{t('online.browser.sources')}</Text>
+              </Pressable>
             </View>}
         </View>
         {opened && <OnlineBrowserBar theme={theme} provider={provider} browser={browser} address={address}
@@ -242,6 +261,12 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   browserArea: { flex: 1 },
+  start: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28, paddingBottom: 16, gap: 14 },
+  startSearch: { width: '100%', maxWidth: 420, minHeight: 52, borderRadius: 26, borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  startInput: { flex: 1, minHeight: 52, fontSize: 16, paddingVertical: 8 },
+  startSources: { paddingHorizontal: 12, paddingVertical: 6 },
+  startSourcesLabel: { fontSize: 13, fontWeight: '500' },
   content: { padding: 16, gap: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
   wrap: { flexWrap: 'wrap' },

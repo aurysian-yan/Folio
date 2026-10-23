@@ -502,6 +502,7 @@ function MobileApp() {
   const sidebar = usesNativeSidebar && width >= 600;
   const [tab, setTab] = useState<MobileTab>('local');
   const [navExpanded, setNavExpanded] = useState(false);
+  const [onlineOpened, setOnlineOpened] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [nativeDestination, setNativeDestination] = useState<NativeDestination>('local');
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
@@ -526,7 +527,7 @@ function MobileApp() {
   const screenTarget = libraryTarget;
   const libraryActive = nativeDestination === 'local';
   const onlineActive = usesNativeControls ? nativeDestination === 'online' : tab === 'online';
-  const navCollapsed = onlineActive && !navExpanded;
+  const navCollapsed = onlineActive && onlineOpened && !navExpanded;
 
   useEffect(() => {
     let mounted = true;
@@ -619,7 +620,7 @@ function MobileApp() {
     active={(usesNativeControls ? nativeDestination === 'cloud' : tab === 'cloud') && !settingsPageVisible}
     snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
   const onlineContent = <OnlineFontsScreen theme={theme} active={usesNativeControls ? nativeDestination === 'online' : tab === 'online'}
-    sourceId={sourceId} navigationCollapsed={navCollapsed}
+    sourceId={sourceId} navigationCollapsed={navCollapsed} onOpenedChange={setOnlineOpened}
     webPalette={webPalette} onOpenSettings={() => openSettingsPage('online')} onSnapshotChange={applySnapshot} />;
   const settingsContent = <SettingsScreen theme={theme} sourceId={sourceId} controller={syncController}
     active={(usesNativeControls ? nativeDestination === 'settings' : tab === 'settings') && !settingsPageVisible}

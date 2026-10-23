@@ -5,6 +5,8 @@ import android.graphics.Canvas
 import android.graphics.RenderNode
 import android.os.Build
 import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,6 +49,15 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
             }
             invalidate()
         }
+    // WebView 通过每帧一次性的 Chromium functor 绘制；同一 RenderNode 被多处采样时，
+    // 第二次重放会得到空白帧。开启合成层后显示列表只执行一次，采样直接复用纹理。
+    var compositingLayer: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
+    private var hasWebView = false
 
     init { setWillNotDraw(false) }
 
@@ -55,7 +66,7 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
 
     override fun draw(canvas: Canvas) {
         if (Build.VERSION.SDK_INT >= 31 && active && windowVisibility == VISIBLE && canvas.isHardwareAccelerated && width > 0 && height > 0) {
-            val node = backdrop.obtainNode()
+            val node = backdrop.obtainNode(compositingLayer || hasWebView)
             val recording = node.beginRecording(width, height)
             try {
                 super.draw(recording)
@@ -91,9 +102,21 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
     }
 
     private fun register() {
+        hasWebView = containsWebView(this)
         if (active && sourceId.isNotEmpty() && isAttachedToWindow) {
             FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] = backdrop
         }
+    }
+
+    // 未显式声明合成层时按内容兜底，避免新增网页漏配后再次出现重放闪屏。
+    private fun containsWebView(group: ViewGroup): Boolean {
+        for (index in 0 until group.childCount) {
+            when (val child = group.getChildAt(index)) {
+                is WebView -> return true
+                is ViewGroup -> if (containsWebView(child)) return true
+            }
+        }
+        return false
     }
 
     private fun unregister() {
@@ -111,14 +134,19 @@ internal class FolioViewBackdrop(private val source: FolioBackdropSourceView) : 
         private set
 
     @RequiresApi(31)
-    fun obtainNode(): RenderNode = (node ?: RenderNode("FolioBackdrop").also { node = it }).apply {
+    fun obtainNode(compositingLayer: Boolean): RenderNode = (node ?: RenderNode("FolioBackdrop").also { node = it }).apply {
         setPosition(0, 0, source.width, source.height)
+        // 显示列表（含 WebView functor）一次执行到离屏缓冲，后续引用只做纹理拷贝。
+        setUseCompositingLayer(compositingLayer, null)
     }
 
     fun recorded() { contentVersion++ }
 
     fun release() {
-        if (Build.VERSION.SDK_INT >= 31) node?.discardDisplayList()
+        if (Build.VERSION.SDK_INT >= 31) {
+            node?.setUseCompositingLayer(false, null)
+            node?.discardDisplayList()
+        }
         node = null
         contentVersion++
     }

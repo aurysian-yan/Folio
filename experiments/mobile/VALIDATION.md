@@ -383,3 +383,36 @@ Android 原生测试包构建与页面回归通过，参数为 `-e copyFeedbackS
 Android Debug 构建、移动端类型检查、Lint 与 96 项测试通过。Pixel 10 模拟器已核对安装包与当前构建的校验和；浅深色、标题点击编辑、拖动取消点击已检查。导航收起与展开时 WebView 的屏幕边界均为 `[0,290][1080,2130]`，网页底边不随导航改变。移除 WebView 的 RenderNode 背景录制后，Google Fonts 连续 8 帧采样内容保持稳定；这不是长期性能或全部网站动画的验收。
 
 Google Fonts 和 ZeoSeven 默认 CSS 复用来源自定义样式入口，已有自定义内容和显式清空优先。最后的 ZeoSeven 样式追加只运行改动文件 Lint 与在线来源测试，没有重复原生构建。
+
+## Android WebView Backdrop Compositing
+
+2026-10-23：恢复在线字体页 WebView 区域的背景源，并修复采样导致的网页闪屏。原因是同一背景 `RenderNode` 会被页面本体、底栏、标题条和菜单分别引用，hwui 每引用一次就重放一次显示列表；Chromium 的 draw functor 每帧只能产出一个合成帧，后续重放得到空白帧并露出网页底色。
+
+含 WebView 的背景源现在启用 `RenderNode.setUseCompositingLayer`：显示列表每帧执行一次到离屏缓冲，所有采样直接拷贝纹理，实时模糊和折射保持不变。`NavigationBackdrop` 新增 `compositingLayer` 属性；在线字体页显式开启，原生侧并在注册背景源时扫描 WebView 作为兜底。普通字体列表不开启，避免额外的整页纹理和约 5 ms/帧开销。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| 共享代码 | PASS：`pnpm typecheck`、改动文件 ESLint、`git diff --check`。 |
+| Android 原生 | PASS：`:folio-native:compileDebugKotlin`。 |
+| 运行验收 | 待执行：需在 API 31+ 真机或模拟器展开底栏，确认网页滚动、加载和导航折叠期间无闪屏，并对比开启合成层前后的帧耗时。 |
+
+## Android Navigation Adaptive Margins
+
+2026-10-23：底栏外边距改为自适应。原生 `screenMetrics` 返回当前窗口尺寸与四角圆角；短边 `360–600dp`、底部圆角 `8–32dp` 归一化后按尺寸 `0.4`、圆角 `0.6` 加权，从当前底部和左右边距中缩减 `6–12dp`。左右最小 `8dp`，底部始终保留系统手势区加 `4dp`。屏幕或窗口尺寸变化时重新读取原生指标。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| 共享数学与边界 | PASS：新增 `navigation-metrics.test.ts`，覆盖 `6/12dp` 端点、尺寸与圆角权重、左右下限和手势区下限；全量 101 项 JS 测试通过。 |
+| 共享类型与风格 | PASS：`pnpm typecheck`、改动文件 ESLint、`git diff --check`。 |
+| Android 原生 | PASS：`:folio-native:compileDebugKotlin`。 |
+| 运行验收 | 待执行：需在普通手机、宽屏或将系统显示尺寸调大后核对底栏与屏幕圆角、手势区的实际间距，并确认旋转或分屏后重新计算。 |
+
+## Android Navigation Icons and Online Start
+
+2026-10-23：底栏常规图标由 28dp 收为 24dp，紧凑态按原比例过渡；搜索圆同步收为 24dp 与 19dp。在线字体页未打开网页时，内容区垂直居中显示搜索框与「字体来源」入口；进入网页后底栏才自动折叠，关闭网页后恢复展开。打开网页前的底部留白按展开导航计算，网页挂载后固定为紧凑控件高度，不随手动展开或收起改变 WebView 布局。
+
+| 检查 | 结果与实际范围 |
+| --- | --- |
+| 共享代码 | PASS：`pnpm typecheck`、改动文件 ESLint、全量 101 项 JS 测试、`git diff --check`。 |
+| Android 原生 | PASS：清除增量缓存后 `:folio-native:compileDebugKotlin` 通过。 |
+| 运行验收 | 待执行：需核对 24dp 图标与 12sp 标签的视觉比例、紧凑圆内图标大小、起始搜索框在浅深色和不同屏幕高度下的居中位置，以及进入/关闭网页时底栏折叠与展开的时序。 |

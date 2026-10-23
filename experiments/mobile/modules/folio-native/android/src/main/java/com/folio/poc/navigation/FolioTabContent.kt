@@ -24,14 +24,14 @@ import kotlin.math.roundToInt
 @Composable
 internal fun ColumnScope.FolioTabContent(icon: String, label: String, tint: Color) {
     val labelAlpha = (1f - LocalLiquidTabCompactProgress.current * 1.35f).coerceIn(0f, 1f)
-    FolioTabIcon(icon, tint, Modifier.size(28.dp))
+    FolioTabIcon(icon, tint, Modifier.size(24.dp))
     BasicText(label,
         modifier = Modifier
             .collapseVertically(labelAlpha)
             .graphicsLayer { alpha = labelAlpha },
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        style = TextStyle(color = tint, fontSize = 10.sp, lineHeight = 13.sp))
+        style = TextStyle(color = tint, fontSize = 12.sp, lineHeight = 15.sp))
 }
 
 @Composable

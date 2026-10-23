@@ -19,6 +19,8 @@ export interface NavigationBackdropProps extends ViewProps {
   sourceId: string;
   active: boolean;
   theme: Theme;
+  /** 内容含 WebView 等一次性绘制表面时启用合成层，供多处采样复用同一帧纹理。 */
+  compositingLayer?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 

@@ -17,6 +17,15 @@ interface MaterialBridge {
 
 interface AndroidWindowBridge {
   screenCornerRadius(): number;
+  screenMetrics(): ScreenMetrics;
+}
+
+export interface ScreenMetrics {
+  width: number;
+  height: number;
+  shortestSide: number;
+  topCornerRadius: number;
+  bottomCornerRadius: number;
 }
 
 interface FileWorkflowBridge { cancelFileWorkflow(id:string):Promise<boolean>; fileWorkflow(request: string): Promise<string>; fileState(): Promise<string>; removeExternalSource(id: string): Promise<void>; }
@@ -42,6 +51,7 @@ export const wallpaperSeed = () => nativeModule.wallpaperSeed();
 export const materialPalette = (seed: string, dark: boolean, followWallpaper = false) => nativeModule.materialPalette(seed, dark, followWallpaper);
 export const materialWebPalette = (seed: string, dark: boolean, followWallpaper = false) => nativeModule.materialWebPalette(seed, dark, followWallpaper);
 export const screenCornerRadius = () => nativeModule.screenCornerRadius();
+export const screenMetrics = () => nativeModule.screenMetrics();
 
 export interface PreviewSelection {
   requestId?: string;
