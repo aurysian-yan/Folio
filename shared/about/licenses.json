@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "fingerprints": {
-    "Cargo.lock": "3fb707808b484470c12a49c45cc25ba55310a54ebc2450b0a6158ce911e824d9",
-    "apps/desktop-ui/src-tauri/Cargo.lock": "827b0f7877cb54b8b4f60b443fd47c4238d6d55f194bf808110e13de314c64a5",
+    "Cargo.lock": "0a82899ff618cc00bc33fb869f8e3fa6dd5f6f4cebebf3fe1d833455a3414f65",
+    "apps/desktop-ui/src-tauri/Cargo.lock": "143ab15b123dd1cfff6c14029f81d94173e14fc203f12f8b9b1db965379b6091",
     "pnpm-lock.yaml": "cff8f09b990fb74d2c8645a941a1bcae4f9962ee8aa57b96c0e77119695a75b3",
     "experiments/mobile/pnpm-lock.yaml": "e8e55039fe1c5231b0f5d82fd53bc2703b4d0465376ef9eeb92667f701354405",
-    "experiments/mobile/modules/folio-native/android/build.gradle": "3bbcc9eced0e128584b077645cb168d7cdafa418bcacb6a4c0c26c7907dd8283",
-    "experiments/mobile/modules/folio-native/ios/FolioNative.podspec": "455ae52ea24752551c5fe627a4ac3b6286715b105c215b1063eb92ba6bd3fa6c",
+    "experiments/mobile/modules/folio-native/android/build.gradle": "6ee6f3d89c14fca9f86853e2b75b13f8ea90e26d233574bb26cc7f32823068ad",
+    "experiments/mobile/modules/folio-native/ios/FolioNative.podspec": "89205c473afc705e101a46537127893b07ce5c8ee71f160211ffacc1311ae956",
     "shared/about/android-dependencies.txt": "3657f1e9fda3a132d8a4cb894376d2d196c8bb2470a24dbfad78500e78149518",
     "shared/about/native-notices.json": "a368515483cd8d026662f5ef2045797b05974d76554266c65475eabf9b0fb921",
     "shared/about/ios-notices.json": "6671cf313286296b0d716b1d6638d9bff3b99da3c083b72228bf35cc98446c5f"
@@ -12543,9 +12543,9 @@
       "declarationOnly": false
     },
     {
-      "id": "9604371bd2096644",
+      "id": "83f8c09b0e7befc0",
       "name": "Folio",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "license": "AGPL-3.0-only",
       "source": "https://github.com/aurysian-yan/Folio",
       "platforms": [
@@ -27226,6 +27226,25 @@
       "declarationOnly": false
     },
     {
+      "id": "570714b269452185",
+      "name": "zip",
+      "version": "6.0.0",
+      "license": "MIT",
+      "source": "https://github.com/zip-rs/zip2.git",
+      "platforms": [
+        "android",
+        "ios",
+        "macos"
+      ],
+      "documents": [
+        {
+          "title": "LICENSE",
+          "text": "04dc52136d82400b11df5f474949863a70a5d05d2278dec45b99c479494450a6"
+        }
+      ],
+      "declarationOnly": false
+    },
+    {
       "id": "f3661e4a578584b1",
       "name": "ZIPFoundation",
       "version": "",
@@ -27861,6 +27880,7 @@
     "83c1763356e822adde0a2cae748d938a73fdc263849ccff6b27776dff213bd32": "Copyright 2019 The Fuchsia Authors.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are\nmet:\n\n   * Redistributions of source code must retain the above copyright\nnotice, this list of conditions and the following disclaimer.\n   * Redistributions in binary form must reproduce the above\ncopyright notice, this list of conditions and the following disclaimer\nin the documentation and/or other materials provided with the\ndistribution.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS\n\"AS IS\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT\nLIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR\nA PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT\nOWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,\nSPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT\nLIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,\nDATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY\nTHEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n",
     "1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df": "Copyright 2023 The Fuchsia Authors\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n\n",
     "8c7516d4b27b1e495be5e38b612298b63de48d05f49cdac94f70f3cd70f8864b": "Copyright (c) 2018-2026 The RustCrypto Project Developers\n\nPermission is hereby granted, free of charge, to any\nperson obtaining a copy of this software and associated\ndocumentation files (the \"Software\"), to deal in the\nSoftware without restriction, including without\nlimitation the rights to use, copy, modify, merge,\npublish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software\nis furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice\nshall be included in all copies or substantial portions\nof the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF\nANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED\nTO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A\nPARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT\nSHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR\nIN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER\nDEALINGS IN THE SOFTWARE.\n",
+    "04dc52136d82400b11df5f474949863a70a5d05d2278dec45b99c479494450a6": "The MIT License (MIT)\n\nCopyright (c) 2014 Mathijs van de Nes\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\nSome files in the \"tests/data\" subdirectory of this repository are under other\nlicences; see files named LICENSE.*.txt for details.",
     "e72111c52b7d96ebe25348dee19f0744f444d3c95ae6b1ecb6ccaecc5bce05ba": "(C) 2024 Trifecta Tech Foundation \n\nThis software is provided 'as-is', without any express or implied\nwarranty. In no event will the authors be held liable for any damages\narising from the use of this software.\n\nPermission is granted to anyone to use this software for any purpose,\nincluding commercial applications, and to alter it and redistribute it\nfreely, subject to the following restrictions:\n\n1. The origin of this software must not be misrepresented; you must not\n   claim that you wrote the original software. If you use this software\n   in a product, an acknowledgment in the product documentation would be\n   appreciated but is not required.\n\n2. Altered source versions must be plainly marked as such, and must not be\n   misrepresented as being the original software.\n\n3. This notice may not be removed or altered from any source distribution.\n",
     "d30047bca3b516639339a3c279bb84c3483124fb5a9dafe3c75056a85090e745": "MIT License\n\nCopyright (c) zune-image developers\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
     "d201d14804d3bcd3b944147173175e4abfbd838b7c8069b6bd3452496bf13e6c": "zlib License\n\n(C) zune-image developers\n\nThis software is provided 'as-is', without any express or implied\nwarranty. In no event will the authors be held liable for any damages\narising from the use of this software.\n\nPermission is granted to anyone to use this software for any purpose,\nincluding commercial applications, and to alter it and redistribute it\nfreely, subject to the following restrictions:\n\n1. The origin of this software must not be misrepresented; you must not\n   claim that you wrote the original software. If you use this software\n   in a product, an acknowledgment in the product documentation would be\n   appreciated but is not required.\n2. Altered source versions must be plainly marked as such, and must not be\n   misrepresented as being the original software.\n3. This notice may not be removed or altered from any source distribution.\n",
