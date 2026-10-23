@@ -13,6 +13,7 @@ use std::{
 
 pub const CUSTOM_ICON_LIMIT: u64 = 8 * 1024 * 1024;
 const REMOTE_ICON_LIMIT: u64 = 1024 * 1024;
+const ICON_USER_AGENT: &str = concat!("Folio/", env!("CARGO_PKG_VERSION"));
 type Result<T> = std::result::Result<T, IconError>;
 
 #[derive(Debug, thiserror::Error)]
@@ -195,7 +196,11 @@ impl IconCache {
             urls.push(fallback);
         }
         let candidate_key = blake3::hash(
-            serde_json::to_string(&urls.iter().map(|v| v.as_str()).collect::<Vec<_>>())?.as_bytes(),
+            serde_json::to_string(&(
+                ICON_USER_AGENT,
+                urls.iter().map(|v| v.as_str()).collect::<Vec<_>>(),
+            ))?
+            .as_bytes(),
         )
         .to_hex()
         .to_string();
@@ -269,6 +274,7 @@ async fn fetch(mut url: reqwest::Url) -> Option<Vec<u8>> {
         }
         let client = reqwest::Client::builder()
             .no_proxy()
+            .user_agent(ICON_USER_AGENT)
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(6))
             .resolve_to_addrs(host, &addresses)
@@ -404,6 +410,46 @@ mod tests {
         );
         provider.homepage = "https://other.example.com/".into();
         assert_eq!(cache.provider_uri(&db, &provider).unwrap(), None);
+    }
+
+    #[tokio::test]
+    #[ignore = "需要访问公开 HTTPS 图标"]
+    async fn zeoseven_favicon_accepts_application_user_agent() {
+        let root = tempfile::tempdir().unwrap();
+        let database = root.path().join("folio.sqlite");
+        let db = FolioDatabase::open(&database).unwrap();
+        let cache = IconCache::open(&database).unwrap();
+        db.save_online_setting("disclaimer", "1").unwrap();
+        let provider = browser::default_providers()
+            .into_iter()
+            .find(|value| value.id == "zeoseven")
+            .unwrap();
+        let previous = CachedIcon {
+            homepage: provider.homepage.clone(),
+            candidate_key: blake3::hash(
+                serde_json::to_string(&vec!["https://fonts.zeoseven.com/favicon.ico"])
+                    .unwrap()
+                    .as_bytes(),
+            )
+            .to_hex()
+            .to_string(),
+            attempted_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            asset_id: None,
+            success: false,
+        };
+        db.save_online_setting(
+            &format!("favicon:{}", provider.id),
+            &serde_json::to_string(&previous).unwrap(),
+        )
+        .unwrap();
+        assert!(cache
+            .refresh(&provider.id, &provider.homepage, &[])
+            .await
+            .unwrap());
+        assert!(cache.provider_uri(&db, &provider).unwrap().is_some());
     }
 
     #[tokio::test]

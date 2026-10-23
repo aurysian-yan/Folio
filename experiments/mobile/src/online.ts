@@ -306,7 +306,7 @@ export function buildWebThemeScript({ palette, dark, enabled, customCss }: {
   const custom = (customCss ?? '').replace(/<\/style/gi, '<\\/style').slice(0, 20000).trim();
   const css = `${enabled ? buildWebThemeCss(palette, dark) : ''}${custom ? `\n${custom}` : ''}`.trim();
   const literal = JSON.stringify(css).replace(/</g, '\\u003c');
-  return `(function(){var id='folio-web-theme';var css=${literal};var node=document.getElementById(id);if(!css){if(node&&node.parentNode)node.parentNode.removeChild(node);return;}if(!node){node=document.createElement('style');node.id=id;(document.head||document.documentElement).appendChild(node);}node.textContent=css;})();`;
+  return `(function(){var id='folio-web-theme';var css=${literal};var node=document.getElementById(id);if(!css){if(node&&node.parentNode)node.parentNode.removeChild(node);return document.readyState==='complete';}if(!node){node=document.createElement('style');node.id=id;(document.head||document.documentElement).appendChild(node);}node.textContent=css;return document.readyState==='complete'&&node.textContent===css&&!!node.sheet;})();`;
 }
 
 // 无 Monet 时使用当前 Folio 语义色，保证开关在 iOS 也可用。

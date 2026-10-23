@@ -18,8 +18,9 @@ import { usesNativeControls } from './native-controls';
 import type { LibrarySnapshot } from './library';
 import { OnlineHeader } from './OnlineHeader';
 import { OnlineBrowserBar } from './OnlineBrowserBar';
+import { OnlineBrowserLoading } from './OnlineBrowserLoading';
 
-const emptyBrowser: BrowserState = { url: '', title: '', loading: false, canGoBack: false, canGoForward: false, errorKey: null };
+const emptyBrowser: BrowserState = { url: '', title: '', loading: true, canGoBack: false, canGoForward: false, errorKey: null };
 
 // 页面只控制浏览与确认，下载和导入由原生服务持有。
 export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', navigationCollapsed = false, onSnapshotChange, onOpenSettings }: {
@@ -38,6 +39,7 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
   const [address, setAddress] = useState('');
   const [browser, setBrowser] = useState(emptyBrowser);
   const [command, setCommand] = useState('');
+  const [revealRequest, setRevealRequest] = useState('');
   const [opened, setOpened] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [panel, setPanel] = useState<'downloads' | 'inspect' | null>(null);
@@ -53,8 +55,13 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
   const operation = useRef(false);
   const provider = state?.providers.find((item) => item.id === providerId) ?? lastProvider;
   const enabledProviders = state?.providers.filter((item) => item.enabled) ?? [];
-  const send = useCallback((action: string, url?: string) => {
-    setCommand(JSON.stringify({ id: String(++serial.current), action, url }));
+  const send = useCallback((action: string, url?: string, reveal = false) => {
+    const id = String(++serial.current);
+    if (['navigate', 'back', 'forward', 'reload'].includes(action)) {
+      setBrowser((value) => ({ ...value, loading: true, errorKey: null }));
+    }
+    setRevealRequest(reveal ? id : '');
+    setCommand(JSON.stringify({ id, action, url }));
   }, []);
   const refresh = useCallback(async () => {
     const value = await online.state();
@@ -93,17 +100,17 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
     try { await action(); } catch (cause) { if (mounted.current) setError(onlineErrorKey(cause)); }
     finally { operation.current = false; if (mounted.current) setBusy(false); }
   }
-  async function visit(item: OnlineProvider, search = query) {
+  async function visit(item: OnlineProvider, search = query, reveal = false) {
     await run(async () => {
       const url = await online.search(item.id, search.trim());
       Keyboard.dismiss(); setProviderId(item.id); setLastProvider(item); setAddress(url); setBrowser(emptyBrowser);
-      setSearchOpen(false); setOpened(true); send('navigate', url);
+      setSearchOpen(false); setOpened(true); send('navigate', url, reveal);
     });
   }
   function selectProvider(item: OnlineProvider) {
     Keyboard.dismiss();
     setSearchOpen(false);
-    void visit(item, query);
+    void visit(item, query, !opened || item.id !== providerId);
   }
   function submitSearch() {
     const item = provider?.enabled ? provider : enabledProviders[0];
@@ -154,16 +161,21 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
       </ScrollView> : <>
         {feedback}
         <View style={[styles.browserArea, { paddingBottom: browserBottom }]}>
-          {opened ? <NativeOnlineBrowser style={styles.screen} active={active && panel === null}
-            provider={JSON.stringify(provider ?? {})} command={command} webTheme={webTheme} accentColor={theme.accent}
-            onBrowserState={({ nativeEvent }) => {
-              setBrowser(nativeEvent);
-              if (nativeEvent.url.startsWith('https://')) setAddress(nativeEvent.url);
-              if (nativeEvent.errorKey) setError(nativeEvent.errorKey);
-              const next = provider ? extractSearchQuery(provider, nativeEvent.url) : null;
-              if (next && !searchOpen && next !== query) setQuery(next);
-            }}
-            onDownloadIntent={({ nativeEvent }) => confirmDownload(nativeEvent)} />
+          {opened ? <View style={styles.screen}>
+            <NativeOnlineBrowser style={styles.screen} active={active && panel === null}
+              provider={JSON.stringify(provider ?? {})} command={command} webTheme={webTheme} accentColor={theme.accent}
+              onBrowserState={({ nativeEvent }) => {
+                setBrowser(nativeEvent);
+                if (nativeEvent.url.startsWith('https://')) setAddress(nativeEvent.url);
+                if (nativeEvent.errorKey) setError(nativeEvent.errorKey);
+                else setError((value) => value === 'online.browser.loadError' ? null : value);
+                const next = provider ? extractSearchQuery(provider, nativeEvent.url) : null;
+                if (next && !searchOpen && next !== query) setQuery(next);
+              }}
+              onDownloadIntent={({ nativeEvent }) => confirmDownload(nativeEvent)} />
+            <OnlineBrowserLoading loading={browser.loading} failed={!!browser.errorKey}
+              active={active && panel === null} revealRequest={revealRequest} provider={provider} theme={theme} />
+          </View>
             : <View style={styles.content}>
               <GlobeIcon size={28} color={theme.secondary} />
               <Text style={[styles.text, { color: theme.secondary }]}>{t('online.browser.chooseSource')}</Text>
@@ -190,7 +202,7 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
               {['queued', 'transferring'].includes(job.state) && <PanelAction label={t('online.browser.pause')} theme={theme} disabled={busy} onPress={() => void run(async () => { await online.pause(job.id); await refresh(); })} />}
               <PanelAction label={t('online.browser.openSource')} theme={theme} disabled={busy} onPress={() => {
                 const item = state.providers.find((value) => value.id === job.origin.providerId) ?? { id: job.origin.providerId ?? 'history', name: job.origin.providerName, homepage: job.origin.sourcePageUrl, searchTemplate: '', enabled: false, builtin: false };
-                setProviderId(item.id); setLastProvider(item); setAddress(job.origin.sourcePageUrl); setOpened(true); setPanel(null); send('navigate', job.origin.sourcePageUrl);
+                setProviderId(item.id); setLastProvider(item); setAddress(job.origin.sourcePageUrl); setBrowser(emptyBrowser); setOpened(true); setPanel(null); send('navigate', job.origin.sourcePageUrl);
               }} />
               {job.state === 'ready' && <>{<PanelAction label={t('online.browser.review')} theme={theme} onPress={() => void inspect(job.id)} disabled={busy} />}{<PanelAction label={t('online.browser.saveFile')} theme={theme} onPress={() => void run(() => online.save(job.id))} disabled={busy} />}</>}
               {['failed', 'paused', 'needsUser'].includes(job.state) && <PanelAction label={t('common.retry')} theme={theme} onPress={() => void run(async () => { await online.retry(job.id); await refresh(); })} disabled={busy} />}

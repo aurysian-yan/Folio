@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import {
   browserPageTitle, buildWebThemeCss, buildWebThemeScript, createOnlineClient, extractSearchQuery, onlineErrorKey,
   providerCustomCss, providerThemeEnabled, type OnlineBridge, type OnlineProvider,
@@ -101,4 +102,36 @@ test('样式脚本在关闭自动配色时仍保留自定义 CSS，并能移除�
   assert.doesNotMatch(script, /<\/style>/);
   const empty = buildWebThemeScript({ palette: { primary: '#123456' }, dark: false, enabled: false, customCss: '' });
   assert.match(empty, /removeChild/);
+});
+
+test('网页完成加载且样式表注入成功后才确认就绪', () => {
+  const css = 'body{color:red;}';
+  const script = buildWebThemeScript({ palette: {}, dark: false, enabled: false, customCss: css });
+  const style = { id: '', textContent: '', sheet: {} as object | null };
+  const document = {
+    readyState: 'loading',
+    getElementById: () => null,
+    createElement: () => style,
+    head: { appendChild: () => {} },
+  };
+  assert.equal(runInNewContext(script, { document }), false);
+  document.readyState = 'interactive';
+  assert.equal(runInNewContext(script, { document }), false);
+  document.readyState = 'complete';
+  style.sheet = null;
+  assert.equal(runInNewContext(script, { document }), false);
+  style.sheet = {};
+  assert.equal(runInNewContext(script, { document }), true);
+  assert.equal(style.textContent, css);
+});
+
+test('关闭配色并清空 CSS 时等待网页加载完成，清除旧样式后确认就绪', () => {
+  const script = buildWebThemeScript({ palette: {}, dark: false, enabled: false, customCss: '' });
+  let removed = false;
+  const style = { parentNode: { removeChild: () => { removed = true; } } };
+  const document = { readyState: 'loading', getElementById: () => removed ? null : style };
+  assert.equal(runInNewContext(script, { document }), false);
+  assert.equal(removed, true);
+  document.readyState = 'complete';
+  assert.equal(runInNewContext(script, { document }), true);
 });

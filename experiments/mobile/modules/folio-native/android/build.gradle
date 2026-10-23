@@ -21,6 +21,7 @@ android {
     testInstrumentationRunner project.findProperty('folioFileTest') ? 'com.folio.poc.FolioFileInstrumentation' : project.findProperty('folioPreviewTest') ? 'com.folio.poc.FolioPreviewInstrumentation' :
       project.findProperty('folioSliderTest') ? 'com.folio.poc.FolioSliderRefractionInstrumentation' :
       project.findProperty('folioSwitchTest') ? 'com.folio.poc.FolioSwitchRefractionInstrumentation' :
+      project.findProperty('folioOnlineLoadingTest') ? 'com.folio.poc.FolioOnlineLoadingInstrumentation' :
       project.findProperty('folioSyncTarget') ? 'com.folio.poc.FolioLiveSyncInstrumentation' : 'com.folio.poc.FolioSyncInstrumentation'
     consumerProguardFiles 'consumer-rules.pro'
   }

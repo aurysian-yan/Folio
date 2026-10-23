@@ -22,10 +22,16 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     private var sourcePage = ""
     private var disposed = false
     private var webTheme = ""
+    private var pendingTheme: String? = null
     private var lastState = ""
     private var lastThemeUrl = ""
     private var active = false
-    private var loading = false
+    private var loading = true
+    private var pageLoaded = false
+    private var pageFailed = false
+    private var contentReady = false
+    private var themeRevision = 0L
+    private var loadError: String? = null
     private val poll = object : Runnable {
         override fun run() {
             if (!active || disposed) return
@@ -39,10 +45,12 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     init {
         refresh.addView(web, FrameLayout.LayoutParams(-1, -1))
         addView(refresh, FrameLayout.LayoutParams(-1, -1))
-        refresh.setOnRefreshListener { web.reload() }
+        web.visibility = android.view.View.INVISIBLE
+        refresh.setOnRefreshListener { beginLoading(); web.reload() }
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            useWideViewPort = true
             allowFileAccess = false
             allowContentAccess = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -54,17 +62,17 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = navigate(request.url)
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
-                loading = true; updateSource(url); emit(true, force = true)
+                beginLoading(); updateSource(url)
             }
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
                 updateSource(url); emit(loading)
             }
             override fun onPageFinished(view: WebView, url: String?) {
-                loading = false
-                refresh.isRefreshing = false
+                if (pageFailed || url != web.url) return
+                pageLoaded = true
                 lastThemeUrl = url ?: ""
                 applyWebTheme()
-                updateSource(url); emit(false, force = true)
+                updateSource(url)
                 val providerId = provider.optString("id")
                 if (url == null || providerId.isEmpty()) return
                 web.evaluateJavascript(FolioOnlineIcons.discoveryScript) { value ->
@@ -77,10 +85,10 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
                 }
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame) { loading = false; refresh.isRefreshing = false; emit(false, "online.browser.loadError") }
+                if (request.isForMainFrame) { pageFailed = true; failLoading() }
             }
             override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
-                handler.cancel(); loading = false; refresh.isRefreshing = false; emit(false, "online.browser.loadError")
+                handler.cancel(); pageFailed = true; failLoading()
             }
         }
         web.webChromeClient = object : WebChromeClient() {
@@ -102,6 +110,11 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
             }
         }
         web.setDownloadListener { url, agent, disposition, mime, _ ->
+            if (!contentReady) {
+                pageLoaded = true
+                lastThemeUrl = web.url ?: ""
+                applyWebTheme()
+            }
             try {
                 FolioFileRuntime.get(context).browser.validateAddress(url)
                 val name = URLUtil.guessFileName(url, disposition, mime)
@@ -118,13 +131,67 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     fun setProvider(value: String) { provider = JSONObject(value) }
-    fun setWebTheme(value: String) { webTheme = value; applyWebTheme() }
+    fun setWebTheme(value: String) {
+        if (webTheme == value) return
+        webTheme = value
+        applyWebTheme()
+    }
     fun setAccentColor(value: String) {
         try { refresh.setColorSchemeColors(android.graphics.Color.parseColor(value)) } catch (_: Exception) {}
     }
     private fun applyWebTheme() {
-        if (webTheme.isEmpty()) return
-        web.evaluateJavascript(webTheme) { }
+        if (disposed || !pageLoaded || pageFailed || webTheme.isEmpty() || web.url == null) return
+        val script = webTheme
+        if (pendingTheme == script) return
+        val revision = ++themeRevision
+        pendingTheme = script
+        loadError = null
+        // 同一文档的地址和主题更新不重置已经就绪的页面。
+        if (!contentReady) {
+            loading = true
+            updateVisibility()
+            emit(true)
+        }
+        web.evaluateJavascript(script) { value ->
+            if (disposed || revision != themeRevision || !pageLoaded || pageFailed) return@evaluateJavascript
+            if (value != "true") { failLoading(); return@evaluateJavascript }
+            // 样式进入下一帧绘制后才展示网页，避免未适配内容闪现。
+            web.postVisualStateCallback(revision, object : WebView.VisualStateCallback() {
+                override fun onComplete(requestId: Long) {
+                    if (disposed || revision != themeRevision || !pageLoaded || pageFailed) return
+                    pendingTheme = null
+                    contentReady = true
+                    loading = false
+                    refresh.isRefreshing = false
+                    updateVisibility()
+                    emit(false)
+                }
+            })
+        }
+    }
+    private fun beginLoading() {
+        themeRevision++
+        pendingTheme = null
+        loadError = null
+        pageLoaded = false
+        pageFailed = false
+        contentReady = false
+        loading = true
+        updateVisibility()
+        emit(true, force = true)
+    }
+    private fun failLoading(error: String? = "online.browser.loadError") {
+        themeRevision++
+        pendingTheme = null
+        loadError = error
+        contentReady = false
+        loading = false
+        refresh.isRefreshing = false
+        updateVisibility()
+        emit(false)
+    }
+    private fun updateVisibility() {
+        web.visibility = if (active && contentReady) android.view.View.VISIBLE else android.view.View.INVISIBLE
     }
     fun command(value: String) {
         if (disposed) return
@@ -136,14 +203,17 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
             "navigate" -> {
                 try {
                     val url = FolioFileRuntime.get(context).browser.validateAddress(request.getString("url"))
-                    sourcePage = ""; web.loadUrl(url)
-                } catch (_: Exception) { emit(false, "online.browser.invalidSource") }
+                    sourcePage = ""; beginLoading(); web.loadUrl(url)
+                } catch (_: Exception) {
+                    if (!contentReady) loading = false
+                    emit(loading, "online.browser.invalidSource")
+                }
             }
-            "back" -> if (web.canGoBack()) web.goBack()
-            "forward" -> if (web.canGoForward()) web.goForward()
-            "reload" -> web.reload()
-            "stop" -> web.stopLoading()
-            "clear" -> { web.stopLoading(); web.clearHistory(); web.clearCache(true); WebStorage.getInstance().deleteAllData(); CookieManager.getInstance().removeAllCookies(null); web.loadUrl("about:blank") }
+            "back" -> if (web.canGoBack()) { beginLoading(); web.goBack() }
+            "forward" -> if (web.canGoForward()) { beginLoading(); web.goForward() }
+            "reload" -> { beginLoading(); web.reload() }
+            "stop" -> { web.stopLoading(); pageFailed = true; failLoading(null) }
+            "clear" -> { web.stopLoading(); web.clearHistory(); web.clearCache(true); WebStorage.getInstance().deleteAllData(); CookieManager.getInstance().removeAllCookies(null); beginLoading(); web.loadUrl("about:blank") }
         }
     }
     private fun navigate(uri: Uri): Boolean {
@@ -165,15 +235,16 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     private fun emit(loading: Boolean, error: String? = null, force: Boolean = false) {
         val url = web.url ?: ""
         val title = web.title ?: ""
-        val signature = "$url|$title|$loading|${web.canGoBack()}|${web.canGoForward()}"
+        val errorKey = error ?: loadError
+        val signature = "$url|$title|$loading|${web.canGoBack()}|${web.canGoForward()}|$errorKey"
         if (!force && error == null && signature == lastState) return
         lastState = signature
         onBrowserState(mapOf("url" to url, "title" to title, "loading" to loading,
-            "canGoBack" to web.canGoBack(), "canGoForward" to web.canGoForward(), "errorKey" to (error ?: "")))
+            "canGoBack" to web.canGoBack(), "canGoForward" to web.canGoForward(), "errorKey" to (errorKey ?: "")))
     }
     fun setActive(active: Boolean) {
         this.active = active
-        web.visibility = if (active) android.view.View.VISIBLE else android.view.View.INVISIBLE
+        updateVisibility()
         removeCallbacks(poll)
         if (active) { web.onResume(); post(poll) } else web.onPause()
     }
