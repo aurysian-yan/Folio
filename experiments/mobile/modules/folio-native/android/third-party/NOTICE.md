@@ -18,6 +18,19 @@
 - 搜索框从搜索按钮位置展开并收回，顶部信息使用 RN Animated 淡入淡出；系统关闭动画时直接完成转场。导入按钮使用原生 ProgressBar，完成、取消或失败后恢复加号。
 - 顶栏的网格、列表、勾选、箭头、搜索、加号与关闭路径同样来自已安装的 Phosphor 常规字重。
 
+## Android 底部导航折叠
+
+- 在线字体页的底栏折叠参考同一 MeiloX 固定提交的
+  [`GlassBottomBar.kt`](https://github.com/NEORUAA/MeiloX/blob/1d830d3f9cd11294e2bb977c7d0ba77f0fb8ca29/app/src/main/java/com/ljyh/mei/ui/glass/GlassBottomBar.kt)，
+  GPL-3.0；复用已保留的 `MeiloX-LICENSE.txt`。
+- 采用其宽度/高度插值、`StiffnessMediumLow` 弹簧、选中图标中心插值、标签纵向收拢、
+  非选中项淡出和指示器随动参数，并适配 Folio 现有三层玻璃结构。
+- 本地、在线字体、云端与设置保留在主胶囊中，搜索独立为右侧玻璃圆按钮。主胶囊高度
+  为 64dp，在线字体页收拢为 48dp 圆形，搜索与主胶囊共用折叠进度，图标由 28dp
+  收至 22dp。指示器在进度 0.74–0.98 之间淡出，紧凑态仅显示外层玻璃和当前图标。
+- 主胶囊、紧凑圆与独立搜索均保留拖动形变和弹性恢复；减少动态效果时关闭视觉形变，
+  拖动取消点击、禁用态与无障碍语义保持有效。云端长分段控件沿用原有独立参数。
+
 ## Android Progressive Header Blur
 
 - 顶部标题栏渐进式模糊参考同一 MeiloX 固定提交的 [`IosPinnedListPage.kt`](https://github.com/NEORUAA/MeiloX/blob/1d830d3f9cd11294e2bb977c7d0ba77f0fb8ca29/app/src/main/java/com/ljyh/mei/ui/glass/IosPinnedListPage.kt)，GPL-3.0；复用已保留的 `MeiloX-LICENSE.txt`。上游高斯采样算法参考 [AndroidX 固定提交](https://android.googlesource.com/platform/frameworks/support/+/7e1430f6c57df22b6ceeaa66ff4e18b53a67edd9)，Apache-2.0，许可原文已随模块打包。

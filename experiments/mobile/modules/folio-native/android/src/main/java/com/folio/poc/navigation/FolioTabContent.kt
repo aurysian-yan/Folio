@@ -12,14 +12,30 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 
 // Phosphor 常规字重路径与 RN 导航图标保持一致。
 @Composable
-internal fun ColumnScope.FolioTabContent(icon: String, label: String, dark: Boolean) {
-    val tint = (if (dark) Color.White else Color.Black).copy(alpha = 0.8f)
+internal fun ColumnScope.FolioTabContent(icon: String, label: String, tint: Color) {
+    val labelAlpha = (1f - LocalLiquidTabCompactProgress.current * 1.35f).coerceIn(0f, 1f)
+    FolioTabIcon(icon, tint, Modifier.size(28.dp))
+    BasicText(label,
+        modifier = Modifier
+            .collapseVertically(labelAlpha)
+            .graphicsLayer { alpha = labelAlpha },
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        style = TextStyle(color = tint, fontSize = 10.sp, lineHeight = 13.sp))
+}
+
+@Composable
+internal fun FolioTabIcon(icon: String, tint: Color, modifier: Modifier = Modifier) {
     val vector = remember(icon) {
         ImageVector.Builder(icon, 24.dp, 24.dp, 256f, 256f).apply {
             val paths = when (icon) {
@@ -34,6 +50,16 @@ internal fun ColumnScope.FolioTabContent(icon: String, label: String, dark: Bool
             paths.forEach { addPath(addPathNodes(it), fill = SolidColor(Color.Black)) }
         }.build()
     }
-    Image(vector, contentDescription = null, modifier = Modifier.size(24.dp), colorFilter = ColorFilter.tint(tint))
-    BasicText(label, style = TextStyle(color = tint, fontSize = 11.sp))
+    Image(vector, contentDescription = null, modifier = modifier, colorFilter = ColorFilter.tint(tint))
+}
+
+// 折叠时标签高度与透明度一起收拢，避免只淡出留下空位。
+private fun Modifier.collapseVertically(fraction: Float): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val height = (placeable.height * fraction.coerceIn(0f, 1f))
+        .roundToInt()
+        .coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(placeable.width, height) {
+        placeable.placeRelative(0, 0)
+    }
 }

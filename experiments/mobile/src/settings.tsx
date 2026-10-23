@@ -18,6 +18,10 @@ export interface Preferences {
   searchAutoFocus: boolean;
   characterMapAutoSelectFirstNonEmpty: boolean;
   characterMapInheritAxes: boolean;
+  /** 在线来源的站内配色开关，缺省时仅 Google Fonts 开启。 */
+  onlineTheme: Record<string, boolean>;
+  /** 按来源保存的自定义 CSS，仅保存在本机。 */
+  onlineCss: Record<string, string>;
 }
 
 export const defaultPreferences: Preferences = {
@@ -32,6 +36,8 @@ export const defaultPreferences: Preferences = {
   searchAutoFocus: false,
   characterMapAutoSelectFirstNonEmpty: true,
   characterMapInheritAxes: true,
+  onlineTheme: {},
+  onlineCss: {},
 };
 
 // 外观页可选的预览字号，与 FontCard 的基准字号对应。
@@ -43,6 +49,26 @@ const viewModeValues: readonly LibraryMode[] = ['grid', 'list'];
 
 function pick<T extends string>(values: readonly T[], value: unknown, fallback: T): T {
   return typeof value === 'string' && (values as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+function sanitizeTheme(raw: unknown): Record<string, boolean> {
+  const result: Record<string, boolean> = {};
+  if (!raw || typeof raw !== 'object') return result;
+  for (const [key, item] of Object.entries(raw as Record<string, unknown>)) {
+    if (key.length > 0 && key.length <= 100 && typeof item === 'boolean') result[key] = item;
+  }
+  return result;
+}
+
+function sanitizeCss(raw: unknown): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object') return result;
+  for (const [key, item] of Object.entries(raw as Record<string, unknown>)) {
+    if (key.length > 0 && key.length <= 100 && typeof item === 'string') {
+      result[key] = item.slice(0, 20000);
+    }
+  }
+  return result;
 }
 
 function sanitize(raw: unknown): Preferences {
@@ -64,6 +90,8 @@ function sanitize(raw: unknown): Preferences {
     importShowResults: typeof value.importShowResults === 'boolean' ? value.importShowResults : defaultPreferences.importShowResults,
     characterMapAutoSelectFirstNonEmpty: typeof value.characterMapAutoSelectFirstNonEmpty === 'boolean' ? value.characterMapAutoSelectFirstNonEmpty : defaultPreferences.characterMapAutoSelectFirstNonEmpty,
     characterMapInheritAxes: typeof value.characterMapInheritAxes === 'boolean' ? value.characterMapInheritAxes : defaultPreferences.characterMapInheritAxes,
+    onlineTheme: sanitizeTheme(value.onlineTheme),
+    onlineCss: sanitizeCss(value.onlineCss),
   };
 }
 

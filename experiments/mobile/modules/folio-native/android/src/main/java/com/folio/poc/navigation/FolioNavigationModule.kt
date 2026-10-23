@@ -34,6 +34,8 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioPanelBackdropView::class) {
+            Prop("navigationGlass") { view: FolioPanelBackdropView, value: Boolean -> view.navigationGlass = value }
+            Prop("dark") { view: FolioPanelBackdropView, value: Boolean -> view.dark = value }
             Prop("sourceId") { view: FolioPanelBackdropView, value: String -> view.sourceId = value }
             Prop("active") { view: FolioPanelBackdropView, value: Boolean -> view.active = value }
             Prop("tintColor") { view: FolioPanelBackdropView, value: String -> view.tintColor = value }
@@ -108,13 +110,16 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioLiquidTabsView::class) {
-            Events("onSelectionChange")
+            Events("onSelectionChange", "onExpand", "onCollapse")
             Prop("sourceId") { view: FolioLiquidTabsView, value: String -> view.sourceId = value }
             Prop("selectedId") { view: FolioLiquidTabsView, value: String -> view.selectedId = value }
             Prop("dark") { view: FolioLiquidTabsView, value: Boolean -> view.dark = value }
             Prop("accentColor") { view: FolioLiquidTabsView, value: String -> view.accentColor = value }
             Prop("segmented") { view: FolioLiquidTabsView, value: Boolean -> view.segmented = value }
             Prop("enabled") { view: FolioLiquidTabsView, value: Boolean -> view.controlEnabled = value }
+            Prop("collapsed") { view: FolioLiquidTabsView, value: Boolean -> view.collapsed = value }
+            Prop("collapsible") { view: FolioLiquidTabsView, value: Boolean -> view.collapsible = value }
+            Prop("expandHint") { view: FolioLiquidTabsView, value: String -> view.expandHint = value }
             Prop("labelColor") { view: FolioLiquidTabsView, value: String -> view.labelColor = value }
             Prop("surfaceColor") { view: FolioLiquidTabsView, value: String -> view.surfaceColor = value }
             Prop("items") { view: FolioLiquidTabsView, value: List<FolioNavigationItem> ->

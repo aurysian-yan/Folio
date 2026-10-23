@@ -3,7 +3,9 @@ package com.folio.poc.navigation
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -57,6 +60,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp as lerpDp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
@@ -76,12 +80,37 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
 import kotlinx.coroutines.launch
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.sign
+import kotlin.math.sin
+import kotlin.math.tanh
 
 internal val LocalLiquidBottomTabScale =
     staticCompositionLocalOf { { 1f } }
+
+internal val LocalLiquidTabCompactProgress =
+    staticCompositionLocalOf { 0f }
+
+internal data class LiquidTabCollapseGeometry(
+    val progress: Float,
+    val fullWidthPx: Float,
+    val currentWidthPx: Float,
+    val compactWidthPx: Float,
+    val insetPx: Float,
+    val count: Int,
+)
+
+internal val LocalLiquidTabCollapse =
+    staticCompositionLocalOf { LiquidTabCollapseGeometry(0f, 1f, 1f, 1f, 0f, 1) }
+
+// 选中图标在胶囊收成圆形后才缩到紧凑尺寸。
+internal fun compactIconLateProgress(progress: Float): Float {
+    if (progress <= 0.74f) return 0f
+    val morph = ((progress - 0.74f) / 0.26f).coerceIn(0f, 1f)
+    return FastOutSlowInEasing.transform(morph)
+}
 
 @Composable
 fun RowScope.LiquidBottomTab(
@@ -90,30 +119,53 @@ fun RowScope.LiquidBottomTab(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    selectionActive: Boolean = true,
+    index: Int = 0,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scale = LocalLiquidBottomTabScale.current
-    Column(
-        modifier
-            .clip(ContinuousCapsule())
-            .selectable(selected, remember { MutableInteractionSource() }, null, enabled = enabled, role = Role.Tab, onClick = onClick)
-            .clearAndSetSemantics {
-                role = Role.Tab
-                this.selected = selected
-                contentDescription = label
-                if (enabled) onClick { onClick(); true } else disabled()
-            }
-            .fillMaxHeight()
-            .weight(1f)
-            .graphicsLayer {
-                val s = scale()
-                scaleX = s
-                scaleY = s
-            },
-        verticalArrangement = Arrangement.spacedBy(2f.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        content = content
-    )
+    val collapse = LocalLiquidTabCollapse.current
+    val density = LocalDensity.current
+    val progress = collapse.progress
+    val contentWidth = (collapse.currentWidthPx - collapse.insetPx * 2f).coerceAtLeast(1f)
+    val expandedWidth = (collapse.fullWidthPx - collapse.insetPx * 2f) / collapse.count.coerceAtLeast(1)
+    // 紧凑圆的内宽等于收起后的整个内容宽度。
+    val selectedWidth = lerp(expandedWidth, (collapse.compactWidthPx - collapse.insetPx * 2f).coerceAtLeast(1f), progress)
+    val slotWidth = contentWidth / collapse.count.coerceAtLeast(1)
+    val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val slotCenter = collapse.insetPx + (index + 0.5f) * slotWidth
+    val expandedCenter = collapse.insetPx + (index + 0.5f) * expandedWidth
+    val translation = (lerp(expandedCenter, collapse.compactWidthPx / 2f, progress) - slotCenter) * if (isLtr) 1f else -1f
+    val alpha = if (selected) 1f else (1f - progress * 1.35f).coerceIn(0f, 1f)
+    val lateScale = compactIconLateProgress(progress)
+    val width = if (selected) with(density) { selectedWidth.toDp() } else null
+
+    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier
+                .then(width?.let { Modifier.requiredWidth(it) } ?: Modifier.fillMaxWidth())
+                .fillMaxHeight()
+                .graphicsLayer {
+                    translationX = if (selected) translation else 0f
+                    this.alpha = alpha
+                    val s = scale() * lerp(1f, (22f / 28f) / 0.82f, lateScale)
+                    scaleX = s
+                    scaleY = s
+                }
+                .clip(ContinuousCapsule())
+                .selectable(selected && selectionActive, remember { MutableInteractionSource() }, null,
+                    enabled = enabled && progress < 0.74f, role = Role.Tab, onClick = onClick)
+                .clearAndSetSemantics {
+                    role = Role.Tab
+                    this.selected = selected && selectionActive
+                    contentDescription = label
+                    if (enabled && progress < 0.74f) onClick { onClick(); true } else disabled()
+                },
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            content = content
+        )
+    }
 }
 
 @Composable
@@ -131,6 +183,12 @@ fun LiquidBottomTabs(
     enabled: Boolean = true,
     containerTint: Color? = null,
     preserveCapsuleOnPress: Boolean = false,
+    compactProgress: Float = 0f,
+    selectionActive: Boolean = true,
+    compactLabel: String = "",
+    compactHint: String = "",
+    onExpand: () -> Unit = {},
+    compactSize: Dp = 48.dp,
     content: @Composable RowScope.() -> Unit
 ) {
     val isLightTheme = !dark
@@ -155,6 +213,18 @@ fun LiquidBottomTabs(
         val padPx = with(density) { trackInset.toPx() }
         val tabWidth = (constraints.maxWidth.toFloat() - padPx * 2f) / tabsCount
         val maxIndex = (tabsCount - 1).toFloat()
+        val compactWidthPx = with(density) { compactSize.toPx() }
+        val currentWidthPx = lerp(constraints.maxWidth.toFloat(), compactWidthPx, compactProgress)
+        val currentWidth = with(density) { currentWidthPx.toDp() }
+        val currentHeight = lerpDp(containerHeight, compactSize, compactProgress)
+        val collapseGeometry = LiquidTabCollapseGeometry(
+            progress = compactProgress,
+            fullWidthPx = constraints.maxWidth.toFloat(),
+            currentWidthPx = currentWidthPx,
+            compactWidthPx = compactWidthPx,
+            insetPx = padPx,
+            count = tabsCount,
+        )
 
         val offsetAnimation = remember { Animatable(0f) }
         val panelOffset by remember(density, constraints.maxWidth) {
@@ -170,6 +240,12 @@ fun LiquidBottomTabs(
         val ltrSign = if (isLtr) 1f else -1f
         val animationScope = rememberCoroutineScope()
         val motionEnabled = (animationScope.coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f) > 0f
+        val compactInteraction = remember(animationScope) { InteractiveHighlight(animationScope, consumeDrag = true) }
+        val compactMode = compactProgress >= 0.74f
+        val innerGlassVisibility = if (compactProgress <= 0.74f) 1f else {
+            1f - FastOutSlowInEasing.transform(((compactProgress - 0.74f) / 0.24f).coerceIn(0f, 1f))
+        }
+        val opticalVisibility = (1f - compactProgress * 1.5f).coerceIn(0f, 1f)
 
         var currentIndex by remember { mutableIntStateOf(selectedTabIndex()) }
         val dampedDragAnimation = remember(animationScope, tabsCount, preserveCapsuleOnPress) {
@@ -220,41 +296,70 @@ fun LiquidBottomTabs(
             remember(containerColor) { { drawRect(containerColor) } }
         Row(
             Modifier
-                .graphicsLayer { translationX = panelOffset }
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { ContinuousCapsule() },
-                    effects = panelEffects,
-                    highlight = null,
-                    shadow = { if (preserveCapsuleOnPress) null else Shadow.Default },
-                    layerBlock = {
-                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress else 0f
-                        val scale = if (preserveCapsuleOnPress) 1f else lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)
-                        scaleX = scale
-                        scaleY = scale
-                    },
-                    onDrawSurface = panelSurface
-                )
-                .edgeLight(shape = ContinuousCapsule(), edgeLight = defaultEdgeLight)
+                .graphicsLayer {
+                    translationX = panelOffset
+                    scaleY = 1f + 0.045f * sin(PI.toFloat() * compactProgress)
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (isLtr) 0f else 1f, 0.5f)
+                    if (motionEnabled && compactMode) {
+                        val offset = compactInteraction.offset
+                        val press = compactInteraction.pressProgress
+                        scaleX = 1f + 0.12f * press + 0.08f * (abs(offset.x) / size.width).coerceAtMost(1f)
+                        scaleY = 1f + 0.12f * press + 0.08f * (abs(offset.y) / size.height).coerceAtMost(1f)
+                        translationX += size.width * tanh(0.05f * offset.x / size.width)
+                        translationY = size.height * tanh(0.05f * offset.y / size.height)
+                    }
+                }
+                .then(if (preserveCapsuleOnPress) {
+                    Modifier.drawBackdrop(
+                        backdrop = backdrop, shape = { ContinuousCapsule() }, effects = panelEffects,
+                        highlight = null, shadow = null, onDrawSurface = panelSurface,
+                    ).edgeLight(shape = ContinuousCapsule(), edgeLight = defaultEdgeLight)
+                } else {
+                    Modifier.navigationGlass(backdrop = backdrop, dark = dark,
+                        layerBlock = {
+                            val progress = if (motionEnabled && !compactMode) dampedDragAnimation.pressProgress else 0f
+                            val scale = lerp(1f, 1f + 16.dp.toPx() / size.width, progress)
+                            scaleX = scale
+                            scaleY = scale
+                        },
+                        onDrawSurface = panelSurface,
+                    )
+                })
                 .then(if (motionEnabled) interactiveHighlight.modifier else Modifier)
-                .height(containerHeight)
-                .fillMaxWidth()
+                .then(if (compactMode) Modifier.clearAndSetSemantics {} else Modifier)
+                .width(currentWidth)
+                .height(currentHeight)
                 .padding(trackInset),
             verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
+        ) {
+            CompositionLocalProvider(
+                LocalLiquidTabCollapse provides collapseGeometry,
+                LocalLiquidTabCompactProgress provides compactProgress,
+                LocalLiquidBottomTabScale provides {
+                    if (preserveCapsuleOnPress) lerp(1f, 1.2f, if (motionEnabled) dampedDragAnimation.pressProgress else 0f)
+                    else (1f - compactProgress).coerceAtLeast(0.82f)
+                },
+            ) { content() }
+        }
 
         CompositionLocalProvider(
             LocalLiquidBottomTabScale provides {
-                lerp(1f, 1.2f, if (motionEnabled) dampedDragAnimation.pressProgress else 0f)
-            }
+                lerp(1f, 1.2f, if (motionEnabled) dampedDragAnimation.pressProgress else 0f) *
+                    if (preserveCapsuleOnPress) 1f else (1f - compactProgress).coerceAtLeast(0.82f)
+            },
+            LocalLiquidTabCollapse provides collapseGeometry,
+            LocalLiquidTabCompactProgress provides compactProgress,
         ) {
             Row(
                 Modifier
                     .clearAndSetSemantics {}
                     .alpha(0f)
                     .layerBackdrop(tabsBackdrop)
-                    .graphicsLayer { translationX = panelOffset }
+                    .graphicsLayer {
+                        translationX = panelOffset
+                        scaleY = 1f + 0.045f * sin(PI.toFloat() * compactProgress)
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (isLtr) 0f else 1f, 0.5f)
+                    }
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { ContinuousCapsule() },
@@ -274,8 +379,8 @@ fun LiquidBottomTabs(
                         onDrawSurface = { drawRect(containerColor) }
                     )
                     .then(if (motionEnabled) interactiveHighlight.modifier else Modifier)
-                    .height(highlightHeight)
-                    .fillMaxWidth()
+                    .width(currentWidth)
+                    .height(lerpDp(highlightHeight, compactSize, compactProgress))
                     .padding(horizontal = trackInset)
                     .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
                 verticalAlignment = Alignment.CenterVertically,
@@ -287,24 +392,36 @@ fun LiquidBottomTabs(
         val selectorStretch = if (preserveCapsuleOnPress && motionEnabled) dampedDragAnimation.dragStretch * selectorPress else 0f
         val idleSelectorInset = if (preserveCapsuleOnPress) 2.dp * (1f - selectorPress) else 0.dp
         val selectorWidth = with(density) { tabWidth.toDp() } - idleSelectorInset * 2 + 26.dp * selectorPress + 24.dp * selectorStretch
+        val compactSelectorWidth = with(density) { (compactWidthPx - padPx * 2f).toDp() }
+        val compactSelectorHeight = compactSize - 8.dp
+        val animatedSelectorWidth = if (preserveCapsuleOnPress) selectorWidth
+            else lerpDp(with(density) { tabWidth.toDp() }, compactSelectorWidth, compactProgress)
+        val animatedSelectorHeight = if (preserveCapsuleOnPress) selectorHeight + 18.dp * selectorPress - 4.dp * selectorStretch
+            else lerpDp(selectorHeight, compactSelectorHeight, compactProgress)
         Box(
-            (if (preserveCapsuleOnPress) Modifier.width(selectorWidth).requiredHeight(selectorHeight + 18.dp * selectorPress - 4.dp * selectorStretch)
-                else Modifier.padding(horizontal = trackInset))
+            Modifier.width(animatedSelectorWidth).requiredHeight(animatedSelectorHeight)
                 .graphicsLayer {
-                    val inset = if (preserveCapsuleOnPress) padPx + (tabWidth - size.width) / 2f else 0f
-                    val position = if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset + inset
-                        else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset - inset
+                    val currentTabWidth = (currentWidthPx - padPx * 2f) / tabsCount
+                    val tabCenter = if (isLtr) padPx + (dampedDragAnimation.value + 0.5f) * currentTabWidth
+                        else currentWidthPx - padPx - (dampedDragAnimation.value + 0.5f) * currentTabWidth
+                    val compactCenter = if (isLtr) compactWidthPx / 2f else currentWidthPx - compactWidthPx / 2f
+                    val indicatorLeft = (lerp(tabCenter, compactCenter, compactProgress) - size.width / 2f)
+                        .coerceIn(padPx, (currentWidthPx - padPx - size.width).coerceAtLeast(padPx))
                     // 端点拉伸向轨道内展开，避免胶囊端部超出屏幕。
                     val overhang = 13.dp.toPx() - padPx
-                    translationX = if (preserveCapsuleOnPress) position.coerceIn(-overhang, constraints.maxWidth - size.width + overhang)
-                        else position
+                    translationX = if (preserveCapsuleOnPress) {
+                        val position = if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
+                            else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset
+                        position.coerceIn(-overhang, constraints.maxWidth - size.width + overhang)
+                    } else indicatorLeft + (if (isLtr) 0f else size.width - currentWidthPx) + panelOffset
+                    if (!preserveCapsuleOnPress) scaleY = 1f + 0.045f * sin(PI.toFloat() * compactProgress)
                 }
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { ContinuousCapsule() },
                     downsampleScale = 1f,
                     effects = {
-                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress else 0f
+                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress * opticalVisibility else 0f
                         lens(
                             10f.dp.toPx() * progress,
                             14f.dp.toPx() * progress,
@@ -312,21 +429,22 @@ fun LiquidBottomTabs(
                         )
                     },
                     highlight = {
-                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress else 0f
+                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress * opticalVisibility else 0f
                         Highlight.Default.copy(alpha = progress)
                     },
                     shadow = {
-                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress else 0f
+                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress * opticalVisibility else 0f
                         Shadow(alpha = progress)
                     },
                     innerShadow = {
-                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress else 0f
+                        val progress = if (motionEnabled) dampedDragAnimation.pressProgress * opticalVisibility else 0f
                         InnerShadow(
                             radius = 8f.dp * progress,
                             alpha = progress
                         )
                     },
                     layerBlock = {
+                        alpha = if (selectionActive) innerGlassVisibility else 0f
                         // 长胶囊以实际尺寸生成轮廓，端部不参与非等比缩放。
                         scaleX = if (motionEnabled && !preserveCapsuleOnPress) dampedDragAnimation.scaleX else 1f
                         scaleY = if (motionEnabled && !preserveCapsuleOnPress) dampedDragAnimation.scaleY else 1f
@@ -341,17 +459,15 @@ fun LiquidBottomTabs(
                         drawRect(
                             if (isLightTheme) Color.Black.copy(0.08f)
                             else Color.White.copy(0.1f),
-                            alpha = 1f - progress
+                            alpha = (1f - progress) * (1f - compactProgress)
                         )
                         drawRect(Color.Black.copy(alpha = 0.03f * progress))
                     }
                 )
                 .then(if (motionEnabled) interactiveHighlight.gestureModifier else Modifier)
-                .then(if (preserveCapsuleOnPress) Modifier else Modifier.height(selectorHeight))
-                .then(if (preserveCapsuleOnPress) Modifier else Modifier.fillMaxWidth(1f / tabsCount))
         )
 
-        Box(
+        if (compactProgress < 0.74f) Box(
             Modifier
                 .fillMaxSize()
                 .clearAndSetSemantics {}
@@ -416,5 +532,22 @@ fun LiquidBottomTabs(
                     }
                 }
         )
+        if (compactMode) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .width(with(density) { compactWidthPx.toDp() })
+                    .height(containerHeight)
+                    .then(if (enabled) compactInteraction.gestureModifier else Modifier)
+                    .clickable(enabled = enabled, interactionSource = remember { MutableInteractionSource() }, indication = null,
+                        role = Role.Tab, onClick = onExpand)
+                    .clearAndSetSemantics {
+                        role = Role.Tab
+                        contentDescription = if (compactHint.isEmpty()) compactLabel else "$compactLabel，$compactHint"
+                        this.selected = selectionActive
+                        if (enabled) onClick { onExpand(); true } else disabled()
+                    }
+            )
+        }
     }
 }

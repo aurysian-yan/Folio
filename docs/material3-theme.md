@@ -67,6 +67,10 @@
 玻璃开关、菜单与面板页签一并跟随。原先直接读取基础配色的
 `HeaderControls.android` 已改为从派生主题取色，避免顶栏遗漏。
 
+开启 Material3 后，在线字体来源可按开关把完整角色表注入站点 CSS 变量；
+默认仅 Google Fonts 启用，其他来源由用户显式开启。实现与站点限制见
+`docs/online-font-web-theme.md`。
+
 ## 验证
 
 - `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm i18n:validate`。

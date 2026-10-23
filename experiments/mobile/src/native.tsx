@@ -6,12 +6,13 @@ import type { MaterialRoles } from './material-theme';
 import { createSyncClient, type SyncBridge } from './sync';
 import { ForegroundSyncSession } from './sync-session';
 import { createStorageClient, type StorageBridge } from './storage';
-import { createOnlineClient, type BrowserState, type OnlineBridge } from './online';
+import { createOnlineClient, type BrowserState, type OnlineBridge, type WebPalette } from './online';
 
 // 安卓外观主题桥接：壁纸种子与 Material3 语义色。
 interface MaterialBridge {
   wallpaperSeed(): string | null;
   materialPalette(seed: string, dark: boolean, followWallpaper: boolean): MaterialRoles;
+  materialWebPalette(seed: string, dark: boolean, followWallpaper: boolean): WebPalette;
 }
 
 interface AndroidWindowBridge {
@@ -26,6 +27,8 @@ export const NativeOnlineBrowser = requireNativeViewManager<ViewProps & {
   provider: string;
   command: string;
   active: boolean;
+  webTheme: string;
+  accentColor: string;
   onBrowserState: (event: NativeSyntheticEvent<BrowserState>) => void;
   onDownloadIntent: (event: NativeSyntheticEvent<{ id: string; name: string }>) => void;
 }>('FolioNative', 'FolioOnlineView');
@@ -37,6 +40,7 @@ export const storage = createStorageClient(nativeModule);
 export const copyText = (text: string) => nativeModule.copyText(text);
 export const wallpaperSeed = () => nativeModule.wallpaperSeed();
 export const materialPalette = (seed: string, dark: boolean, followWallpaper = false) => nativeModule.materialPalette(seed, dark, followWallpaper);
+export const materialWebPalette = (seed: string, dark: boolean, followWallpaper = false) => nativeModule.materialWebPalette(seed, dark, followWallpaper);
 export const screenCornerRadius = () => nativeModule.screenCornerRadius();
 
 export interface PreviewSelection {

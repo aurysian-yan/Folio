@@ -39,6 +39,8 @@ class FolioPanelBackdropView(context: Context, appContext: AppContext) : ExpoVie
     var tintColor by mutableStateOf("")
     var cornerRadius by mutableStateOf(32f)
     var borderColor by mutableStateOf("")
+    var navigationGlass by mutableStateOf(false)
+    var dark by mutableStateOf(false)
     private var sampleVersion by mutableIntStateOf(0)
     private val location = IntArray(2)
     private var lastX = Int.MIN_VALUE
@@ -57,6 +59,8 @@ class FolioPanelBackdropView(context: Context, appContext: AppContext) : ExpoVie
     private val compose = ComposeView(context)
 
     init {
+        clipChildren = false
+        clipToPadding = false
         compose.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
         addView(compose, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         compose.setContent {
@@ -73,6 +77,10 @@ class FolioPanelBackdropView(context: Context, appContext: AppContext) : ExpoVie
                 }
             }
             val tint = Color(android.graphics.Color.parseColor(tintColor))
+            if (navigationGlass) {
+                Box(Modifier.fillMaxSize().navigationGlass(backdrop = backdrop, dark = dark))
+                return@setContent
+            }
             val shape = RoundedCornerShape(cornerRadius.dp)
             val edge = if (borderColor.isEmpty()) Color.Transparent else Color(android.graphics.Color.parseColor(borderColor))
             Box(Modifier.fillMaxSize().border(0.5.dp, edge, shape).drawPlainBackdrop(

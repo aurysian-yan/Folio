@@ -31,10 +31,21 @@ export interface BottomNavigationProps {
   bottomInset: number;
   leftInset: number;
   rightInset: number;
+  collapsed?: boolean;
+  collapsible?: boolean;
   onSelectionChange: (id: MobileTab) => void;
+  onExpand?: () => void;
+  onCollapse?: () => void;
 }
 
 export function navigationContentInset(bottomInset: number) { return bottomInset + 96; }
+
+// 浮层控制条需要停在导航表面上方；折叠只改变宽度，视觉顶边不变。
+export function navigationBarTopInset(bottomInset: number) { return bottomInset + 8 + 64; }
+
+export function navigationCompactBarFrame(bottomInset: number, _availableWidth: number) {
+  return { bottom: bottomInset + 8, sideInset: 84 };
+}
 
 export function NavigationBackdrop({ children, style }: NavigationBackdropProps) {
   return <View style={style}>{children}</View>;
@@ -42,7 +53,20 @@ export function NavigationBackdrop({ children, style }: NavigationBackdropProps)
 
 const icons = { local: TextAaIcon, search: MagnifyingGlassIcon, online: GlobeIcon, cloud: CloudIcon, settings: GearIcon };
 
-export function BottomNavigation({ hidden = false, selectedId, theme, bottomInset, leftInset, rightInset, onSelectionChange }: BottomNavigationProps) {
+export function BottomNavigation({ hidden = false, collapsed = false, selectedId, theme, bottomInset, leftInset, rightInset, onSelectionChange, onExpand }: BottomNavigationProps) {
+  if (collapsed) {
+    const item = navigationItems.find(({ id }) => id === selectedId) ?? navigationItems[0];
+    const Icon = icons[item.id];
+    return <View pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden}
+      importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
+      style={[styles.dock, { opacity: hidden ? 0 : 1, bottom: bottomInset + 8, left: leftInset + 20 }]}>
+      <Pressable accessibilityRole="tab" accessibilityLabel={`${item.label}，${i18n.t('navigation.expandBar')}`}
+        accessibilityState={{ selected: true }} onPress={onExpand}
+        style={({ pressed }) => [styles.compact, { backgroundColor: theme.tab, borderColor: theme.border, opacity: pressed ? 0.6 : 1 }]}>
+        <Icon size={24} color={theme.accent} />
+      </Pressable>
+    </View>;
+  }
   return <View pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden}
     importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
     style={[styles.dock, { opacity: hidden ? 0 : 1, bottom: bottomInset + 8, left: leftInset + 20, right: rightInset + 20 }]}>
@@ -66,6 +90,7 @@ export function BottomNavigation({ hidden = false, selectedId, theme, bottomInse
 const styles = StyleSheet.create({
   dock: { position: 'absolute' },
   bar: { minHeight: 64, borderRadius: 32, borderWidth: StyleSheet.hairlineWidth, padding: 4, flexDirection: 'row', alignItems: 'center' },
+  compact: { width: 56, height: 56, borderRadius: 28, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
   tab: { flex: 1, minHeight: 54, borderRadius: 27, justifyContent: 'center', alignItems: 'center', gap: 3, paddingVertical: 4 },
   label: { fontSize: 10, fontWeight: '600', lineHeight: 13 },
 });

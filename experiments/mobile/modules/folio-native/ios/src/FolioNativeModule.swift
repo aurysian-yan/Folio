@@ -4,6 +4,7 @@ import FolioFileServices
 import ExpoModulesCore
 import Foundation
 import UIKit
+import WebKit
 
 struct FolioSyncProfile: Record {
     @Field var serverUrl: String = ""
@@ -81,6 +82,12 @@ public final class FolioNativeModule: Module {
         AsyncFunction("onlineImportIcon") { (uri: String) throws -> String in try FolioOnlineIcons.importFile(uri) }.runOnQueue(queue)
         AsyncFunction("onlineAcceptDisclaimer") { () throws in try FolioFileRuntime.shared().browser.acceptDisclaimer() }.runOnQueue(queue)
         AsyncFunction("onlineSaveProviders") { (value: String) throws in try FolioFileRuntime.shared().browser.saveProviders(value: value) }.runOnQueue(queue)
+        AsyncFunction("onlineClearData") {
+            WKWebsiteDataStore.default().removeData(
+                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
+            ) {}
+            HTTPCookieStorage.shared.removeCookies(since: .distantPast)
+        }.runOnQueue(queue)
         AsyncFunction("onlineSearch") { (id: String, query: String) throws -> String in try FolioFileRuntime.shared().browser.search(providerId: id, query: query) }.runOnQueue(queue)
         AsyncFunction("onlineDownload") { (id: String) throws -> String in try FolioOnlineTransfers.shared.start(id) }.runOnQueue(queue)
         AsyncFunction("onlinePause") { (id: String) throws in try FolioOnlineTransfers.shared.pause(id) }.runOnQueue(queue)
@@ -99,11 +106,16 @@ public final class FolioNativeModule: Module {
             }
             if !presented { throw FolioPaths.failure() }
         }.runOnQueue(queue)
+        View(FolioTabBarBehavior.self) {
+            Prop("minimize") { (view: FolioTabBarBehavior, value: Bool) in view.setMinimize(value) }
+        }
         View(FolioOnlineView.self) {
             Prop("active") { (view: FolioOnlineView, value: Bool) in view.setActive(value) }
             Events("onBrowserState", "onDownloadIntent")
             Prop("provider") { (view: FolioOnlineView, value: String) in view.setProvider(value) }
             Prop("command") { (view: FolioOnlineView, value: String) in view.command(value) }
+            Prop("webTheme") { (view: FolioOnlineView, value: String) in view.setWebTheme(value) }
+            Prop("accentColor") { (view: FolioOnlineView, value: String) in view.setAccentColor(value) }
         }
         AsyncFunction("openCharacterMap") { (request: String) throws -> String in
             guard let value=try JSONSerialization.jsonObject(with:Data(request.utf8)) as? [String:Any], let path=value["sourcePath"] as? String else {throw FolioPaths.failure()}

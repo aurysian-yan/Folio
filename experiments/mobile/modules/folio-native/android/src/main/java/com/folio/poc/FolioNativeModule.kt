@@ -6,6 +6,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.view.RoundedCorner
+import android.webkit.CookieManager
+import android.webkit.WebStorage
+import android.webkit.WebViewDatabase
 import com.folio.poc.ffi.SmartFolderIdDto
 import com.folio.poc.ffi.CollectionIdDto
 import com.folio.poc.ffi.FolioEngine
@@ -98,6 +101,18 @@ class FolioNativeModule : Module() {
         AsyncFunction("onlineImportIcon") { uri:String,promise:Promise -> perform(promise) {FolioOnlineIcons.importFile(context(),uri)} }
         AsyncFunction("onlineAcceptDisclaimer") { promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.acceptDisclaimer();true} }
         AsyncFunction("onlineSaveProviders") { value:String,promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.saveProviders(value);true} }
+        AsyncFunction("onlineClearData") { promise:Promise ->
+            val app = context()
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                try {
+                    CookieManager.getInstance().removeAllCookies(null)
+                    CookieManager.getInstance().flush()
+                    WebStorage.getInstance().deleteAllData()
+                    WebViewDatabase.getInstance(app).clearHttpAuthUsernamePassword()
+                    promise.resolve(true)
+                } catch (cause: Exception) { promise.reject("online.browser.storageError", cause.message, cause) }
+            }
+        }
         AsyncFunction("onlineSearch") { id:String,query:String,promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.search(id,query)} }
         AsyncFunction("onlineDownload") { id:String,promise:Promise -> perform(promise) {FolioOnlineTransfers.start(context(),id)} }
         AsyncFunction("onlinePause") { id:String,promise:Promise -> perform(promise) {FolioOnlineTransfers.pause(context(),id);true} }
@@ -115,6 +130,8 @@ class FolioNativeModule : Module() {
             Events("onBrowserState","onDownloadIntent")
             Prop("provider") {view:FolioOnlineView,value:String->view.setProvider(value)}
             Prop("command") {view:FolioOnlineView,value:String->view.command(value)}
+            Prop("webTheme") {view:FolioOnlineView,value:String->view.setWebTheme(value)}
+            Prop("accentColor") {view:FolioOnlineView,value:String->view.setAccentColor(value)}
         }
         AsyncFunction("openCharacterMap") { request: String, promise: Promise ->
             performCharacterMap(promise) {
@@ -141,6 +158,9 @@ class FolioNativeModule : Module() {
         Function("wallpaperSeed") { FolioMaterialColors.wallpaperSeed(context()) }
         Function("materialPalette") { seed: String, dark: Boolean, followWallpaper: Boolean ->
             FolioMaterialColors.scheme(context(), seed, dark, followWallpaper)
+        }
+        Function("materialWebPalette") { seed: String, dark: Boolean, followWallpaper: Boolean ->
+            FolioMaterialColors.webPalette(context(), seed, dark, followWallpaper)
         }
 
         // 屏幕顶部圆角按当前窗口方向读取，并转换为 dp。

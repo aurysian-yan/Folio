@@ -13,7 +13,7 @@ import {
 import { requireNativeView } from 'expo';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Keyboard, Platform, StyleSheet, View } from 'react-native';
+import { Keyboard, Platform, StyleSheet, View, type ViewProps } from 'react-native';
 import { collectionColorValue, collectionSystemImage } from './collection-style';
 import { HeaderScrollContext, headerShadowColor, useHeaderShadowProgress } from './HeaderButtonShadow';
 import type {
@@ -27,6 +27,7 @@ const toolbarHeight = 44;
 
 export const NativeScrollContainer = requireNativeView<NativeScrollContainerProps>('FolioNative', 'FolioScrollContainer');
 const NativeTabContent = requireNativeView<{ children: React.ReactNode; animateTabChanges?: boolean }>('FolioNative', 'FolioTabContent');
+const TabBarBehavior = requireNativeView<ViewProps & { minimize: boolean }>('FolioNative', 'FolioTabBarBehavior');
 
 // 原生玻璃尺寸与控件边界保持一致。
 function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = false, prominent = false) {
@@ -108,7 +109,9 @@ export function NativeNavigation({ children, settings, search, cloud, online, th
           <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{search}</View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="online" label={t('online.title')} systemImage="globe">
-          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{online}</View></RNHostView></NativeTabContent>
+          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{online}
+            <TabBarBehavior minimize style={styles.tabBarBehavior} />
+          </View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="cloud" label={t('navigation.cloud')} systemImage="cloud">
           <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{cloud}</View></RNHostView></NativeTabContent>
@@ -281,5 +284,6 @@ export function NativeActionButton({ label, systemImage, color, onPress, disable
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  tabBarBehavior: { position: 'absolute', width: 0, height: 0 },
   header: { flex: 1, height: toolbarHeight },
 });

@@ -104,6 +104,12 @@ pub fn default_providers() -> Vec<SearchProvider> {
             "https://fonts.google.com/?query={{query}}",
         ),
         (
+            "zeoseven",
+            "ZeoSeven Fonts",
+            "https://fonts.zeoseven.com/",
+            "https://fonts.zeoseven.com/search/?text={{query}}",
+        ),
+        (
             "maoken",
             "猫啃网",
             "https://www.maoken.com/",
@@ -172,9 +178,28 @@ pub fn search_url(provider: &SearchProvider, query: &str) -> Result<String> {
     Ok(public_https(&provider.search_template.replace("{{query}}", &encoded))?.into())
 }
 
+// 已保存配置可能早于当前版本；缺失的内置来源插入到内置段末尾，保留用户顺序。
+fn merge_defaults(mut saved: Vec<SearchProvider>) -> Vec<SearchProvider> {
+    let defaults = default_providers();
+    let missing: Vec<SearchProvider> = defaults
+        .into_iter()
+        .filter(|value| !saved.iter().any(|item| item.id == value.id))
+        .collect();
+    if missing.is_empty() {
+        return saved;
+    }
+    let insert_at = saved
+        .iter()
+        .rposition(|value| value.builtin)
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    saved.splice(insert_at..insert_at, missing);
+    saved
+}
+
 pub fn providers(db: &FolioDatabase) -> Result<Vec<SearchProvider>> {
     match db.online_setting("providers")? {
-        Some(value) => Ok(serde_json::from_str(&value)?),
+        Some(value) => Ok(merge_defaults(serde_json::from_str(&value)?)),
         None => Ok(default_providers()),
     }
 }
@@ -216,12 +241,27 @@ mod tests {
 
     #[test]
     fn search_encodes_unicode_and_reserved_characters_once() {
-        let provider = default_providers().remove(1);
+        let provider = default_providers()
+            .into_iter()
+            .find(|value| value.id == "maoken")
+            .unwrap();
         assert_eq!(
             search_url(&provider, "字体 & #?/%").unwrap(),
             "https://www.maoken.com/?s=%E5%AD%97%E4%BD%93%20%26%20%23%3F%2F%25"
         );
         assert_eq!(search_url(&provider, "  ").unwrap(), provider.homepage);
+    }
+
+    #[test]
+    fn zeoseven_search_uses_text_query() {
+        let provider = default_providers()
+            .into_iter()
+            .find(|value| value.id == "zeoseven")
+            .unwrap();
+        assert_eq!(
+            search_url(&provider, "思源 宋体").unwrap(),
+            "https://fonts.zeoseven.com/search/?text=%E6%80%9D%E6%BA%90%20%E5%AE%8B%E4%BD%93"
+        );
     }
 
     #[test]
@@ -255,5 +295,32 @@ mod tests {
         assert!(!providers(&db).unwrap()[0].enabled);
         values.pop();
         assert!(save_providers(&db, values).is_err());
+    }
+
+    #[test]
+    fn older_provider_lists_gain_new_builtin_without_reordering_customs() {
+        let root = tempfile::tempdir().unwrap();
+        let db = FolioDatabase::open(root.path().join("folio.sqlite")).unwrap();
+        let mut stored = default_providers();
+        stored.retain(|value| value.id != "zeoseven");
+        let custom = SearchProvider {
+            id: "custom".into(),
+            name: "自定义来源".into(),
+            homepage: "https://example.com/".into(),
+            search_template: "https://example.com/?q={{query}}".into(),
+            enabled: true,
+            builtin: false,
+            icon: None,
+        };
+        stored.push(custom.clone());
+        db.save_online_setting("providers", &serde_json::to_string(&stored).unwrap())
+            .unwrap();
+
+        let merged = providers(&db).unwrap();
+        assert!(merged.iter().any(|value| value.id == "zeoseven"));
+        assert_eq!(merged.last().unwrap().id, custom.id);
+        // 合并后的列表可以再次保存；旧列表缺少内置来源时会被 save 拒绝。
+        save_providers(&db, merged).unwrap();
+        assert!(save_providers(&db, stored).is_err());
     }
 }

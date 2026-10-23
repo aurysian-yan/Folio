@@ -5,6 +5,6 @@ import { settingsLayout } from './settings-ui';
 
 const Backdrop = requireNativeView<ViewProps & { dark: boolean; cornerRadius: number }>('FolioNative', 'FolioPanelBackdrop');
 
-export function PanelBackdrop({ theme, sourceId: _sourceId, cornerRadius = settingsLayout.card.borderRadius, ...props }: PanelBackdropProps) {
+export function PanelBackdrop({ theme, sourceId: _sourceId, navigationGlass: _navigationGlass, cornerRadius = settingsLayout.card.borderRadius, ...props }: PanelBackdropProps) {
   return <Backdrop {...props} dark={theme.dark} cornerRadius={cornerRadius} pointerEvents="none" />;
 }

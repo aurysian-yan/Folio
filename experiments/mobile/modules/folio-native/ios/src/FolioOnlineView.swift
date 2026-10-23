@@ -7,9 +7,15 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   let onBrowserState = EventDispatcher()
   let onDownloadIntent = EventDispatcher()
   private let web: WKWebView
+  private let refreshControl = UIRefreshControl()
   private var commandID = ""
   private var provider: [String: Any] = [:]
   private var sourcePage = ""
+  private var webTheme = ""
+  private var lastState = ""
+  private var lastThemeURL = ""
+  private var isActive = false
+  private var pollTimer: Timer?
 
   required init(appContext: AppContext? = nil) {
     let configuration = WKWebViewConfiguration()
@@ -21,6 +27,8 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     web.uiDelegate = self
     web.allowsBackForwardNavigationGestures = true
     web.isInspectable = false
+    refreshControl.addTarget(self, action: #selector(refreshPage), for: .valueChanged)
+    web.scrollView.refreshControl = refreshControl
     addSubview(web)
   }
   override func layoutSubviews() {
@@ -28,14 +36,60 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     web.frame = bounds
   }
   deinit {
+    pollTimer?.invalidate()
     web.stopLoading()
     web.navigationDelegate = nil
     web.uiDelegate = nil
   }
 
   func setActive(_ active: Bool) {
+    isActive = active
     web.isHidden = !active
     web.isUserInteractionEnabled = active
+    if active { startPolling() } else { stopPolling() }
+  }
+  func setWebTheme(_ value: String) {
+    webTheme = value
+    applyWebTheme()
+  }
+  func setAccentColor(_ value: String) {
+    refreshControl.tintColor = Self.color(from: value)
+  }
+  @objc private func refreshPage() { web.reload() }
+  private func startPolling() {
+    guard pollTimer == nil else { return }
+    pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+      guard let self, self.isActive else { return }
+      let url = self.web.url?.absoluteString ?? ""
+      if url != self.lastThemeURL {
+        self.lastThemeURL = url
+        self.applyWebTheme()
+      }
+      self.emit()
+    }
+  }
+  private func stopPolling() {
+    pollTimer?.invalidate()
+    pollTimer = nil
+  }
+  private func applyWebTheme() {
+    guard !webTheme.isEmpty, web.url != nil else { return }
+    web.evaluateJavaScript(webTheme, in: nil, in: .defaultClient) { _ in }
+  }
+  private static func color(from value: String) -> UIColor? {
+    let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard text.hasPrefix("#"), text.count == 7 || text.count == 9 else { return nil }
+    let hex = String(text.dropFirst())
+    guard let number = UInt64(hex, radix: 16) else { return nil }
+    if hex.count == 6 {
+      return UIColor(red: CGFloat((number >> 16) & 0xff) / 255,
+                     green: CGFloat((number >> 8) & 0xff) / 255,
+                     blue: CGFloat(number & 0xff) / 255, alpha: 1)
+    }
+    return UIColor(red: CGFloat((number >> 24) & 0xff) / 255,
+                   green: CGFloat((number >> 16) & 0xff) / 255,
+                   blue: CGFloat((number >> 8) & 0xff) / 255,
+                   alpha: CGFloat(number & 0xff) / 255)
   }
   func webView(
     _ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
@@ -74,9 +128,14 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     default: break
     }
   }
-  private func emit(error: String? = nil) {
+  private func emit(error: String? = nil, force: Bool = false) {
+    let url = web.url?.absoluteString ?? ""
+    let title = web.title ?? ""
+    let signature = "\(url)|\(title)|\(web.isLoading)|\(web.canGoBack)|\(web.canGoForward)"
+    if !force && error == nil && signature == lastState { return }
+    lastState = signature
     onBrowserState([
-      "url": web.url?.absoluteString ?? "", "title": web.title ?? "", "loading": web.isLoading,
+      "url": url, "title": title, "loading": web.isLoading,
       "canGoBack": web.canGoBack, "canGoForward": web.canGoForward,
       "errorKey": error as Any? ?? NSNull(),
     ])
@@ -171,9 +230,12 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     }
   }
   func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-    emit()
+    emit(force: true)
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    refreshControl.endRefreshing()
+    lastThemeURL = web.url?.absoluteString ?? ""
+    applyWebTheme()
     if let url = web.url, let home = provider["homepage"] as? String,
       let host = URL(string: home)?.host,
       url.host == host || (url.host?.hasSuffix("." + host) ?? false)
@@ -194,9 +256,11 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
     withError error: Error
   ) {
+    refreshControl.endRefreshing()
     if (error as NSError).code != NSURLErrorCancelled { emit(error: "online.browser.loadError") }
   }
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    refreshControl.endRefreshing()
     if (error as NSError).code != NSURLErrorCancelled { emit(error: "online.browser.loadError") }
   }
   func webView(

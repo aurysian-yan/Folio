@@ -1,4 +1,5 @@
 import { OnlineFontsScreen } from './OnlineFontsScreen';
+import { webPaletteFromTheme } from './online';
 import { getDocumentAsync } from 'expo-document-picker';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -27,7 +28,7 @@ import { PageHeader, usePageHeader } from './PageHeader';
 import { HeaderScrollContext } from './HeaderButtonShadow';
 import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
 import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
-import { cloudSync, fileState, library, materialPalette, syncSession, wallpaperSeed } from './native';
+import { cloudSync, fileState, library, materialPalette, materialWebPalette, syncSession, wallpaperSeed } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
   usesNativeControls, usesNativeSidebar, type NativeDestination,
@@ -38,6 +39,7 @@ import { SettingsAppearancePage } from './SettingsAppearancePage';
 import { SettingsBrowsingPage } from './SettingsBrowsingPage';
 import { SettingsScreen, type SettingsPageId } from './SettingsScreen';
 import { SettingsSyncPage } from './SettingsSyncPage';
+import { SettingsOnlinePage } from './SettingsOnlinePage';
 import { CloudScreen } from './CloudScreen';
 import { LibraryHero } from './LibraryHero';
 import { createLibraryHero, type HeroAction } from './library-hero';
@@ -461,6 +463,7 @@ function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => voi
     case 'storage': return <SettingsStoragePage theme={theme} onClose={onClose} />;
     case 'appearance': return <SettingsAppearancePage theme={theme} onClose={onClose} />;
     case 'browsing': return <SettingsBrowsingPage theme={theme} onClose={onClose} />;
+    case 'online': return <SettingsOnlinePage theme={theme} onClose={onClose} />;
     case 'about': return <SettingsAboutPage theme={theme} onClose={onClose} />;
   }
 }
@@ -478,19 +481,27 @@ function MobileApp() {
     });
     return () => subscription.remove();
   }, []);
+  const materialSeed = useMemo(() => resolveAccentColor(preferences.accent, dark, wallpaperAccent ?? undefined),
+    [dark, preferences.accent, wallpaperAccent]);
+  const materialRoles = useMemo(() => Platform.OS === 'android' && preferences.materialTheme
+    ? materialPalette(materialSeed, dark, preferences.accent === 'wallpaper') : undefined,
+  [dark, materialSeed, preferences.accent, preferences.materialTheme]);
   const theme = useMemo(() => {
     if (Platform.OS !== 'android') return createTheme(dark, preferences.accent);
-    const materialRoles = preferences.materialTheme
-      ? materialPalette(resolveAccentColor(preferences.accent, dark, wallpaperAccent ?? undefined), dark, preferences.accent === 'wallpaper')
-      : undefined;
     return createTheme(dark, preferences.accent, { materialRoles, wallpaperAccent: wallpaperAccent ?? undefined });
-  }, [dark, preferences.accent, preferences.materialTheme, wallpaperAccent]);
+  }, [dark, materialRoles, preferences.accent, wallpaperAccent]);
+  // 站内配色优先使用完整 Material3 角色；非 Android 或无 Monet 时回退到当前语义主题。
+  const webPalette = useMemo(() => Platform.OS === 'android' && materialRoles
+    ? materialWebPalette(materialSeed, dark, preferences.accent === 'wallpaper')
+    : webPaletteFromTheme(theme, dark),
+  [dark, materialRoles, materialSeed, preferences.accent, theme]);
   const sourceId = useId();
   const inset = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   // 紧凑窗口沿用 iPhone 导航，常规宽度启用原生侧栏。
   const sidebar = usesNativeSidebar && width >= 600;
   const [tab, setTab] = useState<MobileTab>('local');
+  const [navExpanded, setNavExpanded] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [nativeDestination, setNativeDestination] = useState<NativeDestination>('local');
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
@@ -514,6 +525,8 @@ function MobileApp() {
     : nativeDestination;
   const screenTarget = libraryTarget;
   const libraryActive = nativeDestination === 'local';
+  const onlineActive = usesNativeControls ? nativeDestination === 'online' : tab === 'online';
+  const navCollapsed = onlineActive && !navExpanded;
 
   useEffect(() => {
     let mounted = true;
@@ -557,6 +570,7 @@ function MobileApp() {
   function selectTarget(target: LibraryTarget) { setFocusedCloudFile(null); setLibraryTarget(target); setNativeDestination('local'); }
   function navigate(value: NativeDestination) {
     Keyboard.dismiss();
+    setNavExpanded(false);
     setFocusedCloudFile(null);
     if (value === 'favorites') selectTarget({ scope: 'favorites' });
     else if (value.startsWith('collection:')) selectTarget({ scope: 'collection', collectionId: value.slice('collection:'.length) });
@@ -604,7 +618,9 @@ function MobileApp() {
   const cloudContent = <CloudScreen onOpenFont={(font) => void openCloudFont(font)} theme={theme} sourceId={sourceId}
     active={(usesNativeControls ? nativeDestination === 'cloud' : tab === 'cloud') && !settingsPageVisible}
     snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
-  const onlineContent = <OnlineFontsScreen theme={theme} active={usesNativeControls ? nativeDestination === 'online' : tab === 'online'} onSnapshotChange={applySnapshot} />;
+  const onlineContent = <OnlineFontsScreen theme={theme} active={usesNativeControls ? nativeDestination === 'online' : tab === 'online'}
+    sourceId={sourceId} navigationCollapsed={navCollapsed}
+    webPalette={webPalette} onOpenSettings={() => openSettingsPage('online')} onSnapshotChange={applySnapshot} />;
   const settingsContent = <SettingsScreen theme={theme} sourceId={sourceId} controller={syncController}
     active={(usesNativeControls ? nativeDestination === 'settings' : tab === 'settings') && !settingsPageVisible}
     onOpenPage={openSettingsPage} />;
@@ -649,7 +665,8 @@ function MobileApp() {
       }} />
       <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme} hidden={keyboardVisible}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
-        onSelectionChange={(id) => { Keyboard.dismiss(); setFocusedCloudFile(null); setTab(id); }} />
+        collapsed={navCollapsed} collapsible={onlineActive} onExpand={() => setNavExpanded(true)} onCollapse={() => setNavExpanded(false)}
+        onSelectionChange={(id) => { Keyboard.dismiss(); setFocusedCloudFile(null); setNavExpanded(false); setTab(id); }} />
     </KeyboardAvoidingView>
   );
 

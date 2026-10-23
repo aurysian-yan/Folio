@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.webkit.*
 import android.widget.FrameLayout
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -15,13 +16,30 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     private val onBrowserState by EventDispatcher()
     private val onDownloadIntent by EventDispatcher()
     private val web = WebView(context)
+    private val refresh = SwipeRefreshLayout(context)
     private var commandId = ""
     private var provider = JSONObject()
     private var sourcePage = ""
     private var disposed = false
+    private var webTheme = ""
+    private var lastState = ""
+    private var lastThemeUrl = ""
+    private var active = false
+    private var loading = false
+    private val poll = object : Runnable {
+        override fun run() {
+            if (!active || disposed) return
+            val url = web.url ?: ""
+            if (url != lastThemeUrl) { lastThemeUrl = url; applyWebTheme() }
+            emit(loading)
+            postDelayed(this, 500)
+        }
+    }
 
     init {
-        addView(web, FrameLayout.LayoutParams(-1, -1))
+        refresh.addView(web, FrameLayout.LayoutParams(-1, -1))
+        addView(refresh, FrameLayout.LayoutParams(-1, -1))
+        refresh.setOnRefreshListener { web.reload() }
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -36,10 +54,17 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = navigate(request.url)
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
-                updateSource(url); emit(true)
+                loading = true; updateSource(url); emit(true, force = true)
+            }
+            override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                updateSource(url); emit(loading)
             }
             override fun onPageFinished(view: WebView, url: String?) {
-                updateSource(url); emit(false)
+                loading = false
+                refresh.isRefreshing = false
+                lastThemeUrl = url ?: ""
+                applyWebTheme()
+                updateSource(url); emit(false, force = true)
                 val providerId = provider.optString("id")
                 if (url == null || providerId.isEmpty()) return
                 web.evaluateJavascript(FolioOnlineIcons.discoveryScript) { value ->
@@ -52,10 +77,10 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
                 }
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                if (request.isForMainFrame) emit(false, "online.browser.loadError")
+                if (request.isForMainFrame) { loading = false; refresh.isRefreshing = false; emit(false, "online.browser.loadError") }
             }
             override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
-                handler.cancel(); emit(false, "online.browser.loadError")
+                handler.cancel(); loading = false; refresh.isRefreshing = false; emit(false, "online.browser.loadError")
             }
         }
         web.webChromeClient = object : WebChromeClient() {
@@ -93,6 +118,14 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     fun setProvider(value: String) { provider = JSONObject(value) }
+    fun setWebTheme(value: String) { webTheme = value; applyWebTheme() }
+    fun setAccentColor(value: String) {
+        try { refresh.setColorSchemeColors(android.graphics.Color.parseColor(value)) } catch (_: Exception) {}
+    }
+    private fun applyWebTheme() {
+        if (webTheme.isEmpty()) return
+        web.evaluateJavascript(webTheme) { }
+    }
     fun command(value: String) {
         if (disposed) return
         val request = JSONObject(value)
@@ -129,15 +162,26 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         val home = Uri.parse(provider.optString("homepage")).host ?: return
         if (host == home || host.endsWith(".$home")) sourcePage = value ?: sourcePage
     }
-    private fun emit(loading: Boolean, error: String? = null) {
-        onBrowserState(mapOf("url" to (web.url ?: ""), "title" to (web.title ?: ""), "loading" to loading,
+    private fun emit(loading: Boolean, error: String? = null, force: Boolean = false) {
+        val url = web.url ?: ""
+        val title = web.title ?: ""
+        val signature = "$url|$title|$loading|${web.canGoBack()}|${web.canGoForward()}"
+        if (!force && error == null && signature == lastState) return
+        lastState = signature
+        onBrowserState(mapOf("url" to url, "title" to title, "loading" to loading,
             "canGoBack" to web.canGoBack(), "canGoForward" to web.canGoForward(), "errorKey" to (error ?: "")))
     }
     fun setActive(active: Boolean) {
+        this.active = active
         web.visibility = if (active) android.view.View.VISIBLE else android.view.View.INVISIBLE
-        if (active) web.onResume() else web.onPause()
+        removeCallbacks(poll)
+        if (active) { web.onResume(); post(poll) } else web.onPause()
     }
     fun dispose() {
-        if (!disposed) { disposed = true; web.stopLoading(); web.webChromeClient = null; web.webViewClient = WebViewClient(); removeView(web); web.destroy() }
+        if (!disposed) {
+            disposed = true; active = false; removeCallbacks(poll)
+            web.stopLoading(); web.webChromeClient = null; web.webViewClient = WebViewClient()
+            refresh.removeView(web); removeView(refresh); web.destroy()
+        }
     }
 }

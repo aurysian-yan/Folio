@@ -1,4 +1,4 @@
-import { CloudIcon, DatabaseIcon, DownloadSimpleIcon, InfoIcon, PaintBrushIcon } from './icons';
+import { CloudIcon, DatabaseIcon, DownloadSimpleIcon, GlobeIcon, InfoIcon, PaintBrushIcon } from './icons';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Animated, AppState, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
@@ -11,7 +11,7 @@ import type { Theme } from './ui';
 import type { CloudSyncController } from './useCloudSync';
 import { webdavSourceName } from './sync';
 
-export type SettingsPageId = 'sync' | 'storage' | 'appearance' | 'browsing' | 'about';
+export type SettingsPageId = 'sync' | 'storage' | 'appearance' | 'browsing' | 'online' | 'about';
 
 // 设置主页显示真实概览；进入页面和回到前台时刷新存储用量。
 export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage }: {
@@ -47,6 +47,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
   const entries = [
     { id: 'appearance', Icon: PaintBrushIcon, title: t('mobile.settings.appearanceAndDisplay'), description: t('mobile.settings.appearanceSummary') },
     { id: 'browsing', Icon: DownloadSimpleIcon, title: t('mobile.settings.browsingAndImport'), description: t('mobile.settings.browsingSummary') },
+    { id: 'online', Icon: GlobeIcon, title: t('settings.onlineFonts'), description: t('mobile.settings.onlineSummary') },
     { id: 'about', Icon: InfoIcon, title: t('settings.about'), description: t('mobile.settings.aboutDescription') },
   ] as const;
 

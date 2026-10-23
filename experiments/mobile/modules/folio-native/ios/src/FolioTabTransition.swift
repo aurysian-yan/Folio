@@ -1,6 +1,7 @@
 #if canImport(FolioFileServices)
 import FolioFileServices
 #endif
+import ExpoModulesCore
 import SwiftUI
 import UIKit
 
@@ -99,5 +100,48 @@ private final class FolioTabCrossfade: NSObject, UIViewControllerAnimatedTransit
             if context.transitionWasCancelled { to.removeFromSuperview() }
             context.completeTransition(!context.transitionWasCancelled)
         }
+    }
+}
+
+// 在线字体页使用系统标签栏的滚动最小化，不绘制第二套折叠控件。
+final class FolioTabBarBehavior: ExpoView {
+    private var minimize = true
+    private var attempts = 0
+
+    required init(appContext: AppContext? = nil) {
+        super.init(appContext: appContext)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        apply()
+    }
+
+    func setMinimize(_ value: Bool) {
+        minimize = value
+        apply()
+    }
+
+    private func apply() {
+        guard let controller = tabBarController() else {
+            guard attempts < 4 else { return }
+            attempts += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.apply() }
+            return
+        }
+        attempts = 0
+        if #available(iOS 26.0, *) {
+            controller.tabBarMinimizeBehavior = minimize ? .onScrollDown : .never
+        }
+    }
+
+    private func tabBarController() -> UITabBarController? {
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let controller = current as? UITabBarController { return controller }
+            if let controller = current as? UIViewController, let tabs = controller.tabBarController { return tabs }
+            responder = current.next
+        }
+        return nil
     }
 }
