@@ -86,6 +86,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         ios: {
           deploymentTarget: '16.4',
           enableSceneSupport: true,
+          // 按当前 React Native 头文件编译 Expo 模块，保持 C++ 类型布局一致。
+          usePrecompiledModules: false,
         },
         android: {
           minSdkVersion: 28,

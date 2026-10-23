@@ -81,16 +81,23 @@ pnpm android --device
 
 已通过 `expo-build-properties` 的 `enableSceneSupport` 启用 SDK 57 的 Scene 生命周期支持，兼容 Xcode 27 / iOS 27 的启动要求。
 
+Expo 原生模块通过 `usePrecompiledModules: false` 从源码编译，与当前 React Native 的 C++ 类型布局保持一致，避免预编译模块在 `ExpoViewProps` 注册阶段闪退；React Native 核心仍使用预编译产物。
+
 ```sh
 pnpm rust:ios
-pnpm prebuild:dev --platform ios
-pnpm pods
 pnpm ios
 ```
 
-`pnpm ios`、`pnpm ios:release` 会先以对应身份刷新原生工程再运行；重新生成 iOS 工程后需再次执行 `pnpm pods`。
+`pnpm ios`、`pnpm ios:release` 会先以对应身份刷新原生工程，校验并安装 Pods，再运行原生构建；单独执行 `pnpm prebuild*` 后仍需手动补跑 `pnpm pods`。
 
-`pnpm pods` 对 CocoaPods 的有效 UTF-8 子进程输出恢复编码，并修正生成的 Expo Constants 和 React Native 打包脚本中的路径引用，使当前仓库的中文及空格路径可构建；不修改 CocoaPods 安装或第三方源码。新增依赖或重新生成 iOS 工程后再次执行此命令。
+`pnpm pods` 对 CocoaPods 的有效 UTF-8 子进程输出恢复编码，并修正生成的 Expo Constants 和 React Native 打包脚本中的路径引用，使当前仓库的中文及空格路径可构建；不修改 CocoaPods 安装或第三方源码。安装前会检查 React Native 预编译核心，目录缺少 `Info.plist` 或设备／模拟器切片时自动移除并重装，避免中断构建留下半成品；新增依赖或重新生成 iOS 工程后再次执行此命令。
+
+模拟器在启动阶段立即闪退，且崩溃日志同时包含 `Library not loaded: /usr/lib/libSystem.B.dylib` 和 `no dyld cache` 时，先关闭并重新启动当前模拟器；本机已验证此操作可恢复系统库加载，且不清除应用数据。若仍有同样错误，再关闭所有模拟器并重启 CoreSimulator 服务：
+
+```sh
+xcrun simctl shutdown all
+killall -9 com.apple.CoreSimulator.CoreSimulatorService
+```
 
 必须使用 development build：`pnpm start` 启动 Metro，Expo Go 不包含本地 Rust 模块。原生工程、生成绑定、二进制、临时数据库及构建输出均不入库；`expo prebuild` 仅在本目录生成工程，不操作 `apps/macos` 或 `apps/desktop-ui`。
 
