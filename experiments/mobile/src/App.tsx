@@ -1,3 +1,12 @@
+import { DialogProvider } from './Dialogs';
+import { NavigationScrollContext, NavigationScrollScope } from './NavigationScroll';
+import { BrowserDataProvider } from './BrowserDataProvider';
+import { OnlineSessionProvider, useOnlineSession, type OnlineOpenRequest } from './OnlineSession';
+import { BrowserLibraryPage } from './BrowserLibraryPage';
+import { GlobalSearchScreen } from './GlobalSearchScreen';
+import { CloudSearchDetails } from './CloudSearchDetails';
+import { SettingsSearchFocus } from './settings-ui';
+import { browserId } from './browser-data';
 import { OnlineFontsScreen } from './OnlineFontsScreen';
 import { webPaletteFromTheme } from './online';
 import { getDocumentAsync } from 'expo-document-picker';
@@ -501,8 +510,11 @@ function MobileApp() {
   // 紧凑窗口沿用 iPhone 导航，常规宽度启用原生侧栏。
   const sidebar = usesNativeSidebar && width >= 600;
   const [tab, setTab] = useState<MobileTab>('local');
-  const [navExpanded, setNavExpanded] = useState(false);
-  const [onlineOpened, setOnlineOpened] = useState(false);
+  const [navMinimized, setNavMinimized] = useState(false);
+  const [navigationPanels, setNavigationPanels] = useState<string[]>([]);
+  const setNavigationPanelActive = useCallback((id: string, active: boolean) => {
+    setNavigationPanels((values) => active ? values.includes(id) ? values : [...values, id] : values.includes(id) ? values.filter((value) => value !== id) : values);
+  }, []);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [nativeDestination, setNativeDestination] = useState<NativeDestination>('local');
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
@@ -510,7 +522,12 @@ function MobileApp() {
   const [initializeRetry, setInitializeRetry] = useState(0);
   const [initialError, setInitialError] = useState<string | null>(null);
   const [libraryTarget, setLibraryTarget] = useState<LibraryTarget>({ scope: 'all' });
-  const [searchTarget, setSearchTarget] = useState<LibraryTarget>({ scope: 'all' });
+  const [onlineRequest, setOnlineRequest] = useState<OnlineOpenRequest | null>(null);
+  const [urlRequest, setUrlRequest] = useState<{ id: string; url: string } | null>(null);
+  const [cloudInspection, setCloudInspection] = useState<import('./sync').CloudFont | null>(null);
+  const [settingsSearchTitle, setSettingsSearchTitle] = useState<string | null>(null);
+  const { setBrowsing, libraryOpen, libraryRequest, closeLibrary, dismissLibrary } = useOnlineSession();
+  const pendingLibraryUrl = useRef<string | null>(null);
   const [fontPage, setFontPage] = useState<FontFamily | null>(null);
   const [focusedCloudFile, setFocusedCloudFile] = useState<import('./sync').CloudFont | null>(null);
   const recentAttempt = useRef(0);
@@ -527,7 +544,8 @@ function MobileApp() {
   const screenTarget = libraryTarget;
   const libraryActive = nativeDestination === 'local';
   const onlineActive = usesNativeControls ? nativeDestination === 'online' : tab === 'online';
-  const navCollapsed = onlineActive && onlineOpened && !navExpanded;
+  const navCollapsed = preferences.navigationAutoCollapse && navMinimized;
+  useEffect(() => { setBrowsing(onlineActive && !settingsPageVisible && !fontPageVisible && !libraryOpen); return () => setBrowsing(false); }, [onlineActive, settingsPageVisible, fontPageVisible, libraryOpen, setBrowsing]);
 
   useEffect(() => {
     let mounted = true;
@@ -541,8 +559,6 @@ function MobileApp() {
     setSnapshot(value);
     setLibraryVersion((version) => version + 1);
     setLibraryTarget((target) => (target.scope === 'collection' && !value.collections.some((item) => item.id === target.collectionId))
-      || (target.scope === 'smart' && !value.smartFolders.some((item) => item.id === target.smartFolderId)) ? { scope: 'all' } : target);
-    setSearchTarget((target) => (target.scope === 'collection' && !value.collections.some((item) => item.id === target.collectionId))
       || (target.scope === 'smart' && !value.smartFolders.some((item) => item.id === target.smartFolderId)) ? { scope: 'all' } : target);
   }, []);
 
@@ -570,8 +586,8 @@ function MobileApp() {
 
   function selectTarget(target: LibraryTarget) { setFocusedCloudFile(null); setLibraryTarget(target); setNativeDestination('local'); }
   function navigate(value: NativeDestination) {
+    if (value !== 'online') { setOnlineRequest(null); setUrlRequest(null); }
     Keyboard.dismiss();
-    setNavExpanded(false);
     setFocusedCloudFile(null);
     if (value === 'favorites') selectTarget({ scope: 'favorites' });
     else if (value.startsWith('collection:')) selectTarget({ scope: 'collection', collectionId: value.slice('collection:'.length) });
@@ -606,35 +622,34 @@ function MobileApp() {
     return () => { show.remove(); hide.remove(); };
   }, []);
 
-  function openSettingsPage(page: SettingsPageId) { setSettingsPage(page); setSettingsPageVisible(true); }
+  function openSettingsPage(page: SettingsPageId, title: string | null = null) { setSettingsSearchTitle(title); setSettingsPage(page); setSettingsPageVisible(true); }
   const openCloudFont = async (font: import('./sync').CloudFont) => {
     try {
       const result = await library.query({scope:'all',text:'',fileFingerprint:font.fingerprint,offset:0,limit:100});
-      if (result.families.length === 1) { setFontPage(result.families[0]!); setFontPageVisible(true); }
-      else if (result.families.length > 1) {
-        setFocusedCloudFile(font); setLibraryTarget({scope:'all'}); setNativeDestination('local'); setTab('local');
-      }
-    } catch { setRecentError(t('common.operationFailed')); }
+      if (result.families.length === 1 && result.totalMatches === 1) openFamily(result.families[0]!, { scope: 'all' });
+      else setCloudInspection(font);
+    } catch { setCloudInspection(font); }
   };
-  const cloudContent = <CloudScreen onOpenFont={(font) => void openCloudFont(font)} theme={theme} sourceId={sourceId}
+  const cloudContent = <NavigationScrollScope active={(usesNativeControls ? nativeDestination : tab) === 'cloud'}><CloudScreen onOpenFont={(font) => void openCloudFont(font)} theme={theme} sourceId={sourceId}
     active={(usesNativeControls ? nativeDestination === 'cloud' : tab === 'cloud') && !settingsPageVisible}
-    snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} />;
-  const onlineContent = <OnlineFontsScreen theme={theme} active={usesNativeControls ? nativeDestination === 'online' : tab === 'online'}
-    sourceId={sourceId} navigationCollapsed={navCollapsed} onOpenedChange={setOnlineOpened}
-    webPalette={webPalette} onOpenSettings={() => openSettingsPage('online')} onSnapshotChange={applySnapshot} />;
-  const settingsContent = <SettingsScreen theme={theme} sourceId={sourceId} controller={syncController}
+    snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} /></NavigationScrollScope>;
+  const onlineContent = <NavigationScrollScope active={(usesNativeControls ? nativeDestination : tab) === 'online'}><OnlineFontsScreen theme={theme} active={onlineActive && !settingsPageVisible && !fontPageVisible && !libraryOpen}
+    sourceId={sourceId} navigationCollapsed={navCollapsed}
+    webPalette={webPalette} onOpenSettings={() => openSettingsPage('online')}
+    openRequest={onlineRequest} onRequestConsumed={(id) => setOnlineRequest((current) => current?.id === id ? null : current)}
+    urlRequest={urlRequest} onUrlConsumed={(id) => setUrlRequest((current) => current?.id === id ? null : current)} /></NavigationScrollScope>;
+  const settingsContent = <NavigationScrollScope active={(usesNativeControls ? nativeDestination : tab) === 'settings'}><SettingsScreen theme={theme} sourceId={sourceId} controller={syncController}
     active={(usesNativeControls ? nativeDestination === 'settings' : tab === 'settings') && !settingsPageVisible}
-    onOpenPage={openSettingsPage} />;
+    onOpenPage={openSettingsPage} /></NavigationScrollScope>;
   const onHeroAction = (action: HeroAction) => {
     if (action === 'cloudSettings') openSettingsPage('sync');
     else if (action === 'cloudFonts') navigate('cloud');
   };
-  const searchContent = <LibraryScreen syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={usesNativeControls ? 0 : inset.bottom}
-    sidebar={sidebar} searchPage destination="search" target={searchTarget} snapshot={snapshot} libraryVersion={libraryVersion}
-    initialError={initialError} defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady}
-    showImportResults={preferences.importShowResults} onSnapshotChange={applySnapshot} onOpenFamily={(family) => openFamily(family, searchTarget)}
-    onTargetChange={setSearchTarget} onRetryInitialize={() => setInitializeRetry((value) => value + 1)}
-    active={usesNativeControls ? nativeDestination === 'search' : tab === 'search'} />;
+  const searchContent = <NavigationScrollScope active={(usesNativeControls ? nativeDestination : tab) === 'search'}><GlobalSearchScreen initialError={initialError} onRetryInitialize={() => setInitializeRetry((value) => value + 1)} theme={theme} snapshot={snapshot} libraryVersion={libraryVersion} controller={syncController}
+    active={(usesNativeControls ? nativeDestination === 'search' : tab === 'search') && !fontPageVisible && !settingsPageVisible && !cloudInspection && !libraryOpen}
+    onSnapshotChange={applySnapshot} onOpenFont={openFamily} onOpenCloud={(font) => void openCloudFont(font)}
+    onOpenOnline={(providerId, query) => { setOnlineRequest({ id: browserId(), providerId, query }); navigate('online'); setTab('online'); }}
+    onOpenSettings={(entry) => openSettingsPage(entry.page, entry.titleKey === entry.pageKey ? '' : t(entry.titleKey))} /></NavigationScrollScope>;
   const content = usesNativeControls ? (
     <View style={[styles.app, { backgroundColor: theme.background }]}>
       <StatusBar style="auto" />
@@ -654,11 +669,11 @@ function MobileApp() {
       paddingLeft: inset.left, paddingRight: inset.right }]}>
       <StatusBar style="auto" />
       <TabScenes selectedId={tab} scenes={{
-        local: <LibraryScreen cloudFile={focusedCloudFile} syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
+        local: <NavigationScrollScope active={tab === 'local'}><LibraryScreen cloudFile={focusedCloudFile} syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
             target={libraryTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
             defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
             onSnapshotChange={applySnapshot} onTargetChange={selectTarget}
-            onRetryInitialize={() => setInitializeRetry((value) => value + 1)} />,
+            onRetryInitialize={() => setInitializeRetry((value) => value + 1)} /></NavigationScrollScope>,
         search: searchContent,
         online: onlineContent,
         cloud: cloudContent,
@@ -666,8 +681,8 @@ function MobileApp() {
       }} />
       <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme} hidden={keyboardVisible}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
-        collapsed={navCollapsed} collapsible={onlineActive} onExpand={() => setNavExpanded(true)} onCollapse={() => setNavExpanded(false)}
-        onSelectionChange={(id) => { Keyboard.dismiss(); setFocusedCloudFile(null); setNavExpanded(false); setTab(id); }} />
+        collapsed={navCollapsed} collapsible={preferences.navigationAutoCollapse} onExpand={() => setNavMinimized(false)} onCollapse={() => setNavMinimized(true)}
+        onSelectionChange={(id) => { navigate(id); setTab(id); }} />
     </KeyboardAvoidingView>
   );
 
@@ -686,19 +701,36 @@ function MobileApp() {
       }}
       snapshot={snapshot} collectionId={fontPageCollectionId}
       onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />
-  ) : settingsPage ? settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false), syncController) : null;
+  ) : settingsPage ? <SettingsSearchFocus value={settingsSearchTitle}>{settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false), syncController)}</SettingsSearchFocus> : null;
 
-  return <FontNavigation visible={fontPageVisible || settingsPageVisible} theme={theme}
-    onDismissed={() => { setFontPageVisible(false); setFontPage(null); setSettingsPageVisible(false); setSettingsPage(null); }}
-    detail={detail}>
-    {content}
-  </FontNavigation>;
+  const browserDetail = libraryRequest ? <BrowserLibraryPage key={libraryRequest.id} request={libraryRequest} theme={theme}
+    onClose={closeLibrary} onSnapshotChange={applySnapshot} onOpenUrl={(url) => { pendingLibraryUrl.current = url; closeLibrary(); }} /> : null;
+  function libraryDismissed() {
+    dismissLibrary();
+    const url = pendingLibraryUrl.current; pendingLibraryUrl.current = null;
+    if (url) {
+      setSettingsPageVisible(false); setFontPageVisible(false);
+      setUrlRequest({ id: browserId(), url }); navigate('online'); setTab('online');
+    }
+  }
+  return <NavigationScrollContext.Provider value={{ enabled: preferences.navigationAutoCollapse && navigationPanels.length === 0 && !keyboardVisible && !fontPageVisible && !settingsPageVisible && !libraryOpen && !cloudInspection, onCollapse: setNavMinimized, setPanelActive: setNavigationPanelActive }}>
+    <DialogProvider theme={theme}><View style={styles.app}>
+      <FontNavigation visible={libraryOpen} theme={theme} detail={browserDetail} onDismissed={libraryDismissed}>
+        <FontNavigation visible={fontPageVisible || settingsPageVisible} theme={theme}
+          onDismissed={() => { setFontPageVisible(false); setFontPage(null); setSettingsPageVisible(false); setSettingsPage(null); }} detail={detail}>
+          {content}
+        </FontNavigation>
+        <CloudSearchDetails font={cloudInspection} theme={theme} controller={syncController} libraryVersion={libraryVersion} onClose={() => setCloudInspection(null)} onOpen={(family) => openFamily(family, { scope: 'all' })} onConfigure={() => openSettingsPage('sync')} />
+      </FontNavigation>
+    </View></DialogProvider>
+  </NavigationScrollContext.Provider>;
+
 }
 
 export default function App() {
   // 原生导航完成挂载后移除启动画面。
   useEffect(() => { SplashScreen.hide(); }, []);
-  return <SafeAreaProvider><PreferencesProvider><MobileApp /></PreferencesProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><PreferencesProvider><BrowserDataProvider><OnlineSessionProvider><MobileApp /></OnlineSessionProvider></BrowserDataProvider></PreferencesProvider></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({

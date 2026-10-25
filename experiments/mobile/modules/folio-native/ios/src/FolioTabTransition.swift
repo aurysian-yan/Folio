@@ -103,7 +103,7 @@ private final class FolioTabCrossfade: NSObject, UIViewControllerAnimatedTransit
     }
 }
 
-// 在线字体页使用系统标签栏的滚动最小化，不绘制第二套折叠控件。
+// 底部导航在所有主页面共用系统滚动最小化行为。
 final class FolioTabBarBehavior: ExpoView {
     private var minimize = true
     private var attempts = 0

@@ -80,6 +80,8 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
     var dark by mutableStateOf(false)
     var accentColor by mutableStateOf("")
     var items by mutableStateOf(emptyList<FolioNavigationItem>())
+    var iconOnly by mutableStateOf(false)
+    var borderColor by mutableStateOf("")
     var segmented by mutableStateOf(false)
     var controlEnabled by mutableStateOf(true)
     var collapsed by mutableStateOf(false)
@@ -142,10 +144,11 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
                             if (collapsible && collapsed) onExpand(mapOf<String, Any>())
                         },
                         containerTint = if (segmented && surfaceColor.isNotEmpty()) Color(android.graphics.Color.parseColor(surfaceColor)) else null,
-                        containerHeight = if (segmented) 48.dp else 64.dp,
-                        highlightHeight = if (segmented) 44.dp else 64.dp,
-                        selectorHeight = if (segmented) 40.dp else 56.dp,
-                        modifier = Modifier.width(tabsWidth).height(if (segmented) 48.dp else 64.dp).drawWithContent {
+                        outlineColor = if (segmented && borderColor.isNotEmpty()) Color(android.graphics.Color.parseColor(borderColor)) else null,
+                        containerHeight = if (segmented) { if (iconOnly) 44.dp else 48.dp } else 64.dp,
+                        highlightHeight = if (segmented) { if (iconOnly) 40.dp else 44.dp } else 64.dp,
+                        selectorHeight = if (segmented) { if (iconOnly) 36.dp else 40.dp } else 56.dp,
+                        modifier = Modifier.width(tabsWidth).height(if (segmented) { if (iconOnly) 44.dp else 48.dp } else 64.dp).drawWithContent {
                             backdrop.contentVersion
                             drawContent()
                         }
@@ -155,7 +158,10 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
                             LiquidBottomTab(selected = selected,
                                 label = item.label, enabled = controlEnabled, selectionActive = selectionActive, index = index,
                                 onClick = { select(item) }) {
-                                if (segmented && labelColor.isNotEmpty()) BasicText(item.label, maxLines = 1,
+                                if (segmented && iconOnly) FolioTabIcon(item.icon,
+                                    if (selected) accent else if (labelColor.isNotEmpty()) Color(android.graphics.Color.parseColor(labelColor)) else contentColor,
+                                    Modifier.size(20.dp))
+                                else if (segmented && labelColor.isNotEmpty()) BasicText(item.label, maxLines = 1,
                                     style = TextStyle(color = Color(android.graphics.Color.parseColor(labelColor)),
                                         fontSize = 16.sp, fontWeight = FontWeight.Medium))
                                 else FolioTabContent(item.icon, item.label,
@@ -239,7 +245,7 @@ private fun BottomSearchControl(
             },
         contentAlignment = Alignment.Center,
     ) {
-        FolioTabIcon(item.icon, tint, Modifier.size(lerpDp(24.dp, 19.dp, compactProgress)))
+        FolioTabIcon(item.icon, tint, Modifier.size(24.dp))
     }
 }
 

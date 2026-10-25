@@ -9,6 +9,8 @@ export function SettingsBrowsingPage({ theme, onClose }: { theme: Theme; onClose
   const { preferences, ready, update } = usePreferences();
   return <SettingsPage title={t('mobile.settings.browsingAndImport')} theme={theme} onClose={onClose}>
     <SettingsGroup theme={theme} title={t('mobile.settings.browsing')}>
+      <SettingsSwitchRow theme={theme} title={t('browser.autoCollapse')} detail={t('browser.autoCollapseDetail')}
+        value={preferences.navigationAutoCollapse} disabled={!ready} onChange={(navigationAutoCollapse) => update({ navigationAutoCollapse })} />
       <SettingsSwitchRow theme={theme} title={t('mobile.settings.searchAutoFocus')}
         detail={t('mobile.settings.searchAutoFocusDetail')} value={preferences.searchAutoFocus} disabled={!ready}
         onChange={(value) => update({ searchAutoFocus: value })} />

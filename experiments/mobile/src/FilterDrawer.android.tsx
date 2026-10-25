@@ -1,3 +1,4 @@
+import { useNavigationPanel } from './NavigationScroll';
 import BottomSheet, { BottomSheetFlatList, BottomSheetHandle, BottomSheetScrollView, BottomSheetTextInput,
   type BottomSheetHandleProps } from '@gorhom/bottom-sheet';
 import { useCallback, useEffect, useRef } from 'react';
@@ -31,6 +32,7 @@ export function FilterList<T>(props: FlatListProps<T>) {
 
 // 安卓抽屉复用现成手势与滚动组件，内容沿用应用主题。
 export function FilterDrawer(props: LibraryPanelProps) {
+  useNavigationPanel(props.visible);
   const sheet = useRef<BottomSheet>(null);
   const inset = useSafeAreaInsets();
   const { t } = useTranslation();

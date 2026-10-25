@@ -15,6 +15,8 @@ const AnimatedCircle = Motion.createAnimatedComponent(Circle);
 const AnimatedPath = Motion.createAnimatedComponent(Path);
 const ringSize = 72;
 const ringRadius = 34;
+const ringStrokeWidth = 2;
+const emblemSize = (ringRadius - ringStrokeWidth / 2 - 6) * 2;
 const circumference = 2 * Math.PI * ringRadius;
 
 // 加载遮罩持续覆盖原生网页，就绪后从来源图标中心展开圆形窗口。
@@ -109,11 +111,13 @@ export function OnlineBrowserLoading({ loading, failed, active, revealRequest, p
     </Svg> : <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background }]} />}
     <Motion.View pointerEvents="none" style={[styles.emblem, { left: centerX - ringSize / 2, top: centerY - ringSize / 2 }, foreground]}>
       <Svg width={ringSize} height={ringSize} style={StyleSheet.absoluteFill}>
-        <Circle cx={ringSize / 2} cy={ringSize / 2} r={ringRadius} stroke={theme.border} strokeWidth={2} fill="none" />
+        <Circle cx={ringSize / 2} cy={ringSize / 2} r={ringRadius} stroke={theme.border} strokeWidth={ringStrokeWidth} fill="none" />
         <AnimatedCircle cx={ringSize / 2} cy={ringSize / 2} r={ringRadius} stroke={theme.accent}
-          strokeWidth={2} strokeLinecap="round" fill="none" animatedProps={ring} />
+          strokeWidth={ringStrokeWidth} strokeLinecap="round" fill="none" animatedProps={ring} />
       </Svg>
-      <OnlineSourceIcon provider={provider} theme={theme} size={48} />
+      <View style={[styles.iconBackground, { backgroundColor: theme.surface }]}>
+        <OnlineSourceIcon provider={provider} theme={theme} size={38} />
+      </View>
     </Motion.View>
     <Motion.View pointerEvents="none" style={[styles.title, { top: centerY + ringSize / 2 + 24 }, foreground]}>
       <Text numberOfLines={2} style={[styles.name, { color: theme.label }]}>{provider?.name || t('online.title')}</Text>
@@ -124,7 +128,8 @@ export function OnlineBrowserLoading({ loading, failed, active, revealRequest, p
 
 const styles = StyleSheet.create({
   overlay: { zIndex: 2 },
-  emblem: { position: 'absolute', width: ringSize, height: ringSize, alignItems: 'center', justifyContent: 'center' },
+  emblem: { position: 'absolute', width: ringSize, height: ringSize, borderRadius: ringSize / 2, alignItems: 'center', justifyContent: 'center' },
+  iconBackground: { width: emblemSize, height: emblemSize, borderRadius: emblemSize / 2, alignItems: 'center', justifyContent: 'center' },
   title: { position: 'absolute', left: 16, right: 16 },
   name: { fontSize: 18, lineHeight: 26, textAlign: 'center', fontWeight: '500' },
   hint: { marginTop: 6, fontSize: 13, lineHeight: 19, textAlign: 'center' },

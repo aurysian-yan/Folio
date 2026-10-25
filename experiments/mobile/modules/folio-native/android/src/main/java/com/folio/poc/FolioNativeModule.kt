@@ -127,7 +127,7 @@ class FolioNativeModule : Module() {
         View(FolioOnlineView::class) {
             OnViewDestroys { view: FolioOnlineView -> view.dispose() }
             Prop("active") { view: FolioOnlineView, value: Boolean -> view.setActive(value) }
-            Events("onBrowserState","onDownloadIntent")
+            Events("onBrowserState","onDownloadIntent","onVisit","onPageScroll")
             Prop("provider") {view:FolioOnlineView,value:String->view.setProvider(value)}
             Prop("command") {view:FolioOnlineView,value:String->view.command(value)}
             Prop("webTheme") {view:FolioOnlineView,value:String->view.setWebTheme(value)}

@@ -1,77 +1,44 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { DownloadSimpleIcon, MagnifyingGlassIcon, XIcon } from './icons';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { OnlineProvider } from './online';
 import { OnlineSourceIcon } from './OnlineSourceIcon';
-import { IconButton, type Theme } from './ui';
+import type { Theme } from './ui';
 
-// 在线字体顶栏：来源 tab、隐藏式搜索与下载入口，不再显示大标题。
-export function OnlineHeader({ theme, providers, selectedId, searchOpen, searchText, onSelect, onSearchChange, onSearchOpen, onSearchClose, onSearchSubmit, onDownloads }: {
-  theme: Theme;
-  providers: OnlineProvider[];
-  selectedId: string;
-  searchOpen: boolean;
-  searchText: string;
-  onSelect: (provider: OnlineProvider) => void;
-  onSearchChange: (value: string) => void;
-  onSearchOpen: () => void;
-  onSearchClose: () => void;
-  onSearchSubmit: () => void;
-  onDownloads: () => void;
+// 起始页固定首位，来源与临时网页只承担标签切换。
+export function OnlineHeader({ theme, providers, webTabs, selectedId, onStart, onSelect, onWebTab }: {
+  theme: Theme; providers: OnlineProvider[]; webTabs: { id: string; title: string }[]; selectedId: string;
+  onStart: () => void; onSelect: (provider: OnlineProvider) => void; onWebTab: (id: string) => void;
 }) {
   const { t } = useTranslation();
-  const input = useRef<TextInput>(null);
-  useEffect(() => { if (searchOpen) input.current?.focus(); }, [searchOpen]);
-
+  const scroll = useRef<ScrollView>(null);
+  const positions = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (selectedId !== 'start' && positions.current[selectedId] !== undefined) scroll.current?.scrollTo({ x: Math.max(0, positions.current[selectedId]! - 4), animated: false });
+  }, [selectedId]);
+  function tab(id: string, title: string, onPress: () => void, provider?: OnlineProvider) {
+    const selected = id === selectedId;
+    return <Pressable key={id} onLayout={({ nativeEvent }) => {
+      positions.current[id] = nativeEvent.layout.x;
+      if (selected && id !== 'start') scroll.current?.scrollTo({ x: Math.max(0, nativeEvent.layout.x - 4), animated: false });
+    }} accessibilityRole="tab" accessibilityState={{ selected }} onPress={onPress}
+      style={({ pressed }) => [styles.tab, { backgroundColor: selected ? theme.selection : theme.surface,
+        borderColor: selected ? theme.accent : theme.border, opacity: pressed ? 0.7 : 1 }]}>
+      {provider && <OnlineSourceIcon provider={provider} theme={theme} />}
+      <Text numberOfLines={1} style={[styles.label, { color: selected ? theme.accent : theme.label }]}>{title}</Text>
+    </Pressable>;
+  }
   return <View style={[styles.header, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
-    {searchOpen ? <View style={[styles.search, { backgroundColor: theme.surface }]}>
-      <MagnifyingGlassIcon size={18} color={theme.secondary} />
-      <TextInput ref={input} value={searchText} onChangeText={onSearchChange} onSubmitEditing={onSearchSubmit}
-        placeholder={t('online.search')} placeholderTextColor={theme.muted} style={[styles.input, { color: theme.label }]}
-        accessibilityLabel={t('online.search')} returnKeyType="search" autoCapitalize="none" autoCorrect={false} />
-      {searchText.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.clearSearch')} hitSlop={10}
-        onPress={() => { onSearchChange(''); input.current?.focus(); }}>
-        <XIcon size={16} color={theme.secondary} />
-      </Pressable>}
-      <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} hitSlop={10} onPress={onSearchClose}>
-        <Text style={{ color: theme.accent }}>{t('common.close')}</Text>
-      </Pressable>
-    </View> : <>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
-        accessibilityRole="tablist" style={styles.sources} contentContainerStyle={styles.sourceRow}>
-        {providers.map((provider) => {
-          const selected = provider.id === selectedId;
-          return <Pressable key={provider.id} accessibilityRole="tab" accessibilityState={{ selected }}
-            accessibilityLabel={provider.name} onPress={() => onSelect(provider)} hitSlop={4}
-            style={({ pressed }) => [styles.source, {
-              backgroundColor: selected ? theme.selection : theme.surface,
-              borderColor: selected ? theme.accent : theme.border,
-              opacity: pressed ? 0.7 : 1,
-            }]}>
-            <OnlineSourceIcon provider={provider} theme={theme} size={20} />
-            <Text numberOfLines={1} style={[styles.sourceLabel, { color: selected ? theme.accent : theme.label }]}>{provider.name}</Text>
-          </Pressable>;
-        })}
-      </ScrollView>
-      <IconButton theme={theme} label={t('online.search')} systemImage="magnifyingglass" onPress={onSearchOpen}>
-        <MagnifyingGlassIcon size={20} color={theme.label} />
-      </IconButton>
-      <IconButton theme={theme} label={t('online.browser.downloads')} systemImage="arrow.down.circle" onPress={onDownloads}>
-        <DownloadSimpleIcon size={20} color={theme.label} />
-      </IconButton>
-    </>}
+    {tab('start', t('browser.start'), onStart)}
+    <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} accessibilityRole="tablist" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.row}>
+      {providers.map((item) => tab(item.id, item.name, () => onSelect(item), item))}
+      {webTabs.map((item) => tab(item.id, item.title, () => onWebTab(item.id)))}
+    </ScrollView>
   </View>;
 }
-
 const styles = StyleSheet.create({
-  header: { minHeight: 52, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth },
-  sources: { flex: 1 },
-  sourceRow: { alignItems: 'center', gap: 6, paddingRight: 4 },
-  source: { height: 34, maxWidth: 156, paddingHorizontal: 10, borderRadius: 17, borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sourceLabel: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
-  search: { flex: 1, minHeight: 40, borderRadius: 20, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  input: { flex: 1, minHeight: 40, fontSize: 15, paddingVertical: 6 },
+  header: { minHeight: 52, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6, borderBottomWidth: StyleSheet.hairlineWidth },
+  row: { alignItems: 'center', gap: 6, paddingRight: 4 },
+  tab: { minHeight: 36, maxWidth: 196, paddingHorizontal: 12, borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  label: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
 });

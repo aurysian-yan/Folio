@@ -1,10 +1,14 @@
+import { useDialogs } from './Dialogs';
+import { ReorderableList } from './ReorderableList';
+import { FilterScrollView, FilterTextInput } from './FilterDrawer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getDocumentAsync } from 'expo-document-picker';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CaretRightIcon } from './icons';
 import { LibraryPanel } from './LibraryPanel';
 import { online } from './native';
+import { useOnlineSession } from './OnlineSession';
 import { onlineErrorKey, providerCustomCss, providerThemeEnabled, type OnlineProvider, type OnlineState } from './online';
 import { OnlineSourceIcon } from './OnlineSourceIcon';
 import { PanelAction } from './panel-content';
@@ -15,8 +19,10 @@ import type { Theme } from './ui';
 
 // 来源管理、网站数据与站内配色统一放在通用设置。
 export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: () => void }) {
+  const { alert } = useDialogs();
   const { t } = useTranslation();
   const { preferences, update } = usePreferences();
+  const session = useOnlineSession();
   const [state, setState] = useState<OnlineState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +67,7 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
   async function save(values: OnlineProvider[]) {
     await online.saveProviders(values);
     await refresh();
+    await session.invalidate();
   }
   function saveDraft() {
     if (!state || !draft) return;
@@ -86,25 +93,27 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
       setDraft((value) => value ? { ...value, icon: { kind: 'custom', assetId: icon.assetId }, iconUri: icon.uri } : value);
     });
   }
-  async function move(index: number, delta: number) {
-    if (!state) return;
-    const target = index + delta;
-    if (target < 0 || target >= state.providers.length) return;
-    await run(async () => {
-      const values = [...state.providers];
-      [values[index], values[target]] = [values[target]!, values[index]!];
-      await save(values);
-    });
-  }
   const errorNode = error && <Text accessibilityRole="alert" style={{ color: theme.danger }}>{t(error)}</Text>;
   const inputStyle = [styles.input, { color: theme.label, backgroundColor: theme.raised, borderColor: theme.border }];
 
   return <SettingsPage title={t('settings.onlineFonts')} theme={theme} onClose={onClose}>
+    <SettingsGroup theme={theme}>
+      <SettingsSwitchRow theme={theme} title={t('browser.showSourceHomes')} value={preferences.browserShowSourceHomes}
+        onChange={(browserShowSourceHomes) => update({ browserShowSourceHomes })} />
+      <SettingsActionRow theme={theme} title={t('online.browser.downloads')} onPress={() => session.openLibrary('downloads')} />
+      <SettingsSwitchRow theme={theme} title={t('browser.inheritSearch')} detail={t('browser.inheritSearchDetail')}
+        value={preferences.onlineInheritSearchQuery} onChange={(onlineInheritSearchQuery) => update({ onlineInheritSearchQuery })} />
+    </SettingsGroup>
     <SettingsGroup theme={theme} title={t('online.browser.sources')}>
-      {state?.providers.map((item, index) => {
+      {state && <ReorderableList items={state.providers} theme={theme} enabled={!busy} label={(item) => item.name}
+        onChange={(values) => {
+          const previous = state;
+          setState({ ...state, providers: values });
+          void run(async () => { try { await save(values); } catch (cause) { if (mounted.current) setState(previous); throw cause; } });
+        }} renderItem={(item, handle) => {
         const fallback = providerThemeEnabled(undefined, item.id);
         return <View key={item.id} style={[styles.sourceRow, { borderBottomColor: theme.border }]}>
-          <View style={styles.sourceHeader}>
+          <View style={styles.sourceHeader}>{handle}
             <Pressable accessibilityRole="button" accessibilityLabel={`${t('common.edit')} ${item.name}`}
               onPress={() => openEditor(item)} style={({ pressed }) => [styles.sourceMain, { opacity: pressed ? 0.7 : 1 }]}>
               <OnlineSourceIcon provider={item} theme={theme} size={30} />
@@ -120,17 +129,13 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
               })} />
           </View>
           <View style={styles.actions}>
-            <PanelAction label={t('online.browser.moveUp')} theme={theme} disabled={busy || index === 0}
-              onPress={() => void move(index, -1)} />
-            <PanelAction label={t('online.browser.moveDown')} theme={theme} disabled={busy || index === state.providers.length - 1}
-              onPress={() => void move(index, 1)} />
             <Text style={[styles.defaultNote, { color: theme.secondary }]}>
               {t(providerThemeEnabled(preferences.onlineTheme[item.id], item.id) ? 'online.browser.themeOn' : 'online.browser.themeOff')}
               {fallback ? ` · ${t('online.browser.themeDefault')}` : ''}
             </Text>
           </View>
         </View>;
-      })}
+      }} />}
       {!state && <View style={styles.loading}><ActivityIndicator color={theme.accent} /></View>}
       <SettingsActionRow theme={theme} title={t('online.browser.addSource')} disabled={busy || !state?.accepted}
         onPress={() => setDraft({
@@ -150,7 +155,7 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
     </SettingsGroup>
     <SettingsGroup theme={theme} title={t('online.browser.websiteData')}>
       <SettingsActionRow destructive theme={theme} title={t('online.browser.clearData')} disabled={busy}
-        onPress={() => Alert.alert(t('online.browser.clearData'), t('online.browser.clearDataNotice'), [
+        onPress={() => alert(t('online.browser.clearData'), t('online.browser.clearDataNotice'), [
           { text: t('common.cancel'), style: 'cancel' },
           { text: t('common.delete'), style: 'destructive', onPress: () => void run(async () => {
             await online.clearData(); setNotice(t('online.browser.dataCleared'));
@@ -159,7 +164,7 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
     </SettingsGroup>
     <LibraryPanel visible={draft !== null} title={t('online.browser.editSource')} theme={theme} busy={busy}
       onClose={() => { if (!busy) setDraft(null); }}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <FilterScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {draft && <>
           {errorNode}
           {notice && <Text style={{ color: theme.secondary }}>{notice}</Text>}
@@ -170,12 +175,12 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
               onPress={() => setDraft({ ...draft, icon: null, iconUri: null })} />
           </View>
           <Text style={{ color: theme.secondary }}>{t('online.browser.iconHelp')}</Text>
-          <TextInput accessibilityLabel={t('common.name')} placeholder={t('common.name')} placeholderTextColor={theme.secondary}
+          <FilterTextInput accessibilityLabel={t('common.name')} placeholder={t('common.name')} placeholderTextColor={theme.secondary}
             style={inputStyle} value={draft.name} onChangeText={(name) => setDraft({ ...draft, name })} />
-          <TextInput accessibilityLabel={t('online.browser.homepage')} placeholder={t('online.browser.homepage')}
+          <FilterTextInput accessibilityLabel={t('online.browser.homepage')} placeholder={t('online.browser.homepage')}
             placeholderTextColor={theme.secondary} style={inputStyle} value={draft.homepage} autoCapitalize="none"
             autoCorrect={false} keyboardType="url" onChangeText={(homepage) => setDraft({ ...draft, homepage })} />
-          <TextInput accessibilityLabel={t('online.browser.template')} placeholder={t('online.browser.template')}
+          <FilterTextInput accessibilityLabel={t('online.browser.template')} placeholder={t('online.browser.template')}
             placeholderTextColor={theme.secondary} style={inputStyle} value={draft.searchTemplate} autoCapitalize="none"
             autoCorrect={false} keyboardType="url" onChangeText={(searchTemplate) => setDraft({ ...draft, searchTemplate })} />
           <Text style={{ color: theme.secondary }}>{t('online.browser.templateHelp')}</Text>
@@ -187,7 +192,7 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
             <GlassSwitch label={t('online.browser.themeSite')} value={draftTheme} disabled={busy} theme={theme} onChange={setDraftTheme} />
           </View>
           <Text style={[styles.fieldTitle, { color: theme.label }]}>{t('online.browser.customCss')}</Text>
-          <TextInput accessibilityLabel={t('online.browser.customCss')} placeholder={t('online.browser.customCssPlaceholder')}
+          <FilterTextInput accessibilityLabel={t('online.browser.customCss')} placeholder={t('online.browser.customCssPlaceholder')}
             placeholderTextColor={theme.secondary} style={[inputStyle, styles.css]} value={draftCss} multiline
             autoCapitalize="none" autoCorrect={false} onChangeText={setDraftCss} />
           <Text style={{ color: theme.secondary }}>{t('online.browser.customCssHelp')}</Text>
@@ -211,7 +216,7 @@ export function SettingsOnlinePage({ theme, onClose }: { theme: Theme; onClose: 
             })} />}
           </View>
         </>}
-      </ScrollView>
+      </FilterScrollView>
     </LibraryPanel>
   </SettingsPage>;
 }

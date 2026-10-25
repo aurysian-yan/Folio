@@ -6,7 +6,7 @@ import type { Theme } from './ui';
 
 export const navigationItems = [
   { id: 'local', label: i18n.t('navigation.local'), icon: 'text-aa' },
-  { id: 'search', label: i18n.t('common.search'), icon: 'search' },
+  { id: 'search', label: i18n.t('globalSearch.title'), icon: 'search' },
   { id: 'online', label: i18n.t('online.title'), icon: 'globe' },
   { id: 'cloud', label: i18n.t('navigation.cloud'), icon: 'cloud' },
   { id: 'settings', label: i18n.t('navigation.settings'), icon: 'gear' },

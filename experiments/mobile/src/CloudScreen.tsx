@@ -1,7 +1,8 @@
+import { useDialogs } from './Dialogs';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { CloudIcon, CaretRightIcon } from './icons';
-import { ActivityIndicator, Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { NavigationBackdrop } from './bottom-navigation';
@@ -21,6 +22,7 @@ import type { Theme } from './ui';
 export function CloudScreen({ theme, active, sourceId, controller, snapshot, onConfigure, onOpenFont }: {
   theme: Theme; active: boolean; sourceId: string; controller: CloudSyncController; snapshot: LibrarySnapshot | null; onConfigure: () => void; onOpenFont: (font: CloudFont) => void;
 }) {
+  const { alert } = useDialogs();
   const { t } = useTranslation();
   const list = useRef<Animated.FlatList<CloudFont>>(null);
   const header = usePageHeader({ sourceId, onSnap: (offset, animated) => list.current?.scrollToOffset({ offset, animated }) });
@@ -44,7 +46,7 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
       if (success && action !== 'cloudOnly') controller.requestSync();
     }); };
     if (action === 'delete' || action === 'cloudOnly') {
-      Alert.alert(t(action === 'delete' ? 'fontLocation.deleteTitle' : 'fontLocation.removeDownload'),
+      alert(t(action === 'delete' ? 'fontLocation.deleteTitle' : 'fontLocation.removeDownload'),
         `${font.displayName || font.filename}\n${t(action === 'delete' ? 'fontLocation.deleteHint' : 'cloud.cloudOnlyConfirmMessage')}`,
         [{ text: t('common.cancel'), style: 'cancel' },
           { text: t(action === 'delete' ? 'cloud.deleteEverywhere' : 'cloud.keepCloudOnly'), style: 'destructive', onPress: execute }]);
@@ -55,7 +57,7 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
       if (success) controller.requestSync();
     }); };
     if (resolution === 'keepBoth') execute();
-    else Alert.alert(t('cloud.conflictConfirmTitle'), t('cloud.conflictConfirmMessage'),
+    else alert(t('cloud.conflictConfirmTitle'), t('cloud.conflictConfirmMessage'),
       [{ text: t('common.cancel'), style: 'cancel' },
         { text: t(resolution === 'useLocal' ? 'cloud.useLocal' : 'cloud.useRemote'), style: 'destructive', onPress: execute }]);
   }

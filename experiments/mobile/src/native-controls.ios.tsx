@@ -1,11 +1,11 @@
 import {
   Button, GlassEffectContainer, Host, HStack, Image, Label, List, Menu,
   NavigationSplitView, Picker, RNHostView, Section, Spacer, TabView, Text, TextField,
-  Toolbar, ToolbarItem, useNativeState, VStack,
+  Toolbar, ToolbarItem, useNativeState, VStack, ZStack,
   type ButtonProps, type TextFieldRef, type NavigationSplitViewColumn, type NavigationSplitViewVisibility,
 } from '@expo/ui/swift-ui';
 import {
-  accessibilityLabel, autocorrectionDisabled, background, buttonBorderShape,
+  accessibilityLabel, hidden, autocorrectionDisabled, background, buttonBorderShape,
   buttonStyle, contentShape, controlSize, disabled, font, foregroundStyle, frame, glassEffect,
   labelStyle, listStyle, menuIndicator, menuStyle, navigationSplitViewStyle, navigationTitle, onSubmit, opacity, padding, submitLabel,
   shadow, shapes, tabViewStyle, tag, textFieldStyle, textInputAutocapitalization, tint,
@@ -14,6 +14,8 @@ import { requireNativeView } from 'expo';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, Platform, StyleSheet, View, type ViewProps } from 'react-native';
+import { usePreferences } from './settings';
+import { TabScenes } from './TabScenes';
 import { collectionColorValue, collectionSystemImage } from './collection-style';
 import { HeaderScrollContext, headerShadowColor, useHeaderShadowProgress } from './HeaderButtonShadow';
 import type {
@@ -44,6 +46,7 @@ function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = fa
 // iPad 常规窗口使用原生分栏，紧凑窗口沿用 iPhone 标签栏。
 export function NativeNavigation({ children, settings, search, cloud, online, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
   const { t } = useTranslation();
+  const { preferences } = usePreferences();
   const [visibility, setVisibility] = useState<NavigationSplitViewVisibility>('all');
   const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
 
@@ -80,15 +83,21 @@ export function NativeNavigation({ children, settings, search, cloud, online, th
                 {snapshot?.collections.map((collection) => row(`collection:${collection.id}`, collection.name,
                   collectionSystemImage(collection.icon) as ButtonProps['systemImage'], collection.memberCount, collectionColorValue(collection.color)))}
               </Section>}
-              <Section>{row('search', t('common.search'), 'magnifyingglass')}</Section>
+              <Section>{row('search', t('globalSearch.title'), 'magnifyingglass')}</Section>
               <Section>{row('online', t('online.title'), 'globe')}</Section>
               <Section title={t('navigation.cloud')}>{row('cloud', t('mobile.cloudFonts'), 'cloud')}</Section>
               <Section>{row('settings', t('navigation.settings'), 'gear')}</Section>
             </List>
           </NavigationSplitView.Sidebar>
-          <NavigationSplitView.Detail>{destination === 'settings' ? settings : destination === 'search' ? search
-            : destination === 'online' ? <RNHostView><View style={styles.fill}>{online}</View></RNHostView>
-            : destination === 'cloud' ? <RNHostView><View style={styles.fill}>{cloud}</View></RNHostView> : children}</NavigationSplitView.Detail>
+          <NavigationSplitView.Detail>
+            <ZStack>
+              <VStack modifiers={[hidden(['settings', 'search', 'online', 'cloud'].includes(destination))]}>{children}</VStack>
+              <VStack modifiers={[hidden(!['settings', 'search', 'online', 'cloud'].includes(destination))]}><RNHostView>
+                <View style={styles.fill}><TabScenes selectedId={destination === 'settings' || destination === 'search' || destination === 'online' || destination === 'cloud' ? destination : 'local'}
+                  scenes={{ local: <View />, settings, search, online, cloud }} /></View>
+              </RNHostView></VStack>
+            </ZStack>
+          </NavigationSplitView.Detail>
         </NavigationSplitView>
       </Host>
     );
@@ -102,22 +111,22 @@ export function NativeNavigation({ children, settings, search, cloud, online, th
         modifiers={[tabViewStyle({ type: 'automatic' }), tint(theme.accent), background(theme.background)]}>
         <TabView.Tab value="local" label={t('navigation.local')} systemImage="textformat.alt">
           <NativeTabContent animateTabChanges>
-            <RNHostView><View style={styles.fill}>{children}</View></RNHostView>
+            <RNHostView><View style={styles.fill}>{children}<TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} /></View></RNHostView>
           </NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="search" label={t('common.search')} systemImage="magnifyingglass">
-          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{search}</View></RNHostView></NativeTabContent>
+          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{search}<TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} /></View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="online" label={t('online.title')} systemImage="globe">
           <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{online}
-            <TabBarBehavior minimize style={styles.tabBarBehavior} />
+            <TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} />
           </View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="cloud" label={t('navigation.cloud')} systemImage="cloud">
-          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{cloud}</View></RNHostView></NativeTabContent>
+          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{cloud}<TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} /></View></RNHostView></NativeTabContent>
         </TabView.Tab>
         <TabView.Tab value="settings" label={t('navigation.settings')} systemImage="gear">
-          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{settings}</View></RNHostView></NativeTabContent>
+          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{settings}<TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} /></View></RNHostView></NativeTabContent>
         </TabView.Tab>
       </TabView>
     </Host>
@@ -143,7 +152,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
     <Toolbar>
       <NativeTabContent><RNHostView><HeaderScrollContext.Provider value={null}>{children}</HeaderScrollContext.Provider></RNHostView></NativeTabContent>
       <Toolbar.Content>
-        <ToolbarItem placement="principal">
+        {active && <ToolbarItem placement="principal">
           {active && searchOpen ? <HStack spacing={8} modifiers={[
             padding({ horizontal: 12 }), frame({ width: Math.max(100, width - toolbarHeight), height: toolbarHeight }),
             ...(glass ? [glassEffect({ glass: { variant: 'regular' }, shape: 'capsule' })] : []),
@@ -162,7 +171,7 @@ export function NativeLibraryContent({ children, title, subtitle, active, theme,
             <Text modifiers={[font({ textStyle: 'headline' })]}>{title}</Text>
             {active && <Text modifiers={[font({ textStyle: 'caption' }), foregroundStyle({ type: 'hierarchical', style: 'secondary' })]}>{subtitle}</Text>}
           </VStack>}
-        </ToolbarItem>
+        </ToolbarItem>}
         {active && <ToolbarItem placement="topBarTrailing">
           <HStack>
             {searchOpen ? <>

@@ -1,3 +1,4 @@
+import { useNavigationPanel } from './NavigationScroll';
 import { useTranslation } from 'react-i18next';
 import { Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -5,6 +6,7 @@ import { PanelBody, type LibraryPanelProps } from './panel-content';
 
 // 安卓面板使用原生 Modal，返回与遮罩点击统一关闭。
 export function LibraryPanel(props: LibraryPanelProps) {
+  useNavigationPanel(props.visible);
   const { t } = useTranslation();
   const { height } = useWindowDimensions();
   const inset = useSafeAreaInsets();

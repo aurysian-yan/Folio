@@ -5,6 +5,9 @@ import WebKit
 
 final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   let onBrowserState = EventDispatcher()
+  let onVisit = EventDispatcher()
+  let onPageScroll = EventDispatcher()
+  private var scrollObservation: NSKeyValueObservation?
   let onDownloadIntent = EventDispatcher()
   private let web: WKWebView
   private let refreshControl = UIRefreshControl()
@@ -22,6 +25,11 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var contentReady = false
   private var loading = true
   private var themeRevision = 0
+  private var visitSequence = 0
+  private var visitedSequence = -1
+  private var visitedURL = ""
+  private var historyReload = false
+  private var historyHTTPError = false
   private var currentNavigation: WKNavigation?
   private var loadError: String?
   private var pendingReveal = false
@@ -41,6 +49,10 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     web.isHidden = true
     refreshControl.addTarget(self, action: #selector(refreshPage), for: .valueChanged)
     web.scrollView.refreshControl = refreshControl
+    scrollObservation = web.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] scroll, _ in
+      guard let self, self.isActive, !self.loading, scroll.isDragging || scroll.isDecelerating else { return }
+      self.onPageScroll(["offset": max(0, scroll.contentOffset.y + scroll.adjustedContentInset.top)])
+    }
     addSubview(web)
   }
   override func layoutSubviews() {
@@ -70,7 +82,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   func setAccentColor(_ value: String) {
     refreshControl.tintColor = Self.color(from: value)
   }
-  @objc private func refreshPage() { pendingReveal = false; beginLoading(); web.reload() }
+  @objc private func refreshPage() { historyReload = true; pendingReveal = false; beginLoading(); web.reload() }
   private func startPolling() {
     guard pollTimer == nil else { return }
     pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -79,6 +91,9 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
       if url != self.lastThemeURL {
         self.lastThemeURL = url
         self.applyWebTheme()
+      }
+      if self.pageLoaded && !self.loading && !self.pageFailed && !self.historyHTTPError && url != self.visitedURL {
+        self.emitVisit(sameDocument: true)
       }
       self.emit()
     }
@@ -225,6 +240,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
         guard let value = request["url"] as? String else { throw FolioPaths.failure() }
         let url = try FolioFileRuntime.shared().browser.validateAddress(url: value)
         sourcePage = ""
+        historyReload = false
         beginLoading()
         pendingReveal = request["reveal"] as? Bool ?? false
         web.load(URLRequest(url: URL(string: url)!))
@@ -233,8 +249,8 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
         pendingReveal = false
         emit(error: "online.browser.invalidSource")
       }
-    case "back": if web.canGoBack { pendingReveal = false; beginLoading(); web.goBack() }
-    case "forward": if web.canGoForward { pendingReveal = false; beginLoading(); web.goForward() }
+    case "back": if web.canGoBack { historyReload = false; pendingReveal = false; beginLoading(); web.goBack() }
+    case "forward": if web.canGoForward { historyReload = false; pendingReveal = false; beginLoading(); web.goForward() }
     case "reload": pendingReveal = false; refreshPage()
     case "stop":
       pendingReveal = false
@@ -253,6 +269,16 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
       web.loadHTMLString("", baseURL: nil)
     default: break
     }
+  }
+  // 成功主页面与同页地址变化使用独立事件，普通状态轮询不新增访问。
+  private func emitVisit(sameDocument: Bool = false) {
+    guard !historyHTTPError, !pageFailed, let url = web.url, url.scheme == "https" else { return }
+    if !sameDocument && visitedSequence == visitSequence { return }
+    visitedSequence = visitSequence
+    visitedURL = url.absoluteString
+    onVisit(["visitedAt": Date().timeIntervalSince1970 * 1000, "id": String(visitSequence), "url": visitedURL, "title": web.title ?? "",
+             "reload": historyReload && !sameDocument, "sameDocument": sameDocument])
+    historyReload = false
   }
   private func emit(error: String? = nil, force: Bool = false) {
     let url = web.url?.absoluteString ?? ""
@@ -309,6 +335,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     _ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
   ) {
+    if response.isForMainFrame, let http = response.response as? HTTPURLResponse { historyHTTPError = http.statusCode >= 400 }
     if response.isForMainFrame, let http = response.response as? HTTPURLResponse, http.statusCode >= 500 {
       pageFailed = true
       failLoading(error: "online.browser.serverError")
@@ -347,6 +374,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private func resumeAfterDownload() {
     guard !contentReady else { return }
     pageLoaded = true
+    emitVisit()
     lastThemeURL = web.url?.absoluteString ?? ""
     applyWebTheme()
   }
@@ -354,7 +382,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     let page = sourcePage.isEmpty ? (web.url?.absoluteString ?? url.absoluteString) : sourcePage
     let origin: [String: Any] = [
       "providerId": provider["id"] as Any? ?? NSNull(),
-      "providerName": provider["name"] as? String ?? "", "sourcePageUrl": page,
+      "providerName": provider["name"] as? String ?? web.url?.host ?? "", "sourcePageUrl": page,
       "downloadHost": url.host ?? "",
     ]
     web.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
@@ -371,12 +399,15 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     }
   }
   func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+    historyHTTPError = false
+    visitSequence += 1
     beginLoading()
     currentNavigation = navigation
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     guard navigation === currentNavigation, !pageFailed else { return }
     pageLoaded = true
+    emitVisit()
     lastThemeURL = web.url?.absoluteString ?? ""
     applyWebTheme()
     if let url = web.url, let home = provider["homepage"] as? String,

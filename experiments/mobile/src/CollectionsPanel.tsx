@@ -1,7 +1,7 @@
 import { CheckIcon, ClockIcon, DotsThreeIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, StarIcon, TextAaIcon, TrashIcon } from './icons';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useSharedValue } from 'react-native-reanimated';
 import { collectionColors, collectionIcons, CollectionSymbol, collectionColorValue } from './collection-style';
@@ -331,7 +331,7 @@ export function FamilyCollectionsPanel({ visible, family, snapshot, collectionId
   const current = snapshot?.collections.find((item) => item.id === collectionId);
   return <LibraryPanel visible={visible} title={t('collection.addTo')} theme={theme} busy={busy}
     onClose={() => { if (!pending.current) { setMessage(null); setError(null); onClose(); } }}>
-    <ScrollView contentContainerStyle={panelStyles.content} keyboardShouldPersistTaps="handled">
+    <FilterScrollView contentContainerStyle={panelStyles.content} keyboardShouldPersistTaps="handled">
       <Text style={[panelStyles.section, { color: theme.secondary }]}>{family.displayName}</Text>
       {message && <Text accessibilityLiveRegion="polite" style={[panelStyles.section, { color: theme.secondary }]}>{message}</Text>}
       {error && <Text accessibilityRole="alert" style={[panelStyles.section, { color: theme.danger }]}>{error}</Text>}
@@ -345,6 +345,6 @@ export function FamilyCollectionsPanel({ visible, family, snapshot, collectionId
           onPress={() => { void change(current, false); }} />}
         {snapshot?.collections.length === 0 && <Text style={[panelStyles.detail, { color: theme.secondary }]}>{t('collection.emptyCreateHint')}</Text>}
       </PanelSection>
-    </ScrollView>
+    </FilterScrollView>
   </LibraryPanel>;
 }

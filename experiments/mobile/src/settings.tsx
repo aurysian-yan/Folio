@@ -1,3 +1,4 @@
+import { defaultDashboard, sanitizeDashboard, type DashboardSection } from './browser-dashboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -7,6 +8,9 @@ export type AccentId = 'folio' | 'blue' | 'green' | 'purple' | 'yellow' | 'pink'
 export type LibraryMode = 'grid' | 'list';
 
 export interface Preferences {
+  navigationAutoCollapse: boolean;
+  browserShowSourceHomes: boolean;
+  browserDashboard: DashboardSection[];
   appearance: AppearanceMode;
   accent: AccentId;
   materialTheme: boolean;
@@ -24,9 +28,14 @@ export interface Preferences {
   onlineCss: Record<string, string>;
   /** 是否显示在线来源的区域提示，关闭后不发起出口查询。 */
   onlineRegionHints: boolean;
+  /** 首次打开来源时沿用最近提交的站内关键词。 */
+  onlineInheritSearchQuery: boolean;
 }
 
 export const defaultPreferences: Preferences = {
+  navigationAutoCollapse: true,
+  browserShowSourceHomes: false,
+  browserDashboard: defaultDashboard,
   appearance: 'system',
   accent: 'folio',
   materialTheme: false,
@@ -41,6 +50,7 @@ export const defaultPreferences: Preferences = {
   onlineTheme: {},
   onlineCss: {},
   onlineRegionHints: true,
+  onlineInheritSearchQuery: true,
 };
 
 // 外观页可选的预览字号，与 FontCard 的基准字号对应。
@@ -81,6 +91,9 @@ function sanitize(raw: unknown): Preferences {
     ? Math.min(48, Math.max(12, Math.round(value.previewScale)))
     : defaultPreferences.previewScale;
   return {
+    navigationAutoCollapse: typeof value.navigationAutoCollapse === 'boolean' ? value.navigationAutoCollapse : true,
+    browserShowSourceHomes: value.browserShowSourceHomes === true,
+    browserDashboard: sanitizeDashboard(value.browserDashboard),
     // 兼容旧偏好，深浅色统一跟随系统。
     appearance: 'system',
     accent: pick(accentValues, value.accent, defaultPreferences.accent),
@@ -95,13 +108,16 @@ function sanitize(raw: unknown): Preferences {
     characterMapInheritAxes: typeof value.characterMapInheritAxes === 'boolean' ? value.characterMapInheritAxes : defaultPreferences.characterMapInheritAxes,
     onlineTheme: sanitizeTheme(value.onlineTheme),
     onlineCss: sanitizeCss(value.onlineCss),
+    onlineInheritSearchQuery: typeof value.onlineInheritSearchQuery === 'boolean' ? value.onlineInheritSearchQuery : true,
     onlineRegionHints: typeof value.onlineRegionHints === 'boolean' ? value.onlineRegionHints : defaultPreferences.onlineRegionHints,
   };
 }
 
+let preferencesQueue = Promise.resolve();
 function persist(next: Preferences) {
   // 写入失败不影响当前会话内的偏好使用。
-  AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => undefined);
+  const raw = JSON.stringify(next);
+  preferencesQueue = preferencesQueue.catch(() => {}).then(() => AsyncStorage.setItem(storageKey, raw)).catch(() => {});
 }
 
 export interface PreferencesValue {

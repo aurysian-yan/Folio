@@ -6,7 +6,7 @@ import type { MaterialRoles } from './material-theme';
 import { createSyncClient, type SyncBridge } from './sync';
 import { ForegroundSyncSession } from './sync-session';
 import { createStorageClient, type StorageBridge } from './storage';
-import { createOnlineClient, type BrowserState, type OnlineBridge, type WebPalette } from './online';
+import { createOnlineClient, type BrowserState, type BrowserVisit, type OnlineBridge, type WebPalette } from './online';
 
 // 安卓外观主题桥接：壁纸种子与 Material3 语义色。
 interface MaterialBridge {
@@ -38,6 +38,8 @@ export const NativeOnlineBrowser = requireNativeViewManager<ViewProps & {
   active: boolean;
   webTheme: string;
   accentColor: string;
+  onPageScroll: (event: NativeSyntheticEvent<{ offset: number; reset?: boolean }>) => void;
+  onVisit: (event: NativeSyntheticEvent<BrowserVisit>) => void;
   onBrowserState: (event: NativeSyntheticEvent<BrowserState>) => void;
   onDownloadIntent: (event: NativeSyntheticEvent<{ id: string; name: string }>) => void;
 }>('FolioNative', 'FolioOnlineView');

@@ -1,5 +1,6 @@
+import { ReorderScrollContext, useReorderScroll } from './ReorderableList';
 import { CaretLeftIcon, CaretRightIcon } from './icons';
-import { useImperativeHandle, useRef, type ReactNode, type Ref } from 'react';
+import { createContext, useContext, useImperativeHandle, useRef, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { GlassSwitch } from './GlassSwitch';
@@ -10,6 +11,10 @@ import { NativeScrollContainer } from './native-controls';
 import { PageHeader, PageTitle, pageTitleInset, usePageHeader } from './PageHeader';
 import Motion, { Easing, FadeIn, FadeOut, LinearTransition, ReduceMotion } from 'react-native-reanimated';
 import { pageTitleMotion } from './page-header-motion';
+
+// 空字符串表示从搜索打开整页，非空字符串同时指定控件标题。
+export const SettingsSearchFocus = createContext<string | null>(null);
+const SettingsScrollFocus = createContext<((title: string, node: View | null) => void) | null>(null);
 
 export interface SettingsPageHandle { restoreTitle: () => void }
 
@@ -43,8 +48,24 @@ function SettingsPageContent({ pageRef, title, theme, onClose, children, backgro
 }) {
   const { t } = useTranslation();
   const scrollView = useRef<ScrollView>(null);
+  const reorderScroll = useReorderScroll(scrollView);
+  const focusTitle = useContext(SettingsSearchFocus);
+  const focusNode = useRef<View | null>(null);
+  const focused = useRef<string | null>(null);
+  function focusSetting(title: string, node: View | null) {
+    if (!focusTitle || title !== focusTitle || !node || focused.current === focusTitle) return;
+    focusNode.current = node;
+    requestAnimationFrame(() => {
+      const nativeScroll = scrollView.current?.getNativeScrollRef();
+      if (!nativeScroll) return;
+      node.measureLayout(nativeScroll, (_x, y) => {
+        scrollView.current?.scrollTo({ y: Math.max(0, y - header.contentTop), animated: false });
+        focused.current = focusTitle;
+      }, () => {});
+    });
+  }
   const scrollSize = useRef({ content: 0, viewport: 0 });
-  const header = usePageHeader({ sourceId: backdropSourceId, bottomTabs: false,
+  const header = usePageHeader({ sourceId: backdropSourceId, bottomTabs: false, onScrollOffset: reorderScroll.onScroll,
     onSnap: (y, animated) => scrollView.current?.scrollTo({ y, animated }) });
   useImperativeHandle(pageRef, () => ({ restoreTitle: header.restoreTitle }), [header.restoreTitle]);
   // 内容缩短至一屏时，平滑恢复顶部位置与大标题。
@@ -56,22 +77,22 @@ function SettingsPageContent({ pageRef, title, theme, onClose, children, backgro
   return <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
       <NativeScrollContainer accessibilityViewIsModal hasHeader onInsetsChange={header.onInsetsChange} style={styles.screen}>
         <PageHeader {...header} title={title} theme={theme} style={styles.header} leading={
-          <IconButton theme={theme} label={backLabel ?? t('mobile.backToSettings')} systemImage="chevron.left" onPress={onClose}>
+          <IconButton theme={theme} label={backLabel ?? t(focusTitle !== null ? 'globalSearch.backToSearch' : 'mobile.backToSettings')} systemImage="chevron.left" onPress={onClose}>
             <CaretLeftIcon size={20} color={theme.label} />
           </IconButton>
         } />
         <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
           {background}
-          <Animated.ScrollView ref={scrollView} {...header.snapScrollProps} onScroll={header.onScroll} scrollEventThrottle={16}
+          <ReorderScrollContext.Provider value={reorderScroll.value}><Animated.ScrollView ref={scrollView} {...header.snapScrollProps} onScroll={header.onScroll} scrollEventThrottle={16}
             onLayout={(event) => { scrollSize.current.viewport = event.nativeEvent.layout.height; resetScrollIfContentFits(); }}
-            onContentSizeChange={(_width, height) => { scrollSize.current.content = height; resetScrollIfContentFits(); }}
+            onContentSizeChange={(_width, height) => { scrollSize.current.content = height; resetScrollIfContentFits(); if (focusTitle) focusSetting(focusTitle, focusNode.current); }}
             contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
             scrollIndicatorInsets={{ top: header.contentTop, bottom: header.contentBottom }}
             contentContainerStyle={[styles.content, { paddingTop: header.contentTop, paddingBottom: header.contentBottom }]}
             keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
             <PageTitle {...header} title={title} theme={theme} style={settingsLayout.pageTitle} />
-            {children}
-          </Animated.ScrollView>
+            <SettingsScrollFocus.Provider value={focusSetting}>{children}</SettingsScrollFocus.Provider>
+          </Animated.ScrollView></ReorderScrollContext.Provider>
         </NavigationBackdrop>
       </NativeScrollContainer>
   </SafeAreaView>;
@@ -91,22 +112,26 @@ export function SettingsGroup({ theme, title, footer, children, animateLayout = 
     : <View style={styles.group}>{content}</View>;
 }
 
-function RowShell({ theme, children, onPress, accessibilityLabel, accessibilityState }: {
-  theme: Theme; children: ReactNode; onPress?: () => void; last?: boolean;
+function RowShell({ theme, children, onPress, accessibilityLabel, accessibilityState, searchTitle }: {
+  theme: Theme; children: ReactNode; onPress?: () => void; last?: boolean; searchTitle?: string;
   accessibilityLabel?: string; accessibilityState?: { disabled?: boolean; selected?: boolean };
 }) {
+  const focus = useContext(SettingsScrollFocus);
+  const node = useRef<View>(null);
   const body = <View style={styles.row}>{children}</View>;
-  if (!onPress) return <View accessibilityState={accessibilityState}>{body}</View>;
-  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={accessibilityState}
-    disabled={accessibilityState?.disabled} onPress={onPress}
-    style={({ pressed }) => [pressed && { backgroundColor: theme.raised }]}>{body}</Pressable>;
+  return <View ref={node} collapsable={false} onLayout={() => { if (searchTitle) focus?.(searchTitle, node.current); }}>
+    {onPress ? <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={accessibilityState}
+      disabled={accessibilityState?.disabled} onPress={onPress}
+      style={({ pressed }) => [pressed && { backgroundColor: theme.raised }]}>{body}</Pressable>
+      : <View accessibilityState={accessibilityState}>{body}</View>}
+  </View>;
 }
 
 export function SettingsNavRow({ icon, title, detail, value, theme, onPress, last }: {
   icon?: ReactNode; title: string; detail?: string; value?: string;
   theme: Theme; onPress: () => void; last?: boolean;
 }) {
-  return <RowShell theme={theme} onPress={onPress} last={last} accessibilityLabel={title}>
+  return <RowShell searchTitle={title} theme={theme} onPress={onPress} last={last} accessibilityLabel={title}>
     {icon}
     <View style={styles.rowBody}>
       <Text style={[styles.rowTitle, { color: theme.label }]}>{title}</Text>
@@ -121,7 +146,7 @@ export function SettingsSwitchRow({ icon, title, detail, value, theme, onChange,
   icon?: ReactNode; title: string; detail?: string; value: boolean;
   theme: Theme; onChange: (value: boolean) => void; disabled?: boolean; last?: boolean;
 }) {
-  return <RowShell theme={theme} last={last}>
+  return <RowShell searchTitle={title} theme={theme} last={last}>
     {icon}
     <View style={styles.rowBody}>
       <Text style={[styles.rowTitle, { color: theme.label }]}>{title}</Text>
@@ -158,7 +183,7 @@ export function SettingsChoiceRow<T extends string>({ title, detail, options, va
 export function SettingsValueRow({ title, detail, value, theme, last }: {
   title: string; detail?: string; value: string; theme: Theme; last?: boolean;
 }) {
-  return <RowShell theme={theme} last={last}>
+  return <RowShell searchTitle={title} theme={theme} last={last}>
     <View style={styles.rowBody}>
       <Text style={[styles.rowTitle, { color: theme.label }]}>{title}</Text>
       {!!detail && <Text style={[styles.rowDetail, { color: theme.secondary }]}>{detail}</Text>}
@@ -172,7 +197,7 @@ export function SettingsActionRow({ icon, title, theme, onPress, destructive = f
   destructive?: boolean; disabled?: boolean; busy?: boolean; last?: boolean;
 }) {
   const color = destructive ? theme.danger : theme.accent;
-  return <RowShell theme={theme} onPress={onPress} last={last}
+  return <RowShell searchTitle={title} theme={theme} onPress={onPress} last={last}
     accessibilityLabel={title} accessibilityState={{ disabled: !!disabled }}>
     {icon}
     <View style={styles.rowBody}>

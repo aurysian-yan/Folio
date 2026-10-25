@@ -111,7 +111,7 @@ public final class FolioNativeModule: Module {
         }
         View(FolioOnlineView.self) {
             Prop("active") { (view: FolioOnlineView, value: Bool) in view.setActive(value) }
-            Events("onBrowserState", "onDownloadIntent")
+            Events("onBrowserState", "onDownloadIntent", "onVisit", "onPageScroll")
             Prop("provider") { (view: FolioOnlineView, value: String) in view.setProvider(value) }
             Prop("command") { (view: FolioOnlineView, value: String) in view.command(value) }
             Prop("webTheme") { (view: FolioOnlineView, value: String) in view.setWebTheme(value) }

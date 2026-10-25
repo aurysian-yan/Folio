@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.view.View
+import android.view.MotionEvent
 import android.view.animation.PathInterpolator
 import android.webkit.*
 import android.widget.FrameLayout
@@ -24,6 +25,8 @@ import org.json.JSONObject
 
 class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     private val onBrowserState by EventDispatcher()
+    private val onVisit by EventDispatcher()
+    private val onPageScroll by EventDispatcher()
     private val onDownloadIntent by EventDispatcher()
     private val web = WebView(context)
     private val blobs = FolioOnlineBlobs(web)
@@ -31,6 +34,15 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     private var commandId = ""
     private var provider = JSONObject()
     private var sourcePage = ""
+    private var visitSequence = 0L
+    private var visitedSequence = -1L
+    private var visitedUrl = ""
+    private var historyReload = false
+    private var historyHttpError = false
+    private var userScrolling = false
+    private var userTouching = false
+    private var scrollViewportHeight = 0
+    private val finishUserScroll = Runnable { userScrolling = false }
     private var disposed = false
     private var webTheme = ""
     private var pendingTheme: String? = null
@@ -59,6 +71,26 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     init {
         refresh.addView(web, FrameLayout.LayoutParams(-1, -1))
         addView(refresh, FrameLayout.LayoutParams(-1, -1))
+        web.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    userTouching = true; userScrolling = true
+                    scrollViewportHeight = web.height; removeCallbacks(finishUserScroll)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    userTouching = false; postDelayed(finishUserScroll, 200)
+                }
+            }
+            false
+        }
+        web.setOnScrollChangeListener { _, _, y, _, _ ->
+            if (active && !loading && userScrolling) {
+                val resized = scrollViewportHeight != web.height
+                scrollViewportHeight = web.height
+                onPageScroll(mapOf("offset" to y / resources.displayMetrics.density, "reset" to resized))
+                if (!userTouching) { removeCallbacks(finishUserScroll); postDelayed(finishUserScroll, 200) }
+            }
+        }
         web.visibility = android.view.View.INVISIBLE
         refresh.setOnRefreshListener { pendingReveal = false; beginLoading(); web.reload() }
         web.settings.apply {
@@ -76,10 +108,13 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = navigate(request.url)
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                visitSequence++; historyReload = false; historyHttpError = false
                 beginLoading(); updateSource(url)
             }
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                if (isReload) historyReload = true
                 updateSource(url); emit(loading)
+                if (pageLoaded && !pageFailed && !isReload && url != visitedUrl) emitVisit(true)
             }
             override fun onPageCommitVisible(view: WebView, url: String?) {
                 blobs.install()
@@ -87,6 +122,7 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
             override fun onPageFinished(view: WebView, url: String?) {
                 if (pageFailed || url != web.url) return
                 pageLoaded = true
+                emitVisit()
                 lastThemeUrl = url ?: ""
                 blobs.install()
                 applyWebTheme()
@@ -108,6 +144,7 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
                 failLoading(loadErrorKey(error.errorCode))
             }
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+                if (request.isForMainFrame) historyHttpError = response.statusCode >= 400
                 if (!request.isForMainFrame || response.statusCode < 500) return
                 pageFailed = true
                 failLoading("online.browser.serverError")
@@ -137,6 +174,7 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         web.setDownloadListener { url, agent, disposition, mime, _ ->
             if (!contentReady) {
                 pageLoaded = true
+                emitVisit()
                 lastThemeUrl = web.url ?: ""
                 applyWebTheme()
             }
@@ -346,8 +384,19 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
         val page = sourcePage.ifEmpty { web.url ?: url }
         val host = if (url.startsWith("blob:")) Uri.parse(page).host else Uri.parse(url).host
         return JSONObject().put("providerId", provider.optString("id").ifEmpty { null })
-            .put("providerName", provider.optString("name"))
+            .put("providerName", provider.optString("name").ifEmpty { Uri.parse(page).host ?: "" })
             .put("sourcePageUrl", page).put("downloadHost", host ?: "")
+    }
+    // 访问事件仅在主页面成功完成或同页地址变化后发送。
+    private fun emitVisit(sameDocument: Boolean = false) {
+        val url = web.url ?: return
+        if (historyHttpError || pageFailed || !url.startsWith("https://")) return
+        if (!sameDocument && visitedSequence == visitSequence) return
+        visitedSequence = visitSequence
+        visitedUrl = url
+        onVisit(mapOf("visitedAt" to System.currentTimeMillis(), "id" to visitSequence.toString(), "url" to url, "title" to (web.title ?: ""),
+            "reload" to (historyReload && !sameDocument), "sameDocument" to sameDocument))
+        historyReload = false
     }
     private fun emit(loading: Boolean, error: String? = null, force: Boolean = false) {
         val url = web.url ?: ""
@@ -361,13 +410,14 @@ class FolioOnlineView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     fun setActive(active: Boolean) {
         this.active = active
+        if (!active) { userScrolling = false; userTouching = false; removeCallbacks(finishUserScroll) }
         updateVisibility()
         removeCallbacks(poll)
         if (active) { web.onResume(); post(poll) } else web.onPause()
     }
     fun dispose() {
         if (!disposed) {
-            disposed = true; active = false; removeCallbacks(poll); blobs.cancel()
+            disposed = true; active = false; removeCallbacks(finishUserScroll); removeCallbacks(poll); blobs.cancel()
             alphaAnimator?.cancel(); alphaAnimator = null
             revealAnimator?.cancel(); revealAnimator = null
             clearBlur()

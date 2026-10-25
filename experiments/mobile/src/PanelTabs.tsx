@@ -1,20 +1,23 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { BookmarkIcon, ClockIcon, DownloadSimpleIcon } from './icons';
 import type { Theme } from './ui';
 
 export interface PanelTabsProps {
   label: string; value: string; options: { value: string; label: string; systemImage: string }[];
-  theme: Theme; disabled: boolean; onChange: (value: string) => void;
+  iconOnly?: boolean; theme: Theme; disabled: boolean; onChange: (value: string) => void;
 }
 
 // 安卓分段胶囊提供完整按钮边界和选中反馈。
-export function PanelTabs({ label, value, options, theme, disabled, onChange }: PanelTabsProps) {
+export function PanelTabs({ label, value, options, theme, disabled, onChange, iconOnly = false }: PanelTabsProps) {
   return <View accessibilityRole="tablist" accessibilityLabel={label} style={[styles.track, { backgroundColor: theme.surface }]}>
-    {options.map((option) => <Pressable key={option.value} accessibilityRole="tab" disabled={disabled}
+    {options.map((option) => {
+      const Icon = option.systemImage === 'bookmark' ? BookmarkIcon : option.systemImage === 'clock' ? ClockIcon : DownloadSimpleIcon;
+      return <Pressable key={option.value} accessibilityRole="tab" accessibilityLabel={option.label} disabled={disabled}
       accessibilityState={{ selected: option.value === value, disabled }} onPress={() => onChange(option.value)}
       style={({ pressed }) => [styles.segment, { backgroundColor: option.value === value ? theme.accent : 'transparent',
         opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}>
-      <Text style={[styles.label, { color: option.value === value ? theme.onAccent : theme.secondary }]}>{option.label}</Text>
-    </Pressable>)}
+      {iconOnly ? <Icon size={20} color={option.value === value ? theme.onAccent : theme.secondary} /> : <Text style={[styles.label, { color: option.value === value ? theme.onAccent : theme.secondary }]}>{option.label}</Text>}
+    </Pressable>; })}
   </View>;
 }
 

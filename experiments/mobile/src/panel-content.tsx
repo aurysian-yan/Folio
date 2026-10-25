@@ -16,6 +16,7 @@ export interface LibraryPanelProps {
   title: string;
   theme: Theme;
   onClose: () => void;
+  onDismissed?: () => void;
   onBack?: () => void;
   children: ReactNode;
   busy?: boolean;

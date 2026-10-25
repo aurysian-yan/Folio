@@ -1,3 +1,4 @@
+import { useNavigationScroll } from './NavigationScroll';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View,
@@ -16,10 +17,11 @@ export const pageHeaderHeight = 64;
 export const pageTitleInset = 12;
 
 // 滚动标题共用安全区域、原生栏遮挡与减少动态效果设置。
-export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset, bottomTabs = true, sourceId: providedSourceId, onSnap }: {
+export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset, bottomTabs = true, sourceId: providedSourceId, onSnap, onScrollOffset }: {
   collapseOffset?: number; bottomTabs?: boolean; sourceId?: string;
-  onSnap: (offset: number, animated: boolean) => void;
+  onSnap: (offset: number, animated: boolean) => void; onScrollOffset?: (offset: number) => void;
 }) {
+  const { begin: beginNavigationScroll, end: endNavigationScroll, scroll: reportNavigationScroll } = useNavigationScroll();
   const inset = useSafeAreaInsets();
   const generatedSourceId = useId();
   const [scrollOffset] = useState(() => new Animated.Value(0));
@@ -88,9 +90,13 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset,
     const listener = scrollY.addListener(({ value }) => update(value));
     return () => { scrollY.removeListener(listener); transition?.stop(); };
   }, [collapseOffset, reduceMotion, scrollY, titleOffset, titleScale]);
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    onScrollOffset?.(event.nativeEvent.contentOffset.y);
+    if (bottomTabs) reportNavigationScroll(event.nativeEvent.contentOffset.y);
+  }, [bottomTabs, onScrollOffset, reportNavigationScroll]);
   const onScroll = useMemo(() => Animated.event(
-    [{ nativeEvent: { contentOffset: { y: scrollOffset } } }], { useNativeDriver: true },
-  ), [scrollOffset]);
+    [{ nativeEvent: { contentOffset: { y: scrollOffset } } }], { useNativeDriver: true, listener: handleScroll },
+  ), [handleScroll, scrollOffset]);
   // 内容收起期间独立驱动标题，避免原生滚动归零打断过渡。
   const restoreTitle = useCallback(() => {
     if (restoring.current) return;
@@ -127,13 +133,14 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset,
   }, [collapseOffset, reduceMotion, onSnap]);
   const snapScrollProps = useMemo(() => ({
     snapToOffsets: [0, collapseOffset], snapToEnd: false,
-    onScrollBeginDrag: interruptRestore,
-    onMomentumScrollEnd: settleHeader,
+    onScrollBeginDrag: (event: NativeSyntheticEvent<NativeScrollEvent>) => { beginNavigationScroll(event.nativeEvent.contentOffset.y); interruptRestore(event); },
+    onMomentumScrollEnd: (event: NativeSyntheticEvent<NativeScrollEvent>) => { endNavigationScroll(); settleHeader(event); },
     onScrollEndDrag: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentSize, layoutMeasurement, velocity } = event.nativeEvent;
+      if (Math.abs(velocity?.y ?? 0) < 0.05) endNavigationScroll();
       if (contentSize.height - layoutMeasurement.height < collapseOffset || Math.abs(velocity?.y ?? 0) < 0.05) settleHeader(event);
     },
-  }), [collapseOffset, interruptRestore, settleHeader]);
+  }), [collapseOffset, interruptRestore, beginNavigationScroll, endNavigationScroll, settleHeader]);
   const topInset = usesNativeControls ? Math.max(inset.top, nativeInsets.top) : inset.top;
   return {
     scrollY, titleOffset, titleScale, titleCollapsed, onScroll, collapsed, reduceMotion, topInset, snapScrollProps, restoreTitle,

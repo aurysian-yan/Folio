@@ -10,7 +10,7 @@ export interface OnlineProvider {
 }
 export type TransferState = 'queued' | 'transferring' | 'paused' | 'needsUser' | 'failed' | 'ready' | 'completed' | 'cancelled';
 export interface OnlineJob {
-  id: string; name: string; state: TransferState; bytesDone: number; bytesTotal: number | null;
+  id: string; name: string; state: TransferState; createdAt?: number; bytesDone: number; bytesTotal: number | null;
   kind: 'font' | 'archive' | null; errorKey: string | null;
   origin: { providerId: string | null; providerName: string; sourcePageUrl: string; downloadHost: string };
 }
@@ -20,6 +20,7 @@ export interface OnlineEntry {
   previewPath?: string;
   analysis?: { fingerprint: string; faces: { family: string; style: string; faceIndex: number; duplicate: boolean; conflict: boolean }[] };
 }
+export interface BrowserVisit { visitedAt: number; id: string; url: string; title: string; reload: boolean; sameDocument: boolean }
 export interface BrowserState {
   url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean; errorKey: string | null;
 }

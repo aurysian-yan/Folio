@@ -1,16 +1,16 @@
+import { LibraryPanel } from './LibraryPanel';
+import { FilterList, FilterScrollView, FilterTextInput } from './FilterDrawer';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AccessibilityInfo, Animated, FlatList, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Animated, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { G, Path } from 'react-native-svg';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import content from '../../../shared/about/content.json';
 import glyphs from '../../../shared/about/glyphs.json';
 import licenses from '../../../shared/about/licenses.json';
 import { checkForUpdate, isAllowedExternalUrl, WordmarkVariation, type AppInfo, type UpdateResult } from '../../../shared/about/update';
 import { getAboutInfo } from './native';
-import { CaretLeftIcon, XIcon } from './icons';
 import { SettingsActionRow, SettingsGroup, SettingsNavRow, SettingsNote, SettingsPage, settingsLayout, settingsTypography } from './settings-ui';
-import { IconButton, type Theme } from './ui';
+import type { Theme } from './ui';
 
 type LicenseEntry = typeof licenses.entries[number];
 const AnimatedG = Animated.createAnimatedComponent(G);
@@ -112,30 +112,23 @@ export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: (
         <SettingsNote theme={theme}>{t('about.copyright')}</SettingsNote>
       </View>
     </SettingsPage>
-    <Modal visible={reader} animationType={reduced ? 'none' : 'slide'} presentationStyle="pageSheet" onRequestClose={() => selected ? setSelected(undefined) : closeReader()}>
-      <SafeAreaView style={[styles.reader, { backgroundColor: theme.background }]}>
-        <View style={styles.readerToolbar}>
-          {selected && <IconButton theme={theme} label={t('about.back')} onPress={() => setSelected(undefined)}><CaretLeftIcon size={20} color={theme.label} /></IconButton>}
-          <Text accessibilityRole="header" style={[settingsTypography.body, styles.readerTitle, { color: theme.label }]}>{t('about.licenses')}</Text>
-          <IconButton theme={theme} label={t('about.close')} onPress={closeReader}><XIcon size={20} color={theme.label} /></IconButton>
-        </View>
+    <LibraryPanel visible={reader} title={t('about.licenses')} theme={theme} onClose={closeReader} backButton={!!selected} onBack={selected ? () => setSelected(undefined) : undefined}>
         <View style={styles.reader}><View style={[styles.reader, selected && styles.hidden]} pointerEvents={selected ? "none" : "auto"} accessibilityElementsHidden={!!selected} importantForAccessibility={selected ? 'no-hide-descendants' : 'auto'}>
-          <TextInput value={query} onChangeText={setQuery} placeholder={t('about.search')} accessibilityLabel={t('about.search')} placeholderTextColor={theme.secondary}
-            style={[styles.search, settingsTypography.body, { color: theme.label, backgroundColor: theme.surface }]} clearButtonMode="while-editing" autoCorrect={false} />
-          <FlatList data={entries} keyExtractor={(entry) => entry.id} keyboardShouldPersistTaps="handled"
+          <FilterTextInput value={query} onChangeText={setQuery} placeholder={t('about.search')} accessibilityLabel={t('about.search')} placeholderTextColor={theme.secondary}
+            style={[styles.search, settingsTypography.body, { fontWeight: '400', color: theme.label, backgroundColor: theme.surface }]} clearButtonMode="while-editing" autoCorrect={false} />
+          <FilterList data={entries} keyExtractor={(entry) => entry.id} keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => <SettingsNavRow theme={theme} title={`${item.name} ${item.version}`} detail={licenseLabel(item.license)} onPress={() => setSelected(item)} />}
             ListEmptyComponent={<SettingsNote theme={theme}>{t('about.noResults')}</SettingsNote>} />
         </View>
-        {selected && <ScrollView key={selected.id} style={[styles.reader, StyleSheet.absoluteFill]} contentContainerStyle={styles.licenseContent}>
+        {selected && <FilterScrollView key={selected.id} style={[styles.reader, StyleSheet.absoluteFill]} contentContainerStyle={styles.licenseContent}>
           <Text accessibilityRole="header" selectable style={[settingsTypography.body, { color: theme.label }]}>{selected.name} {selected.version}</Text>
           <Text selectable style={[settingsTypography.detail, { color: theme.secondary }]}>{licenseLabel(selected.license)}</Text>
           <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t("about.appliesTo", { platforms: selected.platforms.map((platform) => t(`about.platformNames.${platform}`)).join(' · ') })}</Text>
           <SettingsActionRow theme={theme} title={t('about.sourceLink')} onPress={() => void open(selected.source)} />
           {selected.declarationOnly && <Text selectable style={[settingsTypography.detail, { color: theme.label }]}>{t('about.declaration')}: {licenseLabel(selected.license)}</Text>}
           {selected.documents.map((document, index) => <Text selectable key={index} style={[settingsTypography.detail, { color: theme.label }]}>{(licenses.texts as Record<string, string>)[document.text]}</Text>)}
-        </ScrollView>}</View>
-      </SafeAreaView>
-    </Modal>
+        </FilterScrollView>}</View>
+    </LibraryPanel>
   </>;
 }
 const styles = StyleSheet.create({

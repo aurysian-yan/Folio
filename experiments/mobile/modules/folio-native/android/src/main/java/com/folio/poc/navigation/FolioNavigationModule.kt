@@ -116,6 +116,8 @@ class FolioNavigationModule : Module() {
             Prop("selectedId") { view: FolioLiquidTabsView, value: String -> view.selectedId = value }
             Prop("dark") { view: FolioLiquidTabsView, value: Boolean -> view.dark = value }
             Prop("accentColor") { view: FolioLiquidTabsView, value: String -> view.accentColor = value }
+            Prop("iconOnly") { view: FolioLiquidTabsView, value: Boolean -> view.iconOnly = value }
+            Prop("borderColor") { view: FolioLiquidTabsView, value: String -> view.borderColor = value }
             Prop("segmented") { view: FolioLiquidTabsView, value: Boolean -> view.segmented = value }
             Prop("enabled") { view: FolioLiquidTabsView, value: Boolean -> view.controlEnabled = value }
             Prop("collapsed") { view: FolioLiquidTabsView, value: Boolean -> view.collapsed = value }
@@ -126,6 +128,7 @@ class FolioNavigationModule : Module() {
             Prop("items") { view: FolioLiquidTabsView, value: List<FolioNavigationItem> ->
                 val ids = value.map { it.id }.toSet()
                 if ((value.size == 5 && ids == setOf("local", "search", "online", "cloud", "settings"))
+                    || (value.size == 3 && ids == setOf("bookmarks", "history", "downloads"))
                     || (value.size == 2 && ids.size == 2 && ids.none { it.isBlank() })) {
                     view.items = value
                 }

@@ -1,6 +1,8 @@
+import { DialogContent, usePanelDialog } from './Dialogs';
+import { FilterScrollView } from './FilterDrawer';
 // 文件操作、外部授权和可恢复结果复用现有面板。
 import { useEffect, useState, useRef } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { cancelFileWorkflow, fileWorkflow, fileState, removeExternalSource, syncSession } from './native';
 import { LibraryPanel } from './LibraryPanel';
@@ -55,7 +57,8 @@ export function FileWorkflowPanel({ visible, theme, onClose, onCollect, onChange
     parent?: string;
     ids?: string[];
 }) {
-    const { t } = useTranslation();
+    const { dialog, alert, dismiss } = usePanelDialog();
+  const { t } = useTranslation();
     const activeRequest = useRef('');
     const [state, setState] = useState<FileState | null>(null);
     const [busy, setBusy] = useState(false);
@@ -122,9 +125,12 @@ export function FileWorkflowPanel({ visible, theme, onClose, onCollect, onChange
             setBusy(false);
         }
     }
-    function remove(id: string) { Alert.alert(t('common.remove'), t('workflow.sources'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('common.remove'), style: 'destructive', onPress: () => { setBusy(true); void removeExternalSource(id).then(() => fileState()).then((value) => { setState(JSON.parse(value) as FileState); onChanged(); }).catch(() => setError(t('workflow.error.operationFailed'))).finally(() => setBusy(false)); } }]); }
+    function remove(id: string) { alert(t('common.remove'), t('workflow.sources'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('common.remove'), style: 'destructive', onPress: () => { setBusy(true); void removeExternalSource(id).then(() => fileState()).then((value) => { setState(JSON.parse(value) as FileState); onChanged(); }).catch(() => setError(t('workflow.error.operationFailed'))).finally(() => setBusy(false)); } }]); }
+  if (dialog) return <LibraryPanel visible={visible} title={dialog.title} theme={theme} backButton onBack={dismiss} onClose={() => { dismiss(); onClose(); }}>
+    <DialogContent dialog={dialog} theme={theme} onSelect={(button) => { dismiss(); button.onPress?.(); }} />
+  </LibraryPanel>;
     return <LibraryPanel visible={visible} theme={theme} title={t('workflow.filesTitle')} onClose={onClose} busy={busy}>
-    <ScrollView contentContainerStyle={styles.content}>
+    <FilterScrollView contentContainerStyle={styles.content}>
       {busy && <><ActivityIndicator color={theme.accent}/><PanelAction label={t('common.cancel')} theme={theme} onPress={() => { void cancelFileWorkflow(activeRequest.current); }}/></>}
       {error && <Text accessibilityRole="alert" style={{ color: theme.danger }}>{error}</Text>}
       <PanelSection title={t('import.importFonts')} theme={theme}>
@@ -146,7 +152,7 @@ export function FileWorkflowPanel({ visible, theme, onClose, onCollect, onChange
                             conflict: boolean;
                         }[];
                     }).faces.map((face) => <Text key={face.faceIndex} style={{ color: theme.secondary }}>{face.family} · {face.style} · {t('workflow.faceIndex', { index: face.faceIndex })}{face.duplicate ? ` · ${t('workflow.duplicate')}` : ''}{face.conflict ? ` · ${t('workflow.revisionConflict')}` : ''}</Text>)}{font.messageKey && <Text style={{ color: theme.secondary }}>{t(font.messageKey)}</Text>}</View>)}<PanelAction label={t('workflow.confirmCollect')} theme={theme} disabled={busy || !inboxAnalysis[item.id]} onPress={() => { void run('collectInbox', { inboxId: item.id }); }}/></View>)}</PanelSection>}
-      {!!state?.sources.length && <PanelSection title={t('workflow.sources')} theme={theme}>{state.sources.map((source) => <View key={source.id} style={styles.item}><Text style={{ color: theme.label }}>{source.displayName}</Text>{!source.available && <Text style={{ color: theme.secondary }}>{t(`workflow.sourceState.${source.unavailableReason ?? 'unavailable'}`)}</Text>}<PanelAction label={t('workflow.reconnect')} theme={theme} disabled={busy} onPress={() => Alert.alert(t('workflow.reconnect'), source.displayName, [{ text: t('workflow.referenceFiles'), onPress: () => { void run('referenceFiles', { sourceId: source.id }); } }, { text: t('workflow.referenceFolder'), onPress: () => { void run('referenceFolder', { sourceId: source.id }); } }, { text: t('common.cancel'), style: 'cancel' }])}/><PanelAction label={t('common.remove')} theme={theme} disabled={busy} destructive onPress={() => remove(source.id)}/></View>)}</PanelSection>}
+      {!!state?.sources.length && <PanelSection title={t('workflow.sources')} theme={theme}>{state.sources.map((source) => <View key={source.id} style={styles.item}><Text style={{ color: theme.label }}>{source.displayName}</Text>{!source.available && <Text style={{ color: theme.secondary }}>{t(`workflow.sourceState.${source.unavailableReason ?? 'unavailable'}`)}</Text>}<PanelAction label={t('workflow.reconnect')} theme={theme} disabled={busy} onPress={() => alert(t('workflow.reconnect'), source.displayName, [{ text: t('workflow.referenceFiles'), onPress: () => { void run('referenceFiles', { sourceId: source.id }); } }, { text: t('workflow.referenceFolder'), onPress: () => { void run('referenceFolder', { sourceId: source.id }); } }, { text: t('common.cancel'), style: 'cancel' }])}/><PanelAction label={t('common.remove')} theme={theme} disabled={busy} destructive onPress={() => remove(source.id)}/></View>)}</PanelSection>}
       <PanelSection title={t('workflow.health')} theme={theme} initiallyExpanded={false}>
         {state && !state.health.scanned && <Text style={{ color: theme.secondary }}>{t('workflow.notScanned')}</Text>}
         {state?.health.issues.map((issue, index) => <Text key={`${issue.path}-${index}`} style={{ color: theme.label }}>{issue.path} · {t(`import.issueKinds.${issue.kind}`, { defaultValue: t('workflow.error.invalidFont') })}</Text>)}
@@ -154,7 +160,7 @@ export function FileWorkflowPanel({ visible, theme, onClose, onCollect, onChange
         <PanelAction label={t('workflow.refresh')} theme={theme} disabled={busy} onPress={() => { void run('refresh'); }}/>
       </PanelSection>
       {!!state?.batches.length && <PanelSection title={t('import.importResults')} theme={theme} initiallyExpanded={false}>{state.batches.map((batch) => <View key={batch.id} style={styles.item}>{batch.items.map((item) => <Text key={item.id} style={{ color: theme.label }}>{item.name} · {t(`workflow.status.${item.status}`)}{item.errorKey ? ` · ${t(item.errorKey)}` : ''}</Text>)}{batch.items.some((item) => ['failed', 'awaitingDecision', 'running'].includes(item.status)) && <PanelAction label={t('common.retry')} theme={theme} disabled={busy} onPress={() => { void run('exportFiles', { ids: batch.items.filter((item) => ['failed', 'awaitingDecision', 'running'].includes(item.status)).map((item) => item.source) }); }}/>}</View>)}</PanelSection>}
-    </ScrollView>
+    </FilterScrollView>
   </LibraryPanel>;
 }
 const styles = StyleSheet.create({ content: { paddingHorizontal: 16, paddingBottom: 16, gap: 16 }, item: { gap: 8, paddingVertical: 12 } });

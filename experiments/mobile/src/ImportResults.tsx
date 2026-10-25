@@ -1,5 +1,6 @@
+import { FilterList } from './FilterDrawer';
 import { useTranslation } from 'react-i18next';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { LibraryPanel } from './LibraryPanel';
 import { summarizeImport, type ImportReport } from './library';
 import type { Theme } from './ui';
@@ -16,7 +17,7 @@ export function ImportResults({ report, visible, theme, onClose }: {
   const counts = summarizeImport(report.items);
   const labels = { imported: t('mobile.imported'), duplicate: t('mobile.skippedDuplicates'), failed: t('mobile.importFailed'), unprocessed: t('mobile.importUnprocessed') };
   return <LibraryPanel visible={visible} title={t('import.importResults')} theme={theme} onClose={onClose}>
-        <FlatList data={report.items} keyExtractor={(_, index) => String(index)}
+        <FilterList data={report.items} keyExtractor={(_, index) => String(index)}
           contentContainerStyle={styles.content} initialNumToRender={12}
           ListHeaderComponent={<Text style={[styles.summary, { color: theme.secondary }]}>
             {t('mobile.importSummary', counts)}

@@ -39,6 +39,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -148,7 +151,7 @@ fun RowScope.LiquidBottomTab(
                 .graphicsLayer {
                     translationX = if (selected) translation else 0f
                     this.alpha = alpha
-                    val s = scale() * lerp(1f, (22f / 28f) / 0.82f, lateScale)
+                    val s = scale() * lerp(1f, 1f / 0.82f, lateScale)
                     scaleX = s
                     scaleY = s
                 }
@@ -182,6 +185,7 @@ fun LiquidBottomTabs(
     selectorHeight: Dp = 48.dp,
     enabled: Boolean = true,
     containerTint: Color? = null,
+    outlineColor: Color? = null,
     preserveCapsuleOnPress: Boolean = false,
     compactProgress: Float = 0f,
     selectionActive: Boolean = true,
@@ -209,7 +213,7 @@ fun LiquidBottomTabs(
     ) {
         val density = LocalDensity.current
         val viewConfiguration = LocalViewConfiguration.current
-        val trackInset = if (preserveCapsuleOnPress) 2.dp else 4.dp
+        val trackInset = 4.dp
         val padPx = with(density) { trackInset.toPx() }
         val tabWidth = (constraints.maxWidth.toFloat() - padPx * 2f) / tabsCount
         val maxIndex = (tabsCount - 1).toFloat()
@@ -313,7 +317,12 @@ fun LiquidBottomTabs(
                     Modifier.drawBackdrop(
                         backdrop = backdrop, shape = { ContinuousCapsule() }, effects = panelEffects,
                         highlight = null, shadow = null, onDrawSurface = panelSurface,
-                    ).edgeLight(shape = ContinuousCapsule(), edgeLight = defaultEdgeLight)
+                        onDrawFront = {
+                            if (outlineColor != null) inset(0.6f) {
+                                drawOutline(ContinuousCapsule().createOutline(size, layoutDirection, this), outlineColor, style = Stroke(1.2f))
+                            }
+                        },
+                    ).then(if (outlineColor == null) Modifier.edgeLight(shape = ContinuousCapsule(), edgeLight = defaultEdgeLight) else Modifier)
                 } else {
                     Modifier.navigationGlass(backdrop = backdrop, dark = dark,
                         layerBlock = {
@@ -390,8 +399,7 @@ fun LiquidBottomTabs(
 
         val selectorPress = if (preserveCapsuleOnPress && motionEnabled) dampedDragAnimation.pressProgress.coerceIn(0f, 1f) else 0f
         val selectorStretch = if (preserveCapsuleOnPress && motionEnabled) dampedDragAnimation.dragStretch * selectorPress else 0f
-        val idleSelectorInset = if (preserveCapsuleOnPress) 2.dp * (1f - selectorPress) else 0.dp
-        val selectorWidth = with(density) { tabWidth.toDp() } - idleSelectorInset * 2 + 26.dp * selectorPress + 24.dp * selectorStretch
+        val selectorWidth = with(density) { tabWidth.toDp() } + 26.dp * selectorPress + 24.dp * selectorStretch
         val compactSelectorWidth = with(density) { (compactWidthPx - padPx * 2f).toDp() }
         val compactSelectorHeight = compactSize - 8.dp
         val animatedSelectorWidth = if (preserveCapsuleOnPress) selectorWidth
@@ -410,8 +418,9 @@ fun LiquidBottomTabs(
                     // 端点拉伸向轨道内展开，避免胶囊端部超出屏幕。
                     val overhang = 13.dp.toPx() - padPx
                     translationX = if (preserveCapsuleOnPress) {
-                        val position = if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
-                            else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset
+                        val center = if (isLtr) padPx + (dampedDragAnimation.value + 0.5f) * tabWidth
+                            else constraints.maxWidth - padPx - (dampedDragAnimation.value + 0.5f) * tabWidth
+                        val position = center - size.width / 2f + panelOffset
                         position.coerceIn(-overhang, constraints.maxWidth - size.width + overhang)
                     } else indicatorLeft + (if (isLtr) 0f else size.width - currentWidthPx) + panelOffset
                     if (!preserveCapsuleOnPress) scaleY = 1f + 0.045f * sin(PI.toFloat() * compactProgress)
