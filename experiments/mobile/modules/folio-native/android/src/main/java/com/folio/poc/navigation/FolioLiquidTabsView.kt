@@ -1,8 +1,10 @@
 package com.folio.poc.navigation
 
 import android.content.Context
+import android.view.MotionEvent
 import com.facebook.react.uimanager.PointerEvents
 import com.facebook.react.uimanager.ReactPointerEventsView
+import com.facebook.react.uimanager.events.NativeGestureUtil
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -93,6 +95,7 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
     private val onExpand by EventDispatcher()
     private val onCollapse by EventDispatcher()
     private val compose = ComposeView(context)
+    private var nativeGestureActive = false
 
     init {
         clipChildren = false
@@ -181,6 +184,20 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
                 }
             }
         }
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        val handled = super.dispatchTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && handled) {
+            // 仅在 Compose 命中控件时取消底层 React 点击，透明区域仍可穿过。
+            nativeGestureActive = true
+            NativeGestureUtil.notifyNativeGestureStarted(this, event)
+        } else if (nativeGestureActive &&
+            (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL)) {
+            nativeGestureActive = false
+            NativeGestureUtil.notifyNativeGestureEnded(this, event)
+        }
+        return handled
     }
 
     // Expo 的延迟测量可能晚于卸载；离窗时不重建 Compose composition。
