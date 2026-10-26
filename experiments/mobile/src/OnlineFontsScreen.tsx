@@ -16,7 +16,7 @@ import { PanelAction } from './panel-content';
 import { usePreferences } from './settings';
 import type { Theme } from './ui';
 import { navigationBarTopInset, navigationCompactBarFrame, NavigationBackdrop } from './bottom-navigation';
-import { usesNativeSidebar } from './native-controls';
+import { NativeScrollContainer, usesNativeSidebar } from './native-controls';
 import { OnlineHeader } from './OnlineHeader';
 import { OnlineBrowserBar } from './OnlineBrowserBar';
 import { OnlineBrowserLoading } from './OnlineBrowserLoading';
@@ -208,7 +208,7 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
     closeAddressThen(() => showLibrary(tab, bookmark));
   }
   const barBottom = usesNativeSidebar && width >= 600 ? inset.bottom + 8 : navigationBarTopInset(inset.bottom) + 8;
-  const browserBottom = Platform.OS === 'android' && navigationCollapsed ? navigationCompactBarFrame(inset.bottom, width - inset.left - inset.right).bottom + 64 : barBottom + 64;
+  const browserBottom = Platform.OS === 'ios' && !usesNativeSidebar && Number(Platform.Version) >= 26 ? 0 : Platform.OS === 'android' && navigationCollapsed ? navigationCompactBarFrame(inset.bottom, width - inset.left - inset.right).bottom + 64 : barBottom + 64;
   const address = browserAddress(draft);
   const restricted = activeProvider && providerRegionRisk(activeProvider) && preferences.onlineRegionHints;
   const hint = restricted && regionKind === 'CN' ? t('online.browser.regionHint', { name: activeProvider.name }) : null;
@@ -260,7 +260,7 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
                     if (tab.id === activeId && nativeEvent.errorKey && !isPageFailureKey(nativeEvent.errorKey)) setError(nativeEvent.errorKey);
                   }} onDownloadIntent={({ nativeEvent }) => confirmDownload(nativeEvent)} />;
               })}
-              {!activeTab && startContent}
+              {!activeTab && <NativeScrollContainer style={styles.screen} hasHeader={false} onInsetsChange={() => {}}>{startContent}</NativeScrollContainer>}
               {activeTab && <OnlineBrowserLoading key={activeId} loading={activeTab.browser.loading} failed={failed} hint={hint}
                 active={active && !editing} revealRequest={activeTab.revealRequest} provider={activeProvider} theme={theme} />}
               {activeTab && failed && <OnlineBrowserFailure theme={theme} provider={activeProvider} errorKey={activeTab.browser.errorKey}

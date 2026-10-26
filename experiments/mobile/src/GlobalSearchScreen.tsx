@@ -9,6 +9,7 @@ import { CollectionsPanel } from './CollectionsPanel';
 import { FilterPanel } from './FilterPanel';
 import { PanelAction } from './panel-content';
 import { library } from './native';
+import { NativeScrollContainer } from './native-controls';
 import { navigationContentInset } from './bottom-navigation';
 import { usePreferences } from './settings';
 import { useOnlineSession } from './OnlineSession';
@@ -180,6 +181,7 @@ export function GlobalSearchScreen({ initialError, onRetryInitialize, active, th
       {scope === 'local' && <View style={styles.tools}><PanelAction theme={theme} label={scopeTitle ?? t('mobile.allFonts')} onPress={() => { Keyboard.dismiss(); setCollectionsOpen(true); }} />
         <PanelAction theme={theme} label={`${t('library.filterFonts')}${facets.length ? ` (${facets.length})` : ''}`} disabled={!query} onPress={() => { Keyboard.dismiss(); setFilterOpen(true); }} /></View>}
     </View>
+    <NativeScrollContainer style={styles.screen} hasHeader={false} onInsetsChange={() => {}}>
     <FlatList ref={list} data={rows} keyExtractor={(item) => item.id} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
       contentContainerStyle={[styles.content, { paddingBottom: navigationContentInset(inset.bottom) }]}
       onScrollBeginDrag={({ nativeEvent }) => navigationScroll.begin(nativeEvent.contentOffset.y)} onMomentumScrollEnd={navigationScroll.end} onScrollEndDrag={({ nativeEvent }) => { if (Math.abs(nativeEvent.velocity?.y ?? 0) < 0.05) navigationScroll.end(); }}
@@ -204,6 +206,7 @@ export function GlobalSearchScreen({ initialError, onRetryInitialize, active, th
           case 'message': return <View style={styles.result}><Text accessibilityLiveRegion="polite" style={{ color: theme.secondary }}>{item.text}</Text>{item.retry && <PanelAction theme={theme} label={t(item.id.startsWith('cloud-') && item.id !== 'cloud-error' ? 'common.openSettings' : 'common.retry')} onPress={item.retry} />}</View>;
         }
       }} />
+    </NativeScrollContainer>
     <FilterPanel visible={filterOpen && active} theme={theme} options={optionsFor === JSON.stringify([target, query, libraryVersion, retry]) ? options : page.facets} counts={page.facets} selected={facets} savedHideSystemFonts={optionsFor === JSON.stringify([target, query, libraryVersion, retry]) && savedHideSystemFonts} loading={loading || (!optionsError && optionsFor !== JSON.stringify([target, query, libraryVersion, retry]))} error={optionsError ? t('mobile.errorFilters') : localError ? t('mobile.errorLibraryRead') : null} totalMatches={page.totalMatches} onChange={(value) => { setFacets(value); resetOffset(); }} onClose={() => setFilterOpen(false)} onRetry={retryQuery} locationFilter={locationFilter} onLocationChange={(value) => { setLocationFilter(value); resetOffset(); }} />
     <CollectionsPanel visible={collectionsOpen && active} theme={theme} target={target} snapshot={snapshot} currentConditions={savedConditions({ text, facets })} libraryVersion={libraryVersion} onSnapshot={onSnapshotChange} onSelect={(value) => { setTarget(value); resetOffset(); }} onClose={() => setCollectionsOpen(false)} />
   </SafeAreaView>;

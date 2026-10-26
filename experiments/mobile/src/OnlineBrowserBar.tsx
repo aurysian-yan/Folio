@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AccessibilityInfo, Animated, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MagnifyingGlassIcon } from './icons';
 import { browserHost } from './browser-data';
@@ -10,14 +10,18 @@ import { PanelBackdrop } from './PanelBackdrop';
 import { navigationCompactBarFrame } from './bottom-navigation';
 import type { Theme } from './ui';
 
-// 标题条仅承担统一地址与工具弹窗的入口。
-export function OnlineBrowserBar({ theme, provider, browser, address, bottom, sourceId, compact = false, start, badge, attention, onEdit }: {
+export interface OnlineBrowserBarProps {
   theme: Theme; provider: OnlineProvider | null; browser: BrowserState; address: string; bottom: number; sourceId: string;
   compact?: boolean; start: boolean; badge: number; attention: boolean; onEdit: () => void;
-}) {
+}
+
+// 标题条仅承担统一地址与工具弹窗的入口。
+export function OnlineBrowserBar({ theme, provider, browser, address, bottom, sourceId, compact = false, start, badge, attention, onEdit }: OnlineBrowserBarProps) {
   const { t } = useTranslation();
   const [reduceMotion, setReduceMotion] = useState(false);
   const [progress] = useState(() => new Animated.Value(compact ? 1 : 0));
+  const [position] = useState(() => new Animated.Value(compact ? 1 : 0));
+  const verticalTravel = useMemo(() => Animated.multiply(Animated.subtract(position, progress), 16.8), [position, progress]);
   const { width } = useWindowDimensions();
   const inset = useSafeAreaInsets();
   const frame = navigationCompactBarFrame(inset.bottom, width - inset.left - inset.right);
@@ -29,17 +33,23 @@ export function OnlineBrowserBar({ theme, provider, browser, address, bottom, so
     return () => { mounted = false; motion.remove(); };
   }, []);
   useEffect(() => {
-    if (reduceMotion) { progress.setValue(compact ? 1 : 0); return; }
-    const animation = Animated.spring(progress, { toValue: compact ? 1 : 0, stiffness: 200, damping: 28.3, mass: 1, useNativeDriver: false });
+    const target = compact ? 1 : 0;
+    if (reduceMotion) { progress.setValue(target); position.setValue(target); return; }
+    // 与两侧按钮共用弹簧节奏，折叠向下弹、展开向上弹。
+    const animation = Animated.parallel([
+      Animated.timing(progress, { toValue: target, duration: 345, easing: Easing.bezier(0.4, 0, 0.2, 1), useNativeDriver: false }),
+      Animated.spring(position, { toValue: target, stiffness: 320 / (1.15 * 1.15), damping: 18.6 / 1.15, mass: 1, restDisplacementThreshold: 0.001, restSpeedThreshold: 0.001, useNativeDriver: false }),
+    ]);
     animation.start(); return () => animation.stop();
-  }, [compact, progress, reduceMotion]);
+  }, [compact, position, progress, reduceMotion]);
   const url = (browser.url || address).replace(/^https:\/\//, '');
   const title = browserPageTitle(browser.title, provider, browser.url || address) || provider?.name || browserHost(browser.url || address) || t('online.title');
   return <Animated.View style={[styles.wrap, {
     bottom: progress.interpolate({ inputRange: [0, 1], outputRange: [bottom, frame.bottom], extrapolate: 'clamp' }),
     left: Animated.add(inset.left, progress.interpolate({ inputRange: [0, 1], outputRange: [expandedSide, frame.sideInset], extrapolate: 'clamp' })),
     right: Animated.add(inset.right, progress.interpolate({ inputRange: [0, 1], outputRange: [expandedSide, frame.sideInset], extrapolate: 'clamp' })),
-    height: compact ? 48 : 56,
+    height: progress.interpolate({ inputRange: [0, 1], outputRange: [56, 48], extrapolate: 'clamp' }),
+    transform: [{ translateY: verticalTravel }],
   }]}>
     {Platform.OS === 'android' && <PanelBackdrop navigationGlass sourceId={sourceId} theme={theme} style={StyleSheet.absoluteFill} />}
     <Pressable accessibilityRole="button" accessibilityLabel={`${start ? t('browser.searchOrAddress') : title}，${t('browser.pageTools')}${badge ? `，${t('browser.downloading', { count: badge })}` : attention ? `，${t('browser.needsAttention')}` : ''}`}

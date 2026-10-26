@@ -106,9 +106,7 @@ public final class FolioNativeModule: Module {
             }
             if !presented { throw FolioPaths.failure() }
         }.runOnQueue(queue)
-        View(FolioTabBarBehavior.self) {
-            Prop("minimize") { (view: FolioTabBarBehavior, value: Bool) in view.setMinimize(value) }
-        }
+        View(FolioNativeTabs.self)
         View(FolioOnlineView.self) {
             Prop("active") { (view: FolioOnlineView, value: Bool) in view.setActive(value) }
             Events("onBrowserState", "onDownloadIntent", "onVisit", "onPageScroll")

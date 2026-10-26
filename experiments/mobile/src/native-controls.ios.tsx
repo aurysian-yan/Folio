@@ -1,6 +1,6 @@
 import {
   Button, GlassEffectContainer, Host, HStack, Image, Label, List, Menu,
-  NavigationSplitView, Picker, RNHostView, Section, Spacer, TabView, Text, TextField,
+  NavigationSplitView, Picker, RNHostView, Section, Spacer, Text, TextField,
   Toolbar, ToolbarItem, useNativeState, VStack, ZStack,
   type ButtonProps, type TextFieldRef, type NavigationSplitViewColumn, type NavigationSplitViewVisibility,
 } from '@expo/ui/swift-ui';
@@ -8,13 +8,15 @@ import {
   accessibilityLabel, hidden, autocorrectionDisabled, background, buttonBorderShape,
   buttonStyle, contentShape, controlSize, disabled, font, foregroundStyle, frame, glassEffect,
   labelStyle, listStyle, menuIndicator, menuStyle, navigationSplitViewStyle, navigationTitle, onSubmit, opacity, padding, submitLabel,
-  shadow, shapes, tabViewStyle, tag, textFieldStyle, textInputAutocapitalization, tint,
+  shadow, shapes, tag, textFieldStyle, textInputAutocapitalization, tint,
 } from '@expo/ui/swift-ui/modifiers';
 import { requireNativeView } from 'expo';
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Keyboard, Platform, StyleSheet, View, type ViewProps } from 'react-native';
+import { Keyboard, Platform, StyleSheet, View, type NativeSyntheticEvent } from 'react-native';
 import { usePreferences } from './settings';
+import { NavigationScrollContext } from './NavigationScroll';
+import { NativeBrowserAccessoryContext, type BrowserAccessory } from './NativeBrowserAccessory';
 import { TabScenes } from './TabScenes';
 import { collectionColorValue, collectionSystemImage } from './collection-style';
 import { HeaderScrollContext, headerShadowColor, useHeaderShadowProgress } from './HeaderButtonShadow';
@@ -29,8 +31,13 @@ const toolbarHeight = 44;
 
 export const NativeScrollContainer = requireNativeView<NativeScrollContainerProps>('FolioNative', 'FolioScrollContainer');
 const NativeTabContent = requireNativeView<{ children: React.ReactNode; animateTabChanges?: boolean }>('FolioNative', 'FolioTabContent');
-const TabBarBehavior = requireNativeView<ViewProps & { minimize: boolean }>('FolioNative', 'FolioTabBarBehavior');
-
+const NativeTabs = requireNativeView<{
+  children: React.ReactNode; selection: string; labels: string[]; minimize: boolean;
+  accessoryVisible: boolean; addressTitle: string; address: string; addressLabel: string;
+  addressStart: boolean; addressBadge: number; addressAttention: boolean;
+  onSelectionChange: (event: NativeSyntheticEvent<{ selection: NativeDestination }>) => void;
+  onAddressPress: () => void;
+}>('FolioNative', 'FolioNativeTabs');
 // 原生玻璃尺寸与控件边界保持一致。
 function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = false, prominent = false) {
   return [
@@ -47,6 +54,8 @@ function iconButtonModifiers(color: string, diameter = toolbarHeight, plain = fa
 export function NativeNavigation({ children, settings, search, cloud, online, theme, sidebar, destination, snapshot, onDestinationChange }: NativeNavigationProps) {
   const { t } = useTranslation();
   const { preferences } = usePreferences();
+  const { enabled: minimizeEnabled } = useContext(NavigationScrollContext);
+  const [accessory, setAccessory] = useState<BrowserAccessory | null>(null);
   const [visibility, setVisibility] = useState<NavigationSplitViewVisibility>('all');
   const [compactColumn, setCompactColumn] = useState<NavigationSplitViewColumn>('detail');
 
@@ -104,32 +113,21 @@ export function NativeNavigation({ children, settings, search, cloud, online, th
   }
 
   return (
-    <Host style={styles.fill} modifiers={[background(theme.background)]}>
-      <TabView selection={destination} onSelectionChange={(value) => {
-        if (value === 'local' || value === 'search' || value === 'online' || value === 'cloud' || value === 'settings') onDestinationChange(value);
-      }}
-        modifiers={[tabViewStyle({ type: 'automatic' }), tint(theme.accent), background(theme.background)]}>
-        <TabView.Tab value="local" label={t('navigation.local')} systemImage="textformat.alt">
-          <NativeTabContent animateTabChanges>
-            <RNHostView><View style={styles.fill}>{children}<TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} /></View></RNHostView>
-          </NativeTabContent>
-        </TabView.Tab>
-        <TabView.Tab value="search" label={t('common.search')} systemImage="magnifyingglass">
-          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{search}<TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} /></View></RNHostView></NativeTabContent>
-        </TabView.Tab>
-        <TabView.Tab value="online" label={t('online.title')} systemImage="globe">
-          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{online}
-            <TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} />
-          </View></RNHostView></NativeTabContent>
-        </TabView.Tab>
-        <TabView.Tab value="cloud" label={t('navigation.cloud')} systemImage="cloud">
-          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{cloud}<TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} /></View></RNHostView></NativeTabContent>
-        </TabView.Tab>
-        <TabView.Tab value="settings" label={t('navigation.settings')} systemImage="gear">
-          <NativeTabContent animateTabChanges><RNHostView><View style={styles.fill}>{settings}<TabBarBehavior minimize={preferences.navigationAutoCollapse} style={styles.tabBarBehavior} /></View></RNHostView></NativeTabContent>
-        </TabView.Tab>
-      </TabView>
-    </Host>
+    <NativeBrowserAccessoryContext.Provider value={{ enabled: glass, setAccessory }}>
+      <Host style={styles.fill} modifiers={[background(theme.background), tint(theme.accent)]}>
+        <NativeTabs selection={destination} onSelectionChange={({ nativeEvent }) => onDestinationChange(nativeEvent.selection)}
+          labels={[t('navigation.local'), t('online.title'), t('navigation.cloud'), t('navigation.settings'), t('common.search')]}
+          minimize={preferences.navigationAutoCollapse && minimizeEnabled}
+          accessoryVisible={destination === 'online' && !!accessory}
+          addressTitle={accessory?.title ?? ''} address={accessory?.address ?? ''} addressLabel={accessory?.label ?? ''}
+          addressStart={accessory?.start ?? true} addressBadge={accessory?.badge ?? 0} addressAttention={accessory?.attention ?? false}
+          onAddressPress={() => accessory?.onPress()}>
+          {[children, online, cloud, settings, search].map((content, index) => <NativeTabContent key={index} animateTabChanges>
+            <RNHostView><View style={styles.fill}>{content}</View></RNHostView>
+          </NativeTabContent>)}
+        </NativeTabs>
+      </Host>
+    </NativeBrowserAccessoryContext.Provider>
   );
 }
 
@@ -293,6 +291,5 @@ export function NativeActionButton({ label, systemImage, color, onPress, disable
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  tabBarBehavior: { position: 'absolute', width: 0, height: 0 },
   header: { flex: 1, height: toolbarHeight },
 });

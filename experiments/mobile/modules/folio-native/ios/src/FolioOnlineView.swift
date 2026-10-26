@@ -18,6 +18,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var pendingTheme: String?
   private var lastState = ""
   private var lastThemeURL = ""
+  private weak var scrollController: UIViewController?
   private var isActive = false
   private var pollTimer: Timer?
   private var pageLoaded = false
@@ -59,6 +60,7 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     super.layoutSubviews()
     web.frame = bounds
     blurView?.frame = bounds
+    connectNavigationScroll()
   }
   deinit {
     pollTimer?.invalidate()
@@ -69,8 +71,43 @@ final class FolioOnlineView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     web.uiDelegate = nil
   }
 
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    connectNavigationScroll()
+  }
+
+  // 仅当前网页注册主滚动视图，系统标签栏直接跟随 WebKit 的滚动手势。
+  private func connectNavigationScroll() {
+    guard isActive, window != nil else {
+      if scrollController?.contentScrollView(for: .bottom) === web.scrollView {
+        scrollController?.setContentScrollView(nil, for: .all)
+      }
+      scrollController = nil
+      return
+    }
+    var responder: UIResponder? = self
+    while let current = responder {
+      if var controller = current as? UIViewController {
+        while let parent = controller.parent,
+              !(parent is UITabBarController), !(parent is UINavigationController),
+              !(parent is UISplitViewController) { controller = parent }
+        if scrollController !== controller || controller.contentScrollView(for: .bottom) !== web.scrollView {
+          scrollController = controller
+          controller.setContentScrollView(web.scrollView, for: .all)
+          if #available(iOS 26.0, *) {
+            web.scrollView.topEdgeEffect.style = .soft
+            web.scrollView.bottomEdgeEffect.style = .soft
+          }
+        }
+        return
+      }
+      responder = current.next
+    }
+  }
+
   func setActive(_ active: Bool) {
     isActive = active
+    connectNavigationScroll()
     updateVisibility()
     if active { startPolling() } else { stopPolling() }
   }

@@ -60,7 +60,10 @@ private final class FolioTabTransitionDelegate: NSObject, UITabBarControllerDele
     func tabBarController(_ tabBarController: UITabBarController,
                           animationControllerForTransitionFrom fromVC: UIViewController,
                           to toVC: UIViewController) -> UIViewControllerAnimatedTransitioning? {
-        FolioTabCrossfade()
+        if let search = tabBarController.viewControllers?.last, fromVC === search || toVC === search {
+            return original?.tabBarController?(tabBarController, animationControllerForTransitionFrom: fromVC, to: toVC)
+        }
+        return FolioTabCrossfade()
     }
 
     func tabBarController(_ tabBarController: UITabBarController,
@@ -103,45 +106,127 @@ private final class FolioTabCrossfade: NSObject, UIViewControllerAnimatedTransit
     }
 }
 
-// 底部导航在所有主页面共用系统滚动最小化行为。
-final class FolioTabBarBehavior: ExpoView {
-    private var minimize = true
-    private var attempts = 0
+// 系统标签栏负责滚动最小化、独立搜索入口与地址附加栏。
+final class FolioNativeTabsProps: ExpoSwiftUI.ViewProps {
+    @Field var selection: String = "local"
+    @Field var labels: [String] = []
+    @Field var minimize: Bool = true
+    @Field var accessoryVisible: Bool = false
+    @Field var addressTitle: String = ""
+    @Field var address: String = ""
+    @Field var addressLabel: String = ""
+    @Field var addressStart: Bool = true
+    @Field var addressBadge: Int = 0
+    @Field var addressAttention: Bool = false
+    var onSelectionChange = EventDispatcher()
+    var onAddressPress = EventDispatcher()
+}
 
-    required init(appContext: AppContext? = nil) {
-        super.init(appContext: appContext)
+struct FolioNativeTabs: ExpoSwiftUI.View {
+    @ObservedObject var props: FolioNativeTabsProps
+    private let destinations = ["local", "online", "cloud", "settings", "search"]
+    private let symbols = ["textformat.alt", "globe", "cloud", "gear", "magnifyingglass"]
+
+    @State private var selectedTab = "local"
+    var body: some View {
+        tabs
+            .onChange(of: props.selection) { value in
+                if selectedTab != value { selectedTab = value }
+            }
+            .onAppear { selectedTab = props.selection }
     }
 
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        apply()
-    }
-
-    func setMinimize(_ value: Bool) {
-        minimize = value
-        apply()
-    }
-
-    private func apply() {
-        guard let controller = tabBarController() else {
-            guard attempts < 4 else { return }
-            attempts += 1
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.apply() }
-            return
+    @ViewBuilder
+    private var tabs: some View {
+        if #available(iOS 26.1, *) {
+            modernTabs
+                .tabBarMinimizeBehavior(props.minimize ? .onScrollDown : .never)
+                .tabViewBottomAccessory(isEnabled: props.accessoryVisible) { FolioBrowserAccessory(props: props) }
+        } else if #available(iOS 26.0, *) {
+            modernTabs
+                .tabBarMinimizeBehavior(props.minimize ? .onScrollDown : .never)
+                .tabViewBottomAccessory {
+                    if props.accessoryVisible { FolioBrowserAccessory(props: props) }
+                }
+        } else if #available(iOS 18.0, *) {
+            modernTabs
+        } else {
+            SwiftUI.TabView(selection: selection) {
+                ForEach(destinations.indices, id: \.self) { index in
+                    content(index)
+                        .tabItem { Label(title(index), systemImage: symbols[index]) }
+                        .tag(destinations[index])
+                }
+            }
         }
-        attempts = 0
-        if #available(iOS 26.0, *) {
-            controller.tabBarMinimizeBehavior = minimize ? .onScrollDown : .never
+    }
+
+    @available(iOS 18.0, *)
+    private var modernTabs: some View {
+        SwiftUI.TabView(selection: selection) {
+            ForEach(0..<4, id: \.self) { index in
+                SwiftUI.Tab(title(index), systemImage: symbols[index], value: destinations[index]) {
+                    content(index)
+                }
+            }
+            SwiftUI.Tab(title(4), systemImage: symbols[4], value: "search", role: .search) { content(4) }
         }
     }
 
-    private func tabBarController() -> UITabBarController? {
-        var responder: UIResponder? = self
-        while let current = responder {
-            if let controller = current as? UITabBarController { return controller }
-            if let controller = current as? UIViewController, let tabs = controller.tabBarController { return tabs }
-            responder = current.next
+    private var selection: Binding<String> {
+        Binding(get: { selectedTab }, set: { value in
+            guard value != selectedTab else { return }
+            selectedTab = value
+            props.onSelectionChange(["selection": value])
+        })
+    }
+
+    private func title(_ index: Int) -> String {
+        props.labels.indices.contains(index) ? props.labels[index] : ""
+    }
+
+    @ViewBuilder
+    private func content(_ index: Int) -> some View {
+        if let children = props.children, children.indices.contains(index) {
+            let view: any View = children[index].childView
+            AnyView(view)
         }
-        return nil
+    }
+}
+
+@available(iOS 26.0, *)
+private struct FolioBrowserAccessory: View {
+    @ObservedObject var props: FolioNativeTabsProps
+    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
+
+    var body: some View {
+        Button { props.onAddressPress([:]) } label: {
+            HStack {
+                Image(systemName: props.addressStart ? "magnifyingglass" : "globe")
+                    .foregroundStyle(.secondary)
+                VStack(spacing: 2) {
+                    Text(props.addressTitle)
+                        .font(.subheadline)
+                        .fontWeight(props.addressStart ? .regular : .semibold)
+                        .lineLimit(1)
+                    if placement != .inline && !props.addressStart {
+                        Text(props.address)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                if props.addressBadge > 0 {
+                    Text(props.addressBadge, format: .number).font(.caption).foregroundStyle(.tint)
+                } else if props.addressAttention {
+                    Image(systemName: "exclamationmark.circle").foregroundStyle(.tint)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .padding(.horizontal)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(props.addressLabel)
     }
 }

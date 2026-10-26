@@ -5,9 +5,11 @@ import android.view.MotionEvent
 import com.facebook.react.uimanager.PointerEvents
 import com.facebook.react.uimanager.ReactPointerEventsView
 import com.facebook.react.uimanager.events.NativeGestureUtil
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -33,6 +35,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp as lerpColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.Density
@@ -117,11 +121,26 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
             val tabItems = if (segmented) items else items.filter { it.id != "search" }
             val searchItem = if (segmented) null else items.firstOrNull { it.id == "search" }
             val selectedPrimary = tabItems.firstOrNull { it.id == primaryId } ?: tabItems.firstOrNull()
-            val compactProgress by animateFloatAsState(
+            val motionScope = rememberCoroutineScope()
+            val motionEnabled = (motionScope.coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f) > 0f
+            val collapseMotion by animateFloatAsState(
                 targetValue = if (collapsed && !segmented) 1f else 0f,
-                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                animationSpec = if (motionEnabled && controlEnabled) spring(
+                    dampingRatio = 0.52f, stiffness = 320f / (1.15f * 1.15f), visibilityThreshold = 0.001f,
+                ) else snap(),
                 label = "FolioBottomTabCollapse",
             )
+            // 尺寸单向过渡，弹簧差值只沿两侧按钮的水平方向产生回弹。
+            val compactProgress by animateFloatAsState(
+                targetValue = if (collapsed && !segmented) 1f else 0f,
+                animationSpec = if (motionEnabled && controlEnabled) tween(
+                    durationMillis = 345, easing = FastOutSlowInEasing,
+                ) else snap(),
+                label = "FolioBottomTabMorph",
+            )
+            val sideTravel = if (motionEnabled && controlEnabled && !segmented)
+                16.8.dp * (collapseMotion - compactProgress) else 0.dp
+            val layoutSign = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1f else -1f
             BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                 if (tabItems.isNotEmpty() && accentColor.isNotEmpty()) {
                     val accent = Color(android.graphics.Color.parseColor(accentColor))
@@ -151,7 +170,8 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
                         containerHeight = if (segmented) { if (iconOnly) 44.dp else 48.dp } else 64.dp,
                         highlightHeight = if (segmented) { if (iconOnly) 40.dp else 44.dp } else 64.dp,
                         selectorHeight = if (segmented) { if (iconOnly) 36.dp else 40.dp } else 56.dp,
-                        modifier = Modifier.width(tabsWidth).height(if (segmented) { if (iconOnly) 44.dp else 48.dp } else 64.dp).drawWithContent {
+                        modifier = Modifier.width(tabsWidth).height(if (segmented) { if (iconOnly) 44.dp else 48.dp } else 64.dp)
+                            .graphicsLayer { translationX = -sideTravel.toPx() * layoutSign }.drawWithContent {
                             backdrop.contentVersion
                             drawContent()
                         }
@@ -177,7 +197,9 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : ExpoView(c
                             item = searchItem, backdrop = backdrop, dark = dark,
                             tint = if (selectedId == searchItem.id) accent else contentColor,
                             selected = selectedId == searchItem.id, enabled = controlEnabled,
-                            compactProgress = compactProgress, modifier = Modifier.align(Alignment.CenterEnd),
+                            compactProgress = compactProgress,
+                            modifier = Modifier.align(Alignment.CenterEnd)
+                                .graphicsLayer { translationX = sideTravel.toPx() * layoutSign },
                             onClick = { select(searchItem) },
                         )
                     }

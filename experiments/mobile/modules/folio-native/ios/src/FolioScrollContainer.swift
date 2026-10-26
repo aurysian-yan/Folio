@@ -120,6 +120,11 @@ final class FolioScrollContainer: ExpoView {
             let frame = convert(bar.bounds, from: bar)
             if frame.intersects(scrollFrame) { bottom = max(bottom, scrollFrame.maxY - frame.minY) }
         }
+        if #available(iOS 26.0, *), let accessory = controller?.tabBarController?.bottomAccessory?.contentView,
+           accessory.window != nil, !accessory.isHidden {
+            let frame = convert(accessory.bounds, from: accessory)
+            if frame.intersects(scrollFrame) { bottom = max(bottom, scrollFrame.maxY - frame.minY) }
+        }
         if let header {
             let frame = convert(header.bounds, from: header)
             contentTop = max(contentTop, frame.maxY + frame.height / 4 - scrollFrame.minY)
