@@ -155,7 +155,7 @@ fn font_detection_uses_content_instead_of_download_filename() {
     let service = service(root.path());
     let id = create(&service);
     let sample = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../experiments/mobile/samples/Lato-Regular.ttf");
+        .join("../../fixtures/fonts/Lato-Regular.ttf");
     fs::copy(sample, service.path(&id).unwrap()).unwrap();
     let job = service.finish(&id).unwrap();
     assert_eq!(job.kind.as_deref(), Some("font"));
