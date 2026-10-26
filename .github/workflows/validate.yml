@@ -24,8 +24,10 @@ jobs:
       - run: pnpm i18n:validate
       - run: pnpm --dir apps/desktop-ui typecheck && pnpm --dir apps/desktop-ui lint && pnpm --dir apps/desktop-ui test && pnpm --dir apps/desktop-ui build
       - run: pnpm --dir experiments/mobile typecheck && pnpm --dir experiments/mobile lint && pnpm --dir experiments/mobile test
-      - run: node --test tools/releases/release.test.mjs
-      - run: cargo test --locked --workspace
+      - name: Test release tooling
+        run: node --test tools/releases/*.test.mjs
+      - name: Test Rust workspace
+        run: cargo test --locked --workspace
   windows-workflows:
     strategy:
       fail-fast: false

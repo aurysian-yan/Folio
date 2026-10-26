@@ -37,8 +37,10 @@ S1 服务端部署及对应客户端实网联调是官方高级版上线前置�
 仓库版本以根目录 `Cargo.toml` 的 `[workspace.package].version` 为准。使用
 `pnpm manage version bump patch --build` 同步 Rust、Tauri、macOS 与移动端版本，
 同步 Cargo 锁文件、重新生成并校验许可目录后，才生成中文提交与 `vX.Y.Z` 标签，
-并推送标签触发 `Release` 工作流。任一步失败均不创建发布提交或标签；标签推送
-失败时保留本地标签并给出重试命令，`main` 分支仍需单独推送。准备阶段可加
+并原子推送当前分支与标签，包含该分支上之前已提交的功能更改，由标签触发
+`Release` 工作流。执行前要求工作区干净且已检出分支，本地与远端均不存在目标
+标签。版本与许可校验失败时不创建发布提交或标签；推送失败时远端分支与标签均
+不更新，本地发布提交与标签保留，并给出同时重试两者的命令。准备阶段可加
 `--no-git`，检查变更后自行提交。
 正式版本必须采用 `X.Y.Z`，不接受预发行标签。发布前执行：
 
@@ -80,8 +82,8 @@ OFL 字体制作的字标图形无需字体署名，依据见 [OFL FAQ 1.1.2](ht
 先在待发布提交上手动运行，检查六个原生构建目标和 `complete-release` 产物，
 再推送对应 `vX.Y.Z` 标签触发正式发布。
 仅创建本地 tag 或只推送分支不会触发发布；标签必须指向包含最新工作流、版本与
-许可目录的提交。`pnpm manage version bump` 会自动推送标签，手动发布时依次执行
-`git push origin main` 和 `git push origin vX.Y.Z`。
+许可目录的提交。`pnpm manage version bump` 会同时推送当前分支和标签；手动发布时
+在待发布的 `main` 分支执行 `git push --atomic origin HEAD:refs/heads/main refs/tags/vX.Y.Z:refs/tags/vX.Y.Z`。
 正式发布在构建前检查 Android 四项签名 Secrets，缺失时直接失败。
 
 | 平台 | 原生 runner | 架构 | 安装包 |

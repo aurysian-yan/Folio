@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { commitVersionGit, prepareVersionGit } from './releases/version-git.mjs';
 
 // 仓库根目录由脚本位置推导，保证在任意工作目录下运行结果一致。
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -403,10 +404,7 @@ function syncCargoLocks() {
 }
 
 function executeVersionBump(plan, args) {
-  if (!args['no-git']) {
-    const existing = capture('git', ['tag', '--list', `v${plan.next}`]);
-    if (existing) fail(`标签 v${plan.next} 已存在，请先处理后再执行。`);
-  }
+  const release = args['no-git'] ? null : prepareVersionGit(REPO_ROOT, `v${plan.next}`);
 
   const versionOriginals = applyManifests(VERSION_MANIFESTS, () => plan.next);
   const buildOriginals = applyManifests(plan.buildManifests, () => plan.buildNext);
@@ -440,16 +438,8 @@ function executeVersionBump(plan, args) {
     TAURI_LOCK,
     'shared/about/licenses.json',
   ];
-  run('git', ['add', ...new Set(files)]);
-  run('git', ['commit', '-m', `chore: 发布 v${plan.next}`]);
-  run('git', ['tag', `v${plan.next}`]);
-  // 推送标签即触发 Release；失败时保留本地标签并给出重试命令。
-  const pushed = run('git', ['push', 'origin', `v${plan.next}`], { allowFailure: true });
-  if (pushed.error || pushed.status !== 0) {
-    fail(`标签 v${plan.next} 已创建但推送失败，请重试：git push origin v${plan.next}`);
-  }
-  log(`\n已提交并推送标签 v${plan.next}，Release 工作流会由标签触发。`);
-  log('main 分支仍需单独推送：git push origin main');
+  commitVersionGit(REPO_ROOT, release, files);
+  log(`\n已提交版本改动，并同时推送 ${release.branch} 分支和标签 ${release.tag}，Release 工作流会由标签触发。`);
 }
 
 function bumpVersion(args) {
@@ -974,7 +964,7 @@ async function tuiVersionBump(c) {
   }
   c.note(formatVersionPlan(plan).join('\n'), '版本改动计划');
 
-  const confirmed = await c.confirm({ message: '确认写入、提交并推送标签？', initialValue: true });
+  const confirmed = await c.confirm({ message: '确认写入、提交并推送当前分支与版本标签？', initialValue: true });
   if (c.isCancel(confirmed) || !confirmed) return;
   await runAction(c, '提高版本号', () => executeVersionBump(plan, args));
 }
@@ -1063,7 +1053,7 @@ function printHelp() {
   expo open --platform ios|android    打开 Expo 构建产物目录
   version show                        查看各文件当前版本
   version bump <major|minor|patch|x.y.z> [--build] [--dry-run] [--no-git]
-                                      批量提高版本号并推送标签
+                                      批量提高版本号并推送当前分支与标签
   doctor                              检查当前主机的构建前置条件
 
 环境变量：
