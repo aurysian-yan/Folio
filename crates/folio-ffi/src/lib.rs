@@ -1315,6 +1315,8 @@ impl FolioEngine {
                     "family": face.metadata.family_name,
                     "style": face.metadata.subfamily_name,
                     "faceIndex": face.face_index,
+                    "isVariable": face.metadata.is_variable,
+                    "weight": face.metadata.weight,
                     "duplicate": existing.iter().any(|item| item.revision_id == face.revision.id),
                     "conflict": existing.iter().any(|item| item.revision_id != face.revision.id)
                 })
@@ -2828,6 +2830,15 @@ mod tests {
         let analysis: serde_json::Value =
             serde_json::from_str(&engine.analyze_font_file(sample.clone()).unwrap()).unwrap();
         assert_eq!(analysis["faces"][0]["duplicate"], false);
+        assert_eq!(analysis["faces"][0]["isVariable"], false);
+        assert_eq!(analysis["faces"][0]["weight"], 400.0);
+        let variable = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/fonts/Inter-Variable.ttf")
+            .to_string_lossy()
+            .into_owned();
+        let variable: serde_json::Value =
+            serde_json::from_str(&engine.analyze_font_file(variable).unwrap()).unwrap();
+        assert_eq!(variable["faces"][0]["isVariable"], true);
         assert!(engine.load_cached_library().unwrap().roots.is_empty());
         engine.add_font_file(sample.clone()).unwrap();
         engine.refresh_library().unwrap();

@@ -18,7 +18,8 @@ export interface OnlineState { providers: OnlineProvider[]; defaultProviders: On
 export interface OnlineEntry {
   id: string; name: string; size: number; eligible: boolean; duplicate: boolean;
   previewPath?: string;
-  analysis?: { fingerprint: string; faces: { family: string; style: string; faceIndex: number; duplicate: boolean; conflict: boolean }[] };
+  analysis?: { fingerprint: string; faces: { family: string | null; style: string | null; faceIndex: number; duplicate: boolean; conflict: boolean;
+    isVariable: boolean; weight: number | null }[] };
 }
 export interface BrowserVisit { visitedAt: number; id: string; url: string; title: string; reload: boolean; sameDocument: boolean }
 export interface BrowserState {
@@ -42,7 +43,10 @@ export interface OnlineBridge {
 
 export function createOnlineClient(bridge: OnlineBridge) {
   return {
-    state: async (): Promise<OnlineState> => JSON.parse(await bridge.onlineState()),
+    state: async (): Promise<OnlineState> => {
+      const state: OnlineState = JSON.parse(await bridge.onlineState());
+      return { ...state, jobs: state.jobs.map((job) => ({ ...job, name: downloadDisplayName(job.name) })) };
+    },
     importIcon: async (uri: string): Promise<{ assetId: string; uri: string }> => JSON.parse(await bridge.onlineImportIcon(uri)),
     accept: () => bridge.onlineAcceptDisclaimer(),
     saveProviders: (providers: OnlineProvider[]) => bridge.onlineSaveProviders(JSON.stringify(providers)),
@@ -52,10 +56,21 @@ export function createOnlineClient(bridge: OnlineBridge) {
     pause: (id: string) => bridge.onlinePause(id),
     cancel: (id: string) => bridge.onlineCancel(id),
     retry: (id: string) => bridge.onlineRetry(id),
-    inspect: async (id: string): Promise<OnlineEntry[]> => JSON.parse(await bridge.onlineInspect(id)),
+    inspect: async (id: string): Promise<OnlineEntry[]> => {
+      const entries: OnlineEntry[] = JSON.parse(await bridge.onlineInspect(id));
+      return entries.map((entry) => ({ ...entry, name: downloadDisplayName(entry.name) }));
+    },
     collect: (id: string, selected: string[]) => bridge.onlineImport(id, selected),
     save: (id: string) => bridge.onlineSave(id),
   };
+}
+
+// 仅还原展示名称中的有效编码，保留加号、字面百分号及不完整编码。
+export function downloadDisplayName(value: string): string {
+  return value.replace(/^UTF-?8'[^']*'/i, '').replace(/(?:%[0-9a-f]{2})+/gi, (encoded) => {
+    try { return decodeURIComponent(encoded).replace(/[\u0000-\u001f\u007f]/g, ''); }
+    catch { return encoded; }
+  });
 }
 
 // 仅展示登记过的错误键，原生异常不直接进入界面。

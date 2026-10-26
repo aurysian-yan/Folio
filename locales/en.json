@@ -646,6 +646,7 @@
       "dataCleared": "Website data cleared",
       "noDownloads": "No downloads yet",
       "review": "Choose fonts to add",
+      "selectNone": "Deselect all",
       "saveFile": "Save to Files",
       "importNotice": "Check the fonts and their licenses before adding them. Duplicate files are skipped. Different versions with the same name are kept.",
       "noFonts": "No fonts available to add",

@@ -11,17 +11,15 @@ import { NativeScrollContainer } from './native-controls';
 import { PageHeader, usePageHeader } from './PageHeader';
 import { OnlineDownloads } from './OnlineDownloads';
 import type { BrowserLibraryRequest, BrowserLibraryTab } from './browser-data';
-import type { LibrarySnapshot } from './library';
 import { IconButton, type Theme } from './ui';
 
 // 收藏、历史与下载共用二级页面及统一的玻璃工具栏。
 export function BrowserLibraryPage(props: {
   request: BrowserLibraryRequest; theme: Theme; onClose: () => void; onOpenUrl: (url: string) => void;
-  onSnapshotChange: (snapshot: LibrarySnapshot) => void;
 }) {
   return <SafeAreaProvider><BrowserLibraryContent {...props} /></SafeAreaProvider>;
 }
-function BrowserLibraryContent({ request, theme, onClose, onOpenUrl, onSnapshotChange }: Parameters<typeof BrowserLibraryPage>[0]) {
+function BrowserLibraryContent({ request, theme, onClose, onOpenUrl }: Parameters<typeof BrowserLibraryPage>[0]) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<BrowserLibraryTab>(request.tab);
   const [bookmark, setBookmark] = useState(request.bookmark);
@@ -50,7 +48,7 @@ function BrowserLibraryContent({ request, theme, onClose, onOpenUrl, onSnapshotC
         </PageHeader>
         <NavigationBackdrop sourceId={header.sourceId} active theme={theme} style={styles.screen}>
           <BrowserLibraryActionsContext.Provider value={setActions}><BrowserLibraryScrollContext.Provider value={{ top: header.contentTop, bottom: header.contentBottom, onScroll: header.onScroll }}>
-            {tab === 'downloads' ? <OnlineDownloads theme={theme} onSnapshotChange={onSnapshotChange} onOpenUrl={onOpenUrl} />
+            {tab === 'downloads' ? <OnlineDownloads theme={theme} onOpenUrl={onOpenUrl} />
               : <BrowserLibrary key={tab} tab={tab} initialBookmark={tab === 'bookmarks' ? bookmark : null} theme={theme} onOpen={onOpenUrl} />}
           </BrowserLibraryScrollContext.Provider></BrowserLibraryActionsContext.Provider>
         </NavigationBackdrop>

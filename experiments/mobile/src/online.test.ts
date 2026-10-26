@@ -2,12 +2,30 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import {
-  browserPageTitle, buildWebThemeCss, buildWebThemeScript, createOnlineClient, extractSearchQuery, onlineErrorKey,
+  browserPageTitle, buildWebThemeCss, buildWebThemeScript, createOnlineClient, downloadDisplayName, extractSearchQuery, onlineErrorKey,
   providerCustomCss, providerThemeEnabled, type OnlineBridge, type OnlineProvider,
 } from './online.ts';
 
 const provider = (id: string, homepage: string, searchTemplate: string): OnlineProvider => ({
   id, name: id, homepage, searchTemplate, enabled: true, builtin: true,
+});
+
+test('下载名称还原中文和空格，保留字面加号与无效编码且不重复解码', () => {
+  assert.equal(downloadDisplayName('%E6%80%9D%E6%BA%90%20Sans.zip'), '思源 Sans.zip');
+  assert.equal(downloadDisplayName("UTF-8'zh-CN'%E5%AD%97%E4%BD%93.ttf"), '字体.ttf');
+  assert.equal(downloadDisplayName('字体+A 100%.zip'), '字体+A 100%.zip');
+  assert.equal(downloadDisplayName('%25E5%25AD%2597.ttf'), '%E5%AD%97.ttf');
+  assert.equal(downloadDisplayName('font%ZZ%E5.ttf'), 'font%ZZ%E5.ttf');
+});
+
+test('下载记录和压缩包名称统一展示解码文本，保留原生任务与条目标识', async () => {
+  const bridge = {
+    onlineState: async () => JSON.stringify({ providers: [], jobs: [{ id: 'job', name: '%E5%AD%97%E4%BD%93.zip' }] }),
+    onlineInspect: async () => JSON.stringify([{ id: '7', name: '%E5%AD%97%E4%BD%93/static/A%20Bold.ttf', previewPath: '/private/font.ttf' }]),
+  } as unknown as OnlineBridge;
+  const client = createOnlineClient(bridge);
+  assert.equal((await client.state()).jobs[0]?.name, '字体.zip');
+  assert.deepEqual(await client.inspect('job'), [{ id: '7', name: '字体/static/A Bold.ttf', previewPath: '/private/font.ttf' }]);
 });
 
 test('浏览标题仅清理已识别的站点后缀，不截断正文或清空首页标题', () => {
@@ -34,7 +52,7 @@ test('Google Fonts 默认隐藏网站主题按钮，自定义内容和显式清�
 test('在线服务保留原生任务状态和压缩包选择标识', async () => {
   const calls: unknown[] = [];
   const bridge = {
-    onlineState: async () => JSON.stringify({ accepted: true, providers: [], jobs: [{ id: 'job', state: 'ready', bytesDone: 12, bytesTotal: 12 }] }),
+    onlineState: async () => JSON.stringify({ accepted: true, providers: [], jobs: [{ id: 'job', name: 'font.zip', state: 'ready', bytesDone: 12, bytesTotal: 12 }] }),
     onlineInspect: async () => JSON.stringify([{ id: '7', name: 'font.ttf', eligible: true, duplicate: false }]),
     onlineImport: async (id: string, selected: string[]) => { calls.push([id, selected]); return { snapshot: {}, items: [] }; },
   } as unknown as OnlineBridge;

@@ -1,13 +1,12 @@
-import { useDialogs } from './Dialogs';
 import { BrowserDashboard } from './BrowserDashboard';
 import { useNavigationScroll } from './NavigationScroll';
 import { FilterScrollView, FilterTextInput } from './FilterDrawer';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, BackHandler, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeOnlineBrowser, online } from './native';
-import { buildWebThemeScript, extractSearchQuery, isPageFailureKey, onlineErrorKey, providerCustomCss, providerThemeEnabled, type BrowserState, type BrowserVisit, type OnlineProvider, type WebPalette } from './online';
+import { buildWebThemeScript, downloadDisplayName, extractSearchQuery, isPageFailureKey, onlineErrorKey, providerCustomCss, providerThemeEnabled, type BrowserState, type BrowserVisit, type OnlineProvider, type WebPalette } from './online';
 import { providerRegionRisk } from './online-region';
 import { mostRecentTab } from './online-tabs';
 import { useOnlineRegion } from './useOnlineRegion';
@@ -41,11 +40,10 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
   openRequest: OnlineOpenRequest | null; onRequestConsumed: (id: string) => void;
   urlRequest: { id: string; url: string } | null; onUrlConsumed: (id: string) => void;
 }) {
-  const { alert } = useDialogs();
   const { t } = useTranslation();
   const { begin: beginNavigationScroll, end: endNavigationScroll, scroll: reportNavigationScroll } = useNavigationScroll();
   const { preferences } = usePreferences();
-  const { state, refresh, openLibrary: showLibrary, libraryOpen } = useOnlineSession();
+  const { state, refresh, startDownload, openLibrary: showLibrary, libraryOpen, reviewOpen } = useOnlineSession();
   const { data, ready, change } = useBrowserData();
   const inset = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -193,9 +191,9 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
     for (const event of visits) recordVisit(event.tab, event.visit);
   }, [ready, recordVisit]);
   function confirmDownload(intent: { id: string; name: string }) {
-    alert(t('online.browser.download'), intent.name, [
+    Alert.alert(t('online.browser.download'), downloadDisplayName(intent.name), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('online.browser.download'), onPress: () => void run(async () => { await online.download(intent.id); await refresh(); showLibrary('downloads'); }) },
+      { text: t('online.browser.download'), onPress: () => void run(async () => { await startDownload(intent.id); showLibrary('downloads'); }) },
     ]);
   }
   function addressDismissed() { const next = afterAddressClose.current; afterAddressClose.current = null; next?.(); }
@@ -238,10 +236,10 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
                 const item = tab.provider;
                 return <NativeOnlineBrowser key={tab.id} style={[StyleSheet.absoluteFill, { opacity: visible ? 1 : 0, zIndex: visible ? 1 : 0 }]}
                   pointerEvents={visible && !editing ? 'auto' : 'none'} accessibilityElementsHidden={!visible || editing} importantForAccessibility={visible && !editing ? 'auto' : 'no-hide-descendants'}
-                  active={active && visible && !editing && !libraryOpen} provider={JSON.stringify(item ?? {})} command={tab.command}
+                  active={active && visible && !editing && !libraryOpen && !reviewOpen} provider={JSON.stringify(item ?? {})} command={tab.command}
                   webTheme={item ? buildWebThemeScript({ palette: webPalette, dark: theme.dark, enabled: providerThemeEnabled(preferences.onlineTheme[item.id], item.id), customCss: providerCustomCss(preferences.onlineCss[item.id], item.id) }) : ''}
                   accentColor={theme.accent} onPageScroll={({ nativeEvent }) => {
-                    if (!active || !visible || editing || libraryOpen) return;
+                    if (!active || !visible || editing || libraryOpen || reviewOpen) return;
                     if (nativeEvent.reset) { beginNavigationScroll(nativeEvent.offset); endNavigationScroll(); }
                     else reportNavigationScroll(nativeEvent.offset, true);
                   }} onVisit={({ nativeEvent }) => recordVisit(tab, nativeEvent)}

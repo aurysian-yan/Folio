@@ -633,6 +633,7 @@
       "dataCleared": "网页数据已清除",
       "noDownloads": "还没有下载任务",
       "review": "选择收录字体",
+      "selectNone": "取消全选",
       "saveFile": "保存到文件",
       "importNotice": "确认字体及授权后再收录。重复文件会跳过，字体同名但内容不同的版本会保留。",
       "noFonts": "文件中没有可收录的字体",

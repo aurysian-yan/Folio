@@ -3,6 +3,7 @@ import { NavigationScrollContext, NavigationScrollScope } from './NavigationScro
 import { BrowserDataProvider } from './BrowserDataProvider';
 import { OnlineSessionProvider, useOnlineSession, type OnlineOpenRequest } from './OnlineSession';
 import { BrowserLibraryPage } from './BrowserLibraryPage';
+import { OnlineImportPage } from './OnlineImportPage';
 import { GlobalSearchScreen } from './GlobalSearchScreen';
 import { CloudSearchDetails } from './CloudSearchDetails';
 import { SettingsSearchFocus } from './settings-ui';
@@ -526,7 +527,7 @@ function MobileApp() {
   const [urlRequest, setUrlRequest] = useState<{ id: string; url: string } | null>(null);
   const [cloudInspection, setCloudInspection] = useState<import('./sync').CloudFont | null>(null);
   const [settingsSearchTitle, setSettingsSearchTitle] = useState<string | null>(null);
-  const { setBrowsing, libraryOpen, libraryRequest, closeLibrary, dismissLibrary } = useOnlineSession();
+  const { setBrowsing, libraryOpen, libraryRequest, closeLibrary, dismissLibrary, reviewRequest, reviewOpen, closeReview, dismissReview } = useOnlineSession();
   const pendingLibraryUrl = useRef<string | null>(null);
   const [fontPage, setFontPage] = useState<FontFamily | null>(null);
   const [focusedCloudFile, setFocusedCloudFile] = useState<import('./sync').CloudFont | null>(null);
@@ -704,7 +705,9 @@ function MobileApp() {
   ) : settingsPage ? <SettingsSearchFocus value={settingsSearchTitle}>{settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false), syncController)}</SettingsSearchFocus> : null;
 
   const browserDetail = libraryRequest ? <BrowserLibraryPage key={libraryRequest.id} request={libraryRequest} theme={theme}
-    onClose={closeLibrary} onSnapshotChange={applySnapshot} onOpenUrl={(url) => { pendingLibraryUrl.current = url; closeLibrary(); }} /> : null;
+    onClose={closeLibrary} onOpenUrl={(url) => { pendingLibraryUrl.current = url; closeLibrary(); }} /> : null;
+  const reviewDetail = reviewRequest ? <OnlineImportPage key={reviewRequest.id} jobId={reviewRequest.jobId} theme={theme}
+    onClose={closeReview} onSnapshotChange={applySnapshot} /> : null;
   function libraryDismissed() {
     dismissLibrary();
     const url = pendingLibraryUrl.current; pendingLibraryUrl.current = null;
@@ -713,14 +716,16 @@ function MobileApp() {
       setUrlRequest({ id: browserId(), url }); navigate('online'); setTab('online');
     }
   }
-  return <NavigationScrollContext.Provider value={{ enabled: preferences.navigationAutoCollapse && navigationPanels.length === 0 && !keyboardVisible && !fontPageVisible && !settingsPageVisible && !libraryOpen && !cloudInspection, onCollapse: setNavMinimized, setPanelActive: setNavigationPanelActive }}>
+  return <NavigationScrollContext.Provider value={{ enabled: preferences.navigationAutoCollapse && navigationPanels.length === 0 && !keyboardVisible && !fontPageVisible && !settingsPageVisible && !libraryOpen && !reviewOpen && !cloudInspection, onCollapse: setNavMinimized, setPanelActive: setNavigationPanelActive }}>
     <DialogProvider theme={theme}><View style={styles.app}>
+      <FontNavigation visible={reviewOpen} theme={theme} detail={reviewDetail} onDismissed={dismissReview}>
       <FontNavigation visible={libraryOpen} theme={theme} detail={browserDetail} onDismissed={libraryDismissed}>
         <FontNavigation visible={fontPageVisible || settingsPageVisible} theme={theme}
           onDismissed={() => { setFontPageVisible(false); setFontPage(null); setSettingsPageVisible(false); setSettingsPage(null); }} detail={detail}>
           {content}
         </FontNavigation>
         <CloudSearchDetails font={cloudInspection} theme={theme} controller={syncController} libraryVersion={libraryVersion} onClose={() => setCloudInspection(null)} onOpen={(family) => openFamily(family, { scope: 'all' })} onConfigure={() => openSettingsPage('sync')} />
+      </FontNavigation>
       </FontNavigation>
     </View></DialogProvider>
   </NavigationScrollContext.Provider>;
