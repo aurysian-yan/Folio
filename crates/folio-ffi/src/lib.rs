@@ -2737,8 +2737,24 @@ mod tests {
                 .clear_preview_cache(directory.path().to_string_lossy().into_owned())
                 .is_err());
         }
-        sync.rebuild_sync_indexes().unwrap();
-        assert_eq!(sync.clear_catalog_cache().unwrap(), 0);
+        // 其他并行测试也会刷新字体库，仅等待共享刷新锁，不重试其他错误。
+        fn after_other_refreshes<T>(operation: impl Fn() -> Result<T, FolioFfiError>) -> T {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            loop {
+                match operation() {
+                    Ok(value) => return value,
+                    Err(FolioFfiError::Operation { message })
+                        if message == "请等待字体库刷新完成"
+                            && std::time::Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                    Err(error) => panic!("维护操作失败：{error}"),
+                }
+            }
+        }
+        after_other_refreshes(|| sync.rebuild_sync_indexes());
+        assert_eq!(after_other_refreshes(|| sync.clear_catalog_cache()), 0);
     }
 
     #[test]
