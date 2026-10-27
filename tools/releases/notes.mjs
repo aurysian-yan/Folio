@@ -131,7 +131,8 @@ export async function generateNotes(output, { env = process.env, exec = execFile
   let notes;
   if (draft) {
     if (matching.length !== 1 || !draft.body?.includes(marker)) throw new Error('发布草稿归属不一致');
-    const asset = draft.assets.find((item) => item.name === 'folio-release.json');
+    const asset = draft.assets.find((item) => item.name === 'folio-release-v2.json')
+      ?? draft.assets.find((item) => item.name === 'folio-release.json');
     if (asset) {
       const manifest = JSON.parse(exec('gh', ['api', '-H', 'Accept: application/octet-stream', `repos/${repository}/releases/assets/${asset.id}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
       if (`v${manifest.version}` !== tag || !manifest.releaseNotes) throw new Error('草稿清单无法复用');

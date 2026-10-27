@@ -91,15 +91,21 @@ OFL 字体制作的字标图形无需字体署名，依据见 [OFL FAQ 1.1.2](ht
 | macOS | xcode-27 | arm64 | DMG，本地签名 |
 | Windows | windows-2025 / windows-11-arm | x64 / arm64 | NSIS EXE，未签名 |
 | Linux | ubuntu-22.04 / ubuntu-22.04-arm | x64 / arm64 | AppImage、deb、rpm |
-| Android | ubuntu-24.04 | arm64-v8a / x86_64 | 按 ABI 拆分的两个 APK |
+| Android | ubuntu-24.04 | arm64-v8a / x86_64 | legacy／glasmio 各按 ABI 拆分，共四个 APK |
 
 iOS 本轮不发布安装包。ARM AppImage 在 ARM Linux runner 上构建，不能在 x64
 runner 上交叉打包。Node、pnpm、Rust、Java、NDK 与 Xcode 固定版本；外部 Actions
 固定到提交。所有安装包构建、许可校验及产物检查成功后才汇总 SHA-256 和
-`folio-release.json`。先上传草稿的完整附件，再公开 Release；正式版本不覆盖。
-失败任务保留可用安装包或报告。公开前再次检查十一个安装包、许可资料、更新清单和
+`folio-release.json` 与 `folio-release-v2.json`。先上传草稿的完整附件，再公开 Release；正式版本不覆盖。
+失败任务保留可用安装包或报告。公开前再次检查十三个安装包、许可资料、更新清单和
 全部 SHA-256；上传中断后可重跑失败任务，续传同一提交的工作流草稿。
 正式版本、其他提交创建的草稿及含未知附件的草稿禁止覆盖。
+
+Android 根据 Gradle `apk/<类型>/release/output-metadata.json` 收集四个 APK，
+逐包检查 ABI、发布签名、应用身份、版本、最低 API 和玻璃类型。构建号为
+`FOLIO_BUILD_NUMBER * 10 + 1`（legacy）与 `+ 2`（glasmio）。旧清单保留桌面包与
+legacy 包；v2 清单包含全部十三个安装包以及 Android 类型、系统范围和实际构建号，
+两份清单、许可资料和全部安装包一同参与 SHA-256 与远端附件完整性校验。
 
 客户端主动查询本仓库的最新正式 Release，再读取其中的 `folio-release.json`，
 只选择当前平台与运行架构的产物。Linux 优先 AppImage，可选 deb/rpm。

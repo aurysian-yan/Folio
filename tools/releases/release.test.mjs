@@ -4,8 +4,9 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { aggregate, publish, stage, targets, verifyRelease, verifyVersions } from './release.mjs';
+import { aggregate as aggregateRelease, artifactName, publish, stage, targets, verifyRelease, verifyVersions } from './release.mjs';
 const version = verifyVersions();
+const aggregate = (directory, output, notes, previous) => aggregateRelease(directory, output, notes, previous, 10);
 test('标签必须与全部客户端版本一致', () => {
   assert.equal(verifyVersions(`v${version}`),version);
   assert.throws(() => verifyVersions('v999.999.999'));
@@ -14,7 +15,7 @@ function releaseFixture(callback) {
   const root = mkdtempSync(join(tmpdir(),'folio-publish-'));
   try {
     const input = join(root,'input'); mkdirSync(input);
-    for (const [platform,arch,formats] of targets) for (const format of formats) writeFileSync(join(input,`Folio-v${version}-${platform}-${arch}.${format}`),`${platform}-${arch}-${format}`);
+    for (const [platform,arch,formats,variant] of targets) for (const format of formats) writeFileSync(join(input,artifactName(platform, arch, format, variant)),`${platform}-${arch}-${format}`);
     const output = join(root,'output'); aggregate(input,output);
     callback(output);
   } finally { rmSync(root,{recursive:true,force:true}); }
@@ -50,7 +51,7 @@ function githubFixture(directory, { existing, incomplete = false, corruptDigest 
     if (args[1] === 'upload') {
       assert.ok(args.includes('--clobber'));
       const files = args.filter((arg) => arg.startsWith(directory));
-      assert.equal(files.length,15);
+      assert.equal(files.length,18);
       assert.ok(files.every((file) => basename(file) !== 'release-notes.md'));
       if (failUpload) throw new Error('上传中断');
     }
@@ -110,7 +111,7 @@ test('全部原生产物齐全后才生成清单，哈希对应文件原文', ()
   try {
     const input = join(root,'input'); mkdirSync(input);
     const first = `Folio-v${version}-macos-arm64.dmg`;
-    for (const [platform,arch,formats] of targets) for (const format of formats) writeFileSync(join(input,`Folio-v${version}-${platform}-${arch}.${format}`),`${platform}-${arch}-${format}`);
+    for (const [platform,arch,formats,variant] of targets) for (const format of formats) writeFileSync(join(input,artifactName(platform, arch, format, variant)),`${platform}-${arch}-${format}`);
     const manifest = aggregate(input,join(root,'output'));
     assert.equal(manifest.artifacts.length,11);
     for (const artifact of manifest.artifacts) assert.equal(artifact.sha256,createHash('sha256').update(readFileSync(join(input,artifact.url.split('/').at(-1)))).digest('hex'));
@@ -150,4 +151,22 @@ test('草稿清单复用发布时间，重建安装包不同则停止汇总', ()
   assert.equal(next.publishedAt, first.publishedAt);
   writeFileSync(join(input, `Folio-v${version}-android-arm64.apk`), 'different build');
   assert.throws(() => aggregate(input, directory, notesFile, previous), /草稿清单与本次安装包不一致/);
+}));
+
+test('兼容清单保留旧矩阵，v2 清单包含四包系统范围与实际构建号', () => releaseFixture((directory) => {
+  const previous = JSON.parse(readFileSync(join(directory, 'folio-release.json'), 'utf8'));
+  const next = JSON.parse(readFileSync(join(directory, 'folio-release-v2.json'), 'utf8'));
+  assert.equal(previous.schemaVersion, 1); assert.equal(next.schemaVersion, 2);
+  assert.equal(previous.artifacts.length, 11); assert.equal(next.artifacts.length, 13);
+  assert.ok(previous.artifacts.every((item) => !item.androidVariant && !item.url.includes('-glasmio-')));
+  assert.deepEqual(next.artifacts.filter((item) => item.platform === 'android').map(({ arch, androidVariant, minSdk, maxSdk, versionCode }) =>
+    [arch, androidVariant, minSdk, maxSdk, versionCode]), [
+    ['arm64', 'legacy', 30, 32, 101], ['x64', 'legacy', 30, 32, 101],
+    ['arm64', 'glasmio', 33, undefined, 102], ['x64', 'glasmio', 33, undefined, 102],
+  ]);
+  assert.ok(readFileSync(join(directory, 'SHA256SUMS.txt'), 'utf8').includes('  folio-release-v2.json\n'));
+  const pinned = join(directory, '..', 'previous-v2.json'); writeFileSync(pinned, JSON.stringify(next));
+  const input = join(directory, '..', 'input');
+  writeFileSync(join(input, `Folio-v${version}-android-glasmio-arm64.apk`), 'changed build');
+  assert.throws(() => aggregate(input, directory, undefined, pinned), /草稿清单与本次安装包不一致/);
 }));

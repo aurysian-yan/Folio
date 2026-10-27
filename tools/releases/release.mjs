@@ -4,6 +4,7 @@ import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validateNotes } from './notes.mjs';
+import { androidBuildInfo } from './android.mjs';
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const read = (path) => readFileSync(join(root, path), 'utf8');
 const version = /^version\s*=\s*"([^"]+)"/m.exec(read('Cargo.toml').split('[workspace.package]')[1] ?? '')?.[1];
@@ -11,8 +12,10 @@ const assert = (value, message) => { if (!value) throw new Error(message); };
 export const targets = [
   ['macos','arm64',['dmg']], ['windows','x64',['exe']], ['windows','arm64',['exe']],
   ['linux','x64',['AppImage','deb','rpm']], ['linux','arm64',['AppImage','deb','rpm']],
-  ['android','arm64',['apk']], ['android','x64',['apk']],
+  ['android','arm64',['apk'],'legacy'], ['android','x64',['apk'],'legacy'],
+  ['android','arm64',['apk'],'glasmio'], ['android','x64',['apk'],'glasmio'],
 ];
+export const artifactName = (platform, arch, format, variant) => `Folio-v${version}-${platform}${variant === 'glasmio' ? '-glasmio' : ''}-${arch}.${format}`;
 const walk = (directory) => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(join(directory, entry.name)) : [join(directory, entry.name)]);
 export function verifyVersions(tag) {
   assert(version && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version), '仓库版本必须为正式语义版本');
@@ -27,8 +30,8 @@ export function verifyVersions(tag) {
   assert(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(read('apps/macos/Folio/Info.plist'))?.[1] === version, 'macOS 应用版本不一致');
   return version;
 }
-export function stage(platform, arch, directory, output) {
-  const target = targets.find(([p,a]) => p === platform && a === arch); assert(target, '未知构建目标'); verifyVersions();
+export function stage(platform, arch, directory, output, variant = 'legacy') {
+  const target = targets.find(([p,a,,v]) => p === platform && a === arch && (platform !== 'android' || v === variant)); assert(target, '未知构建目标'); verifyVersions();
   mkdirSync(output, { recursive: true });
   const files = walk(directory);
   for (const format of target[2]) {
@@ -46,40 +49,41 @@ export function stage(platform, arch, directory, output) {
     if (format === 'rpm') assert(execFileSync('rpm',['-qp','--qf','%{ARCH}',file],{encoding:'utf8'}).trim() === (arch === 'arm64' ? 'aarch64' : 'x86_64'), 'rpm 架构错误');
     if (format === 'apk') assert(magic.subarray(0,2).toString() === 'PK', 'APK 文件头错误');
     if (format === 'dmg') assert(bytes.subarray(bytes.length-512,bytes.length-508).toString() === 'koly', 'DMG 文件尾错误');
-    copyFileSync(file, join(output, `Folio-v${version}-${platform}-${arch}.${format}`));
+    copyFileSync(file, join(output, artifactName(platform, arch, format, variant)));
   }
 }
-export function aggregate(directory, output, notesFile, previousManifestFile) {
+export function aggregate(directory, output, notesFile, previousManifestFile, buildNumber = process.env.FOLIO_BUILD_NUMBER) {
   verifyVersions(); mkdirSync(output, { recursive: true });
   const all = walk(directory); const artifacts = [];
-  for (const [platform,arch,formats] of targets) for (const format of formats) {
-    const name = `Folio-v${version}-${platform}-${arch}.${format}`; const files = all.filter((file) => basename(file) === name);
+  for (const [platform,arch,formats,variant] of targets) for (const format of formats) {
+    const name = artifactName(platform, arch, format, variant); const files = all.filter((file) => basename(file) === name);
     assert(files.length === 1, `发布矩阵不完整或产物重复：${name}`);
     const bytes = readFileSync(files[0]); assert(bytes.length > 0, `空产物：${name}`);
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     copyFileSync(files[0], join(output, name));
-    artifacts.push({ platform, arch, format, url: `https://github.com/aurysian-yan/Folio/releases/download/v${version}/${name}`, size: bytes.length, sha256 });
+    artifacts.push({ platform, arch, format, ...(platform === 'android' ? androidBuildInfo(variant, buildNumber) : {}), url: `https://github.com/aurysian-yan/Folio/releases/download/v${version}/${name}`, size: bytes.length, sha256 });
   }
   assert(all.filter((file) => /\.(dmg|exe|AppImage|deb|rpm|apk)$/.test(file)).length === artifacts.length, '存在矩阵以外的安装包');
   copyFileSync(join(root,'shared/about/licenses.json'),join(output,'folio-licenses.json'));
   copyFileSync(join(root,'LICENSE'),join(output,'LICENSE.txt'));
-  const files = readdirSync(output).filter((file) => file !== 'SHA256SUMS.txt' && file !== 'folio-release.json');
-  const manifest = { schemaVersion: 1, version, publishedAt: new Date().toISOString(), releaseUrl: `https://github.com/aurysian-yan/Folio/releases/tag/v${version}`, artifacts };
+  const files = readdirSync(output).filter((file) => file !== 'SHA256SUMS.txt' && !['folio-release.json', 'folio-release-v2.json'].includes(file));
+  const manifest = { schemaVersion: 1, version, publishedAt: new Date().toISOString(), releaseUrl: `https://github.com/aurysian-yan/Folio/releases/tag/v${version}`, artifacts: artifacts.filter((item) => item.androidVariant !== 'glasmio').map(({ androidVariant, minSdk, maxSdk, versionCode, ...item }) => item) };
   if (notesFile) manifest.releaseNotes = validateNotes(JSON.parse(readFileSync(notesFile, 'utf8')));
   if (previousManifestFile) {
     const previous = JSON.parse(readFileSync(previousManifestFile, 'utf8'));
-    assert(previous.version === version && JSON.stringify(previous.artifacts) === JSON.stringify(artifacts)
+    assert(previous.version === version && JSON.stringify(previous.artifacts) === JSON.stringify(previous.schemaVersion === 2 ? artifacts : manifest.artifacts)
       && JSON.stringify(previous.releaseNotes) === JSON.stringify(manifest.releaseNotes), '草稿清单与本次安装包不一致，请重跑原工作流的失败任务');
     manifest.publishedAt = previous.publishedAt;
   }
   writeFileSync(join(output,'folio-release.json'),JSON.stringify(manifest,null,2)+'\n');
-  files.push('folio-release.json');
+  writeFileSync(join(output,'folio-release-v2.json'),JSON.stringify({ ...manifest, schemaVersion: 2, artifacts },null,2)+'\n');
+  files.push('folio-release.json', 'folio-release-v2.json');
   writeFileSync(join(output,'SHA256SUMS.txt'),files.sort().map((name) => `${createHash('sha256').update(readFileSync(join(output,name))).digest('hex')}  ${name}`).join('\n')+'\n');
   return manifest;
 }
 export function verifyRelease(directory) {
-  const names = targets.flatMap(([platform,arch,formats]) => formats.map((format) => `Folio-v${version}-${platform}-${arch}.${format}`));
-  names.push('folio-licenses.json','LICENSE.txt','folio-release.json','SHA256SUMS.txt');
+  const names = targets.flatMap(([platform,arch,formats,variant]) => formats.map((format) => artifactName(platform, arch, format, variant)));
+  names.push('folio-licenses.json','LICENSE.txt','folio-release.json','folio-release-v2.json','SHA256SUMS.txt');
   const files = readdirSync(directory);
   assert(files.length === names.length && names.every((name) => files.includes(name) && statSync(join(directory,name)).isFile()), '发布附件不完整或包含额外文件');
   const checksum = (name) => createHash('sha256').update(readFileSync(join(directory,name))).digest('hex');
@@ -88,14 +92,26 @@ export function verifyRelease(directory) {
   const manifest = JSON.parse(readFileSync(join(directory,'folio-release.json'),'utf8'));
   if (manifest.releaseNotes !== undefined) validateNotes(manifest.releaseNotes);
   assert(manifest.schemaVersion === 1 && manifest.version === version && manifest.releaseUrl === `https://github.com/aurysian-yan/Folio/releases/tag/v${version}`, '发布清单版本或来源错误');
-  const artifacts = targets.flatMap(([platform,arch,formats]) => formats.map((format) => ({platform,arch,format})));
-  assert(Array.isArray(manifest.artifacts) && manifest.artifacts.length === artifacts.length, '发布清单矩阵不完整');
-  for (const {platform,arch,format} of artifacts) {
-    const name = `Folio-v${version}-${platform}-${arch}.${format}`;
-    const matches = manifest.artifacts.filter((item) => item.platform === platform && item.arch === arch && item.format === format);
-    assert(matches.length === 1, `发布清单产物重复或缺失：${name}`);
-    const item = matches[0]; const size = statSync(join(directory,name)).size;
-    assert(size > 0 && item.size === size && item.sha256 === checksum(name) && item.url === `https://github.com/aurysian-yan/Folio/releases/download/v${version}/${name}`, `发布清单与附件不一致：${name}`);
+  const next = JSON.parse(readFileSync(join(directory,'folio-release-v2.json'),'utf8'));
+  assert(next.schemaVersion === 2 && next.version === manifest.version && next.publishedAt === manifest.publishedAt
+    && next.releaseUrl === manifest.releaseUrl && JSON.stringify(next.releaseNotes) === JSON.stringify(manifest.releaseNotes), '双版本发布清单信息不一致');
+  const base = next.artifacts?.find((item) => item.androidVariant === 'legacy')?.versionCode;
+  for (const current of [manifest, next]) {
+    const expected = targets.filter((target) => current === next || target[3] !== 'glasmio');
+    assert(Array.isArray(current.artifacts) && current.artifacts.length === expected.reduce((count, target) => count + target[2].length, 0), '发布清单矩阵不完整');
+    for (const [platform, arch, formats, variant] of expected) for (const format of formats) {
+      const name = artifactName(platform, arch, format, variant);
+      const matches = current.artifacts.filter((item) => item.platform === platform && item.arch === arch && item.format === format
+        && (current !== next || platform !== 'android' || item.androidVariant === variant));
+      assert(matches.length === 1, `发布清单产物重复或缺失：${name}`);
+      const item = matches[0]; const size = statSync(join(directory,name)).size;
+      assert(size > 0 && item.size === size && item.sha256 === checksum(name) && item.url === `https://github.com/aurysian-yan/Folio/releases/download/v${version}/${name}`, `发布清单与附件不一致：${name}`);
+      if (current === next && platform === 'android') {
+        const info = androidBuildInfo(variant, (base - 1) / 10);
+        assert(Object.entries(info).every(([key, value]) => item[key] === value)
+          && (variant === 'legacy' || item.maxSdk === undefined), 'Android 清单类型、系统范围或构建号不一致');
+      }
+    }
   }
   assert(readFileSync(join(directory,'folio-licenses.json')).equals(readFileSync(join(root,'shared/about/licenses.json'))), '发布许可目录不一致');
   assert(readFileSync(join(directory,'LICENSE.txt')).equals(readFileSync(join(root,'LICENSE'))), '发布许可原文不一致');

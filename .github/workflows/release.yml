@@ -214,25 +214,7 @@ jobs:
       - name: Verify and stage Android APKs
         shell: bash
         run: |
-          for entry in arm64:arm64-v8a x64:x86_64; do
-            arch="${entry%%:*}"
-            abi="${entry##*:}"
-            base="experiments/mobile/android/app/build/outputs/apk/release/app-$abi-release"
-            apk=""
-            for candidate in "$base.apk" "$base-unsigned.apk"; do
-              if [ -f "$candidate" ]; then
-                apk="$candidate"
-                break
-              fi
-            done
-            test -n "$apk"
-            input="$RUNNER_TEMP/folio-android-$arch"
-            rm -rf "$input"
-            mkdir -p "$input"
-            cp "$apk" "$input/"
-            node tools/releases/check-native.mjs android "$input" "$arch"
-            node tools/releases/release.mjs stage android "$arch" "$input" release-stage
-          done
+          node tools/releases/stage-android.mjs experiments/mobile/android/app/build/outputs/apk release-stage
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: package-android
@@ -273,6 +255,8 @@ jobs:
           name: release-notes
           path: release-notes
       - run: node tools/releases/release.mjs aggregate release-input release-output release-notes/notes.json
+        env:
+          FOLIO_BUILD_NUMBER: ${{ github.run_number }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: complete-release

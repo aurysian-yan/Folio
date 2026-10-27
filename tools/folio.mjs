@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { androidOutputs } from './releases/android.mjs';
 import { commitVersionGit, prepareVersionGit } from './releases/version-git.mjs';
 
 // 仓库根目录由脚本位置推导，保证在任意工作目录下运行结果一致。
@@ -666,16 +667,12 @@ function expoBuild(args) {
     run(GRADLEW, args.aab ? [task] : [task, `-Pfolio.android.abi=${abi.gradle}`], {
       cwd: join(MOBILE_DIR, 'android'),
     });
-    const output = args.aab ? 'android/app/build/outputs/bundle/release' : 'android/app/build/outputs/apk/release';
+    const output = args.aab ? 'android/app/build/outputs/bundle' : 'android/app/build/outputs/apk';
     log(`\n产物目录：${shorten(join(MOBILE_DIR, output))}`);
     if (!args.aab) {
-      const names = abi.gradle === 'all'
-        ? ['app-arm64-v8a-release.apk', 'app-x86_64-release.apk']
-        : [`app-${abi.gradle === 'arm64' ? 'arm64-v8a' : 'x86_64'}-release.apk`];
-      const actual = names
-        .flatMap((name) => [name, name.replace('.apk', '-unsigned.apk')])
-        .filter((name) => existsSync(join(MOBILE_DIR, output, name)));
-      if (actual.length > 0) log(`APK：${actual.join('、')}`);
+      const version = JSON.parse(readFileSync(join(MOBILE_DIR, 'package.json'), 'utf8')).version;
+      const packages = androidOutputs(join(MOBILE_DIR, output), version, process.env.FOLIO_BUILD_NUMBER ?? '1', abi.gradle);
+      log(`APK：${packages.map((item) => shorten(item.file)).join('、')}`);
     }
     return;
   }
