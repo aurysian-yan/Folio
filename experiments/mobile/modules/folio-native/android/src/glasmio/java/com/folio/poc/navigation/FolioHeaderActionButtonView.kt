@@ -29,9 +29,9 @@ class FolioHeaderActionButtonView(context: Context, appContext: AppContext) : Fo
     private val onPress by EventDispatcher()
 
     @Composable override fun GlassContent() {
-        GlasmioToolbarActionGroup {
+        GlasmioToolbarActionGroup(frostRadius = FolioHeaderFrostRadius) {
             GlasmioIconButton({ if (controlEnabled && !busy) onPress(emptyMap<String, Any>()) },
-                enabled = controlEnabled && !busy, style = GlassSurfaceStyle.Navigation,
+                enabled = controlEnabled && !busy, style = GlassSurfaceStyle.Navigation, frostRadius = FolioHeaderFrostRadius,
                 modifier = Modifier.semantics { contentDescription = label; selected = this@FolioHeaderActionButtonView.controlSelected }) {
                 if (busy) CircularProgressIndicator(Modifier.size(20.dp))
                 else SfIcon(systemImage, null, tint = if (controlSelected || primary) GlasmioTheme.colors.accent else GlasmioTheme.colors.content)

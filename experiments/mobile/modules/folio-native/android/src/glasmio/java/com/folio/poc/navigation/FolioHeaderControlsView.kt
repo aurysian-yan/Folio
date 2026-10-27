@@ -58,7 +58,7 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : FolioG
             return
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            GlasmioToolbarActionGroup {
+            GlasmioToolbarActionGroup(frostRadius = FolioHeaderFrostRadius) {
                 GlasmioMenu(expanded, { expanded = it; onExpandedChange(mapOf("expanded" to it)) }, 2,
                     anchor = { open ->
                         HeaderButton(text.viewOptions, mode, true, open)
@@ -70,7 +70,7 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : FolioG
                 }
                 HeaderButton(text.filter, "filter", ready) { onFilter(emptyMap<String, Any>()) }
                 GlasmioIconButton({ onImport(emptyMap<String, Any>()) }, enabled = ready && !importing && !importBlocked,
-                    style = GlassSurfaceStyle.Navigation, modifier = Modifier.semantics { contentDescription = text.importFonts }) {
+                    style = GlassSurfaceStyle.Navigation, frostRadius = FolioHeaderFrostRadius, modifier = Modifier.semantics { contentDescription = text.importFonts }) {
                     if (importing) CircularProgressIndicator() else ViewMenuIcon("plus", GlasmioTheme.colors.content, 24.dp)
                 }
             }
@@ -78,7 +78,7 @@ class FolioHeaderControlsView(context: Context, appContext: AppContext) : FolioG
     }
 
     @Composable private fun HeaderButton(label: String, icon: String, enabled: Boolean, click: () -> Unit) {
-        GlasmioIconButton(click, enabled = enabled, style = GlassSurfaceStyle.Navigation,
+        GlasmioIconButton(click, enabled = enabled, style = GlassSurfaceStyle.Navigation, frostRadius = FolioHeaderFrostRadius,
             modifier = Modifier.semantics { contentDescription = label }) { ViewMenuIcon(icon, GlasmioTheme.colors.content, 24.dp) }
     }
 }

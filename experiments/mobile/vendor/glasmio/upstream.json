@@ -59,5 +59,13 @@
     "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/IosTextSelection.kt": "1e46aa9b99cad9702cfe531418b4d955b38336e8bd61c4424df9bc9329ca4df7",
     "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/IosToolbars.kt": "82caa7d624d3be69b4a035ec556e4f617972f530d129f260a404203fef183f63",
     "glasmio-ui/src/test/java/io/github/neoruaa/glasmio/ui/AlertMotionTest.kt": "0a8e1b94f8e31c54e22de572fc6fa3d6ba2ee713a8d61bf1a987c4ac71750ee7"
+  },
+  "patches": {
+    "patches/toolbar-frost-radius.patch": "1218cf1abd68f0ab142579e60393a85d27cde3b59dbdfacd6aa1cc0c32f3e5f0"
+  },
+  "patchedFiles": {
+    "glasmio-glass/src/main/java/io/github/neoruaa/glasmio/glass/IosToolbarActionGroup.kt": "cd212dc0a10c4537524803d330ed938c7f488497f7f7846948d6203f5a0b07a2",
+    "glasmio-glass/src/main/java/io/github/neoruaa/glasmio/glass/GlassSurface.kt": "68da00f3a97cfe1de01ba8f57bf68bcf537f2740a2b12fb52a5b2221d727d972",
+    "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlassButtons.kt": "24cbd09ce218c7ab1b60701cb4d93f9737a4f98ecf2202641eba46ddff96d728"
   }
 }

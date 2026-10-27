@@ -8,12 +8,18 @@ Glasmio 源码固定在 `17b13caddb64b7d396009fae71919a8a3955fe6f`，
 
 高版本已注册导航、顶栏、菜单、Slider、Switch 和背景视图，React 页面继续使用原有业务接口。
 控件绘制在页面采样树之外的原生 overlay；页面内容通过 RenderNode 和官方 Backdrop 接口提供，
-Glasmio 保留默认材质、折射和动画。轨道与拨片组合取样由上游控件自身实现。
+Glasmio 保留默认材质、折射和动画；顶栏按钮背景模糊按应用要求提高到 24 dp，
+覆盖合并操作组、独立返回按钮和顶栏菜单触发器。轨道与拨片组合取样由上游控件自身实现。
 菜单触发器前景和菜单由同一 Compose 树管理，字款选择行的文字一起参与前景转移。
 原生 overlay 的实际根节点显式绑定页面的 Lifecycle、SavedState 与 ViewModel owner，
 让页面进入、返回及 RN 滚动裁切后的控件重挂载均能创建 Compose 重组器。
 本轮已在 API 37／arm64 模拟器覆盖安装开发身份的 Glasmio Release 包并启动，
 包内包含完整页面代码，无需预览服务。实际控件效果由使用者验证。
+
+源码的模糊参数透传补丁位于 `vendor/glasmio/patches/toolbar-frost-radius.patch`，
+保留上游默认 2 dp，只有 Folio 顶栏显式提高。菜单前景转移时沿用触发器的模糊半径。
+`upstream.json` 的 `files` 保存上游原始哈希，`patchedFiles` 和 `patches` 分别记录
+补丁后的源码与补丁文件哈希。
 
 ## 构建与兼容规则
 

@@ -840,6 +840,7 @@ fun GlassSurface(
             opticalHighlightBoost,
             exportedBackdrop,
             material,
+            frostRadius,
             navigationSurfaceAlphaMultiplier,
             pressProgressState,
             sampleBackdrop,

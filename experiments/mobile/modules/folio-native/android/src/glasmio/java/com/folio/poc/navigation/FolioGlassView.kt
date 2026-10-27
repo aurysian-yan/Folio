@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -28,6 +29,9 @@ import io.github.neoruaa.glasmio.glass.GlasmioBackdropProvider
 
 internal fun String.glassColor(fallback: Color = Color.Unspecified): Color =
     runCatching { Color(android.graphics.Color.parseColor(this)) }.getOrDefault(fallback)
+
+// 顶栏模糊抑制背景文字，图标与玻璃轮廓保持清晰。
+internal val FolioHeaderFrostRadius = 24.dp
 
 // 原生控件只在页面采样树之外绘制玻璃，布局锚点仍由 Yoga 管理。
 abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
@@ -58,9 +62,9 @@ abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoVi
                 elevatedBackground = surfaceColor.glassColor(defaults.elevatedBackground),
             )) {
                 CompositionLocalProvider(LocalGlasmioIconResolver provides FolioGlassIcons) {
-                GlasmioBackdropProvider(backdrop) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { if (active) GlassContent() }
-                }
+                    GlasmioBackdropProvider(backdrop) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { if (active) GlassContent() }
+                    }
                 }
             }
         }

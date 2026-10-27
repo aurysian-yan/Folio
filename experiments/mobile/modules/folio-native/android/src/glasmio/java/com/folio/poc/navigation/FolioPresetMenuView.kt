@@ -51,7 +51,7 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : FolioGlass
     @Composable override fun GlassContent() {
         val text = labels ?: return
         LaunchedEffect(disabled) { if (disabled) updateExpanded(false) }
-        GlasmioToolbarActionGroup {
+        GlasmioToolbarActionGroup(frostRadius = if (triggerSurface) FolioHeaderFrostRadius else 2.dp) {
             GlasmioMenu(expanded, ::updateExpanded, items.size, anchor = { open ->
                 if (triggerTrailing) {
                     Row(Modifier.fillMaxSize().clickable(enabled = !disabled, onClick = open).padding(horizontal = 16.dp)
@@ -62,7 +62,8 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : FolioGlass
                         ViewMenuIcon("caret", GlasmioTheme.colors.secondaryContent, 18.dp)
                     }
                 } else GlasmioIconButton(open, enabled = !disabled,
-                    style = if (triggerSurface) GlassSurfaceStyle.Navigation else GlassSurfaceStyle.Navigation,
+                    style = GlassSurfaceStyle.Navigation,
+                    frostRadius = if (triggerSurface) FolioHeaderFrostRadius else null,
                     modifier = Modifier.semantics { contentDescription = text.title }) {
                     ViewMenuIcon(if (triggerIcon == "more") "dots" else "caret", GlasmioTheme.colors.content, 20.dp)
                 }

@@ -232,7 +232,7 @@ class GlasmioMenuAnchorState constructor() {
         acquiredGroup = sourceGroup.takeIf { run.isNotEmpty() }
         sourceHasGlassBackground = acquiredGroup != null || standalonePortal != null
         sourceMaterial = standaloneMaterial.takeIf { acquiredGroup == null && standalonePortal != null }
-        sourceFrostRadius = standaloneFrostRadius.takeIf { acquiredGroup == null && standalonePortal != null }
+        sourceFrostRadius = acquiredGroup?.frostRadius ?: standaloneFrostRadius.takeIf { standalonePortal != null }
         sourceMaterialPaint = if (acquiredGroup != null) {
             val paint = acquiredGroup?.materialPaint
             val material = run.first().material
@@ -341,9 +341,10 @@ fun GlasmioToolbarActionGroup(
     modifier: Modifier = Modifier,
     style: GlasmioToolbarActionStyle = GlasmioToolbarActionStyle.Merged,
     separationProgress: Float? = null,
+    frostRadius: Dp = 2.dp,
     content: @Composable RowScope.() -> Unit,
 ) {
-    GlasmioToolbarActionHost(modifier, style, separationProgress) {
+    GlasmioToolbarActionHost(modifier, style, separationProgress, frostRadius = frostRadius) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = content)
     }
 }
@@ -356,6 +357,7 @@ fun GlasmioToolbarActionHost(
     separationProgress: Float? = null,
     presentationBounds: (() -> Rect)? = null,
     presentationTransform: (() -> ToolbarActionTransform)? = null,
+    frostRadius: Dp = 2.dp,
     content: @Composable () -> Unit,
 ) {
     val styleProgress by animateFloatAsState(
@@ -374,6 +376,7 @@ fun GlasmioToolbarActionHost(
     val colors = LocalGlassColors.current
     val appearance = LocalGlassAppearance.current
     group.appearance = appearance
+    group.frostRadius = frostRadius
     group.materialPaint = remember(colors, appearance) {
         { material, alpha ->
             val containerColor = material.color ?: colors.container
@@ -402,7 +405,7 @@ fun GlasmioToolbarActionHost(
             val press = remember(group, run) {
                 derivedStateOf { run.maxOfOrNull { it.highlight.pressProgress } ?: 0f }
             }
-            val background = remember(backdrop, shape, colors, appearance, innerShadows, material, run) {
+            val background = remember(backdrop, shape, colors, appearance, innerShadows, material, run, frostRadius) {
                 Modifier.navigationGlassBackground(
                     backdrop = backdrop,
                     shape = shape,
@@ -420,6 +423,7 @@ fun GlasmioToolbarActionHost(
                         alpha = if (group.isMenuSourceHidden(run)) 0f else 1f
                     },
                     appearance = appearance,
+                    blurRadius = frostRadius,
                 )
             }
             // The layer stays at the run's untransformed size; its graphics transform can
@@ -562,6 +566,7 @@ class ToolbarActionGroup(
     var presentationTransform: (() -> ToolbarActionTransform)? by mutableStateOf(null)
     internal var materialPaint: (DrawScope.(ToolbarActionMaterial, Float) -> Unit)? = null
     internal var appearance = GlassAppearance()
+    internal var frostRadius: Dp = 2.dp
     private val pressScope = GraphicsLayerBlockScope()
     private val pressRenderer = PressHighlightRenderer()
 

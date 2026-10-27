@@ -188,6 +188,7 @@ fun GlasmioIconButton(
     onLongClick: (() -> Unit)? = null,
     detailAction: Boolean = false,
     size: Dp? = null,
+    frostRadius: Dp? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     GlassSurface(
@@ -206,6 +207,7 @@ fun GlasmioIconButton(
         onClick = onClick,
         onLongClick = onLongClick,
         detailAction = detailAction,
+        frostRadius = frostRadius,
         content = content,
     )
 }
