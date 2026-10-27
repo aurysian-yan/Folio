@@ -22,11 +22,13 @@ if (platform === 'macos') {
   const assets = 'apps/desktop-ui/dist/assets';
   if (!readdirSync(assets).filter((name) => name.endsWith('.js')).some((name) => readFileSync(join(assets,name)).includes(Buffer.from(id)))) fail('桌面页面未包含离线许可目录');
 } else if (platform === 'android') {
+  const expectedAbi = { arm64: 'arm64-v8a', x64: 'x86_64' }[arch];
+  if (!expectedAbi) fail('未知 Android 架构');
   const files = readdirSync(directory).filter((file) => file.endsWith('.apk'));
   if (files.length !== 1) fail('Android 产物数量错误');
   const apk = join(directory,files[0]);
-  const python = `import sys,zipfile,json\nz=zipfile.ZipFile(sys.argv[1])\nabis={p.split('/')[1] for p in z.namelist() if p.startswith('lib/') and p.endswith('.so')}\nassert abis=={'arm64-v8a','x86_64'},abis\nfor abi in abis: assert 'lib/'+abi+'/libfolio_ffi.so' in z.namelist()\nbundle=z.read('assets/index.android.bundle')\ncatalog=json.load(open('shared/about/licenses.json'))\nfor entry in catalog['entries']: assert entry['id'].encode() in bundle,'APK 许可目录缺失或过期: '+entry['name']\nfor key in catalog['texts']: assert key.encode() in bundle,'APK 许可原文缺失'\n`;
-  execFileSync('python3',['-c',python,apk],{stdio:'inherit'});
+  const python = `import sys,zipfile,json\nz=zipfile.ZipFile(sys.argv[1])\nabis={p.split('/')[1] for p in z.namelist() if p.startswith('lib/') and p.endswith('.so')}\nassert abis=={sys.argv[2]},abis\nfor abi in abis: assert 'lib/'+abi+'/libfolio_ffi.so' in z.namelist()\nbundle=z.read('assets/index.android.bundle')\ncatalog=json.load(open('shared/about/licenses.json'))\nfor entry in catalog['entries']: assert entry['id'].encode() in bundle,'APK 许可目录缺失或过期: '+entry['name']\nfor key in catalog['texts']: assert key.encode() in bundle,'APK 许可原文缺失'\n`;
+  execFileSync('python3',['-c',python,apk,expectedAbi],{stdio:'inherit'});
   const sdk = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT;
   if (!sdk) fail('未配置 Android SDK');
   const metadata = execFileSync(join(sdk,'build-tools/36.0.0/aapt2'),['dump','badging',apk],{encoding:'utf8'});

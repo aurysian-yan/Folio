@@ -60,9 +60,10 @@ object FolioUpdater {
         if (!Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)").matches(version)) error("package")
         if (compareVersion(version, installed(context).versionName ?: "0.0.0") <= 0) error("version")
         val artifact = data.getJSONObject("artifact")
-        val original = "$REPOSITORY/releases/download/v$version/Folio-v$version-android-universal.apk"
+        val arch = folioAndroidArch()
+        val original = "$REPOSITORY/releases/download/v$version/Folio-v$version-android-$arch.apk"
         if (artifact.getString("url") != original || artifact.getString("platform") != "android"
-            || artifact.getString("arch") != "universal" || artifact.getString("format") != "apk") error("package")
+            || artifact.getString("arch") != arch || artifact.getString("format") != "apk") error("package")
         val size = artifact.getLong("size")
         if (size <= 0 || size > 4L * 1024 * 1024 * 1024 || !Regex("[a-f0-9]{64}").matches(artifact.getString("sha256"))) error("package")
         val prefix = prefixes[data.getString("mirror")] ?: error("package")

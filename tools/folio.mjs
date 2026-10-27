@@ -621,10 +621,21 @@ function expoPlatform(args) {
   return platform;
 }
 
+// Android 发布包按 ABI 拆分；本机可按需只构建一个架构，默认全部。
+function androidAbi(args) {
+  const value = args.abi ?? 'all';
+  if (value === 'all') return { gradle: 'all', rust: [] };
+  if (value === 'arm64') return { gradle: 'arm64', rust: ['arm64-v8a'] };
+  if (value === 'x64') return { gradle: 'x64', rust: ['x86_64'] };
+  fail('--abi 仅支持 all、arm64 或 x64。');
+}
+
 // variant 决定应用身份，prebuild-variant 会在身份变化时自动清理原生工程。
 function expoPrepare(platform, args, variant) {
   if (!args['no-rust']) {
-    run(PNPM, [platform === 'ios' ? 'rust:ios' : 'rust:android'], { cwd: MOBILE_DIR });
+    const script = platform === 'ios' ? 'rust:ios' : 'rust:android';
+    const abis = platform === 'android' ? androidAbi(args).rust : [];
+    run(PNPM, [script, ...abis], { cwd: MOBILE_DIR });
   }
   if (!args['no-prebuild']) {
     run('node', ['scripts/prebuild-variant.mjs', platform], {
@@ -649,10 +660,23 @@ function expoBuild(args) {
   expoPrepare(platform, args, 'production');
 
   if (platform === 'android') {
+    const abi = androidAbi(args);
+    if (args.aab && abi.gradle !== 'all') fail('AAB 包含全部 ABI，不能与 --abi 同时使用。');
     const task = args.aab ? 'bundleRelease' : 'assembleRelease';
-    run(GRADLEW, [task], { cwd: join(MOBILE_DIR, 'android') });
+    run(GRADLEW, args.aab ? [task] : [task, `-Pfolio.android.abi=${abi.gradle}`], {
+      cwd: join(MOBILE_DIR, 'android'),
+    });
     const output = args.aab ? 'android/app/build/outputs/bundle/release' : 'android/app/build/outputs/apk/release';
     log(`\n产物目录：${shorten(join(MOBILE_DIR, output))}`);
+    if (!args.aab) {
+      const names = abi.gradle === 'all'
+        ? ['app-arm64-v8a-release.apk', 'app-x86_64-release.apk']
+        : [`app-${abi.gradle === 'arm64' ? 'arm64-v8a' : 'x86_64'}-release.apk`];
+      const actual = names
+        .flatMap((name) => [name, name.replace('.apk', '-unsigned.apk')])
+        .filter((name) => existsSync(join(MOBILE_DIR, output, name)));
+      if (actual.length > 0) log(`APK：${actual.join('、')}`);
+    }
     return;
   }
 
@@ -903,9 +927,17 @@ async function tuiExpo(c) {
 
   const options = [
     { value: 'dev', label: '调试运行' },
-    { value: 'build', label: '构建', hint: platform === 'android' ? 'APK' : '归档' },
+    {
+      value: 'build',
+      label: platform === 'android' ? '构建 APK（全部 ABI）' : '构建',
+      hint: platform === 'android' ? 'arm64 + x64' : '归档',
+    },
   ];
-  if (platform === 'android') options.push({ value: 'aab', label: '构建 AAB' });
+  if (platform === 'android') {
+    options.push({ value: 'build-arm64', label: '构建 APK（arm64）', hint: 'arm64-v8a' });
+    options.push({ value: 'build-x64', label: '构建 APK（x64）', hint: 'x86_64' });
+    options.push({ value: 'aab', label: '构建 AAB' });
+  }
   options.push({ value: 'open', label: '打开构建产物目录' });
   options.push({ value: BACK, label: '返回' });
 
@@ -915,6 +947,14 @@ async function tuiExpo(c) {
     await runAction(c, 'Expo 调试', () => expoDev({ platform }), () => expoDevNext(platform));
   } else if (action === 'build') {
     await runAction(c, 'Expo 构建', () => expoBuild({ platform }), () => expoBuildNext(platform));
+  } else if (action === 'build-arm64' || action === 'build-x64') {
+    const abi = action === 'build-arm64' ? 'arm64' : 'x64';
+    await runAction(
+      c,
+      `Expo 构建 APK（${abi}）`,
+      () => expoBuild({ platform, abi }),
+      () => expoBuildNext(platform),
+    );
   } else if (action === 'aab') {
     await runAction(
       c,
@@ -1048,8 +1088,9 @@ function printHelp() {
   tauri open [--platform windows|linux] [--arch x64|arm64]
                                       打开 Tauri 构建产物目录
   expo dev --platform ios|android     调试运行 Expo 移动端
-  expo build --platform ios|android [--aab]
-                                      构建移动端（Android 出 APK/AAB，iOS 出归档）
+  expo build --platform ios|android [--aab] [--abi all|arm64|x64]
+                                      构建移动端（Android 默认按 ABI 拆分为两个 APK，
+                                      --aab 产出 AAB，--abi 可只构建单一架构）
   expo open --platform ios|android    打开 Expo 构建产物目录
   version show                        查看各文件当前版本
   version bump <major|minor|patch|x.y.z> [--build] [--dry-run] [--no-git]
@@ -1078,7 +1119,7 @@ function dispatch(group, action, rest) {
         return expoDev(parseArgs(rest, { values: ['platform'], booleans: ['no-rust', 'no-prebuild'] }));
       }
       if (action === 'build') {
-        return expoBuild(parseArgs(rest, { values: ['platform'], booleans: ['no-rust', 'no-prebuild', 'aab'] }));
+        return expoBuild(parseArgs(rest, { values: ['platform', 'abi'], booleans: ['no-rust', 'no-prebuild', 'aab'] }));
       }
       if (action === 'open') return expoOpen(parseArgs(rest, { values: ['platform'] }));
       break;

@@ -91,13 +91,13 @@ OFL 字体制作的字标图形无需字体署名，依据见 [OFL FAQ 1.1.2](ht
 | macOS | xcode-27 | arm64 | DMG，本地签名 |
 | Windows | windows-2025 / windows-11-arm | x64 / arm64 | NSIS EXE，未签名 |
 | Linux | ubuntu-22.04 / ubuntu-22.04-arm | x64 / arm64 | AppImage、deb、rpm |
-| Android | ubuntu-24.04 | arm64-v8a + x86_64 | 单个双 ABI APK |
+| Android | ubuntu-24.04 | arm64-v8a / x86_64 | 按 ABI 拆分的两个 APK |
 
 iOS 本轮不发布安装包。ARM AppImage 在 ARM Linux runner 上构建，不能在 x64
 runner 上交叉打包。Node、pnpm、Rust、Java、NDK 与 Xcode 固定版本；外部 Actions
 固定到提交。所有安装包构建、许可校验及产物检查成功后才汇总 SHA-256 和
 `folio-release.json`。先上传草稿的完整附件，再公开 Release；正式版本不覆盖。
-失败任务保留可用安装包或报告。公开前再次检查十个安装包、许可资料、更新清单和
+失败任务保留可用安装包或报告。公开前再次检查十一个安装包、许可资料、更新清单和
 全部 SHA-256；上传中断后可重跑失败任务，续传同一提交的工作流草稿。
 正式版本、其他提交创建的草稿及含未知附件的草稿禁止覆盖。
 
@@ -130,7 +130,7 @@ runner 上交叉打包。Node、pnpm、Rust、Java、NDK 与 Xcode 固定版本�
 }
 ```
 
-`publishedAt` 为本次发布准备时间，采用 UTC ISO 8601。完整矩阵共十个安装包；
+`publishedAt` 为本次发布准备时间，采用 UTC ISO 8601。完整矩阵共十一个安装包；
 大小以字节计，校验值必须来自上传的同一文件。`folio-licenses.json` 和
 `LICENSE.txt` 也随 Release 发布，`SHA256SUMS.txt` 覆盖全部附件及更新清单。
 客户端不接受其他仓库、外部下载站、损坏清单、重复产物或标签不一致的清单。
@@ -149,8 +149,9 @@ runner 上交叉打包。Node、pnpm、Rust、Java、NDK 与 Xcode 固定版本�
 密钥只解码到 runner 临时目录，构建后删除，不写入仓库或 Actions 附件。
 生产 Expo 配置插件将 Gradle Release 签名切换为固定密钥；缺少任何凭据时正式
 发布立即失败，不回退到调试签名。手动仅构建且无密钥时生成未签名 APK，用于
-产物检查，不能直接安装。Android 构建号使用 `github.run_number`，ABI 保持
-`arm64-v8a` 与 `x86_64`。校验 APK 时检查 ABI、Rust 桥接、离线许可与签名证书。
+产物检查，不能直接安装。Android 构建号使用 `github.run_number`，Gradle 按
+`arm64-v8a` 与 `x86_64` 分别输出 APK，不生成通用包；应用内更新按设备架构选择
+对应安装包。校验 APK 时检查 ABI、Rust 桥接、离线许可与签名证书。
 此前使用调试密钥安装的正式身份 APK 与新发布密钥不兼容，不能原位升级；迁移前
 先通过应用导出或云同步保留资料。
 

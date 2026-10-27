@@ -1,7 +1,7 @@
 import content from './content.json';
 
 export type Platform = 'macos' | 'windows' | 'linux' | 'android' | 'ios';
-export type Architecture = 'arm64' | 'x64' | 'universal';
+export type Architecture = 'arm64' | 'x64';
 export interface AppInfo { version: string; build: string; platform: Platform; arch: Architecture }
 export interface Artifact { platform: Platform; arch: Architecture; format: string; url: string; size: number; sha256: string }
 export interface ReleaseNotes { 'zh-CN': string; en: string }
@@ -59,8 +59,7 @@ export function validateManifest(input: unknown, expectedVersion?: string): Rele
   const seen = new Set<string>();
   for (const artifact of value.artifacts) {
     if (!artifact || !Object.hasOwn(formats, artifact.platform) || !formats[artifact.platform].includes(artifact.format)
-      || !['arm64', 'x64', 'universal'].includes(artifact.arch) || (artifact.arch === 'universal' && artifact.platform !== 'android')
-      || artifact.platform === 'android' && artifact.arch !== 'universal' || !Number.isSafeInteger(artifact.size) || artifact.size <= 0
+      || !['arm64', 'x64'].includes(artifact.arch) || !Number.isSafeInteger(artifact.size) || artifact.size <= 0
       || !/^[a-f0-9]{64}$/.test(artifact.sha256) || !isReleaseUrl(artifact.url, true)
       || !artifact.url.startsWith(`${repositoryUrl}/releases/download/v${value.version}/`)) throw new Error('failed');
     const key = `${artifact.platform}/${artifact.arch}/${artifact.format}`;
@@ -69,7 +68,7 @@ export function validateManifest(input: unknown, expectedVersion?: string): Rele
   return value;
 }
 export function matchingArtifacts(manifest: ReleaseManifest, app: AppInfo): Artifact[] {
-  return manifest.artifacts.filter((item) => item.platform === app.platform && (item.arch === app.arch || item.platform === 'android' && item.arch === 'universal'))
+  return manifest.artifacts.filter((item) => item.platform === app.platform && item.arch === app.arch)
     .sort((a, b) => Number(b.format === 'AppImage') - Number(a.format === 'AppImage'));
 }
 export const fetchTransport: Transport = async (url, signal) => {

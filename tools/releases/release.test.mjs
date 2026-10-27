@@ -50,7 +50,7 @@ function githubFixture(directory, { existing, incomplete = false, corruptDigest 
     if (args[1] === 'upload') {
       assert.ok(args.includes('--clobber'));
       const files = args.filter((arg) => arg.startsWith(directory));
-      assert.equal(files.length,14);
+      assert.equal(files.length,15);
       assert.ok(files.every((file) => basename(file) !== 'release-notes.md'));
       if (failUpload) throw new Error('上传中断');
     }
@@ -112,7 +112,7 @@ test('全部原生产物齐全后才生成清单，哈希对应文件原文', ()
     const first = `Folio-v${version}-macos-arm64.dmg`;
     for (const [platform,arch,formats] of targets) for (const format of formats) writeFileSync(join(input,`Folio-v${version}-${platform}-${arch}.${format}`),`${platform}-${arch}-${format}`);
     const manifest = aggregate(input,join(root,'output'));
-    assert.equal(manifest.artifacts.length,10);
+    assert.equal(manifest.artifacts.length,11);
     for (const artifact of manifest.artifacts) assert.equal(artifact.sha256,createHash('sha256').update(readFileSync(join(input,artifact.url.split('/').at(-1)))).digest('hex'));
     rmSync(join(input,first)); assert.throws(() => aggregate(input,join(root,'failed')));
   } finally { rmSync(root,{recursive:true,force:true}); }
@@ -148,6 +148,6 @@ test('草稿清单复用发布时间，重建安装包不同则停止汇总', ()
   first.publishedAt = '2026-10-01T00:00:00.000Z'; writeFileSync(previous, JSON.stringify(first));
   const next = aggregate(input, directory, notesFile, previous);
   assert.equal(next.publishedAt, first.publishedAt);
-  writeFileSync(join(input, `Folio-v${version}-android-universal.apk`), 'different build');
+  writeFileSync(join(input, `Folio-v${version}-android-arm64.apk`), 'different build');
   assert.throws(() => aggregate(input, directory, notesFile, previous), /草稿清单与本次安装包不一致/);
 }));

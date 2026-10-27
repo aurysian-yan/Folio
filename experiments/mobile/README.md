@@ -62,7 +62,7 @@ Debug 图标位于 `assets/design/dev/`（`icon.png`、`foreground.png`、`backg
 
 ## Android
 
-配置 `ANDROID_HOME` 指向 SDK；非默认 NDK 路径可通过 `ANDROID_NDK_HOME` 指定。Rust 脚本默认打包 arm64-v8a 和 x86_64，并使用 16 KB ELF 对齐；其它 ABI 可显式传入，但仍需独立验收。
+配置 `ANDROID_HOME` 指向 SDK；非默认 NDK 路径可通过 `ANDROID_NDK_HOME` 指定。Rust 脚本默认打包 arm64-v8a 和 x86_64，并使用 16 KB ELF 对齐；其它 ABI 可显式传入，但仍需独立验收。Gradle 按 ABI 拆分 APK，`app-arm64-v8a-release.apk` 与 `app-x86_64-release.apk` 分别产出，不再生成双 ABI 通用包。
 
 ```sh
 pnpm rust:android

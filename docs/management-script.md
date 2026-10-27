@@ -75,8 +75,9 @@ Tauri 客户端面向 Windows 与 Linux；macOS 主机允许启动本机调试�
 - `expo dev --platform ios|android`：按需构建 Rust 绑定、生成原生工程（iOS 还会
   安装 CocoaPods），随后在设备或模拟器上运行开发构建。附加参数可用 `--` 透传，
   例如 `-- --device "手机型号"`。
-- `expo build --platform android [--aab]`：本地 Gradle 构建，默认产出 APK，
-  `--aab` 产出 AAB。
+- `expo build --platform android [--abi all|arm64|x64] [--aab]`：本地 Gradle 构建。
+  默认按 ABI 拆分并产出 arm64-v8a、x86_64 两个 APK；`--abi` 可只构建单一架构，
+  `--aab` 产出包含全部 ABI 的 AAB。
 - `expo build --platform ios`：本地 `xcodebuild` 归档，产物为
   `experiments/mobile/.build/Folio.xcarchive`；导出 IPA 需要自行配置签名。
 - `expo open --platform ios|android`：打开对应平台的产物目录（Android 为

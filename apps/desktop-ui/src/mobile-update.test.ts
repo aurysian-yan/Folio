@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { checkMobileUpdate, fastestMirror, latestManifestUrl, mirrorReleaseUrl, MirrorSpeedSession, normalizeMirror, releaseMirrors, utf8Size, type ManifestReader } from '../../../experiments/mobile/src/update';
 import { noteBlocks, noteSpans } from '../../../experiments/mobile/src/update-markdown';
-import { validateManifest, type AppInfo, type ReleaseManifest } from '../../../shared/about/update';
+import { matchingArtifacts, validateManifest, type AppInfo, type ReleaseManifest } from '../../../shared/about/update';
 
-const app: AppInfo = { version: '1.0.0', build: '1', platform: 'android', arch: 'universal' };
+const app: AppInfo = { version: '1.0.0', build: '1', platform: 'android', arch: 'arm64' };
 const manifest: ReleaseManifest = { schemaVersion: 1, version: '1.2.2', publishedAt: '2026-10-27T01:00:00Z', releaseUrl: 'https://github.com/aurysian-yan/Folio/releases/tag/v1.2.2',
-  releaseNotes: { 'zh-CN': '### 修复\n\n- 修复预览', en: '### Fixes\n\n- Fix previews' }, artifacts: [{ platform: 'android', arch: 'universal', format: 'apk', size: 123, sha256: 'a'.repeat(64), url: 'https://github.com/aurysian-yan/Folio/releases/download/v1.2.2/Folio-v1.2.2-android-universal.apk' }] };
+  releaseNotes: { 'zh-CN': '### 修复\n\n- 修复预览', en: '### Fixes\n\n- Fix previews' }, artifacts: [{ platform: 'android', arch: 'arm64', format: 'apk', size: 123, sha256: 'a'.repeat(64), url: 'https://github.com/aurysian-yan/Folio/releases/download/v1.2.2/Folio-v1.2.2-android-arm64.apk' }] };
 const reader: ManifestReader = async () => ({ status: 200, body: JSON.stringify(manifest) });
 
 describe('移动更新清单与镜像', () => {
@@ -16,6 +16,13 @@ describe('移动更新清单与镜像', () => {
     expect(result.status).toBe('newVersion');
     expect(result.artifacts?.[0]?.url).toBe(manifest.artifacts[0]!.url);
     expect(result.release?.releaseNotes).toEqual(manifest.releaseNotes);
+  });
+  it('只选择设备运行架构的 Android APK', () => {
+    const x64 = { ...manifest.artifacts[0]!, arch: 'x64' as const, url: 'https://github.com/aurysian-yan/Folio/releases/download/v1.2.2/Folio-v1.2.2-android-x64.apk' };
+    const both = { ...manifest, artifacts: [manifest.artifacts[0]!, x64] };
+    expect(matchingArtifacts(both, app).map((item) => item.arch)).toEqual(['arm64']);
+    expect(matchingArtifacts(both, { ...app, arch: 'x64' }).map((item) => item.arch)).toEqual(['x64']);
+    expect(matchingArtifacts(manifest, { ...app, arch: 'x64' })).toEqual([]);
   });
   it('拒绝外仓、任意外链、未知镜像和损坏的双语日志', () => {
     expect(() => mirrorReleaseUrl('https://github.com/other/repo/releases/download/v1/a.apk', 'direct')).toThrow();

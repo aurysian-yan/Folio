@@ -10,7 +10,8 @@ const version = /^version\s*=\s*"([^"]+)"/m.exec(read('Cargo.toml').split('[work
 const assert = (value, message) => { if (!value) throw new Error(message); };
 export const targets = [
   ['macos','arm64',['dmg']], ['windows','x64',['exe']], ['windows','arm64',['exe']],
-  ['linux','x64',['AppImage','deb','rpm']], ['linux','arm64',['AppImage','deb','rpm']], ['android','universal',['apk']],
+  ['linux','x64',['AppImage','deb','rpm']], ['linux','arm64',['AppImage','deb','rpm']],
+  ['android','arm64',['apk']], ['android','x64',['apk']],
 ];
 const walk = (directory) => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(join(directory, entry.name)) : [join(directory, entry.name)]);
 export function verifyVersions(tag) {

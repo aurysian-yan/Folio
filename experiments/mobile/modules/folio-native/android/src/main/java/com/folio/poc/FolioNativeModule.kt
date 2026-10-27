@@ -156,7 +156,7 @@ class FolioNativeModule : Module() {
         Function("aboutInfo") {
             val info = context().packageManager.getPackageInfo(context().packageName, 0)
             mapOf("version" to (info.versionName ?: ""), "build" to info.longVersionCode.toString(),
-                "platform" to "android", "arch" to if (android.os.Process.is64Bit() && android.os.Build.SUPPORTED_ABIS.first().startsWith("arm")) "arm64" else "x64")
+                "platform" to "android", "arch" to folioAndroidArch())
         }
 
         // 外观主题：壁纸种子与 Material3 语义色，由外观页与主题派生同步读取。
