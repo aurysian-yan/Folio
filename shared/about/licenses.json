@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "fingerprints": {
-    "Cargo.lock": "9aafb612a7bc6b6a7c1a485dbd971de7a69345b79852cd510ff7d6cce2a7ebd9",
-    "apps/desktop-ui/src-tauri/Cargo.lock": "f62e2f9c63a094298ccf37bec53769e5c17ba236ae685c9d23d9c1989a3f509a",
+    "Cargo.lock": "d98b8b7f8e8109cce8cfb12b12ee91f5c247985981d3aeb3f546c19126fcad7e",
+    "apps/desktop-ui/src-tauri/Cargo.lock": "e9df220ef852ccec60a2b49647404e165df93e6a6d35af6fa046db447397cbcf",
     "pnpm-lock.yaml": "cff8f09b990fb74d2c8645a941a1bcae4f9962ee8aa57b96c0e77119695a75b3",
-    "experiments/mobile/pnpm-lock.yaml": "e8e55039fe1c5231b0f5d82fd53bc2703b4d0465376ef9eeb92667f701354405",
-    "experiments/mobile/modules/folio-native/android/build.gradle": "36cae90ae97217ceebad68d9201e9265281426da54b474dd8a39b164e1ba19ff",
+    "experiments/mobile/pnpm-lock.yaml": "44c8f48e42a1a89d6e456d881146addd0438102ffcd1b69dd846a0cd60b02a54",
+    "experiments/mobile/modules/folio-native/android/build.gradle": "9f9e82839b8b219bd8fb8cdc6801f6ce59d50fcc12ba5435c179feda0ee35e35",
     "experiments/mobile/modules/folio-native/ios/FolioNative.podspec": "89205c473afc705e101a46537127893b07ce5c8ee71f160211ffacc1311ae956",
     "shared/about/android-dependencies.txt": "3657f1e9fda3a132d8a4cb894376d2d196c8bb2470a24dbfad78500e78149518",
     "shared/about/native-notices.json": "a368515483cd8d026662f5ef2045797b05974d76554266c65475eabf9b0fb921",
@@ -12543,9 +12543,9 @@
       "declarationOnly": false
     },
     {
-      "id": "d79ae7f2c8d8ab86",
+      "id": "02922780979deee1",
       "name": "Folio",
-      "version": "1.2.2",
+      "version": "1.3.0",
       "license": "AGPL-3.0-only",
       "source": "https://github.com/aurysian-yan/Folio",
       "platforms": [
