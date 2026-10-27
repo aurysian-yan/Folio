@@ -78,6 +78,14 @@ public final class FolioNativeModule: Module {
 
     public func definition() -> ModuleDefinition {
         Name("FolioNative")
+        View(FolioReleaseMirrorMenu.self) {
+            Events("onSelectionChange", "onExpandedChange")
+            Prop("items") { (view: FolioReleaseMirrorMenu, value: [FolioReleaseMirrorItem]) in view.items = value }
+            Prop("selectedId") { (view: FolioReleaseMirrorMenu, value: String) in view.selectedId = value }
+            Prop("disabled") { (view: FolioReleaseMirrorMenu, value: Bool) in view.disabled = value }
+            Prop("label") { (view: FolioReleaseMirrorMenu, value: String) in view.label = value }
+            Prop("color") { (view: FolioReleaseMirrorMenu, value: UIColor) in view.color = value }
+        }
         AsyncFunction("onlineState") { () throws -> String in try FolioFileRuntime.shared().browser.state() }.runOnQueue(queue)
         AsyncFunction("onlineImportIcon") { (uri: String) throws -> String in try FolioOnlineIcons.importFile(uri) }.runOnQueue(queue)
         AsyncFunction("onlineAcceptDisclaimer") { () throws in try FolioFileRuntime.shared().browser.acceptDisclaimer() }.runOnQueue(queue)

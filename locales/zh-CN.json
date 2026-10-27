@@ -1303,5 +1303,43 @@
     "cloudFile": "云端文件",
     "title": "全局搜索",
     "backToSearch": "返回搜索"
+  },
+  "softwareUpdate": {
+    "title": "软件更新",
+    "description": "检查新版本、阅读更新日志并选择下载镜像。",
+    "currentVersion": "当前版本",
+    "version": "Folio {{version}}",
+    "mirror": "GitHub Release 镜像",
+    "testing": "测速中…",
+    "unreachable": "不可用",
+    "fastest": "最快",
+    "latency": "{{milliseconds}} 毫秒",
+    "noNotes": "此版本未提供更新日志。",
+    "updateNow": "现在更新",
+    "learnMore": "进一步了解",
+    "install": "安装更新",
+    "removeDownload": "移除安装包",
+    "backToAbout": "返回关于",
+    "progress": "{{received}} / {{total}}",
+    "downloadStatus": {
+      "downloading": "正在下载更新…",
+      "paused": "下载已暂停，等待网络恢复…",
+      "ready": "安装包已校验，可以安装。",
+      "failed": "更新下载失败。"
+    },
+    "errors": {
+      "info": "无法读取当前版本，请重新打开此页面。",
+      "link": "无法打开链接，请稍后重试。",
+      "preference": "镜像选择未能保存，请重试。",
+      "download": "无法下载更新，请检查网络后重试。",
+      "identity": "此安装包与当前应用身份不兼容，请通过 Release 页面选择安装方式。",
+      "package": "安装包信息无效，请重新检查更新。",
+      "version": "安装包的构建号无法升级当前应用，请等待更新版本。",
+      "storage": "可用存储空间不足，请清理后重试。",
+      "checksum": "安装包校验失败，请重新下载。",
+      "signature": "安装包签名与当前应用不兼容，无法原位升级。",
+      "install": "无法启动安装，请检查安装权限后重试。",
+      "foreground": "请返回应用后继续安装。"
+    }
   }
 }

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { validateNotes } from './notes.mjs';
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const read = (path) => readFileSync(join(root, path), 'utf8');
 const version = /^version\s*=\s*"([^"]+)"/m.exec(read('Cargo.toml').split('[workspace.package]')[1] ?? '')?.[1];
@@ -47,7 +48,7 @@ export function stage(platform, arch, directory, output) {
     copyFileSync(file, join(output, `Folio-v${version}-${platform}-${arch}.${format}`));
   }
 }
-export function aggregate(directory, output) {
+export function aggregate(directory, output, notesFile, previousManifestFile) {
   verifyVersions(); mkdirSync(output, { recursive: true });
   const all = walk(directory); const artifacts = [];
   for (const [platform,arch,formats] of targets) for (const format of formats) {
@@ -63,6 +64,13 @@ export function aggregate(directory, output) {
   copyFileSync(join(root,'LICENSE'),join(output,'LICENSE.txt'));
   const files = readdirSync(output).filter((file) => file !== 'SHA256SUMS.txt' && file !== 'folio-release.json');
   const manifest = { schemaVersion: 1, version, publishedAt: new Date().toISOString(), releaseUrl: `https://github.com/aurysian-yan/Folio/releases/tag/v${version}`, artifacts };
+  if (notesFile) manifest.releaseNotes = validateNotes(JSON.parse(readFileSync(notesFile, 'utf8')));
+  if (previousManifestFile) {
+    const previous = JSON.parse(readFileSync(previousManifestFile, 'utf8'));
+    assert(previous.version === version && JSON.stringify(previous.artifacts) === JSON.stringify(artifacts)
+      && JSON.stringify(previous.releaseNotes) === JSON.stringify(manifest.releaseNotes), '草稿清单与本次安装包不一致，请重跑原工作流的失败任务');
+    manifest.publishedAt = previous.publishedAt;
+  }
   writeFileSync(join(output,'folio-release.json'),JSON.stringify(manifest,null,2)+'\n');
   files.push('folio-release.json');
   writeFileSync(join(output,'SHA256SUMS.txt'),files.sort().map((name) => `${createHash('sha256').update(readFileSync(join(output,name))).digest('hex')}  ${name}`).join('\n')+'\n');
@@ -77,6 +85,7 @@ export function verifyRelease(directory) {
   const expected = names.filter((name) => name !== 'SHA256SUMS.txt').sort().map((name) => `${checksum(name)}  ${name}`).join('\n')+'\n';
   assert(readFileSync(join(directory,'SHA256SUMS.txt'),'utf8') === expected, '发布附件校验值不一致');
   const manifest = JSON.parse(readFileSync(join(directory,'folio-release.json'),'utf8'));
+  if (manifest.releaseNotes !== undefined) validateNotes(manifest.releaseNotes);
   assert(manifest.schemaVersion === 1 && manifest.version === version && manifest.releaseUrl === `https://github.com/aurysian-yan/Folio/releases/tag/v${version}`, '发布清单版本或来源错误');
   const artifacts = targets.flatMap(([platform,arch,formats]) => formats.map((format) => ({platform,arch,format})));
   assert(Array.isArray(manifest.artifacts) && manifest.artifacts.length === artifacts.length, '发布清单矩阵不完整');
@@ -99,6 +108,10 @@ export function publish(directory, { env = process.env, exec = execFileSync } = 
   const files = verifyRelease(directory).map((name) => join(directory,name));
   const repository = env.GITHUB_REPOSITORY; const tag = `v${version}`;
   const marker = `<!-- folio-release:${env.GITHUB_SHA} -->`;
+  const manifest = JSON.parse(readFileSync(join(directory, 'folio-release.json'), 'utf8'));
+  const releaseNotes = manifest.releaseNotes ? validateNotes(manifest.releaseNotes) : undefined;
+  const notesBody = releaseNotes ? `## 中文\n\n${releaseNotes['zh-CN']}\n\n## English\n\n${releaseNotes.en}\n\n` : '';
+  const notesData = releaseNotes ? `\n<!-- folio-notes:start -->\n${JSON.stringify(releaseNotes).replaceAll('-->', '--\\u003e')}\n<!-- folio-notes:end -->\n` : '';
   // 草稿无法按标签查询，改为分页列出全部发行版后定位；同一提交的失败草稿可重试，正式版禁止覆盖。
   const list = () => {
     let pages;
@@ -113,9 +126,10 @@ export function publish(directory, { env = process.env, exec = execFileSync } = 
     const draft = existing[0];
     // 不带 --target 创建草稿时 target_commitish 为默认分支名，改用发布提交标记确认归属。
     assert(draft.body?.includes(marker), '同名草稿不属于当前发布提交，禁止覆盖');
+    if (releaseNotes) assert(draft.body.includes(notesBody) && draft.body.includes(notesData), '草稿日志与清单不一致，禁止覆盖');
     assert(draft.assets.every((asset) => files.some((file) => basename(file) === asset.name)), '同名草稿含有未知附件，禁止覆盖');
   } else {
-    const notes = `Folio ${version}\n\n安装方式、Android 签名与桌面系统验证提示见 [发布说明](https://github.com/aurysian-yan/Folio/blob/v${version}/docs/releases.md)。\n\nSHA-256 校验值见 SHA256SUMS.txt；完整开源许可见 folio-licenses.json。\n\n${marker}\n`;
+    const notes = `Folio ${version}\n\n${notesBody}安装方式、Android 签名与桌面系统验证提示见 [发布说明](https://github.com/aurysian-yan/Folio/blob/v${version}/docs/releases.md)。\n\nSHA-256 校验值见 SHA256SUMS.txt；完整开源许可见 folio-licenses.json。\n\n${marker}\n${notesData}`;
     // 标签已存在，不再传 --target，避免默认令牌被要求额外的 workflows 权限。
     exec('gh',['release','create',tag,'--repo',repository,'--verify-tag','--draft','--title',`Folio ${version}`,'--notes-file','-'],{stdio:['pipe','inherit','inherit'],input:notes});
   }
@@ -131,7 +145,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const [mode,...args] = process.argv.slice(2);
   if (mode === 'verify') console.log(verifyVersions(args[0]));
   else if (mode === 'stage') stage(...args);
-  else if (mode === 'aggregate') console.log(JSON.stringify(aggregate(...args),null,2));
+  else if (mode === 'aggregate') {
+    const previous = args[2] ? join(resolve(args[2], '..'), 'previous-manifest.json') : undefined;
+    console.log(JSON.stringify(aggregate(args[0], args[1], args[2], previous && existsSync(previous) ? previous : undefined),null,2));
+  }
   else if (mode === 'publish') publish(args[0]);
   else throw new Error('用法：release.mjs verify [tag] | stage platform arch input output | aggregate input output | publish output');
 }

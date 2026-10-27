@@ -90,13 +90,18 @@ class FolioPreviewSelection : Record {
 class FolioNativeModule : Module() {
     private val executor = Executors.newSingleThreadExecutor()
     private val characterExecutor = Executors.newSingleThreadExecutor()
+    private val updateExecutor = Executors.newSingleThreadExecutor()
     private val engine: FolioEngine? get() = appContext.reactContext?.let { FolioFileRuntime.get(it).engine }
     private val sync: FolioSync? get() = appContext.reactContext?.let { FolioFileRuntime.get(it).sync }
     private val lifecycleLock = Any()
-    private var foreground = true
+    @Volatile private var foreground = true
 
     override fun definition() = ModuleDefinition {
         Name("FolioNative")
+        AsyncFunction("updateDownloadState") { promise: Promise -> performUpdate(promise) { FolioUpdater.state(context()) } }
+        AsyncFunction("startUpdateDownload") { request: String, promise: Promise -> performUpdate(promise) { FolioUpdater.start(context(), request) } }
+        AsyncFunction("cancelUpdateDownload") { promise: Promise -> performUpdate(promise) { FolioUpdater.cancel(context()) } }
+        AsyncFunction("installUpdate") { automatic: Boolean, promise: Promise -> launchUpdate(automatic, promise) }
         AsyncFunction("onlineState") { promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.state()} }
         AsyncFunction("onlineImportIcon") { uri:String,promise:Promise -> perform(promise) {FolioOnlineIcons.importFile(context(),uri)} }
         AsyncFunction("onlineAcceptDisclaimer") { promise:Promise -> perform(promise) {FolioFileRuntime.get(context()).browser.acceptDisclaimer();true} }
@@ -402,7 +407,11 @@ class FolioNativeModule : Module() {
                 syncEngine().resolveConflict(id, value)
             }
         }
-        OnActivityEntersForeground { synchronized(lifecycleLock) { foreground = true } }
+        OnActivityEntersForeground {
+            synchronized(lifecycleLock) { foreground = true }
+            updateExecutor.execute { FolioUpdater.resumePermission(context()) }
+            launchUpdate(true)
+        }
         OnActivityEntersBackground {
             synchronized(lifecycleLock) { foreground = false }
             executor.execute { sync?.cancel() }
@@ -444,6 +453,7 @@ class FolioNativeModule : Module() {
         }
 
         OnDestroy {
+            updateExecutor.shutdown()
             characterExecutor.shutdown()
             executor.execute {
 
@@ -461,6 +471,44 @@ class FolioNativeModule : Module() {
             }
             OnViewDidUpdateProps { view: FolioFontPreview -> view.renderSelection() }
         }
+    }
+
+    private fun performUpdate(promise: Promise, action: () -> Any) {
+        try {
+            updateExecutor.execute {
+                try { promise.resolve(action()) }
+                catch (cause: Exception) { promise.reject("softwareUpdate.errors.download", cause.message, cause) }
+            }
+        } catch (cause: RejectedExecutionException) { promise.reject("softwareUpdate.errors.download", cause.message, cause) }
+    }
+
+    private fun launchUpdate(automatic: Boolean, promise: Promise? = null) {
+        try {
+            updateExecutor.execute {
+                try {
+                    if (!foreground || automatic && FolioUpdater.state(context())["autoInstall"] != true) {
+                        promise?.resolve(null)
+                        return@execute
+                    }
+                    if (automatic && FolioUpdater.state(context())["status"] != "ready") {
+                        promise?.resolve(null)
+                        return@execute
+                    }
+                    val intent = FolioUpdater.installIntent(context())
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        try {
+                            val activity = appContext.currentActivity
+                            if (!foreground || activity == null || activity.isFinishing) {
+                                updateExecutor.execute { FolioUpdater.deferInstall(context()) }
+                                throw IllegalStateException("softwareUpdate.errors.foreground")
+                            }
+                            activity.startActivity(intent)
+                            promise?.resolve(null)
+                        } catch (cause: Exception) { promise?.reject("softwareUpdate.errors.install", cause.message, cause) }
+                    }
+                } catch (cause: Exception) { promise?.reject("softwareUpdate.errors.install", cause.message, cause) }
+            }
+        } catch (cause: RejectedExecutionException) { promise?.reject("softwareUpdate.errors.install", cause.message, cause) }
     }
 
     private fun context() = appContext.reactContext

@@ -5,6 +5,7 @@ import { createLibraryClient, type LibraryBridge } from './library';
 import type { MaterialRoles } from './material-theme';
 import { createSyncClient, type SyncBridge } from './sync';
 import { ForegroundSyncSession } from './sync-session';
+import type { UpdateBridge } from './update';
 import { createStorageClient, type StorageBridge } from './storage';
 import { createOnlineClient, type BrowserState, type BrowserVisit, type OnlineBridge, type WebPalette } from './online';
 
@@ -30,7 +31,13 @@ export interface ScreenMetrics {
 
 interface FileWorkflowBridge { cancelFileWorkflow(id:string):Promise<boolean>; fileWorkflow(request: string): Promise<string>; fileState(): Promise<string>; removeExternalSource(id: string): Promise<void>; }
 
-const nativeModule = requireNativeModule<OnlineBridge & FileWorkflowBridge & LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & AndroidWindowBridge & CharacterMapBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
+const nativeModule = requireNativeModule<UpdateBridge & OnlineBridge & FileWorkflowBridge & LibraryBridge & StorageBridge & SyncBridge & MaterialBridge & AndroidWindowBridge & CharacterMapBridge & { copyText(text: string): Promise<void>; aboutInfo(): import("../../../shared/about/update").AppInfo }>('FolioNative');
+export const updates: UpdateBridge = {
+  updateDownloadState: () => nativeModule.updateDownloadState(),
+  startUpdateDownload: (request) => nativeModule.startUpdateDownload(request),
+  cancelUpdateDownload: () => nativeModule.cancelUpdateDownload(),
+  installUpdate: (automatic) => nativeModule.installUpdate(automatic),
+};
 export const online = createOnlineClient(nativeModule);
 export const NativeOnlineBrowser = requireNativeViewManager<ViewProps & {
   provider: string;

@@ -61,6 +61,30 @@ jobs:
           path: shared/about/licenses.json
           if-no-files-found: error
           retention-days: 14
+  notes:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.14.1
+      - name: Generate bilingual release notes
+        run: node tools/releases/notes.mjs release-notes/notes.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_LLM_API_KEY: ${{ secrets.RELEASE_LLM_API_KEY }}
+          RELEASE_LLM_BASE_URL: ${{ vars.RELEASE_LLM_BASE_URL }}
+          RELEASE_LLM_MODEL: ${{ vars.RELEASE_LLM_MODEL }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-notes
+          path: release-notes/*
+          if-no-files-found: error
+          retention-days: 14
   desktop:
     needs: validate
     timeout-minutes: 90
@@ -207,7 +231,7 @@ jobs:
         shell: bash
         run: rm -rf "$RUNNER_TEMP/folio-release-signing"
   assemble:
-    needs: [validate, desktop, android]
+    needs: [validate, desktop, android, notes]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -224,7 +248,11 @@ jobs:
         with:
           pattern: package-*
           path: release-input
-      - run: node tools/releases/release.mjs aggregate release-input release-output
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: release-notes
+          path: release-notes
+      - run: node tools/releases/release.mjs aggregate release-input release-output release-notes/notes.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: complete-release

@@ -25,6 +25,7 @@
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test src/*.test.ts",
     "test:swift": "node scripts/smoke-swift.mjs",
+    "test:updates": "node scripts/test-updates.mjs",
     "samples": "node scripts/prepare-samples.mjs"
   },
   "dependencies": {

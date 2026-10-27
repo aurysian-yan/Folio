@@ -3,7 +3,7 @@ import type { OnlineProvider } from './online.ts';
 
 export type SearchScope = 'all' | 'local' | 'cloud' | 'online' | 'settings';
 export interface SettingsSearchEntry {
-  page: 'sync' | 'storage' | 'appearance' | 'browsing' | 'online' | 'about'; titleKey: string; pageKey: string; keywords: string[]; platform?: 'android';
+  page: 'sync' | 'storage' | 'appearance' | 'browsing' | 'online' | 'update' | 'about'; titleKey: string; pageKey: string; keywords: string[]; platform?: 'android';
 }
 export const settingsSearchEntries: SettingsSearchEntry[] = [
   { page: 'sync', titleKey: 'settings.cloud', pageKey: 'settings.cloud', keywords: ['WebDAV', '同步', 'sync', '账号', 'account'] },
@@ -18,6 +18,7 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
   { page: 'online', titleKey: 'browser.inheritSearch', pageKey: 'settings.onlineFonts', keywords: ['关键词', 'keyword', '搜索', 'search'] },
   { page: 'online', titleKey: 'online.browser.downloads', pageKey: 'settings.onlineFonts', keywords: ['下载', 'download'] },
   { page: 'online', titleKey: 'online.browser.regionHints', pageKey: 'settings.onlineFonts', keywords: ['区域', 'region'] },
+  { page: 'update', titleKey: 'softwareUpdate.title', pageKey: 'softwareUpdate.title', keywords: ['更新', '版本', '镜像', 'update', 'version', 'release', 'mirror'] },
   { page: 'about', titleKey: 'settings.about', pageKey: 'settings.about', keywords: ['版本', 'version', '许可', 'license'] },
 ];
 export function normalizeSearch(value: string) { return value.trim().replace(/\s+/g, ' ').toLowerCase(); }

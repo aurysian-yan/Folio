@@ -18,7 +18,7 @@ android {
     versionCode 1
     versionName '0.1.0'
     minSdkVersion 28
-    testInstrumentationRunner project.findProperty('folioFileTest') ? 'com.folio.poc.FolioFileInstrumentation' : project.findProperty('folioPreviewTest') ? 'com.folio.poc.FolioPreviewInstrumentation' :
+    testInstrumentationRunner project.findProperty('folioUpdateTest') ? 'com.folio.poc.FolioUpdateInstrumentation' : project.findProperty('folioFileTest') ? 'com.folio.poc.FolioFileInstrumentation' : project.findProperty('folioPreviewTest') ? 'com.folio.poc.FolioPreviewInstrumentation' :
       project.findProperty('folioSliderTest') ? 'com.folio.poc.FolioSliderRefractionInstrumentation' :
       project.findProperty('folioSwitchTest') ? 'com.folio.poc.FolioSwitchRefractionInstrumentation' :
       project.findProperty('folioOnlineLoadingTest') ? 'com.folio.poc.FolioOnlineLoadingInstrumentation' :
@@ -29,6 +29,7 @@ android {
   sourceSets.main.java.srcDirs += 'generated'
   sourceSets.main.resources.srcDirs += 'third-party'
   sourceSets.androidTest.assets.srcDirs += ['../../../samples', '../../../../../locales']
+  if (project.findProperty('folioUpdateTest')) sourceSets.androidTest.assets.srcDirs += ['../../../.build/update-test-assets']
   buildFeatures { compose true }
   if (project.findProperty('folioSyncTarget')) {
     signingConfigs.debug {

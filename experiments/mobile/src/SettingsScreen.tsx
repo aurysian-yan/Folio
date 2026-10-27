@@ -11,7 +11,7 @@ import type { Theme } from './ui';
 import type { CloudSyncController } from './useCloudSync';
 import { webdavSourceName } from './sync';
 
-export type SettingsPageId = 'sync' | 'storage' | 'appearance' | 'browsing' | 'online' | 'about';
+export type SettingsPageId = 'sync' | 'storage' | 'appearance' | 'browsing' | 'online' | 'update' | 'about';
 
 // 设置主页显示真实概览；进入页面和回到前台时刷新存储用量。
 export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage }: {
@@ -48,6 +48,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
     { id: 'appearance', Icon: PaintBrushIcon, title: t('mobile.settings.appearanceAndDisplay'), description: t('mobile.settings.appearanceSummary') },
     { id: 'browsing', Icon: DownloadSimpleIcon, title: t('mobile.settings.browsingAndImport'), description: t('mobile.settings.browsingSummary') },
     { id: 'online', Icon: GlobeIcon, title: t('settings.onlineFonts'), description: t('mobile.settings.onlineSummary') },
+    { id: 'update', Icon: DownloadSimpleIcon, title: t('softwareUpdate.title'), description: t('softwareUpdate.description') },
     { id: 'about', Icon: InfoIcon, title: t('settings.about'), description: t('mobile.settings.aboutDescription') },
   ] as const;
 

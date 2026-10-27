@@ -37,3 +37,9 @@ test('设置索引不在 iOS 返回 Android 专属控件', () => {
   assert.equal(searchSettings('Material3', (key) => key, 'ios').length, 0);
   assert.equal(searchSettings('Material3', (key) => key, 'android')[0]?.titleKey, 'mobile.settings.materialTheme');
 });
+
+test('软件更新可按中英文及镜像关键词在两个平台找到', () => {
+  for (const platform of ['android', 'ios']) for (const query of ['更新', 'mirror', 'release']) {
+    assert.equal(searchSettings(query, (key) => key, platform)[0]?.page, 'update');
+  }
+});

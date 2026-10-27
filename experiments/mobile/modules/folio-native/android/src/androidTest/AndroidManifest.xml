@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <application>
+  <queries><package android:name="com.folio.mobile.poc" /></queries>
+  <application android:usesCleartextTraffic="true">
     <activity android:name="com.folio.poc.FolioOnlineLoadingTestActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     <activity android:name="com.folio.poc.FolioBlobTestActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     <activity android:name="com.folio.poc.FolioNavigationTestActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" />

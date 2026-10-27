@@ -44,6 +44,7 @@ import {
   usesNativeControls, usesNativeSidebar, type NativeDestination,
 } from './native-controls';
 import { PreferencesProvider, usePreferences } from './settings';
+import { SettingsUpdatePage } from './SettingsUpdatePage';
 import { SettingsAboutPage } from './SettingsAboutPage';
 import { SettingsAppearancePage } from './SettingsAppearancePage';
 import { SettingsBrowsingPage } from './SettingsBrowsingPage';
@@ -467,14 +468,15 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
 }
 
 // 设置二级页按入口类型分流，统一由原生详情导航承载。
-function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => void, controller: CloudSyncController) {
+function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => void, controller: CloudSyncController, onOpenUpdate: () => void, active: boolean, updateBackLabel?: string) {
   switch (page) {
     case 'sync': return <SettingsSyncPage theme={theme} onClose={onClose} controller={controller} />;
     case 'storage': return <SettingsStoragePage theme={theme} onClose={onClose} />;
     case 'appearance': return <SettingsAppearancePage theme={theme} onClose={onClose} />;
     case 'browsing': return <SettingsBrowsingPage theme={theme} onClose={onClose} />;
     case 'online': return <SettingsOnlinePage theme={theme} onClose={onClose} />;
-    case 'about': return <SettingsAboutPage theme={theme} onClose={onClose} />;
+    case 'update': return <SettingsUpdatePage theme={theme} onClose={onClose} active={active} backLabel={updateBackLabel} />;
+    case 'about': return <SettingsAboutPage theme={theme} onClose={onClose} onOpenUpdate={onOpenUpdate} />;
   }
 }
 
@@ -537,6 +539,7 @@ function MobileApp() {
   const [fontPageVisible, setFontPageVisible] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
   const [settingsPageVisible, setSettingsPageVisible] = useState(false);
+  const [updateFromAbout, setUpdateFromAbout] = useState(false);
   const destination: NativeDestination = sidebar && nativeDestination === 'local'
     ? libraryTarget.scope === 'favorites' ? 'favorites'
       : libraryTarget.scope === 'collection' ? `collection:${libraryTarget.collectionId}`
@@ -623,7 +626,14 @@ function MobileApp() {
     return () => { show.remove(); hide.remove(); };
   }, []);
 
-  function openSettingsPage(page: SettingsPageId, title: string | null = null) { setSettingsSearchTitle(title); setSettingsPage(page); setSettingsPageVisible(true); }
+  function openSettingsPage(page: SettingsPageId, title: string | null = null) {
+    setUpdateFromAbout(page === 'update' && settingsPage === 'about' && settingsPageVisible);
+    setSettingsSearchTitle(title); setSettingsPage(page); setSettingsPageVisible(true);
+  }
+  function closeSettingsPage() {
+    if (settingsPage === 'update' && updateFromAbout) { setSettingsPage('about'); setUpdateFromAbout(false); }
+    else setSettingsPageVisible(false);
+  }
   const openCloudFont = async (font: import('./sync').CloudFont) => {
     try {
       const result = await library.query({scope:'all',text:'',fileFingerprint:font.fingerprint,offset:0,limit:100});
@@ -702,7 +712,10 @@ function MobileApp() {
       }}
       snapshot={snapshot} collectionId={fontPageCollectionId}
       onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />
-  ) : settingsPage ? <SettingsSearchFocus value={settingsSearchTitle}>{settingsPageNode(settingsPage, theme, () => setSettingsPageVisible(false), syncController)}</SettingsSearchFocus> : null;
+  ) : settingsPage ? <SettingsSearchFocus value={settingsSearchTitle}>
+    {settingsPageNode(settingsPage, theme, closeSettingsPage, syncController, () => openSettingsPage('update'),
+      settingsPageVisible, updateFromAbout ? t('softwareUpdate.backToAbout') : undefined)}
+  </SettingsSearchFocus> : null;
 
   const browserDetail = libraryRequest ? <BrowserLibraryPage key={libraryRequest.id} request={libraryRequest} theme={theme}
     onClose={closeLibrary} onOpenUrl={(url) => { pendingLibraryUrl.current = url; closeLibrary(); }} /> : null;

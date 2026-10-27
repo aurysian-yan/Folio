@@ -7,7 +7,7 @@ import Svg, { G, Path } from 'react-native-svg';
 import content from '../../../shared/about/content.json';
 import glyphs from '../../../shared/about/glyphs.json';
 import licenses from '../../../shared/about/licenses.json';
-import { checkForUpdate, isAllowedExternalUrl, WordmarkVariation, type AppInfo, type UpdateResult } from '../../../shared/about/update';
+import { isAllowedExternalUrl, WordmarkVariation, type AppInfo } from '../../../shared/about/update';
 import { getAboutInfo } from './native';
 import { SettingsActionRow, SettingsGroup, SettingsNavRow, SettingsNote, SettingsPage, settingsLayout, settingsTypography } from './settings-ui';
 import type { Theme } from './ui';
@@ -36,37 +36,28 @@ function Wordmark({ frame, color, reduced, specimen = false }: { frame: number; 
     {specimen && <Path d="M0 144h140 M884 144h140 M0 556h100 M924 556h100 M96 128v32 M928 540v32" fill="none" stroke={color} strokeWidth={1.25} />}
   </Svg>;
 }
-export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: () => void }) {
-  const { t, i18n } = useTranslation();
+export function SettingsAboutPage({ theme, onClose, onOpenUpdate }: { theme: Theme; onClose: () => void; onOpenUpdate: () => void }) {
+  const { t } = useTranslation();
   const [app, setApp] = useState<AppInfo>();
   const [frame, setFrame] = useState(0);
   const [reduced, setReduced] = useState(true);
-  const [update, setUpdate] = useState<UpdateResult>({ status: 'idle' });
   const [reader, setReader] = useState(false);
   const [selected, setSelected] = useState<LicenseEntry>();
   const [query, setQuery] = useState('');
   const [linkError, setLinkError] = useState(false);
   const variation = useRef<WordmarkVariation | null>(null);
-  const request = useRef<AbortController | null>(null);
   useEffect(() => {
     let active = true;
     const egg = new WordmarkVariation(setFrame, glyphs.length); variation.current = egg;
     const setMotion = (value: boolean) => { if (active) setReduced(value); };
     void AccessibilityInfo.isReduceMotionEnabled().then(setMotion);
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setMotion);
-    void Promise.resolve().then(getAboutInfo).then((value) => { if (active) setApp(value); }).catch(() => { if (active) setUpdate({ status: 'failed' }); });
-    return () => { active = false; subscription.remove(); egg.dispose(); request.current?.abort(); variation.current = null; };
+    void Promise.resolve().then(getAboutInfo).then((value) => { if (active) setApp(value); }).catch(() => { if (active) setLinkError(true); });
+    return () => { active = false; subscription.remove(); egg.dispose(); variation.current = null; };
   }, []);
   async function open(url: string) {
     if (!isAllowedExternalUrl(url) && !licenses.entries.some((entry) => entry.source === url && url.startsWith('https://'))) { setLinkError(true); return; }
     try { await Linking.openURL(url); setLinkError(false); } catch { setLinkError(true); }
-  }
-  async function check() {
-    if (!app || request.current) return;
-    const controller = new AbortController(); request.current = controller; setUpdate({ status: 'checking' });
-    const result = await checkForUpdate(app, undefined, controller.signal);
-    if (!controller.signal.aborted) setUpdate(result);
-    if (request.current === controller) request.current = null;
   }
   function closeReader() { setReader(false); setSelected(undefined); setQuery(''); }
   const licenseLabel = (value: string) => value === 'See notices' ? t('about.licenseNotices') : value;
@@ -90,14 +81,7 @@ export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: (
           <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{app ? t('about.platform', { platform: t(`about.platformNames.${app.platform}`), arch: app.arch }) : ''}</Text>
         </View>
         <SettingsGroup theme={theme}>
-          <SettingsActionRow theme={theme} title={t(update.status === 'checking' ? 'about.checking' : 'about.check')} busy={update.status === 'checking'}
-            disabled={!app || update.status === 'checking'} onPress={() => void check()} />
-          {!['idle', 'checking'].includes(update.status) && <View style={settingsLayout.row}>
-            <Text accessibilityLiveRegion="polite" style={[settingsTypography.body, { color: theme.label }]}>{t(`about.${update.status}`, { version: update.release?.version })}</Text>
-            {update.release && <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('about.published', { date: new Date(update.release.publishedAt).toLocaleDateString(i18n.language) })}</Text>}
-          </View>}
-          {update.release && <SettingsActionRow theme={theme} title={t('about.notes')} onPress={() => void open(update.release!.releaseUrl)} />}
-          {update.artifacts?.map((artifact) => <SettingsActionRow key={artifact.format} theme={theme} title={t('about.download')} onPress={() => void open(artifact.url)} />)}
+          <SettingsNavRow theme={theme} title={t('about.check')} onPress={onOpenUpdate} last />
         </SettingsGroup>
         <SettingsGroup theme={theme} title={t('about.links')}>
           {content.links.map((link) => <SettingsNavRow key={link.key} theme={theme} title={t(`about.${link.key}`)} onPress={() => void open(link.url)} />)}

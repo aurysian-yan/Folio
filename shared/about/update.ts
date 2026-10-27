@@ -4,7 +4,8 @@ export type Platform = 'macos' | 'windows' | 'linux' | 'android' | 'ios';
 export type Architecture = 'arm64' | 'x64' | 'universal';
 export interface AppInfo { version: string; build: string; platform: Platform; arch: Architecture }
 export interface Artifact { platform: Platform; arch: Architecture; format: string; url: string; size: number; sha256: string }
-export interface ReleaseManifest { schemaVersion: 1; version: string; publishedAt: string; releaseUrl: string; artifacts: Artifact[] }
+export interface ReleaseNotes { 'zh-CN': string; en: string }
+export interface ReleaseManifest { schemaVersion: 1; version: string; publishedAt: string; releaseUrl: string; artifacts: Artifact[]; releaseNotes?: ReleaseNotes }
 export type UpdateStatus = 'idle' | 'checking' | 'latest' | 'newVersion' | 'noRelease' | 'unavailable' | 'timeout' | 'rateLimited' | 'failed';
 export interface UpdateResult { status: UpdateStatus; release?: ReleaseManifest; artifacts?: Artifact[] }
 export interface HttpResult { status: number; body: string }
@@ -52,6 +53,9 @@ export function validateManifest(input: unknown, expectedVersion?: string): Rele
     || !Number.isFinite(Date.parse(value.publishedAt)) || new Date(value.publishedAt).toISOString().replace('.000Z', 'Z') !== value.publishedAt.replace('.000Z', 'Z') || !isReleaseUrl(value.releaseUrl) || value.releaseUrl !== `${repositoryUrl}/releases/tag/v${value.version}`
     || !Array.isArray(value.artifacts) || value.artifacts.length > 32) throw new Error('failed');
   const formats: Record<Platform, string[]> = { macos: ['dmg'], windows: ['exe'], linux: ['AppImage', 'deb', 'rpm'], android: ['apk'], ios: ['ipa'] };
+  if (value.releaseNotes !== undefined && (!value.releaseNotes || typeof value.releaseNotes !== 'object'
+    || ['zh-CN', 'en'].some((language) => typeof value.releaseNotes![language as keyof ReleaseNotes] !== 'string'
+      || !value.releaseNotes![language as keyof ReleaseNotes].trim()))) throw new Error('failed');
   const seen = new Set<string>();
   for (const artifact of value.artifacts) {
     if (!artifact || !Object.hasOwn(formats, artifact.platform) || !formats[artifact.platform].includes(artifact.format)

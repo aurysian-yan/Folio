@@ -5,7 +5,7 @@
     "apps/desktop-ui/src-tauri/Cargo.lock": "f62e2f9c63a094298ccf37bec53769e5c17ba236ae685c9d23d9c1989a3f509a",
     "pnpm-lock.yaml": "cff8f09b990fb74d2c8645a941a1bcae4f9962ee8aa57b96c0e77119695a75b3",
     "experiments/mobile/pnpm-lock.yaml": "e8e55039fe1c5231b0f5d82fd53bc2703b4d0465376ef9eeb92667f701354405",
-    "experiments/mobile/modules/folio-native/android/build.gradle": "6ee6f3d89c14fca9f86853e2b75b13f8ea90e26d233574bb26cc7f32823068ad",
+    "experiments/mobile/modules/folio-native/android/build.gradle": "36cae90ae97217ceebad68d9201e9265281426da54b474dd8a39b164e1ba19ff",
     "experiments/mobile/modules/folio-native/ios/FolioNative.podspec": "89205c473afc705e101a46537127893b07ce5c8ee71f160211ffacc1311ae956",
     "shared/about/android-dependencies.txt": "3657f1e9fda3a132d8a4cb894376d2d196c8bb2470a24dbfad78500e78149518",
     "shared/about/native-notices.json": "a368515483cd8d026662f5ef2045797b05974d76554266c65475eabf9b0fb921",

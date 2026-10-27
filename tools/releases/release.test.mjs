@@ -122,3 +122,32 @@ test('拒绝将同扩展名的错误页面作为安装包', () => {
   try { writeFileSync(join(root,'wrong.exe'),'<!DOCTYPE html>'); assert.throws(() => stage('windows','arm64',root,join(root,'output'))); }
   finally { rmSync(root,{recursive:true,force:true}); }
 });
+
+test('双语日志写入同一清单并进入 Release 正文，重试不覆盖不同日志', () => releaseFixture((directory) => {
+  const input = join(directory, '..', 'input');
+  const notes = { 'zh-CN': '### 修复\n\n修复字体预览。', en: '### Fixes\n\nFix font previews.' };
+  const notesFile = join(directory, '..', 'notes.json'); writeFileSync(notesFile, JSON.stringify(notes));
+  aggregate(input, directory, notesFile);
+  const manifest = JSON.parse(readFileSync(join(directory, 'folio-release.json'), 'utf8'));
+  assert.deepEqual(manifest.releaseNotes, notes);
+  verifyRelease(directory);
+  const fixture = githubFixture(directory);
+  let body;
+  publish(directory, { env, exec: (command, args, options) => { if (args[1] === 'create') body = options.input; return fixture.exec(command, args, options); } });
+  assert.ok(body.includes(notes['zh-CN']) && body.includes(notes.en));
+  const existing = { id: 1, tag_name: env.GITHUB_REF_NAME, draft: true, body, assets: [] };
+  publish(directory, { env, exec: githubFixture(directory, { existing }).exec });
+  const changed = { ...existing, body: body.replace('Fix font previews.', 'Different content.') };
+  assert.throws(() => publish(directory, { env, exec: githubFixture(directory, { existing: changed }).exec }), /草稿日志与清单不一致/);
+}));
+test('草稿清单复用发布时间，重建安装包不同则停止汇总', () => releaseFixture((directory) => {
+  const input = join(directory, '..', 'input');
+  const notesFile = join(directory, '..', 'notes.json'); writeFileSync(notesFile, JSON.stringify({ 'zh-CN': '更新', en: 'Updates' }));
+  const first = aggregate(input, directory, notesFile);
+  const previous = join(directory, '..', 'previous.json');
+  first.publishedAt = '2026-10-01T00:00:00.000Z'; writeFileSync(previous, JSON.stringify(first));
+  const next = aggregate(input, directory, notesFile, previous);
+  assert.equal(next.publishedAt, first.publishedAt);
+  writeFileSync(join(input, `Folio-v${version}-android-universal.apk`), 'different build');
+  assert.throws(() => aggregate(input, directory, notesFile, previous), /草稿清单与本次安装包不一致/);
+}));

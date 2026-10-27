@@ -1320,5 +1320,43 @@
     "cloudFile": "Cloud File",
     "title": "Global Search",
     "backToSearch": "Back to Search"
+  },
+  "softwareUpdate": {
+    "title": "Software Update",
+    "description": "Check for updates, read release notes and choose a download mirror.",
+    "currentVersion": "Current Version",
+    "version": "Folio {{version}}",
+    "mirror": "GitHub Release Mirror",
+    "testing": "Testing…",
+    "unreachable": "Unavailable",
+    "fastest": "Fastest",
+    "latency": "{{milliseconds}} ms",
+    "noNotes": "No release notes were provided for this version.",
+    "updateNow": "Update Now",
+    "learnMore": "Learn More",
+    "install": "Install Update",
+    "removeDownload": "Remove Package",
+    "backToAbout": "Back to About",
+    "progress": "{{received}} / {{total}}",
+    "downloadStatus": {
+      "downloading": "Downloading update…",
+      "paused": "Download paused. Waiting for the network…",
+      "ready": "Package verified and ready to install.",
+      "failed": "Update download failed."
+    },
+    "errors": {
+      "info": "Unable to read the current version. Reopen this page to try again.",
+      "link": "Unable to open the link. Try again later.",
+      "preference": "Unable to save your mirror selection. Try again.",
+      "download": "Unable to download the update. Check your connection and try again.",
+      "identity": "This package is incompatible with this app. Visit the release page for installation options.",
+      "package": "Invalid package information. Check for updates again.",
+      "version": "This package cannot upgrade the current build. Wait for a newer release.",
+      "storage": "Not enough storage space. Free up space and try again.",
+      "checksum": "Package verification failed. Download it again.",
+      "signature": "This package has an incompatible signature and cannot upgrade the installed app.",
+      "install": "Unable to start installation. Check installation permissions and try again.",
+      "foreground": "Return to the app to continue installation."
+    }
   }
 }

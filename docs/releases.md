@@ -103,8 +103,9 @@ runner 上交叉打包。Node、pnpm、Rust、Java、NDK 与 Xcode 固定版本�
 
 客户端主动查询本仓库的最新正式 Release，再读取其中的 `folio-release.json`，
 只选择当前平台与运行架构的产物。Linux 优先 AppImage，可选 deb/rpm。
-下载由系统浏览器完成，不进行后台自动安装。iOS 缺少产物时显示暂无可用更新，
-仍提供发行说明。清单格式如下：
+桌面端下载由系统浏览器完成。移动端从所选线路直接读取
+`releases/latest/download/folio-release.json`；Android 在应用内下载、校验并调起系统
+安装确认，iOS 只展示版本与日志，暂不提供安装按钮。清单格式如下：
 
 ```json
 {
@@ -112,6 +113,10 @@ runner 上交叉打包。Node、pnpm、Rust、Java、NDK 与 Xcode 固定版本�
   "version": "1.0.0",
   "publishedAt": "2026-10-08T12:00:00.000Z",
   "releaseUrl": "https://github.com/aurysian-yan/Folio/releases/tag/v1.0.0",
+  "releaseNotes": {
+    "zh-CN": "### 修复\n\n- 修复字体预览异常。",
+    "en": "### Fixes\n\n- Fix font preview issues."
+  },
   "artifacts": [
     {
       "platform": "macos",
@@ -164,3 +169,62 @@ Windows 使用未签名 NSIS 安装程序；SmartScreen 可能提示未知发布
 Release 与 SHA-256 后，可在系统提示中选择「更多信息 → 仍要运行」。
 Linux AppImage 下载后赋予执行权限再运行；也可以选择对应架构的 deb 或 rpm，
 通过系统软件管理器安装。
+
+
+## 双语更新日志与 LLM 配置
+
+在 GitHub 仓库 **Settings → Secrets and variables → Actions** 配置：
+
+| 类型 | 名称 | 内容 |
+| --- | --- | --- |
+| Secret | `RELEASE_LLM_API_KEY` | 服务商 API 密钥 |
+| Variable | `RELEASE_LLM_BASE_URL` | HTTPS API 基础地址，例如 `https://api.openai.com/v1`，不含 `/chat/completions` |
+| Variable | `RELEASE_LLM_MODEL` | 服务商提供的准确模型 ID，不预设模型 |
+
+三项齐全才启用模型；采用 OpenAI 兼容的 Chat Completions 协议、Bearer 鉴权和非流式
+响应，不要求供应商支持 JSON 模式或特定采样参数。单次请求最多 45 秒，最多三次尝试，
+全部总结受八分钟总时限约束。密钥仅用于日志生成任务，不进入客户端、安装包或产物。
+
+日志任务与平台构建并行执行，范围为当前提交可达的上一个已公开正式 Release 至当前
+提交；首次发布覆盖此前历史。失败标签、草稿、预发行及其他分支的 Release 不作为基线。
+提交标题、正文及变更路径分批发送，超长单条记录也完整分批，再汇总中英双语 Markdown。
+模型按新增、改进、修复及平台整理，不能把规划文档中的能力写成已交付功能。
+
+缺少配置或模型失败时，按提交类别生成中英标题，正文保留原始提交及链接，不伪造英文
+翻译。超过正文容量的历史使用分类数量与完整提交比较链接，保持全部记录可访问。
+`release-notes` 工作流产物保存可审核的日志；手动构建同样生成，但不公开 Release。
+
+汇总阶段将同一份日志写入 `folio-release.json` 的可选 `releaseNotes` 字段，保留
+`schemaVersion: 1`，再生成 SHA-256。Release 正文与应用使用这份数据。旧清单仍可读取；
+缺少日志时应用显示明确说明。日志不会作为额外附件改变既有十四项发布附件矩阵。
+
+草稿正文保留发布提交标记和日志快照。重跑发布失败任务时沿用原产物；如重新执行日志
+任务，先复用同一提交草稿中的清单或日志快照，不再次调用模型。存在清单时保留原始
+发布时间，并要求安装包哈希一致；不一致时停止发布，重跑原工作流的失败任务。
+正式 Release、其他提交的草稿以及正文与清单不一致的草稿仍禁止覆盖。
+
+## 移动端镜像与 Android 安装
+
+设置主页和关于页均可进入「软件更新」，设置搜索支持版本、更新、镜像等关键词。
+默认 GitHub 直连；可手动固定 GhFast、GhProxy、GhProxyOrg、GhDdlc 或 Isteed。
+镜像只改写请求地址，清单中的原始 URL 始终限于本仓库，进一步了解仍打开 GitHub Release。
+
+每次展开原生菜单并行测速一次，完整下载并校验同一个 Folio 更新清单，单线路超时五秒。
+结果为完整请求耗时，不代表 APK 大文件吞吐速度；关闭菜单取消本轮测速，最快标记不
+改变已选择线路。切换镜像会重新检查更新；下载期间不能切换，须先取消当前下载。
+
+Android 使用系统 DownloadManager 执行下载，任务与安装包信息持久保存在应用内；
+下载进度在更新页显示，离开页面、切入后台或重新打开后可恢复，不重复创建下载。
+下载完成后逐项检查字节数、SHA-256、正式包身份、版本、递增构建号与签名兼容性，
+将校验通过的文件复制到应用私有目录，并在调起系统安装前再次校验。
+
+安装需要用户在系统安装器确认；缺少安装来源权限时打开系统授权设置，授权返回后继续。
+后台不弹出安装器，回到前台后接续。取消安装会保留已验证文件供再次安装，成功升级、
+手动移除或七天过期后清理。开发包身份或历史调试签名不兼容时不会强行覆盖安装。
+安装包通过限定更新目录的 FileProvider 临时只读授权提供，不申请广泛存储访问权限。
+
+
+更新原生安全回归使用临时 `FolioUpdateTest` 模拟器，显式指定序列号：
+`ANDROID_SERIAL=emulator-5554 pnpm --dir experiments/mobile test:updates`。
+脚本生成独立临时签名与不同签名、包名、版本、构建号的最小 APK，验证校验失败清理、
+任务恢复、授权返回、过期移除和 FileProvider 目录隔离，不使用正式签名密钥。
