@@ -1,0 +1,21 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+group = 'io.github.neoruaa.glasmio'
+version = '0.1.0'
+def legalResources = tasks.register('prepareGlasmioLegal', Copy) {
+    from rootProject.file('../vendor/glasmio/legal')
+    into layout.buildDirectory.dir("generated/legal/${project.name}")
+    eachFile { path = path.replace('META-INF/glasmio/', "META-INF/glasmio/${project.name}/") }
+    includeEmptyDirs = false
+}
+android {
+    compileSdk 37
+    defaultConfig { minSdk 33 }
+    buildFeatures { compose true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets.main.resources.srcDir legalResources
+}

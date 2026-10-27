@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, AppState, Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { isReleaseUrl, type AppInfo, type UpdateResult } from '../../../shared/about/update';
+import { isReleaseUrl, type AppInfo } from '../../../shared/about/update';
+import type { MobileUpdateResult } from '../../../shared/about/android-release';
 import { getAboutInfo, updates } from './native';
 import { ReleaseMirrorMenu } from './ReleaseMirrorMenu';
 import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, formatBytes, settingsLayout, settingsTypography } from './settings-ui';
@@ -19,13 +20,13 @@ function updateError(error: unknown) {
   return /softwareUpdate\.errors\.[a-z]+/.exec(message)?.[0] ?? (/^softwareUpdate\.errors\.[a-z]+$/.test(code) ? code : 'softwareUpdate.errors.download');
 }
 
-export function SettingsUpdatePage({ theme, onClose, active = true, backLabel }: { theme: Theme; onClose: () => void; active?: boolean; backLabel?: string }) {
+export function SettingsUpdatePage({ theme, onClose, active = true, backLabel, required = false }: { theme: Theme; onClose: () => void; active?: boolean; backLabel?: string; required?: boolean }) {
   const { t, i18n } = useTranslation();
   const [app, setApp] = useState<AppInfo>();
   const [mirror, setMirror] = useState<ReleaseMirrorId>('direct');
   const [loaded, setLoaded] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [update, setUpdate] = useState<UpdateResult>({ status: 'idle' });
+  const [update, setUpdate] = useState<MobileUpdateResult>({ status: 'idle' });
   const [download, setDownload] = useState(idleDownload);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -115,14 +116,14 @@ export function SettingsUpdatePage({ theme, onClose, active = true, backLabel }:
     if (expanded.current === value) return;
     expanded.current = value;
     if (!value || locked || !active) { speedSession.close(); return; }
-    void speedSession.open(update.release?.version, (id, result) => setSpeeds((previous) => ({ ...previous, [id]: result })));
+    void speedSession.open(update.release?.version, (id, result) => setSpeeds((previous) => ({ ...previous, [id]: result })), app?.platform === 'android' && app.sdkInt !== undefined);
   }
   const best = fastestMirror(speeds);
   const release = update.release;
   const artifact = update.artifacts?.[0];
   const notes = release?.releaseNotes?.[i18n.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en'];
   const progress = download.total ? Math.min(1, Math.max(0, (download.bytes ?? 0) / download.total)) : 0;
-  const statusKey = update.status === 'idle' ? 'about.checking' : `about.${update.status}`;
+  const statusKey = update.status === 'variantRequired' ? 'softwareUpdate.variantRequired' : update.status === 'idle' ? 'about.checking' : `about.${update.status}`;
   const items = releaseMirrors.map((item) => {
     const speed = speeds[item.id];
     const detail = speed?.status === 'success' ? t('softwareUpdate.latency', { milliseconds: speed.milliseconds })
@@ -131,6 +132,7 @@ export function SettingsUpdatePage({ theme, onClose, active = true, backLabel }:
   });
 
   return <SettingsPage title={t('softwareUpdate.title')} theme={theme} onClose={onClose} backdropSourceId={sourceId} backLabel={backLabel}>
+    {required && <SettingsNote theme={theme}>{t('softwareUpdate.compatibilityRequired')}</SettingsNote>}
     <SettingsGroup theme={theme}>
       <View style={styles.versionRow}>
         <View style={styles.flex}>
@@ -172,7 +174,7 @@ export function SettingsUpdatePage({ theme, onClose, active = true, backLabel }:
         </Text>) : <Text style={[styles.note, { color: theme.secondary }]}>{t('softwareUpdate.noNotes')}</Text>}
         <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{t('about.published', { date: new Date(release.publishedAt).toLocaleDateString(i18n.language) })}</Text>
       </View>
-      {Platform.OS === 'android' && update.status === 'newVersion' && artifact && download.status !== 'ready' && !downloading && <View style={settingsLayout.controls}>
+      {Platform.OS === 'android' && (update.status === 'newVersion' || update.status === 'variantRequired') && artifact && download.status !== 'ready' && !downloading && <View style={settingsLayout.controls}>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy}
           onPress={() => void perform(async () => { const next = await updates.startUpdateDownload(downloadRequest(release, artifact, mirror)); if (alive.current) setDownload(next); })}
           style={({ pressed }) => [styles.primary, settingsLayout.control, { backgroundColor: theme.accent, opacity: busy || pressed ? 0.6 : 1 }]}>

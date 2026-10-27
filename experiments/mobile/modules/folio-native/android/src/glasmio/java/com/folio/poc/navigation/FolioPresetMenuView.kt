@@ -1,0 +1,89 @@
+package com.folio.poc.navigation
+
+import android.content.Context
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import expo.modules.kotlin.AppContext
+import expo.modules.kotlin.viewevent.EventDispatcher
+import io.github.neoruaa.glasmio.core.GlasmioTheme
+import io.github.neoruaa.glasmio.glass.GlasmioToolbarActionGroup
+import io.github.neoruaa.glasmio.glass.GlassSurfaceStyle
+import io.github.neoruaa.glasmio.ui.GlasmioIconButton
+import io.github.neoruaa.glasmio.ui.GlasmioMenu
+import io.github.neoruaa.glasmio.ui.GlasmioMenuItem
+
+// 菜单触发器前景与弹层由同一 Compose 树记录和转移。
+class FolioPresetMenuView(context: Context, appContext: AppContext) : FolioGlassView(context, appContext) {
+    var selectedId by mutableStateOf("")
+    var disabled by mutableStateOf(false)
+    var triggerIcon by mutableStateOf("caret")
+    var triggerSurface by mutableStateOf(false)
+    var triggerTrailing by mutableStateOf(false)
+    var triggerFeedback = true
+    var shadowProgress = 0f
+    var colors by mutableStateOf<FolioViewMenuColors?>(null)
+    var labels by mutableStateOf<FolioPresetMenuLabels?>(null)
+    var items by mutableStateOf(emptyList<FolioNavigationItem>())
+    private var expanded by mutableStateOf(false)
+    private val onSelectionChange by EventDispatcher()
+    private val onExpandedChange by EventDispatcher()
+
+    private fun updateExpanded(value: Boolean) {
+        if (expanded == value) return
+        expanded = value
+        onExpandedChange(mapOf("expanded" to value))
+    }
+
+    @Composable override fun GlassContent() {
+        val text = labels ?: return
+        LaunchedEffect(disabled) { if (disabled) updateExpanded(false) }
+        GlasmioToolbarActionGroup {
+            GlasmioMenu(expanded, ::updateExpanded, items.size, anchor = { open ->
+                if (triggerTrailing) {
+                    Row(Modifier.fillMaxSize().clickable(enabled = !disabled, onClick = open).padding(horizontal = 16.dp)
+                        .semantics { contentDescription = listOf(text.title, text.value).filter { it.isNotBlank() }.joinToString(" · ") },
+                        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text.title, modifier = Modifier.weight(1f), color = GlasmioTheme.colors.content, maxLines = 1)
+                        Text(text.value, color = GlasmioTheme.colors.secondaryContent, maxLines = 1)
+                        ViewMenuIcon("caret", GlasmioTheme.colors.secondaryContent, 18.dp)
+                    }
+                } else GlasmioIconButton(open, enabled = !disabled,
+                    style = if (triggerSurface) GlassSurfaceStyle.Navigation else GlassSurfaceStyle.Navigation,
+                    modifier = Modifier.semantics { contentDescription = text.title }) {
+                    ViewMenuIcon(if (triggerIcon == "more") "dots" else "caret", GlasmioTheme.colors.content, 20.dp)
+                }
+            }) { backdrop, close ->
+                items.forEach { item ->
+                    GlasmioMenuItem(item.label, {
+                        if (!disabled && !item.disabled) {
+                            onSelectionChange(mapOf("id" to item.id))
+                            close()
+                        }
+                    }, enabled = !item.disabled, backdrop = backdrop,
+                        systemName = item.icon.takeIf { it.isNotBlank() },
+                        trailing = if (item.id == selectedId) ({ ViewMenuIcon("check", GlasmioTheme.colors.content, 18.dp) }) else null)
+                }
+            }
+        }
+    }
+
+    override fun onDetachedFromWindow() { updateExpanded(false); super.onDetachedFromWindow() }
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (visibility != VISIBLE) updateExpanded(false)
+    }
+}

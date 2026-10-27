@@ -1,3 +1,4 @@
+import { GlassControlScope } from './GlassControlScope';
 import { useNavigationScroll } from './NavigationScroll';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -190,7 +191,7 @@ export function PageHeader({ theme, scrollY, titleOffset = scrollY, titleScale, 
     <View collapsable={false} pointerEvents="box-none" onLayout={onLayout}
       style={[styles.header, { top: topInset,
         backgroundColor: Platform.OS === 'ios' && Number(Platform.Version) < 26 ? theme.background : undefined }, style]}>
-      <HeaderScrollContext.Provider value={scrollY}>{children ?? <>
+      <GlassControlScope sourceId={sourceId} active={active}><HeaderScrollContext.Provider value={scrollY}>{children ?? <>
         <View onLayout={({ nativeEvent }) => setLeadingWidth(nativeEvent.layout.width)} style={styles.leading}>{leading}</View>
         <Animated.View pointerEvents="none" accessibilityElementsHidden={!titleVisible} importantForAccessibility={titleVisible ? 'auto' : 'no-hide-descendants'}
           style={[styles.compactTitle, { left: titleInset, right: titleInset, opacity: fixed ? 1 : compact.opacity,
@@ -201,7 +202,7 @@ export function PageHeader({ theme, scrollY, titleOffset = scrollY, titleScale, 
             reduceMotion={reduceMotion || fixed} style={styles.smallSubtitle} />}
         </Animated.View>
         <View onLayout={({ nativeEvent }) => setActionsWidth(nativeEvent.layout.width)} style={styles.actions}>{actions}</View>
-      </>}</HeaderScrollContext.Provider>
+      </>}</HeaderScrollContext.Provider></GlassControlScope>
     </View>
   </>;
 }

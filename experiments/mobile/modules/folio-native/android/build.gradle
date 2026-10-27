@@ -12,12 +12,14 @@ apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 group = 'com.folio.poc'
 version = '0.1.0'
 
+expoModule { canBePublished false }
+
 android {
   namespace 'com.folio.poc'
   defaultConfig {
     versionCode 1
     versionName '0.1.0'
-    minSdkVersion 28
+    minSdkVersion 30
     testInstrumentationRunner project.findProperty('folioUpdateTest') ? 'com.folio.poc.FolioUpdateInstrumentation' : project.findProperty('folioFileTest') ? 'com.folio.poc.FolioFileInstrumentation' : project.findProperty('folioPreviewTest') ? 'com.folio.poc.FolioPreviewInstrumentation' :
       project.findProperty('folioSliderTest') ? 'com.folio.poc.FolioSliderRefractionInstrumentation' :
       project.findProperty('folioSwitchTest') ? 'com.folio.poc.FolioSwitchRefractionInstrumentation' :
@@ -30,7 +32,20 @@ android {
   sourceSets.main.resources.srcDirs += 'third-party'
   sourceSets.androidTest.assets.srcDirs += ['../../../samples', '../../../../../locales']
   if (project.findProperty('folioUpdateTest')) sourceSets.androidTest.assets.srcDirs += ['../../../.build/update-test-assets']
-  buildFeatures { compose true }
+  buildFeatures { compose true; buildConfig true }
+  flavorDimensions += 'glassTier'
+  productFlavors {
+    legacy {
+      dimension 'glassTier'
+      minSdk 30
+      manifestPlaceholders.folioGlassTier = 'legacy'
+    }
+    glasmio {
+      dimension 'glassTier'
+      minSdk 33
+      manifestPlaceholders.folioGlassTier = 'glasmio'
+    }
+  }
   if (project.findProperty('folioSyncTarget')) {
     signingConfigs.debug {
       storeFile rootProject.file('app/debug.keystore')
@@ -57,8 +72,12 @@ dependencies {
   implementation 'androidx.activity:activity:1.10.1'
   implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
   implementation 'net.java.dev.jna:jna:5.19.1@aar'
-  implementation 'androidx.compose.foundation:foundation-android:1.10.6'
-  implementation 'androidx.compose.ui:ui-android:1.10.6'
+  legacyImplementation 'androidx.compose.foundation:foundation-android:1.10.6'
+  legacyImplementation 'androidx.compose.ui:ui-android:1.10.6'
+  glasmioImplementation platform('androidx.compose:compose-bom:2026.09.00')
+  glasmioImplementation 'androidx.compose.foundation:foundation-android:1.12.1'
+  glasmioImplementation 'androidx.compose.ui:ui-android'
+  glasmioImplementation project(':glasmio-ui')
   // Material3 色彩工具：由种子色生成完整语义色板，供外观主题使用。
   implementation 'com.google.android.material:material:1.13.0'
   implementation 'org.jetbrains:annotations:26.1.0'

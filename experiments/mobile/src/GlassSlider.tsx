@@ -1,6 +1,7 @@
 import type { Theme } from './ui';
 
 export interface GlassSliderProps {
+  sourceId?: string;
   label: string;
   value: number;
   minimum: number;

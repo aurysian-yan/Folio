@@ -1,4 +1,5 @@
 import { DialogProvider } from './Dialogs';
+import { AndroidCompatibilityGate } from './AndroidCompatibilityGate';
 import { NavigationScrollContext, NavigationScrollScope } from './NavigationScroll';
 import { BrowserDataProvider } from './BrowserDataProvider';
 import { OnlineSessionProvider, useOnlineSession, type OnlineOpenRequest } from './OnlineSession';
@@ -748,7 +749,7 @@ function MobileApp() {
 export default function App() {
   // 原生导航完成挂载后移除启动画面。
   useEffect(() => { SplashScreen.hide(); }, []);
-  return <SafeAreaProvider><PreferencesProvider><BrowserDataProvider><OnlineSessionProvider><MobileApp /></OnlineSessionProvider></BrowserDataProvider></PreferencesProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><AndroidCompatibilityGate><PreferencesProvider><BrowserDataProvider><OnlineSessionProvider><MobileApp /></OnlineSessionProvider></BrowserDataProvider></PreferencesProvider></AndroidCompatibilityGate></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({

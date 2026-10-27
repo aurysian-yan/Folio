@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { CharacterMapChoice, type CharacterMapChoiceProps } from './CharacterMapChoice';
 import type { FontFace } from './library';
 import { settingsLayout, settingsTypography } from './settings-ui';
+import { usesGlasmioControls } from './AndroidGlassButton';
 import type { Theme } from './ui';
 
 // 选择行由整行原生菜单接管触摸，文字不重复参与无障碍导航。
@@ -12,7 +13,7 @@ export function FontChoiceRow(props: CharacterMapChoiceProps) {
   const [size, setSize] = useState({ width: 0, height: 64 });
   const selected = options.find((item) => item.value === value)?.label ?? '';
   return <View onLayout={({ nativeEvent: { layout } }) => setSize({ width: layout.width, height: layout.height })} style={styles.row}>
-    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.labels}>
+    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.labels, usesGlasmioControls && { opacity: 0 }]}>
       <Text style={[settingsTypography.body, styles.label, { color: theme.label }]}>{label}</Text>
       <Text numberOfLines={1} style={[styles.value, settingsTypography.detail, { color: theme.secondary }]}>{selected}</Text>
     </View>

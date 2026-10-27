@@ -10,11 +10,27 @@ class FolioNavigationItem : Record {
     @Field var id: String = ""
     @Field var label: String = ""
     @Field var icon: String = ""
+    @Field var disabled: Boolean = false
 }
 
 class FolioNavigationModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("FolioNavigation")
+        Constant("androidVariant") { "glasmio" }
+
+        View(FolioHeaderActionButtonView::class) {
+            Events("onPress")
+            Prop("sourceId") { view: FolioHeaderActionButtonView, value: String -> view.sourceId = value }
+            Prop("controlId") { view: FolioHeaderActionButtonView, value: String -> view.controlId = value }
+            Prop("label") { view: FolioHeaderActionButtonView, value: String -> view.label = value }
+            Prop("systemImage") { view: FolioHeaderActionButtonView, value: String -> view.systemImage = value }
+            Prop("enabled") { view: FolioHeaderActionButtonView, value: Boolean -> view.controlEnabled = value }
+            Prop("busy") { view: FolioHeaderActionButtonView, value: Boolean -> view.busy = value }
+            Prop("selected") { view: FolioHeaderActionButtonView, value: Boolean -> view.controlSelected = value }
+            Prop("primary") { view: FolioHeaderActionButtonView, value: Boolean -> view.primary = value }
+            Prop("dark") { view: FolioHeaderActionButtonView, value: Boolean -> view.dark = value }
+            Prop("accentColor") { view: FolioHeaderActionButtonView, value: String -> view.accentColor = value }
+        }
 
         View(FolioFontStackView::class) {
             Events("onDismissed")
@@ -60,7 +76,7 @@ class FolioNavigationModule : Module() {
             Prop("searchText") { view: FolioHeaderControlsView, value: String -> view.searchText = value }
             Prop("filterCount") { view: FolioHeaderControlsView, value: Int -> view.filterCount = value.coerceAtLeast(0) }
             Prop("shadowProgress") { view: FolioHeaderControlsView, value: Float -> view.shadowProgress = value.coerceIn(0f, 1f) }
-            Prop("colors") { view: FolioHeaderControlsView, value: FolioViewMenuColors -> view.colors = value }
+            Prop("colors") { view: FolioHeaderControlsView, value: FolioViewMenuColors -> view.colors = value; view.accentColor = value.accent; view.surfaceColor = value.raised }
             Prop("labels") { view: FolioHeaderControlsView, value: FolioHeaderLabels -> view.labels = value }
         }
 
@@ -75,12 +91,14 @@ class FolioNavigationModule : Module() {
             Prop("triggerTrailing") { view: FolioPresetMenuView, value: Boolean -> view.triggerTrailing = value }
             Prop("triggerFeedback") { view: FolioPresetMenuView, value: Boolean -> view.triggerFeedback = value }
             Prop("shadowProgress") { view: FolioPresetMenuView, value: Float -> view.shadowProgress = value.coerceIn(0f, 1f) }
-            Prop("colors") { view: FolioPresetMenuView, value: FolioViewMenuColors -> view.colors = value }
+            Prop("colors") { view: FolioPresetMenuView, value: FolioViewMenuColors -> view.colors = value; view.accentColor = value.accent; view.surfaceColor = value.raised }
             Prop("labels") { view: FolioPresetMenuView, value: FolioPresetMenuLabels -> view.labels = value }
             Prop("items") { view: FolioPresetMenuView, value: List<FolioNavigationItem> -> view.items = value }
         }
 
         View(FolioGlassSliderView::class) {
+            Prop("sourceId") { view: FolioGlassSliderView, value: String -> view.sourceId = value }
+            Prop("controlId") { view: FolioGlassSliderView, value: String -> view.controlId = value }
             Events("onValueChange", "onEditingChanged")
             Prop("label") { view: FolioGlassSliderView, value: String -> view.label = value }
             Prop("valueText") { view: FolioGlassSliderView, value: String -> view.valueText = value }
@@ -99,6 +117,8 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioGlassSwitchView::class) {
+            Prop("sourceId") { view: FolioGlassSwitchView, value: String -> view.sourceId = value }
+            Prop("controlId") { view: FolioGlassSwitchView, value: String -> view.controlId = value }
             Events("onValueChange")
             Prop("label") { view: FolioGlassSwitchView, value: String -> view.label = value }
             Prop("checked") { view: FolioGlassSwitchView, value: Boolean -> view.checked = value }

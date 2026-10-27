@@ -1,0 +1,28 @@
+diff --git a/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/utils/AgpConfiguratorUtils.kt b/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/utils/AgpConfiguratorUtils.kt
+index c4a7b359d5427ff3775774a41ff13eee8ac22016..caf54a09577d0ae90511d0d3cabfc17bcb78968e 100644
+--- a/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/utils/AgpConfiguratorUtils.kt	
++++ b/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/utils/AgpConfiguratorUtils.kt
+@@ -78,6 +78,11 @@ internal object AgpConfiguratorUtils {
+   }
+ 
+   fun configureBuildConfigFieldsForLibraries(appProject: Project) {
++    // 全工程监听仅注册一次，避免重复处理已完成配置的模块。
++    val marker = "folio.configureBuildConfigFieldsForLibraries"
++    val properties = appProject.rootProject.extensions.extraProperties
++    if (properties.has(marker)) return
++    properties.set(marker, true)
+     appProject.rootProject.allprojects { subproject ->
+       subproject.pluginManager.withPlugin("com.android.library") {
+         subproject.extensions
+@@ -112,6 +117,11 @@ internal object AgpConfiguratorUtils {
+   }
+ 
+   fun configureNamespaceForLibraries(appProject: Project) {
++    // 全工程监听仅注册一次，避免重复处理已完成配置的模块。
++    val marker = "folio.configureNamespaceForLibraries"
++    val properties = appProject.rootProject.extensions.extraProperties
++    if (properties.has(marker)) return
++    properties.set(marker, true)
+     appProject.rootProject.allprojects { subproject ->
+       subproject.pluginManager.withPlugin("com.android.library") {
+         subproject.extensions

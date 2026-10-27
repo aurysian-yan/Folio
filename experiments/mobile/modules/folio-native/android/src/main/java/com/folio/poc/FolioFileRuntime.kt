@@ -141,7 +141,12 @@ internal class FolioFileRuntime private constructor(val context: Context) {
         @Volatile private var shared:FolioFileRuntime?=null
         val callbacks=ConcurrentHashMap<String,(String?,Exception?)->Unit>()
         val activeFiles=ConcurrentHashMap<String,java.lang.ref.WeakReference<FolioFileActivity>>()
-        fun get(context:Context):FolioFileRuntime=shared ?: synchronized(this){shared ?: FolioFileRuntime(context.applicationContext).also {shared=it}}
+        fun get(context: Context): FolioFileRuntime {
+            FolioAndroidBuild.requireCompatible(context)
+            return shared ?: synchronized(this) {
+                shared ?: FolioFileRuntime(context.applicationContext).also { shared = it }
+            }
+        }
         fun localized(context:Context,key:String):String {
             val language=if(context.resources.configuration.locales[0].language=="zh")"zh-CN" else "en"
             return try {var value:Any=JSONObject((try {context.assets.open("folio-locales/$language.json")}catch(_:java.io.IOException){context.assets.open("$language.json")}).bufferedReader().use {it.readText()});for(part in key.split('.'))value=(value as JSONObject).get(part);value as String}catch(_:Exception){context.applicationInfo.loadLabel(context.packageManager).toString()}

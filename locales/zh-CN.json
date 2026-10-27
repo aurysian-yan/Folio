@@ -1,5 +1,6 @@
 {
   "common": {
+    "exit": "退出",
     "appName": "Folio",
     "ok": "好",
     "cancel": "取消",
@@ -1305,6 +1306,8 @@
     "backToSearch": "返回搜索"
   },
   "softwareUpdate": {
+    "variantRequired": "需要安装适用于此 Android 版本的更新。",
+    "compatibilityRequired": "当前安装包不适用于此 Android 版本，请更新后继续使用。",
     "title": "软件更新",
     "description": "检查新版本、阅读更新日志并选择下载镜像。",
     "currentVersion": "当前版本",

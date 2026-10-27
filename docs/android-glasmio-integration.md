@@ -1,0 +1,110 @@
+# Android 双版本控件接入
+
+## 当前边界
+
+Glasmio 源码固定在 `17b13caddb64b7d396009fae71919a8a3955fe6f`，
+跟进持久标题栏及共享玻璃操作组接口。四个源码模块、原始许可和文件校验值保存在
+移动端 `vendor/glasmio/`；不引入上游 Scaffold、Preference 或示例资源。
+
+高版本已注册导航、顶栏、菜单、Slider、Switch 和背景视图，React 页面继续使用原有业务接口。
+控件绘制在页面采样树之外的原生 overlay；页面内容通过 RenderNode 和官方 Backdrop 接口提供，
+Glasmio 保留默认材质、折射和动画。轨道与拨片组合取样由上游控件自身实现。
+菜单触发器前景和菜单由同一 Compose 树管理，字款选择行的文字一起参与前景转移。
+原生 overlay 的实际根节点显式绑定页面的 Lifecycle、SavedState 与 ViewModel owner，
+让页面进入、返回及 RN 滚动裁切后的控件重挂载均能创建 Compose 重组器。
+本轮已在 API 37／arm64 模拟器覆盖安装开发身份的 Glasmio Release 包并启动，
+包内包含完整页面代码，无需预览服务。实际控件效果由使用者验证。
+
+## 构建与兼容规则
+
+| 类型 | 系统范围 | 最低 API | 控件实现 |
+| --- | --- | --- | --- |
+| `legacy` | Android 11–12L | 30 | 现有原生组件 |
+| `glasmio` | Android 13+ | 33 | Glasmio 默认组件 |
+
+应用和原生模块使用同名 `glassTier` flavor，共享原有正式／开发应用身份。
+正式包共用签名和数据目录。构建号由发布序号乘十后分别加一、加二生成，
+发布序号范围为 `1..209999999`。应用清单写入 `com.folio.android.GLASS_TIER`。
+
+兼容版源码及原有 `com.kyant` 实现放入 `src/legacy/`，高版本源码放入
+`src/glasmio/`。同一 APK 不包含两套同名 Backdrop 类。
+兼容版保留 Compose `1.10.6`；新 Compose 依赖只进入高版本包。
+
+Expo Config Plugin 可重复生成 flavor、模块注册和 Kotlin 版本配置。
+宿主 Kotlin 固定为 `2.4.21`，构建使用 JDK 21，字节码目标保持 17。
+Compose `1.12.1` 的 AAR 元数据要求 AGP `9.1.0+`，宿主使用 `9.1.0`。
+兼容补丁移除 Expo 库模块已删除的 targetSdk 写入，并确保 React Native 全工程监听只注册一次。
+保留独立 Kotlin 插件及旧 DSL，兼容现有 Expo/RN 构建配置；不跳过 AAR 兼容检查。
+Gradle 堆内存为 4 GiB、Metaspace 为 2 GiB，最多两个并行工作线程，防止默认 512 MiB
+Metaspace 导致 Reflection 初始化连带失败。
+
+Expo 的 Pika 编译优化尚无该 Kotlin 版本的对应制品。通过受版本锁定的 pnpm
+补丁，在关闭优化时不加载该编译器插件，并让属性／返回值转换使用已有反射路径。
+补丁不修改玻璃渲染或动画，安装依赖时自动应用。
+
+## 控件转换接口
+
+`GlassControlScope` 随 `NavigationBackdrop` 传递背景源和页面活动状态。
+Slider、Switch 和云端分段通过上下文取得 `sourceId`；Slider、Switch 还传递
+稳定的 `controlId`。显式 `sourceId` 可以覆盖上下文，不改变现有业务回调。
+
+- Slider 继续传递数值范围、步长、语义主题色和编辑状态；事件计数单调递增，
+  拒绝非有限数值、重复事件和迟到事件。
+- Switch 继续使用受控值、禁用态与应用主题色，页面不活动时不提交变化。
+- 原生兼容实现接收背景源和身份字段，保持现有绘制方式。
+- 高版本在相同接口后封装 Glasmio；顶栏按钮通过原生构建常量选择实现，不按 JS 系统版本判断。
+
+原生 `aboutInfo()` 增加 `sdkInt`、`androidVariant` 和 `requiresVariantUpdate`。
+正式兼容包在 API 33+ 必须进入更新页；未知构建信息不能放行主页面。
+开发包由原生明确豁免正式包迁移，不尝试安装正式签名 APK。
+业务提供器在兼容检查通过后才挂载；原生字体／同步运行时也检查兼容状态。
+
+## 更新协议
+
+保留旧 `folio-release.json`；新增客户端支持读取 schema 2 的
+`folio-release-v2.json`。新清单的 Android 产物包含：
+
+- `androidVariant`：`legacy` 或 `glasmio`；
+- `minSdk`：分别为 30、33；
+- `maxSdk`：只在兼容包中为 32，作为客户端选择条件；
+- `versionCode`：与 APK 实际构建号一致。
+
+选择顺序为系统类型和运行架构，不接受重复、范围重叠、错误文件名或不一致的构建号。
+同次发布两种类型的构建号相差一，同类型两个 ABI 的构建号必须相同。
+
+兼容包保留 `Folio-vX.Y.Z-android-<arch>.apk` 文件名，高版本包使用
+`Folio-vX.Y.Z-android-glasmio-<arch>.apk`。
+强制迁移先查询当前版本的 v2 清单，再查询最新正式版本，不回退到未知类型的旧清单包。
+
+允许同版本由兼容包迁移到更高构建号的高版本包，禁止降级或重复安装。
+下载缓存按版本、类型、架构和构建号隔离；旧任务重新校验或清理。
+安装前核对实际包名、签名、版本、构建号、最低 API、类型元数据、ABI、大小和 SHA-256。
+取消安装、断网或下载失败均不解除正式包的兼容限制。
+
+发布工作流的四包矩阵、v2 清单生成和完整 APK 验收仍需在控件接入完成后联调。
+
+## 验证入口
+
+```sh
+pnpm --dir experiments/mobile install --frozen-lockfile
+pnpm --dir experiments/mobile typecheck
+pnpm --dir experiments/mobile lint
+pnpm --dir experiments/mobile test
+pnpm --dir apps/desktop-ui test src/android-release.test.ts src/mobile-update.test.ts
+pnpm i18n:validate
+```
+
+原生单元测试使用 `:folio-native:testLegacyDebugUnitTest`。
+安装安全测试使用 `ANDROID_SERIAL=<临时模拟器序列号> pnpm --dir experiments/mobile test:updates`，
+仅允许名为 `FolioUpdateTest` 的 Android 13+ 临时模拟器，测试签名与数据完全独立。
+测试覆盖错误类型、系统范围、ABI、构建号、签名、哈希、旧任务与同版本任务恢复。
+
+转换层阶段已通过 24 项更新协议测试、26 项原生单元测试和独立模拟器上的
+26 项安装安全检查。控件接入后已重新通过移动端类型检查、Lint、141 项行为测试、24 项更新协议测试、
+26 项原生单元测试，以及 Glasmio Release APK 构建。
+此结果不代表四套正式 APK、控件视觉、动画手感或性能指标已完成验收。
+
+`pnpm --dir experiments/mobile android` 要求已连接设备，按设备 API 选择 `legacyDebug`
+或 `glasmioDebug`，并使用 JDK 21，避免默认 `assembleDebug` 同时构建两套版本。
+多个设备时通过 `--device <序列号>` 指定。手动打包使用 `assembleLegacyRelease` 或
+`assembleGlasmioRelease`，本机可加 `-Pfolio.android.abi=arm64|x64` 缩小构建范围。

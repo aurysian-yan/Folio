@@ -2,7 +2,12 @@ import content from './content.json';
 
 export type Platform = 'macos' | 'windows' | 'linux' | 'android' | 'ios';
 export type Architecture = 'arm64' | 'x64';
-export interface AppInfo { version: string; build: string; platform: Platform; arch: Architecture }
+export interface AppInfo {
+  version: string; build: string; platform: Platform; arch: Architecture;
+  sdkInt?: number;
+  androidVariant?: 'legacy' | 'glasmio';
+  requiresVariantUpdate?: boolean;
+}
 export interface Artifact { platform: Platform; arch: Architecture; format: string; url: string; size: number; sha256: string }
 export interface ReleaseNotes { 'zh-CN': string; en: string }
 export interface ReleaseManifest { schemaVersion: 1; version: string; publishedAt: string; releaseUrl: string; artifacts: Artifact[]; releaseNotes?: ReleaseNotes }

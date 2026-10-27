@@ -2,6 +2,7 @@ import { Switch } from 'react-native';
 import type { Theme } from './ui';
 
 export interface GlassSwitchProps {
+  sourceId?: string;
   label: string;
   value: boolean;
   disabled?: boolean;

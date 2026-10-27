@@ -65,6 +65,8 @@ import kotlin.math.ceil
 // 原生滑块同步绘制拖动，受控回传通过事件序号排除过期值。
 class FolioGlassSliderView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     override val shouldUseAndroidLayout = true
+    var sourceId: String = ""
+    var controlId: String = ""
     var label by mutableStateOf("")
     var valueText by mutableStateOf("")
     var minimum by mutableStateOf(0.0)

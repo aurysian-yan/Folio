@@ -16,6 +16,8 @@ import org.json.JSONObject
 import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import expo.modules.kotlin.types.descriptors.typeDescriptorOf
+import expo.modules.kotlin.types.toReturnType
 
 // 使用临时签名 APK 与独立测试数据校验安装边界，不读写用户字体库。
 class FolioUpdateInstrumentation : Instrumentation() {
@@ -26,16 +28,22 @@ class FolioUpdateInstrumentation : Instrumentation() {
         val official = object : ContextWrapper(testContext) { override fun getPackageName() = "com.folio.mobile.poc" }
         var checks = 0
         try {
+            val descriptor = typeDescriptorOf<List<String>>()
+            check(descriptor.jClass == List::class.java && descriptor.params.single().jClass == String::class.java); checks++
+            toReturnType<List<String>>(); checks++
             FolioUpdater.cancel(official)
             check(FolioUpdater.compareVersion("1.10.0", "1.9.9") > 0); checks++
             check(runCatching { FolioUpdater.start(testContext, "{}") }.exceptionOrNull()?.message == "softwareUpdate.errors.identity"); checks++
-            fun prepare(asset: String, sha: String? = null): File {
+            val arch = folioAndroidArch()
+            fun taskFileName(version: String = "9.9.9") = "Folio-v$version-glasmio-$arch-9992.apk"
+            fun taskMetadata(task: JSONObject): JSONObject = task.put("versionCode", 9992).put("androidVariant", "glasmio").put("arch", arch).put("minSdk", 33)
+            fun prepare(asset: String, sha: String? = null, version: String = "9.9.9"): File {
                 FolioUpdater.cancel(official)
-                val file = File(testContext.filesDir, "updates/Folio-v9.9.9.apk")
+                val file = File(testContext.filesDir, "updates/${taskFileName(version)}")
                 file.parentFile!!.mkdirs()
                 context.assets.open("updates/$asset.apk").use { input -> file.outputStream().use { input.copyTo(it) } }
                 val digest = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
-                val task = JSONObject().put("downloadId", -1).put("version", "9.9.9").put("size", file.length()).put("sha256", sha ?: digest)
+                val task = taskMetadata(JSONObject()).put("downloadId", -1).put("version", version).put("size", file.length()).put("sha256", sha ?: digest)
                     .put("created", System.currentTimeMillis()).put("status", "ready").put("modified", file.lastModified()).put("autoInstall", false)
                 check(testContext.getSharedPreferences("folio-update-v1", Context.MODE_PRIVATE).edit().putString("task", task.toString()).commit())
                 return file
@@ -47,11 +55,14 @@ class FolioUpdateInstrumentation : Instrumentation() {
             check(permission.action == Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES && permission.data.toString() == "package:com.folio.mobile.poc"); checks++
             FolioUpdater.resumePermission(official)
             check(FolioUpdater.state(official)["autoInstall"] == false); checks++
-            for ((asset, error) in listOf("wrong-signature" to "signature", "old-build" to "version", "wrong-package" to "identity", "wrong-version" to "identity")) {
+            for ((asset, error) in listOf("wrong-signature" to "signature", "old-build" to "version", "wrong-package" to "identity", "wrong-version" to "identity", "wrong-variant" to "package", "wrong-minimum" to "package", "wrong-abi" to "package")) {
                 val file = prepare(asset)
                 check(runCatching { FolioUpdater.installIntent(official) }.exceptionOrNull()?.message == "softwareUpdate.errors.$error") { asset }
                 check(!file.exists() && FolioUpdater.state(official)["status"] == "failed"); checks++
             }
+            prepare("same-version", version = "0.1.0")
+            check(FolioUpdater.state(official)["status"] == "ready"); checks++
+            check(FolioUpdater.installIntent(official).action == Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES); checks++
             var file = prepare("good", "0".repeat(64))
             check(runCatching { FolioUpdater.installIntent(official) }.exceptionOrNull()?.message == "softwareUpdate.errors.checksum")
             check(!file.exists()); checks++
@@ -96,9 +107,9 @@ class FolioUpdateInstrumentation : Instrumentation() {
                 try {
                     val manager = testContext.getSystemService(DownloadManager::class.java)
                     val id = manager.enqueue(DownloadManager.Request(Uri.parse("http://127.0.0.1:${socket.localPort}/update.apk"))
-                        .setDestinationInExternalFilesDir(testContext, Environment.DIRECTORY_DOWNLOADS, "updates/Folio-v9.9.9.apk"))
+                        .setDestinationInExternalFilesDir(testContext, Environment.DIRECTORY_DOWNLOADS, "updates/${taskFileName()}"))
                     val digest = MessageDigest.getInstance("SHA-256").digest(payload).joinToString("") { "%02x".format(it) }
-                    val task = JSONObject().put("downloadId", id).put("version", "9.9.9").put("size", payload.size)
+                    val task = taskMetadata(JSONObject()).put("downloadId", id).put("version", "9.9.9").put("size", payload.size)
                         .put("sha256", if (corrupt) "0".repeat(64) else digest).put("created", System.currentTimeMillis())
                         .put("status", "downloading").put("autoInstall", false)
                     taskPrefs.edit().putString("task", task.toString()).commit()
@@ -117,7 +128,7 @@ class FolioUpdateInstrumentation : Instrumentation() {
                         }
                         check(result["status"] == if (corrupt) "failed" else "ready") { result.toString() }
                         check(FolioUpdater.state(official)["status"] == result["status"])
-                        if (corrupt) check(!File(testContext.filesDir, "updates/Folio-v9.9.9.apk").exists())
+                        if (corrupt) check(!File(testContext.filesDir, "updates/${taskFileName()}").exists())
                     }
                     checks++
                 } finally { release.countDown(); socket.close(); server.join(1000); FolioUpdater.cancel(official) }

@@ -1,0 +1,70 @@
+diff --git a/android/src/compose/expo/modules/kotlin/views/PropsParsingStrategy.kt b/android/src/compose/expo/modules/kotlin/views/PropsParsingStrategy.kt
+index 0b7f3cc94888e967d9a27ca3294665d1d9dd08ee..d05588b6f9dfa6efb1e9f3911e9635982d48c781 100644
+--- a/android/src/compose/expo/modules/kotlin/views/PropsParsingStrategy.kt	
++++ b/android/src/compose/expo/modules/kotlin/views/PropsParsingStrategy.kt
+@@ -14,7 +14,7 @@ import kotlin.reflect.full.memberProperties
+ 
+ @PublishedApi
+ internal inline fun <reified Props : ComposeProps> toPropsParsingStrategy(): PropsParsingStrategy<Props> {
+-  return if (isIntrospectable<Props>()) {
++  return if (runCatching { isIntrospectable<Props>() }.getOrDefault(false)) {
+     PropsParsingStrategy.Introspection(introspectionOf<Props>())
+   } else {
+     Log.w("ExpoModulesCore", "Props class ${Props::class.java} is not introspectable. Falling back to reflection-based props parsing, which may have performance implications. To fix this, annotate the props class with @OptimizedComposeProps.")
+diff --git a/android/src/main/java/expo/modules/kotlin/types/ReturnType.kt b/android/src/main/java/expo/modules/kotlin/types/ReturnType.kt
+index edf2186d36861ff7e0152a4697ea5b0f57a659a5..f7b8c77613299feac42a86fab7ed76924e341449 100644
+--- a/android/src/main/java/expo/modules/kotlin/types/ReturnType.kt	
++++ b/android/src/main/java/expo/modules/kotlin/types/ReturnType.kt
+@@ -72,14 +72,11 @@ inline fun <reified T> ReturnTypeProvider.get(): ReturnType {
+     return cachedType
+   }
+ 
+-  val converter: JSTypeConverter<*> = getDirectConverter(klass) ?: getIndirectConverter(
+-    klass,
+-    if (isIntrospectable<T>()) {
+-      introspectionOf<T>()
+-    } else {
+-      null
+-    }
+-  )
++  // 缺少编译期元数据时沿用反射转换。
++  val introspection = runCatching {
++    if (isIntrospectable<T>()) introspectionOf<T>() else null
++  }.getOrNull()
++  val converter: JSTypeConverter<*> = getDirectConverter(klass) ?: getIndirectConverter(klass, introspection)
+ 
+   return ReturnType(converter).also {
+     types[T::class.java] = it
+diff --git a/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/ProjectConfiguration.kt b/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/ProjectConfiguration.kt
+index cfc300c21ed142f0f25813a9f349f5068e72c991..c40473837fb2faae7c42eff32e06819248b7e7dc 100644
+--- a/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/ProjectConfiguration.kt	
++++ b/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/ProjectConfiguration.kt
+@@ -32,6 +32,8 @@ internal fun Project.applyDefaultPlugins() {
+ }
+ 
+ internal fun Project.applyPikaPlugin() {
++  // 禁用优化时不加载编译器插件，避免解析不存在的 Kotlin 配套制品。
++  if (findProperty("expo.enableCompileTimeOptimization")?.toString() == "false") return
+   if (!plugins.hasPlugin("io.github.lukmccall.pika")) {
+     plugins.apply("io.github.lukmccall.pika")
+   }
+@@ -42,6 +44,7 @@ internal fun Project.applyPikaPlugin() {
+ }
+ 
+ internal fun Project.configurePika(shouldBeEnabled: Boolean = true) {
++  if (findProperty("expo.enableCompileTimeOptimization")?.toString() == "false") return
+   val pika = extensions.getByType(PikaGradleExtension::class.java)
+   pika.enabled = shouldBeEnabled
+ }
+diff --git a/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/AndroidLibraryExtension.kt b/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/AndroidLibraryExtension.kt
+index 9bfae8d7961d6f63c1b17c1b0d4f01557e15a424..c382478e9dd8a84b7945f2a3550a37a2e96169c1 100644
+--- a/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/AndroidLibraryExtension.kt	
++++ b/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/AndroidLibraryExtension.kt
+@@ -6,7 +6,6 @@ internal fun LibraryExtension.applySDKVersions(compileSdk: Int, minSdk: Int, tar
+   this.compileSdk = compileSdk
+   defaultConfig {
+     this@defaultConfig.minSdk = minSdk
+-    this@defaultConfig.targetSdk = targetSdk
+   }
+ }
+ 

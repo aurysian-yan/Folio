@@ -7,6 +7,8 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Environment
+import android.os.Build
+import java.util.zip.ZipFile
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import org.json.JSONObject
@@ -25,11 +27,21 @@ object FolioUpdater {
         "ghproxyorg" to "https://gh-proxy.org/", "ghddlc" to "https://gh.ddlc.top/", "isteed" to "https://cors.isteed.cc/")
     private fun prefs(context: Context) = context.getSharedPreferences("folio-update-v1", Context.MODE_PRIVATE)
     private fun manager(context: Context) = context.getSystemService(DownloadManager::class.java)
-    private fun saved(context: Context) = prefs(context).getString("task", null)?.let { JSONObject(it) }
+    private fun saved(context: Context) = prefs(context).getString("task", null)?.let { runCatching { JSONObject(it) }.getOrNull() }
     private fun save(context: Context, task: JSONObject) { check(prefs(context).edit().putString("task", task.toString()).commit()) }
     private fun installed(context: Context): PackageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-    private fun target(context: Context, version: String) = File(context.filesDir, "updates/Folio-v$version.apk")
-    private fun source(context: Context, version: String) = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: error("storage"), "updates/Folio-v$version.apk")
+    private fun fileName(task: JSONObject): String {
+        val version = task.getString("version")
+        val tier = task.getString("androidVariant")
+        val arch = task.getString("arch")
+        val code = task.getLong("versionCode")
+        if (!Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)").matches(version)
+            || tier !in listOf("legacy", "glasmio") || arch !in listOf("arm64", "x64")
+            || code <= 0 || code > 2_100_000_000) error("package")
+        return "Folio-v$version-$tier-$arch-$code.apk"
+    }
+    private fun target(context: Context, task: JSONObject) = File(context.filesDir, "updates/${fileName(task)}")
+    private fun source(context: Context, task: JSONObject) = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: error("storage"), "updates/${fileName(task)}")
     private fun error(code: String): Nothing = throw IllegalStateException("softwareUpdate.errors.$code")
     private fun failure(cause: Exception) = cause.message?.takeIf { it.startsWith("softwareUpdate.errors.") } ?: "softwareUpdate.errors.download"
 
@@ -42,11 +54,20 @@ object FolioUpdater {
     @Synchronized fun cancel(context: Context): Map<String, Any> {
         saved(context)?.let { task ->
             manager(context).remove(task.optLong("downloadId"))
+            runCatching {
+                val file = target(context, task)
+                file.delete()
+                File(file.path + ".part").delete()
+                source(context, task).delete()
+            }
+            // 清理旧格式任务，不复用其版本校验结果。
             val version = task.optString("version")
             if (Regex("[0-9]+\\.[0-9]+\\.[0-9]+").matches(version)) {
-                target(context, version).delete()
-                File(target(context, version).path + ".part").delete()
-                source(context, version).delete()
+                File(context.filesDir, "updates/Folio-v$version.apk").delete()
+                File(context.filesDir, "updates/Folio-v$version.apk.part").delete()
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.let {
+                    File(it, "updates/Folio-v$version.apk").delete()
+                }
             }
         }
         prefs(context).edit().remove("task").commit()
@@ -58,46 +79,69 @@ object FolioUpdater {
         val data = JSONObject(request)
         val version = data.getString("version")
         if (!Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)").matches(version)) error("package")
-        if (compareVersion(version, installed(context).versionName ?: "0.0.0") <= 0) error("version")
+        val current = installed(context)
+        val comparison = compareVersion(version, current.versionName ?: "0.0.0")
         val artifact = data.getJSONObject("artifact")
         val arch = folioAndroidArch()
-        val original = "$REPOSITORY/releases/download/v$version/Folio-v$version-android-$arch.apk"
+        val tier = artifact.getString("androidVariant")
+        val required = FolioAndroidBuild.requiredVariant(Build.VERSION.SDK_INT)
+        val code = artifact.getLong("versionCode")
+        val migration = FolioAndroidBuild.variant == "legacy" && required == "glasmio"
+        if (comparison < 0 || comparison == 0 && !migration || code <= current.longVersionCode
+            || code > 2_100_000_000) error("version")
+        if (tier != required || code % 10 != (if (tier == "legacy") 1L else 2L)) error("package")
+        val minimum = artifact.getInt("minSdk")
+        if (minimum != (if (tier == "legacy") 30 else 33)
+            || tier == "legacy" && artifact.optInt("maxSdk") != 32
+            || tier == "glasmio" && artifact.has("maxSdk")
+            || Build.VERSION.SDK_INT < minimum) error("package")
+        val suffix = if (tier == "glasmio") "-glasmio" else ""
+        val original = "$REPOSITORY/releases/download/v$version/Folio-v$version-android$suffix-$arch.apk"
         if (artifact.getString("url") != original || artifact.getString("platform") != "android"
             || artifact.getString("arch") != arch || artifact.getString("format") != "apk") error("package")
         val size = artifact.getLong("size")
         if (size <= 0 || size > 4L * 1024 * 1024 * 1024 || !Regex("[a-f0-9]{64}").matches(artifact.getString("sha256"))) error("package")
         val prefix = prefixes[data.getString("mirror")] ?: error("package")
         val existing = saved(context)
-        if (existing != null && existing.optString("status") != "failed") return state(context)
+        if (existing != null && existing.optString("status") != "failed" && existing.optString("version") == version
+            && existing.optLong("versionCode") == code && existing.optString("androidVariant") == tier
+            && existing.optString("sha256") == artifact.getString("sha256")) return state(context)
         cancel(context)
         val external = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: error("storage")
         if (external.usableSpace < size || context.filesDir.usableSpace < size) error("storage")
-        source(context, version).parentFile?.mkdirs()
+        val task = JSONObject().put("version", version).put("versionCode", code).put("androidVariant", tier)
+            .put("arch", arch).put("minSdk", minimum).put("size", size)
+            .put("sha256", artifact.getString("sha256")).put("created", System.currentTimeMillis())
+            .put("status", "downloading").put("autoInstall", true)
+        source(context, task).parentFile?.mkdirs()
         val url = if (prefix.isEmpty()) original else prefix + original.removePrefix("https://")
         val download = DownloadManager.Request(Uri.parse(url))
             .setTitle(FolioFileRuntime.localized(context, "softwareUpdate.title"))
             .setDescription("Folio $version")
             .setMimeType("application/vnd.android.package-archive")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-            .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "updates/Folio-v$version.apk")
+            .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "updates/${fileName(task)}")
         val id = manager(context).enqueue(download)
-        val task = JSONObject().put("downloadId", id).put("version", version).put("size", size)
-            .put("sha256", artifact.getString("sha256")).put("created", System.currentTimeMillis())
-            .put("status", "downloading").put("autoInstall", true)
+        task.put("downloadId", id)
         try { save(context, task) } catch (cause: Exception) { manager(context).remove(id); throw cause }
         return state(context)
     }
 
     @Synchronized fun state(context: Context): Map<String, Any> {
         val task = saved(context) ?: return mapOf("status" to "idle")
+        if (!task.has("versionCode") || !task.has("androidVariant") || !task.has("arch")) return cancel(context)
+        if (runCatching { fileName(task) }.isFailure) return cancel(context)
+        if (System.currentTimeMillis() - task.optLong("created") > MAX_AGE
+            || installed(context).longVersionCode >= task.optLong("versionCode")
+            || task.optString("androidVariant") != FolioAndroidBuild.requiredVariant(Build.VERSION.SDK_INT)
+            || task.optString("arch") != folioAndroidArch()) return cancel(context)
         val version = task.getString("version")
-        if (System.currentTimeMillis() - task.getLong("created") > MAX_AGE || compareVersion(installed(context).versionName ?: "0.0.0", version) >= 0) return cancel(context)
         val base = mutableMapOf<String, Any>("id" to task.getLong("downloadId").toString(), "version" to version,
             "total" to task.getLong("size").toDouble(), "bytes" to 0.0, "autoInstall" to task.optBoolean("autoInstall"),
             "canInstall" to context.packageManager.canRequestPackageInstalls())
         if (task.optString("status") == "failed") return base + mapOf("status" to "failed", "error" to task.optString("error"))
         try {
-            val file = target(context, version)
+            val file = target(context, task)
             if (task.optString("status") == "ready") {
                 if (!file.isFile || file.length() != task.getLong("size") || file.lastModified() != task.optLong("modified")) error("checksum")
                 return base + mapOf("status" to "ready", "bytes" to file.length().toDouble())
@@ -112,7 +156,7 @@ object FolioUpdater {
                 }
                 if (status != DownloadManager.STATUS_SUCCESSFUL) return base + mapOf("status" to if (status == DownloadManager.STATUS_PAUSED) "paused" else "downloading")
             }
-            val incoming = source(context, version)
+            val incoming = source(context, task)
             validate(context, incoming, task)
             file.parentFile?.mkdirs()
             val temporary = File(file.path + ".part")
@@ -125,9 +169,9 @@ object FolioUpdater {
             return base + mapOf("status" to "ready", "bytes" to file.length().toDouble())
         } catch (cause: Exception) {
             manager(context).remove(task.getLong("downloadId"))
-            source(context, version).delete()
-            target(context, version).delete()
-            File(target(context, version).path + ".part").delete()
+            source(context, task).delete()
+            target(context, task).delete()
+            File(target(context, task).path + ".part").delete()
             task.put("status", "failed").put("error", failure(cause)).put("autoInstall", false)
             save(context, task)
             return base + mapOf("status" to "failed", "error" to failure(cause), "autoInstall" to false)
@@ -140,10 +184,19 @@ object FolioUpdater {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input -> val buffer = ByteArray(64 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; digest.update(buffer, 0, count) } }
         if (digest.digest().joinToString("") { "%02x".format(it) } != task.getString("sha256")) error("checksum")
-        val archive = context.packageManager.getPackageArchiveInfo(file.path, PackageManager.GET_SIGNING_CERTIFICATES) ?: error("package")
+        val archive = context.packageManager.getPackageArchiveInfo(file.path, PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_META_DATA) ?: error("package")
         val current = installed(context)
         if (archive.packageName != IDENTITY || context.packageName != IDENTITY || archive.versionName != task.getString("version")) error("identity")
-        if (archive.longVersionCode <= current.longVersionCode) error("version")
+        if (archive.longVersionCode <= current.longVersionCode || archive.longVersionCode != task.getLong("versionCode")) error("version")
+        val info = archive.applicationInfo ?: error("package")
+        if (info.minSdkVersion != task.getInt("minSdk") || info.minSdkVersion > Build.VERSION.SDK_INT
+            || info.metaData?.getString(FolioAndroidBuild.METADATA_KEY) != task.getString("androidVariant")) error("package")
+        ZipFile(file).use { zip ->
+            val abis = zip.entries().asSequence().map { it.name }
+                .filter { it.startsWith("lib/") && it.endsWith(".so") }.map { it.split('/')[1] }.toSet()
+            val abi = if (task.getString("arch") == "arm64") "arm64-v8a" else "x86_64"
+            if (abis != setOf(abi) || zip.getEntry("lib/$abi/libfolio_ffi.so") == null) error("package")
+        }
         val incoming = archive.signingInfo ?: error("signature")
         val existing = current.signingInfo ?: error("signature")
         val currentSigners = existing.apkContentsSigners.map { it.toCharsString() }.toSet()
@@ -157,7 +210,7 @@ object FolioUpdater {
         val snapshot = state(context)
         if (snapshot["status"] != "ready") error("download")
         val task = saved(context) ?: error("download")
-        val file = target(context, task.getString("version"))
+        val file = target(context, task)
         try { validate(context, file, task) } catch (cause: Exception) {
             file.delete()
             task.put("status", "failed").put("error", failure(cause)).put("autoInstall", false)

@@ -7,7 +7,7 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 const appVariant = process.env.APP_VARIANT ?? 'development';
 const isDevelopment = appVariant === 'development';
 const ciBuild = process.env.FOLIO_BUILD_NUMBER;
-if (ciBuild && (!/^[1-9]\d*$/.test(ciBuild) || Number(ciBuild) > 2100000000)) throw new Error('无效的发布构建号');
+if (ciBuild && (!/^[1-9]\d*$/.test(ciBuild) || Number(ciBuild) > 209999999)) throw new Error('无效的发布构建号');
 
 // 版本以 package.json 为唯一来源，供根目录版本管理脚本统一维护。
 const { version } = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8')) as {
@@ -79,6 +79,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     './plugins/with-rustls-verifier-repo',
     './plugins/with-android-dev-network-security',
     './plugins/with-android-abi-splits',
+    './plugins/with-android-glass-tiers',
     './plugins/with-release-signing',
     'expo-document-picker',
     [
@@ -91,7 +92,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           usePrecompiledModules: false,
         },
         android: {
-          minSdkVersion: 28,
+          minSdkVersion: 30,
+          compileSdkVersion: 37,
+          kotlinVersion: '2.4.21',
           buildArchs: ['arm64-v8a', 'x86_64'],
         },
       },

@@ -1,5 +1,6 @@
 {
   "common": {
+    "exit": "Exit",
     "appName": "Folio",
     "ok": "OK",
     "cancel": "Cancel",
@@ -1322,6 +1323,8 @@
     "backToSearch": "Back to Search"
   },
   "softwareUpdate": {
+    "variantRequired": "Install the update for this Android version.",
+    "compatibilityRequired": "This package is not compatible with this Android version. Update to continue.",
     "title": "Software Update",
     "description": "Check for updates, read release notes and choose a download mirror.",
     "currentVersion": "Current Version",

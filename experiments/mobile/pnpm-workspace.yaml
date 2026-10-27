@@ -13,4 +13,7 @@ minimumReleaseAgeExclude:
 nodeLinker: hoisted
 overrides:
   react-dom: 19.2.3
+patchedDependencies:
+  '@react-native/gradle-plugin@0.86.3': patches/@react-native__gradle-plugin@0.86.3.patch
+  expo-modules-core@57.0.20: patches/expo-modules-core@57.0.20.patch
 saveExact: true

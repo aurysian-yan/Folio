@@ -4,6 +4,7 @@ import i18n from './i18n/instance';
 import { screenMetrics } from './native';
 import { navigationBottomOffset, navigationMarginReduction, navigationSideMargin } from './navigation-metrics';
 import type { BottomNavigationProps, MobileTab, NavigationBackdropProps } from './bottom-navigation';
+import { GlassControlScope } from './GlassControlScope';
 
 // 导航按可用宽度居中，承载层为按压形变保留溢出空间。
 const containerHeight = 64;
@@ -77,7 +78,9 @@ export function navigationCompactBarFrame(bottomInset: number, availableWidth: n
 
 // 采样包含页面底色，避免透明模糊与下方清晰正文叠加。
 export function NavigationBackdrop({ theme, style, ...props }: NavigationBackdropProps) {
-  return <BackdropSource {...props} collapsable={false} style={[style, { backgroundColor: theme.background }]} />;
+  return <GlassControlScope sourceId={props.sourceId} active={props.active ?? true}>
+    <BackdropSource {...props} collapsable={false} style={[style, { backgroundColor: theme.background }]} />
+  </GlassControlScope>;
 }
 
 export function BottomNavigation({ hidden = false, collapsed = false, collapsible = false, sourceId, selectedId, dark, theme, bottomInset, leftInset, rightInset, onSelectionChange, onExpand, onCollapse }: BottomNavigationProps) {

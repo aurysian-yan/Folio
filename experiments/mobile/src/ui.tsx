@@ -1,5 +1,6 @@
-import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AccessibilityInfo, Animated, PanResponder, Platform, PlatformColor, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { AndroidGlassButton, usesGlasmioControls, type AndroidGlassButtonProps } from './AndroidGlassButton';
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, PanResponder, Platform, PlatformColor, Pressable, StyleSheet, View } from 'react-native';
 import Motion, { cancelAnimation, interpolateColor, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { NativeActionButton, usesNativeControls } from './native-controls';
 import type { AccentId } from './settings';
@@ -98,18 +99,11 @@ export function createTheme(dark: boolean, accent: AccentId, options: ThemeOptio
   return options.materialRoles ? { ...themed, ...materialThemeOverrides(options.materialRoles, dark) } : themed;
 }
 
-export function IconButton({ label, onPress, children, theme, disabled, busy, selected, style, systemImage, primary = false }: {
-  label: string;
-  onPress: () => void;
-  children: ReactNode;
-  theme: Theme;
-  disabled?: boolean;
-  busy?: boolean;
-  selected?: boolean;
-  style?: StyleProp<ViewStyle>;
-  systemImage?: string;
-  primary?: boolean;
-}) {
+export function IconButton(props: AndroidGlassButtonProps) {
+  return usesGlasmioControls ? <AndroidGlassButton {...props} /> : <LegacyIconButton {...props} />;
+}
+
+function LegacyIconButton({ label, onPress, children, theme, disabled, busy, selected, style, systemImage, primary = false }: AndroidGlassButtonProps) {
   const shadowProgress = useHeaderShadowProgress();
   const pressShadowProgress = useSharedValue(0);
   const [pressed, setPressed] = useState(false);

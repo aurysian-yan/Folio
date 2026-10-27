@@ -63,6 +63,8 @@ import kotlin.math.abs
 // iOS 风格玻璃开关自持拖动状态，提交值仍通过 React 偏好持久化。
 class FolioGlassSwitchView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     override val shouldUseAndroidLayout = true
+    var sourceId: String = ""
+    var controlId: String = ""
     var label by mutableStateOf("")
     var checked by mutableStateOf(false)
     var controlEnabled by mutableStateOf(true)
