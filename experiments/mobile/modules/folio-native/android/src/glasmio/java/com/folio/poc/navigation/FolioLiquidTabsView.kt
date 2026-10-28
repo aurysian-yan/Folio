@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,10 +14,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import io.github.neoruaa.glasmio.core.GlasmioMotion
+import io.github.neoruaa.glasmio.core.GlasmioTheme
 import io.github.neoruaa.glasmio.glass.BottomNavigationContact
 import io.github.neoruaa.glasmio.glass.LocalGlassBackdrop
 import io.github.neoruaa.glasmio.glass.GlassSurface
@@ -67,7 +71,18 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : FolioGlass
         if (items.isEmpty()) return
         if (segmented) {
             GlasmioSegmentedControl(items.map { it.id to it.label }, selectedId,
-                { if (controlEnabled) select(it) }, Modifier.fillMaxWidth())
+                ::select, Modifier.fillMaxWidth(), height = if (iconOnly) 44.dp else 48.dp, enabled = controlEnabled,
+                glassTrack = iconOnly,
+                itemContent = { id, selected ->
+                    val item = items.first { it.id == id }
+                    if (iconOnly) {
+                        SfIcon(if (item.icon == "download") "arrow.down.circle" else item.icon, null, size = 20.dp)
+                    } else {
+                        Text(item.label, style = GlasmioTheme.textStyles.callout,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                })
             return
         }
         val compact = animateFloatAsState(if (collapsed) 1f else 0f, GlasmioMotion.spring(), label = "navigationCompact")

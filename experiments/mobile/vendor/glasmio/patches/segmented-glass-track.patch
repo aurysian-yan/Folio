@@ -1,0 +1,202 @@
+--- a/glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlassControls.kt
++++ b/glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlassControls.kt
+@@ -29,6 +29,7 @@
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.CompositionLocalProvider
++import androidx.compose.runtime.derivedStateOf
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableFloatStateOf
+@@ -47,6 +48,7 @@
+ import androidx.compose.ui.geometry.Size
+ import androidx.compose.ui.geometry.Offset
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.GraphicsLayerScope
+ import androidx.compose.ui.graphics.compositeOver
+ import androidx.compose.ui.graphics.drawscope.scale
+ import androidx.compose.ui.graphics.graphicsLayer
+@@ -89,6 +91,7 @@
+ import com.kyant.backdrop.effects.lens
+ import com.kyant.backdrop.effects.vibrancy
+ import com.kyant.backdrop.highlight.Highlight
++import com.kyant.backdrop.highlight.HighlightStyle
+ import com.kyant.backdrop.shadow.InnerShadow
+ import com.kyant.backdrop.shadow.Shadow
+ import com.kyant.capsule.ContinuousRoundedRectangle
+@@ -551,6 +554,7 @@
+     height: Dp = 32.dp,
+     enabled: Boolean = true,
+     deferSelection: Boolean = false,
++    glassTrack: Boolean = false,
+     itemContent: (@Composable BoxScope.(value: T, selected: Boolean) -> Unit)? = null,
+ ) {
+     require(items.isNotEmpty())
+@@ -572,6 +576,9 @@
+         if (appearance.reduceTransparency) it.compositeOver(colors.elevatedBackground) else it
+     }
+     val indicatorHeight = height - 4.dp
++    val indicatorRestingColor = if (glassTrack) {
++        (if (isLight) Color.Black else Color.White).copy(alpha = 0.10f)
++    } else if (isLight) Color.White else Color(0xFF636366)
+ 
+     // Same three-layer structure as LiquidBottomTabs:
+     // visible tabs -> invisible exported tabs with content -> movable combined-backdrop lens.
+@@ -656,7 +663,36 @@
+                 horizontalRadiusProvider = { currentTabWidthPx * 0.65f },
+             )
+         }
+-        val hiddenGlassModifier = remember(backdrop, animation, trackColor, appearance) {
++        // 可见轨道与拨片采样源共用玻璃材质，避免重复采样控件自身。
++        val trackBackgroundModifier = if (glassTrack) {
++            val innerShadows = rememberNavigationInnerShadows(appearance.usesBackdrop)
++            remember(backdrop, colors, appearance, innerShadows) {
++                Modifier.navigationGlassBackground(
++                    backdrop = backdrop,
++                    shape = { Capsule() },
++                    containerColor = colors.container,
++                    navigationMaterial = appearance.usesBackdrop,
++                    innerShadows = innerShadows,
++                    isDark = colors.isDark,
++                    appearance = appearance,
++                )
++            }
++        } else Modifier.clip(Capsule()).background(trackColor)
++        val selectionPressProgress = remember(animation) { derivedStateOf { animation.pressProgress } }
++        val hiddenGlassModifier = if (glassTrack) {
++            val innerShadows = rememberNavigationInnerShadows(appearance.usesRefraction, renderScale = 0.5f)
++            remember(backdrop, colors, appearance, selectionPressProgress, innerShadows) {
++                Modifier.navigationLensSourceBackground(
++                    backdrop = backdrop,
++                    shape = { Capsule() },
++                    containerColor = colors.container,
++                    isDark = colors.isDark,
++                    appearance = appearance,
++                    pressProgressState = selectionPressProgress,
++                    innerShadows = innerShadows,
++                )
++            }
++        } else remember(backdrop, animation, trackColor, appearance) {
+             Modifier.drawBackdrop(
+                 backdrop = if (appearance.usesBackdrop) backdrop else emptyBackdrop(),
+                 shape = { Capsule() },
+@@ -679,36 +715,53 @@
+                 onDrawSurface = { drawRect(trackColor) },
+             )
+         }
+-        val indicatorGlassModifier = remember(indicatorBackdrop, animation, appearance, isLight, labelLayouts) {
+-            if (!appearance.usesBackdrop) Modifier else Modifier.drawBackdrop(
+-                backdrop = indicatorBackdrop,
++        // 图标分段复用底栏拨片的底色、折射和边缘材质，保留分段控件自身的形变尺寸。
++        val indicatorGlassModifier = remember(indicatorBackdrop, animation, appearance, labelLayouts, glassTrack, indicatorRestingColor) {
++            val edgeLayer: GraphicsLayerScope.() -> Unit = { alpha = animation.pressProgress }
++            if (!appearance.usesBackdrop) Modifier else Modifier
++                .then(if (glassTrack) Modifier
++                    .navigationGlassDropShadow({ Capsule() }, edgeLayer, cacheBlurResult = true)
++                    .navigationGlassBoxShadow({ Capsule() }, GlassBoxShadowAlpha, edgeLayer)
++                else Modifier)
++                .drawBackdrop(
++                backdrop = if (glassTrack && !appearance.usesRefraction) emptyBackdrop() else indicatorBackdrop,
+                 shape = { Capsule() },
+                 effects = {
+                     if (appearance.usesRefraction) {
+                         val press = animation.pressProgress
+-                        lens(
++                        if (glassTrack) navigationContactLens(
++                            refractionHeight = NavigationIndicatorRefractionHeight.toPx() * press,
++                            refractionAmount = NavigationIndicatorRefractionAmount.toPx() * press,
++                            contactDirection = 0f,
++                        ) else lens(
+                             SegmentedIndicatorRefractionHeight.toPx() * press,
+                             SegmentedIndicatorRefractionAmount.toPx() * press,
+                             chromaticAberration = true,
+                         )
+                     }
+                 },
+-                highlight = { Highlight.Default.copy(alpha = animation.pressProgress) },
+-                shadow = { Shadow(alpha = 0.72f * animation.pressProgress) },
++                highlight = {
++                    val press = animation.pressProgress
++                    if (glassTrack) Highlight.Default.copy(
++                        alpha = (0.54f + 0.38f * press) * press,
++                        style = HighlightStyle.Default(angle = 90f),
++                    ) else Highlight.Default.copy(alpha = press)
++                },
++                shadow = if (glassTrack) null else ({ Shadow(alpha = 0.72f * animation.pressProgress) }),
+                 innerShadow = {
++                    val press = animation.pressProgress
+                     InnerShadow(
+-                        radius = 6.dp * animation.pressProgress,
+-                        alpha = 0.72f * animation.pressProgress,
++                        radius = (if (glassTrack) 10.dp else 6.dp) * press,
++                        alpha = (if (glassTrack) 0.86f else 0.72f) * press,
+                     )
+                 },
+                 onDrawSurface = {
+                     val press = animation.pressProgress
+-                    // The resting fill belongs to this surface, never to its sampling source.
+-                    drawRect((if (isLight) Color.White else Color(0xFF636366)).copy(alpha = 1f - press))
+-                    drawRect(Color.White.copy(alpha = 0.10f * press))
+-                    // Restore labels over the resting fill at their fixed track positions.
+-                    // As the fill fades, the source's refracted labels take over.
+-                    labelLayouts.forEachIndexed { index, label ->
++                    drawRect(indicatorRestingColor,
++                        alpha = if (glassTrack && !appearance.usesRefraction) 1f else 1f - press)
++                    drawRect(if (glassTrack) Color.Black.copy(alpha = 0.03f * press)
++                        else Color.White.copy(alpha = 0.10f * press))
++                    if (!glassTrack || !appearance.usesRefraction) labelLayouts.forEachIndexed { index, label ->
+                         drawText(
+                             textLayoutResult = label,
+                             topLeft = Offset(
+@@ -716,7 +769,7 @@
+                                     (if (isLtr) 1f else -1f) - label.size.width / 2f,
+                                 (size.height - label.size.height) / 2f,
+                             ),
+-                            alpha = 1f - press,
++                            alpha = if (glassTrack) 1f else 1f - press,
+                         )
+                     }
+                 },
+@@ -727,14 +780,13 @@
+         Row(
+             Modifier
+                 .fillMaxSize()
+-                .clip(Capsule())
+-                .background(trackColor)
++                .then(trackBackgroundModifier)
+                 .drawBehind {
+                     if (appearance.reduceTransparency && selectedIndex >= 0) {
+                         val visualIndex = if (isLtr) animation.value else items.lastIndex - animation.value
+                         val pillHeight = indicatorHeight.toPx()
+                         drawRoundRect(
+-                            color = if (isLight) Color.White else Color(0xFF636366),
++                            color = indicatorRestingColor,
+                             topLeft = Offset(trackPaddingPx + visualIndex * tabWidthPx, trackPaddingPx),
+                             size = Size(tabWidthPx.fastRoundToInt().toFloat(), pillHeight),
+                             cornerRadius = CornerRadius(pillHeight / 2f),
+@@ -764,7 +816,7 @@
+                 .alpha(0f)
+                 .layerBackdrop(tabsBackdrop)
+                 .clip(Capsule())
+-                .background(trackColor)
++                .then(if (glassTrack) Modifier else Modifier.background(trackColor))
+                 .then(hiddenGlassModifier)
+                 .then(segmentedHighlightModifier)
+                 .padding(horizontal = 2.dp),
+@@ -819,14 +871,14 @@
+                     }
+                     .then(indicatorGlassModifier),
+             ) {
+-                if (itemContent != null && appearance.usesBackdrop) {
++                if (itemContent != null && appearance.usesBackdrop && (!glassTrack || !appearance.usesRefraction)) {
+                     // The opaque resting fill covers its optical source. Restore the same
+                     // fixed-track content here, then yield to the source as refraction appears.
+                     Row(
+                         Modifier
+                             .fillMaxSize()
+                             .clip(Capsule())
+-                            .graphicsLayer { alpha = 1f - animation.pressProgress }
++                            .graphicsLayer { alpha = if (glassTrack) 1f else 1f - animation.pressProgress }
+                             .layout { measurable, constraints ->
+                                 val width = contentWidthPx.fastRoundToInt().coerceAtLeast(1)
+                                 val placeable = measurable.measure(
