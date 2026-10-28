@@ -95,7 +95,8 @@ impl ResourceGuard {
             fs2::FileExt::try_lock_shared(&file)
         };
         result.map_err(|error| {
-            if error.kind() == std::io::ErrorKind::WouldBlock {
+            // Windows 锁冲突未必映射为 WouldBlock，按 fs2 的平台错误码识别。
+            if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() {
                 StorageError::ResourceBusy
             } else {
                 error.into()
@@ -448,6 +449,13 @@ mod tests {
         drop(first);
         assert!(ResourceGuard::acquire(&path, "file:one", true).is_err());
         drop(second);
-        assert!(ResourceGuard::acquire(&path, "file:one", true).is_ok());
+        let exclusive = ResourceGuard::acquire(&path, "file:one", true).unwrap();
+        assert!(matches!(
+            ResourceGuard::acquire(&path, "file:one", false),
+            Err(StorageError::ResourceBusy)
+        ));
+        assert!(ResourceGuard::acquire(&path, "file:other", true).is_ok());
+        drop(exclusive);
+        assert!(ResourceGuard::acquire(&path, "file:one", false).is_ok());
     }
 }

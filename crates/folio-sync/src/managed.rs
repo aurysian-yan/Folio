@@ -97,7 +97,9 @@ pub fn prepare_managed_sources(database: &Path, directory: &Path) -> Result<(), 
         if root.id == new_root.id {
             continue;
         }
-        let relative = root.display_path.split_once(&suffix).map(|(_, rest)| rest);
+        // 历史路径匹配统一平台分隔符，实际读写仍使用原生路径。
+        let display_path = root.display_path.replace(std::path::MAIN_SEPARATOR, "/");
+        let relative = display_path.split_once(&suffix).map(|(_, rest)| rest);
         let candidate = if root.path.starts_with(&directory) {
             Some(root.path.clone())
         } else {
@@ -139,7 +141,7 @@ pub fn prepare_managed_sources(database: &Path, directory: &Path) -> Result<(), 
             .path
             .canonicalize()
             .is_ok_and(|path| path.starts_with(&directory))
-            || (root.display_path.ends_with(suffix.trim_end_matches('/')) && !root.path.exists())
+            || (display_path.ends_with(suffix.trim_end_matches('/')) && !root.path.exists())
         {
             let mut complete = true;
             for face in previous_catalog.faces() {
@@ -191,12 +193,15 @@ pub fn prepare_managed_sources(database: &Path, directory: &Path) -> Result<(), 
             old.strip_prefix(&directory)
                 .map_err(|_| SyncError::InvalidFont)?
                 .to_string_lossy()
-        );
+        )
+        .replace(std::path::MAIN_SEPARATOR, "/");
         for mut asset in db.list_sync_assets()? {
-            let matches = asset
-                .local_path
-                .as_ref()
-                .is_some_and(|path| path == &old.to_string_lossy() || path.ends_with(&old_suffix));
+            let matches = asset.local_path.as_ref().is_some_and(|path| {
+                path == &old.to_string_lossy()
+                    || path
+                        .replace(std::path::MAIN_SEPARATOR, "/")
+                        .ends_with(&old_suffix)
+            });
             if matches {
                 if parse_font_file(target)?.fingerprint.to_hex() != asset.fingerprint {
                     return Err(SyncError::InvalidFont);
@@ -210,6 +215,7 @@ pub fn prepare_managed_sources(database: &Path, directory: &Path) -> Result<(), 
     // 正常扩展名的同步资产也随沙盒移动恢复本地路径。
     for mut asset in db.list_sync_assets()? {
         if let Some(previous) = &asset.local_path {
+            let previous = previous.replace(std::path::MAIN_SEPARATOR, "/");
             if let Some((_, name)) = previous.split_once(&suffix) {
                 if safe_relative(name) {
                     let target = directory.join(name);

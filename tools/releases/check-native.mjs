@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-const [platform, directory, arch] = process.argv.slice(2);
+import { androidBuildInfo } from './android.mjs';
+const [platform, directory, arch, variant] = process.argv.slice(2);
 const fail = (message) => { throw new Error(message); };
 if (platform === 'macos') {
   const embedded = readFileSync(join(directory,'Contents/Resources/About/licenses.json'));
@@ -22,6 +23,7 @@ if (platform === 'macos') {
   const assets = 'apps/desktop-ui/dist/assets';
   if (!readdirSync(assets).filter((name) => name.endsWith('.js')).some((name) => readFileSync(join(assets,name)).includes(Buffer.from(id)))) fail('桌面页面未包含离线许可目录');
 } else if (platform === 'android') {
+  const build = androidBuildInfo(variant, process.env.FOLIO_BUILD_NUMBER);
   const expectedAbi = { arm64: 'arm64-v8a', x64: 'x86_64' }[arch];
   if (!expectedAbi) fail('未知 Android 架构');
   const files = readdirSync(directory).filter((file) => file.endsWith('.apk'));
@@ -34,7 +36,11 @@ if (platform === 'macos') {
   const metadata = execFileSync(join(sdk,'build-tools/36.0.0/aapt2'),['dump','badging',apk],{encoding:'utf8'});
   const identity = /package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'/.exec(metadata);
   const version = JSON.parse(readFileSync('experiments/mobile/package.json')).version;
-  if (!identity || identity[1] !== 'com.folio.mobile.poc' || identity[3] !== version || process.env.FOLIO_BUILD_NUMBER && identity[2] !== process.env.FOLIO_BUILD_NUMBER) fail('Android 应用身份或版本不一致');
+  if (!identity || identity[1] !== 'com.folio.mobile.poc' || identity[3] !== version || identity[2] !== String(build.versionCode)) fail('Android 应用身份或版本不一致');
+  const minSdk = /^(?:minSdkVersion|sdkVersion):\s*'(\d+)'/m.exec(metadata)?.[1];
+  if (Number(minSdk) !== build.minSdk) fail(`Android 最低系统版本不一致：期望 ${build.minSdk}，实际 ${minSdk ?? '缺失'}`);
+  const manifest = execFileSync(join(sdk,'build-tools/36.0.0/aapt2'),['dump','xmltree',apk,'--file','AndroidManifest.xml'],{encoding:'utf8'}).replaceAll('http://schemas.android.com/apk/res/android:', 'android:');
+  if (!new RegExp(`android:name[^\\n]*="com\\.folio\\.android\\.GLASS_TIER"[^\\n]*\\n[^\\n]*android:value[^\\n]*="${variant}"`).test(manifest)) fail('Android 玻璃类型不一致');
   const verified = spawnSync(join(sdk,'build-tools/36.0.0/apksigner'),['verify','--print-certs',apk],{encoding:'utf8'});
   if (verified.error || verified.status !== 0 && process.env.FOLIO_BUILD_ONLY !== '1') fail('APK 签名验证失败');
   const signing = verified.stdout ?? '';
