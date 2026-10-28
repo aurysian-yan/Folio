@@ -4,7 +4,7 @@ members = ["crates/folio-core", "crates/folio-cli", "crates/folio-storage", "cra
 exclude = ["apps/desktop-ui/src-tauri"]
 
 [workspace.package]
-version = "1.3.0"
+version = "1.3.1"
 edition = "2021"
 license = "AGPL-3.0-only"
 rust-version = "1.91"
