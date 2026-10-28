@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,8 +65,36 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : FolioGlass
     @Composable override fun GlassContent() {
         if (items.isEmpty()) return
         if (segmented) {
-            GlasmioSegmentedControl(items.map { it.id to it.label }, selectedId,
-                { if (controlEnabled) select(it) }, Modifier.fillMaxWidth())
+            val segments = items.map { it.id to it.label }
+            if (iconOnly) {
+                // 图标与标签共用玻璃采样层，文字仍作为读屏名称。
+                GlasmioSegmentedControl(
+                    items = segments,
+                    selected = selectedId,
+                    onSelected = ::select,
+                    modifier = Modifier.fillMaxWidth(),
+                    height = 50.dp,
+                    enabled = controlEnabled,
+                    itemContent = { id, _ ->
+                        val symbol = when (items.firstOrNull { it.id == id }?.icon) {
+                            "bookmark" -> "star"
+                            "download" -> "arrow.down.circle"
+                            "cloud" -> "icloud"
+                            else -> items.firstOrNull { it.id == id }?.icon.orEmpty().ifBlank { "circle" }
+                        }
+                        SfIcon(symbol, null, Modifier.size(22.dp))
+                    },
+                )
+            } else {
+                GlasmioSegmentedControl(
+                    items = segments,
+                    selected = selectedId,
+                    onSelected = ::select,
+                    modifier = Modifier.fillMaxWidth(),
+                    height = 50.dp,
+                    enabled = controlEnabled,
+                )
+            }
             return
         }
         val compact = animateFloatAsState(if (collapsed) 1f else 0f, GlasmioMotion.spring(), label = "navigationCompact")
