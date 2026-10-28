@@ -469,15 +469,15 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
 }
 
 // 设置二级页按入口类型分流，统一由原生详情导航承载。
-function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => void, controller: CloudSyncController, onOpenUpdate: () => void, active: boolean, updateBackLabel?: string) {
+function settingsPageNode(page: SettingsPageId, theme: Theme, onClose: () => void, controller: CloudSyncController, active: boolean) {
   switch (page) {
     case 'sync': return <SettingsSyncPage theme={theme} onClose={onClose} controller={controller} />;
     case 'storage': return <SettingsStoragePage theme={theme} onClose={onClose} />;
     case 'appearance': return <SettingsAppearancePage theme={theme} onClose={onClose} />;
     case 'browsing': return <SettingsBrowsingPage theme={theme} onClose={onClose} />;
     case 'online': return <SettingsOnlinePage theme={theme} onClose={onClose} />;
-    case 'update': return <SettingsUpdatePage theme={theme} onClose={onClose} active={active} backLabel={updateBackLabel} />;
-    case 'about': return <SettingsAboutPage theme={theme} onClose={onClose} onOpenUpdate={onOpenUpdate} />;
+    case 'update': return <SettingsUpdatePage theme={theme} onClose={onClose} active={active} />;
+    case 'about': return <SettingsAboutPage theme={theme} onClose={onClose} />;
   }
 }
 
@@ -540,7 +540,6 @@ function MobileApp() {
   const [fontPageVisible, setFontPageVisible] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPageId | null>(null);
   const [settingsPageVisible, setSettingsPageVisible] = useState(false);
-  const [updateFromAbout, setUpdateFromAbout] = useState(false);
   const destination: NativeDestination = sidebar && nativeDestination === 'local'
     ? libraryTarget.scope === 'favorites' ? 'favorites'
       : libraryTarget.scope === 'collection' ? `collection:${libraryTarget.collectionId}`
@@ -628,12 +627,10 @@ function MobileApp() {
   }, []);
 
   function openSettingsPage(page: SettingsPageId, title: string | null = null) {
-    setUpdateFromAbout(page === 'update' && settingsPage === 'about' && settingsPageVisible);
     setSettingsSearchTitle(title); setSettingsPage(page); setSettingsPageVisible(true);
   }
   function closeSettingsPage() {
-    if (settingsPage === 'update' && updateFromAbout) { setSettingsPage('about'); setUpdateFromAbout(false); }
-    else setSettingsPageVisible(false);
+    setSettingsPageVisible(false);
   }
   const openCloudFont = async (font: import('./sync').CloudFont) => {
     try {
@@ -714,8 +711,7 @@ function MobileApp() {
       snapshot={snapshot} collectionId={fontPageCollectionId}
       onSnapshotChange={applySnapshot} onClose={() => setFontPageVisible(false)} onFavorite={favorite} />
   ) : settingsPage ? <SettingsSearchFocus value={settingsSearchTitle}>
-    {settingsPageNode(settingsPage, theme, closeSettingsPage, syncController, () => openSettingsPage('update'),
-      settingsPageVisible, updateFromAbout ? t('softwareUpdate.backToAbout') : undefined)}
+    {settingsPageNode(settingsPage, theme, closeSettingsPage, syncController, settingsPageVisible)}
   </SettingsSearchFocus> : null;
 
   const browserDetail = libraryRequest ? <BrowserLibraryPage key={libraryRequest.id} request={libraryRequest} theme={theme}

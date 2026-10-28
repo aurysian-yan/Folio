@@ -36,7 +36,7 @@ function Wordmark({ frame, color, reduced, specimen = false }: { frame: number; 
     {specimen && <Path d="M0 144h140 M884 144h140 M0 556h100 M924 556h100 M96 128v32 M928 540v32" fill="none" stroke={color} strokeWidth={1.25} />}
   </Svg>;
 }
-export function SettingsAboutPage({ theme, onClose, onOpenUpdate }: { theme: Theme; onClose: () => void; onOpenUpdate: () => void }) {
+export function SettingsAboutPage({ theme, onClose }: { theme: Theme; onClose: () => void }) {
   const { t } = useTranslation();
   const [app, setApp] = useState<AppInfo>();
   const [frame, setFrame] = useState(0);
@@ -80,9 +80,6 @@ export function SettingsAboutPage({ theme, onClose, onOpenUpdate }: { theme: The
           <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{app ? t('macos.versionWithBuild', { version: app.version, build: app.build }) : t('common.unknownVersion')}</Text>
           <Text style={[settingsTypography.detail, { color: theme.secondary }]}>{app ? t('about.platform', { platform: t(`about.platformNames.${app.platform}`), arch: app.arch }) : ''}</Text>
         </View>
-        <SettingsGroup theme={theme}>
-          <SettingsNavRow theme={theme} title={t('about.check')} onPress={onOpenUpdate} last />
-        </SettingsGroup>
         <SettingsGroup theme={theme} title={t('about.links')}>
           {content.links.map((link) => <SettingsNavRow key={link.key} theme={theme} title={t(`about.${link.key}`)} onPress={() => void open(link.url)} />)}
         </SettingsGroup>

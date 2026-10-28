@@ -1339,7 +1339,6 @@
     "learnMore": "Learn More",
     "install": "Install Update",
     "removeDownload": "Remove Package",
-    "backToAbout": "Back to About",
     "progress": "{{received}} / {{total}}",
     "downloadStatus": {
       "downloading": "Downloading update…",

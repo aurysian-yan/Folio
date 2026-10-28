@@ -1322,7 +1322,6 @@
     "learnMore": "进一步了解",
     "install": "安装更新",
     "removeDownload": "移除安装包",
-    "backToAbout": "返回关于",
     "progress": "{{received}} / {{total}}",
     "downloadStatus": {
       "downloading": "正在下载更新…",
