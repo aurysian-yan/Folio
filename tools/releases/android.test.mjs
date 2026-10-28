@@ -69,6 +69,10 @@ test('APK 验收检查实际包内 ABI、类型、最低 API、构建号和签�
   const manifest = 'E: meta-data\n  A: android:name(0x01010003)="com.folio.android.GLASS_TIER" (Raw: "com.folio.android.GLASS_TIER")\n  A: android:value(0x01010024)="legacy" (Raw: "legacy")\n';
   writeFileSync(badging, identity); writeFileSync(xml, manifest);
   assert.equal(run().status, 0, run().stderr);
+  writeFileSync(badging, identity.replace('sdkVersion:', 'minSdkVersion:'));
+  writeFileSync(xml, manifest.replaceAll('android:', 'http://schemas.android.com/apk/res/android:'));
+  assert.equal(run().status, 0, run().stderr);
+  writeFileSync(xml, manifest);
   for (const replacement of [identity.replace("'101'", "'10'"), identity.replace("'30'", "'33'")]) {
     writeFileSync(badging, replacement); assert.notEqual(run().status, 0);
   }
