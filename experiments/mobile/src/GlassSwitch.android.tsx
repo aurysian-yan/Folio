@@ -1,3 +1,4 @@
+import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import type { NativeSyntheticEvent, ViewProps } from 'react-native';
 import type { GlassSwitchProps } from './GlassSwitch';
@@ -23,7 +24,7 @@ const NativeSwitch = requireNativeView<NativeSwitchProps>('FolioNavigation', 'Fo
 export function GlassSwitch({ label, value, disabled = false, theme, onChange, sourceId }: GlassSwitchProps) {
   const control = useGlassControl(sourceId);
   const enabled = !disabled && control.active;
-  return <NativeSwitch sourceId={control.sourceId} controlId={control.controlId} label={label} checked={value} enabled={enabled} dark={theme.dark}
+  return <NativeSwitch {...androidPageBackdropProps(theme)} sourceId={control.sourceId} controlId={control.controlId} label={label} checked={value} enabled={enabled} dark={theme.dark}
     accentColor={theme.accent} trackColor={theme.switchTrack} thumbColor={theme.switchThumb} surfaceColor={theme.surface}
     style={{ width: 72, height: 48, opacity: disabled ? 0.4 : 1 }}
     onValueChange={({ nativeEvent }) => { if (enabled) onChange(nativeEvent.value); }} />;

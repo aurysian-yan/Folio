@@ -1,3 +1,4 @@
+import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
 import { processColor, type NativeSyntheticEvent, type ViewProps } from 'react-native';
@@ -15,7 +16,7 @@ const NativeMenu = requireNativeView<ViewProps & {
 export function ReleaseMirrorMenu({ theme, sourceId, selectedId, disabled, title, items, onSelect, onExpandedChange }: ReleaseMirrorMenuProps) {
   const { t } = useTranslation();
   const { label, secondary, muted, accent, tab, border, backButtonBorder, surface: raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
-  return <NativeMenu style={{ width: 44, height: 44 }} sourceId={sourceId} selectedId={selectedId} disabled={disabled} dark={theme.dark}
+  return <NativeMenu {...androidPageBackdropProps(theme)} style={{ width: 44, height: 44 }} sourceId={sourceId} selectedId={selectedId} disabled={disabled} dark={theme.dark}
     colors={{ scrim: processColor(theme.scrim) as number, label, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}
     labels={{ title, expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
     items={items.map((item) => ({ ...item, icon: '' }))}

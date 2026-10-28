@@ -54,24 +54,14 @@
                  )
              }
              // The layer stays at the run's untransformed size; its graphics transform can
-@@ -562,6 +566,7 @@
-     var presentationTransform: (() -> ToolbarActionTransform)? by mutableStateOf(null)
+@@ -570,6 +574,7 @@
+     }
      internal var materialPaint: (DrawScope.(ToolbarActionMaterial, Float) -> Unit)? = null
      internal var appearance = GlassAppearance()
 +    internal var frostRadius: Dp = 2.dp
      private val pressScope = GraphicsLayerBlockScope()
      private val pressRenderer = PressHighlightRenderer()
  
---- a/glasmio-glass/src/main/java/io/github/neoruaa/glasmio/glass/GlassSurface.kt
-+++ b/glasmio-glass/src/main/java/io/github/neoruaa/glasmio/glass/GlassSurface.kt
-@@ -840,6 +840,7 @@
-             opticalHighlightBoost,
-             exportedBackdrop,
-             material,
-+            frostRadius,
-             navigationSurfaceAlphaMultiplier,
-             pressProgressState,
-             sampleBackdrop,
 --- a/glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlassButtons.kt
 +++ b/glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlassButtons.kt
 @@ -188,6 +188,7 @@

@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.structuralEqualityPolicy
@@ -52,7 +53,7 @@ import kotlin.math.floor
 
 val LocalBottomControlContact = staticCompositionLocalOf<BottomControlContact?> { null }
 
-/** Independent controls share their outer material only while their visible edges approach. */
+/** One material context owns both separated controls and their joined contour. */
 @Composable
 fun BottomNavigationContact(
     backdrop: Backdrop,
@@ -65,7 +66,9 @@ fun BottomNavigationContact(
     val renderedLensTransform = remember { mutableStateOf<BottomContactLensTransform?>(null) }
     val renderedLensPress = remember { mutableStateOf(0f) }
     val contact = remember(density) {
-        BottomControlContact(with(density) { 4.dp.roundToPx().toFloat() })
+        BottomControlContact(with(density) { 4.dp.roundToPx().toFloat() }).apply {
+            maximumRefractionHeight = with(density) { 24.dp.toPx() }
+        }
     }
     val materialBackdrop = rememberLayerBackdrop()
     val materialRecordingModifier = remember(materialBackdrop) {
@@ -76,10 +79,8 @@ fun BottomNavigationContact(
     val neighborContentLayer = rememberGraphicsLayer()
     val drawNeighborContent: ContentDrawScope.() -> Unit = remember(contact, neighborContentLayer, renderedLensTransform) {
         {
-            // A disconnected button still owns its visible 2dp background. Only replay
-            // its foreground once the shared hidden material owns that background.
             val transform = renderedLensTransform.value
-            if (contact.connected.value && transform != null) {
+            if (contact.surface.value != null && transform != null) {
                 withTransform({
                     scale(transform.scale.x, transform.scale.y, transform.pivot - contact.neighborOrigin)
                 }) { drawLayer(neighborContentLayer) }
@@ -96,11 +97,11 @@ fun BottomNavigationContact(
     val appearance = LocalGlassAppearance.current
     val innerShadows = rememberNavigationInnerShadows(appearance.usesBackdrop, renderScale = 0.5f)
     val lensInnerShadows = rememberNavigationInnerShadows(appearance.usesRefraction, renderScale = 0.5f)
-    val connected by contact.connected
+    val surfaceReady by remember(contact) { derivedStateOf { contact.surface.value != null } }
     val capturesLensSource by contact.capturesLensSource
     Box(modifier.onGloballyPositioned(contact::updateCoordinates)) {
         Box(Modifier.matchParentSize()) {
-            if (connected) {
+            if (surfaceReady) {
                 val shape = remember(renderedSurface) { { renderedSurface.value?.shape ?: Capsule() } }
                 val press = remember(contact) { derivedStateOf { contact.pressProgress() } }
                 val background = remember(contact, backdrop, shape, press, renderedSurface, colors, appearance, innerShadows) {
@@ -112,6 +113,9 @@ fun BottomNavigationContact(
                         innerShadows = innerShadows,
                         isDark = colors.isDark,
                         pressProgressState = press,
+                        opticalCenter = {
+                            contact.referenceCenter() - (renderedSurface.value?.bounds?.topLeft ?: Offset.Zero)
+                        },
                         pressOverlay = {
                             renderedSurface.value?.let { contact.drawPressHighlight(this, it.bounds.topLeft) }
                         },
@@ -149,8 +153,11 @@ fun BottomNavigationContact(
                     appearance = appearance,
                     pressProgressState = renderedLensPress,
                     innerShadows = lensInnerShadows,
+                    opticalCenter = {
+                        contact.referenceCenter() - (renderedLensSurface.value?.bounds?.topLeft ?: Offset.Zero)
+                    },
                     pressOverlay = {
-                        if (contact.connected.value) {
+                        if (contact.surface.value != null) {
                             val source = renderedSurface.value
                             val sampled = renderedLensSurface.value
                             val transform = renderedLensTransform.value
@@ -246,6 +253,7 @@ class BottomControlContactMember(
     private var bounds: Rect? by mutableStateOf(null)
 
     val connected: Boolean get() = contact.connected.value
+    val sharesSurface: Boolean get() = contact.surface.value != null
 
     fun capsule(): LiquidContactCapsule? = bounds?.let {
         LiquidContactCapsule(it.size, visualBounds.value(it.size).translate(it.topLeft))
@@ -311,39 +319,69 @@ class BottomControlContact(
         private set
     private val pressRenderer = PressHighlightRenderer()
     private val lensPressRenderer = PressHighlightRenderer()
+    private val refractionField = NavigationContactField()
+    internal var maximumRefractionHeight: Float = 0f
+    private var cachedFirst: LiquidContactCapsule? = null
+    private var cachedSecond: LiquidContactCapsule? = null
+    private var cachedRefractionBand = Float.NaN
+    private var cachedContactShape: LiquidContactShape? = null
+    private var cachedSurface: BottomContactSurface? = null
     val capturesLensSource = derivedStateOf(structuralEqualityPolicy()) { members.any { it.needsLensSource() } }
 
-    private val baseSurface = derivedStateOf { createSurface() }
-    val surface = derivedStateOf {
-        baseSurface.value?.takeIf { (it.shape as LiquidContactShape).isConnected }
+    val surface = derivedStateOf(referentialEqualityPolicy()) { createSurface() }
+    val connected = derivedStateOf(structuralEqualityPolicy()) {
+        (surface.value?.shape as? LiquidContactShape)?.isConnected == true
     }
-    val connected = derivedStateOf(structuralEqualityPolicy()) { surface.value != null }
-    val lensTransform = derivedStateOf { members.firstNotNullOfOrNull { it.lensTransform() } }
+    val lensTransform = derivedStateOf(structuralEqualityPolicy()) { members.firstNotNullOfOrNull { it.lensTransform() } }
     val lensSurface = derivedStateOf {
-        val surface = baseSurface.value ?: return@derivedStateOf null
+        val source = surface.value ?: return@derivedStateOf null
         val transform = lensTransform.value ?: return@derivedStateOf null
-        val transformedBounds = transform.bounds(surface.bounds)
+        val transformedBounds = transform.bounds(source.bounds)
         val bounds = Rect(
             floor(transformedBounds.left), floor(transformedBounds.top),
             ceil(transformedBounds.right), ceil(transformedBounds.bottom),
         )
-        BottomContactSurface(bounds, (surface.shape as LiquidContactShape).withOutlineTransform(
+        BottomContactSurface(bounds, (source.shape as LiquidContactShape).withOutlineTransform(
             scale = transform.scale,
             translation = transformedBounds.topLeft - bounds.topLeft,
         ))
     }
 
     private fun createSurface(): BottomContactSurface? {
-        val capsules = members.mapNotNull { it.capsule() }
-        if (capsules.size != 2) return null
-        val bounds = Rect(
-            floor(capsules.minOf { it.bounds.left }), floor(capsules.minOf { it.bounds.top }),
-            ceil(capsules.maxOf { it.bounds.right }), ceil(capsules.maxOf { it.bounds.bottom }),
-        )
-        val local = capsules.map { it.copy(bounds = it.bounds.translate(-bounds.topLeft)) }
-        return liquidContactShape(local[0], local[1], contactDistance, includeDisconnected = true)?.let { shape ->
-            BottomContactSurface(bounds, shape)
+        var first: LiquidContactCapsule? = null
+        var second: LiquidContactCapsule? = null
+        for (member in members) {
+            val capsule = member.capsule() ?: continue
+            if (first == null) first = capsule
+            else if (second == null) second = capsule
+            else return null
         }
+        val firstCapsule = first ?: return null
+        val secondCapsule = second ?: return null
+        val bounds = Rect(
+            floor(minOf(firstCapsule.bounds.left, secondCapsule.bounds.left)),
+            floor(minOf(firstCapsule.bounds.top, secondCapsule.bounds.top)),
+            ceil(maxOf(firstCapsule.bounds.right, secondCapsule.bounds.right)),
+            ceil(maxOf(firstCapsule.bounds.bottom, secondCapsule.bounds.bottom)),
+        )
+        val localFirst = firstCapsule.copy(bounds = firstCapsule.bounds.translate(-bounds.topLeft))
+        val localSecond = secondCapsule.copy(bounds = secondCapsule.bounds.translate(-bounds.topLeft))
+        // Both material passes share the exact same native contour and refraction field.
+        // Callback rebinding or a common translation must not regenerate that contour.
+        val scale = lensTransform.value?.scale ?: Offset(1f, 1f)
+        val minimumScale = minOf(1f, scale.x, scale.y).coerceAtLeast(0.0001f)
+        val band = maximumRefractionHeight / minimumScale
+        val shape = cachedContactShape.takeIf {
+            localFirst == cachedFirst && localSecond == cachedSecond && band == cachedRefractionBand
+        } ?: (liquidContactShape(localFirst, localSecond, contactDistance, includeDisconnected = true)
+            as? LiquidContactShape)?.withRefractionField(refractionField, band)?.also {
+            cachedFirst = localFirst
+            cachedSecond = localSecond
+            cachedRefractionBand = band
+            cachedContactShape = it
+        } ?: return null
+        return cachedSurface?.takeIf { it.bounds == bounds && it.shape === shape }
+            ?: BottomContactSurface(bounds, shape).also { cachedSurface = it }
     }
 
     fun bindSources(material: LayerBackdrop, neighbor: LayerBackdrop, recordingModifier: Modifier) {
@@ -372,6 +410,9 @@ class BottomControlContact(
     }
 
     fun pressProgress(): Float = members.maxOfOrNull { it.materialPressProgress() } ?: 0f
+
+    /** Layout coordinates exclude member press deformation and contact-bound expansion. */
+    fun referenceCenter(): Offset = coordinates?.size?.let { Offset(it.width / 2f, it.height / 2f) } ?: Offset.Zero
 
     fun lensSourcePressProgress(): Float = members.firstNotNullOfOrNull { it.lensSourcePressProgress() } ?: 0f
 

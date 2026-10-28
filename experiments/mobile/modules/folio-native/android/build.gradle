@@ -28,6 +28,13 @@ android {
       project.findProperty('folioSyncTarget') ? 'com.folio.poc.FolioLiveSyncInstrumentation' : 'com.folio.poc.FolioSyncInstrumentation'
     consumerProguardFiles 'consumer-rules.pro'
   }
+  if (project.findProperty('folioBackdropTest')) {
+    defaultConfig.testInstrumentationRunner 'com.folio.poc.navigation.FolioGlasmioBackdropInstrumentation'
+    sourceSets.androidTest {
+      java.setSrcDirs(['src/androidTestGlasmio/java'])
+      manifest.srcFile 'src/androidTestGlasmio/AndroidManifest.xml'
+    }
+  }
   sourceSets.main.java.srcDirs += 'generated'
   sourceSets.main.resources.srcDirs += 'third-party'
   sourceSets.androidTest.assets.srcDirs += ['../../../samples', '../../../../../locales']

@@ -18,6 +18,7 @@ import io.github.neoruaa.glasmio.glass.GlassSurfaceStyle
 import io.github.neoruaa.glasmio.glass.LocalGlassBackdrop
 import io.github.neoruaa.glasmio.glass.progressiveBackdropBlur
 import com.kyant.capsule.ContinuousRoundedRectangle
+import com.kyant.shapes.Capsule
 
 class FolioHeaderBackdropView(context: Context, appContext: AppContext) : FolioGlassView(context, appContext) {
     var tintColor by mutableStateOf("")
@@ -34,7 +35,7 @@ class FolioPanelBackdropView(context: Context, appContext: AppContext) : FolioGl
     var borderColor = ""
     var cornerRadius by mutableStateOf(0f)
     @Composable override fun GlassContent() {
-        GlassSurface(Modifier.fillMaxSize(), style = if (navigationGlass) GlassSurfaceStyle.Navigation else GlassSurfaceStyle.Navigation,
-            shape = ContinuousRoundedRectangle(cornerRadius.dp)) {}
+        GlassSurface(Modifier.fillMaxSize(), style = GlassSurfaceStyle.Navigation,
+            shape = if (navigationGlass) Capsule() else ContinuousRoundedRectangle(cornerRadius.dp)) {}
     }
 }

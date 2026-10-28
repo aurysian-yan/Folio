@@ -1,3 +1,4 @@
+import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, processColor, StyleSheet, type NativeSyntheticEvent, type ViewProps } from 'react-native';
@@ -38,7 +39,7 @@ const NativeHeaderBackdrop = requireNativeView<NativeHeaderBackdropProps>('Folio
 
 // 标题栏材质仅采样字体内容，前景控件保持清晰。
 export function AndroidHeaderBackdrop({ theme, ...props }: AndroidHeaderBackdropProps) {
-  return <NativeHeaderBackdrop {...props} tintColor={String(theme.background)} />;
+  return <NativeHeaderBackdrop {...androidPageBackdropProps(theme)} {...props} tintColor={String(theme.background)} />;
 }
 
 // 安卓操作区使用原生控件与共享语言目录。
@@ -48,7 +49,7 @@ export function AndroidHeaderControls({ sourceId, theme, mode, active, width, re
   const shadowProgress = useHeaderShadowProgress();
   // 搜索框、顶栏图标与菜单面板统一使用当前主题色，覆盖 Material3 配色。
   const { label, secondary, muted, tab, border, backButtonBorder, accent, surface: raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
-  return <NativeAndroidHeader sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
+  return <NativeAndroidHeader {...androidPageBackdropProps(theme)} sourceId={sourceId} mode={mode} active={active} dark={theme.dark}
     ready={ready} importing={importing} importBlocked={importBlocked} searchOpen={searchOpen} autoFocusSearch={autoFocusSearch} searchText={searchText}
     labels={{ search: t('mobile.searchFonts'), searchPlaceholder: t('mobile.searchPlaceholder'), clearSearch: t('mobile.clearSearch'),
       filter: filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'),

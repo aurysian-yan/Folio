@@ -16,6 +16,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
@@ -31,6 +33,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.findViewTreeSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.kyant.backdrop.Backdrop
+import io.github.neoruaa.glasmio.core.defaultGlassColors
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.views.ExpoView
 import kotlin.math.abs
@@ -47,12 +50,22 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
         set(value) { unregister(); field = value; register() }
     var active = true
         set(value) {
+            if (field == value) return
             field = value
+            contentDirty = true
             if (value) register() else { unregister(); backdrop.release() }
             glassLayer.visibility = if (value) VISIBLE else GONE
             invalidate()
         }
+    var pageBackgroundColor by androidx.compose.runtime.mutableStateOf(defaultGlassColors(false).groupedBackground)
+        private set
+    fun setPageBackground(value: String) {
+        pageBackgroundColor = value.glassColor(pageBackgroundColor).copy(alpha = 1f)
+        contentDirty = true
+        invalidate()
+    }
     var compositingLayer = false
+        set(value) { if (field != value) { field = value; contentDirty = true; invalidate() } }
     private val anchors = linkedMapOf<FolioGlassView, View>()
     private val glassLayer = object : FrameLayout(context) {
         override fun drawChild(canvas: Canvas, child: View, drawingTime: Long): Boolean {
@@ -80,7 +93,7 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
     private var downX = 0f
     private var downY = 0f
     private val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
-    private val preDraw = ViewTreeObserver.OnPreDrawListener { placeGlass(); true }
+    private val preDraw = ViewTreeObserver.OnPreDrawListener { placeGlass(); backdrop.updatePosition(); true }
 
     init { setWillNotDraw(false) }
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) = Unit
@@ -122,12 +135,13 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
     }
 
     override fun draw(canvas: Canvas) {
-        if (!active || !canvas.isHardwareAccelerated || width <= 0 || height <= 0) { super.draw(canvas); return }
+        if (!active || windowVisibility != VISIBLE || !isShown || !canvas.isHardwareAccelerated || width <= 0 || height <= 0) { super.draw(canvas); return }
         val node = backdrop.obtainNode(compositingLayer || containsWebView(this))
         if (contentDirty || !node.hasDisplayList()) {
         contentDirty = false
         val recording = node.beginRecording(width, height)
         try {
+            recording.drawColor(pageBackgroundColor.toArgb())
             background?.let { it.setBounds(0, 0, width, height); it.draw(recording) }
             super.dispatchDraw(recording)
             onDrawForeground(recording)
@@ -226,10 +240,17 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
     }
     override fun onWindowVisibilityChanged(visibility: Int) {
         super.onWindowVisibilityChanged(visibility)
-        if (visibility != VISIBLE) backdrop.release() else invalidate()
+        contentDirty = true
+        if (visibility != VISIBLE) { unregister(); backdrop.release() }
+        else { register(); invalidate() }
+    }
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        contentDirty = true
+        if (isVisible) { register(); invalidate() } else { unregister(); backdrop.release() }
     }
     private fun register() {
-        if (active && isAttachedToWindow && sourceId.isNotEmpty()) FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] = backdrop
+        if (active && windowVisibility == VISIBLE && isShown && isAttachedToWindow && sourceId.isNotEmpty()) FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] = backdrop
     }
     private fun unregister() {
         val key = FolioBackdropSources.key(appContext, sourceId)
@@ -241,43 +262,61 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
     }
 }
 
-internal object EmptyNavigationBackdrop : Backdrop {
-    override val isCoordinatesDependent = false
-    override fun DrawScope.drawBackdrop(density: Density, coordinates: LayoutCoordinates?, layerBlock: (GraphicsLayerScope.() -> Unit)?) = Unit
+// 底色先填满实际取样画布，包含模糊扩边和源图层之外的区域。
+internal class FolioPageBackdrop(
+    private val source: FolioViewBackdrop?,
+    private val pageBackground: () -> Color,
+) : Backdrop {
+    override val isCoordinatesDependent = true
+    override fun DrawScope.drawBackdrop(density: Density, coordinates: LayoutCoordinates?, layerBlock: (GraphicsLayerScope.() -> Unit)?) {
+        drawContext.canvas.nativeCanvas.drawColor(pageBackground().copy(alpha = 1f).toArgb())
+        source?.drawContent(this, coordinates)
+    }
 }
 
 internal class FolioViewBackdrop(private val source: FolioBackdropSourceView) {
     private var node: RenderNode? = null
     private var revision by mutableIntStateOf(0)
+    private var position: List<Float>? = null
+    internal val hasRecording: Boolean get() = node?.hasDisplayList() == true
     fun obtainNode(compositing: Boolean) = (node ?: RenderNode("FolioGlasmioBackdrop").also { node = it }).apply {
         setPosition(0, 0, source.width, source.height)
         setUseCompositingLayer(compositing, null)
     }
     fun recorded() { revision++ }
-    fun release() { node?.discardDisplayList(); node = null; revision++ }
-    fun consumer(): Backdrop = object : Backdrop {
-        override val isCoordinatesDependent = true
-        override fun DrawScope.drawBackdrop(density: Density, coordinates: LayoutCoordinates?, layerBlock: (GraphicsLayerScope.() -> Unit)?) {
-            revision
-            val content = node ?: return
-            if (!content.hasDisplayList() || coordinates?.isAttached != true) return
-            // 屏幕坐标同时覆盖页面 overlay 与菜单的独立窗口。
-            val points = arrayOf(androidx.compose.ui.geometry.Offset.Zero,
-                androidx.compose.ui.geometry.Offset(1f, 0f), androidx.compose.ui.geometry.Offset(0f, 1f))
-            val screenPoints = points.flatMap {
-                val point = coordinates.localToScreen(it)
-                listOf(point.x, point.y)
-            }.toFloatArray()
-            if (screenPoints.any { !it.isFinite() }) return
-            val screenToGlass = Matrix()
-            if (!screenToGlass.setPolyToPoly(screenPoints, 0, floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f), 0, 3)) return
-            val sourceMatrix = Matrix().also { source.transformMatrixToGlobal(it) }
-            sourceMatrix.postConcat(screenToGlass)
-            val canvas = drawContext.canvas.nativeCanvas
-            val saved = canvas.save()
-            canvas.concat(sourceMatrix)
-            canvas.drawRenderNode(content)
-            canvas.restoreToCount(saved)
+    fun updatePosition() {
+        val values = FloatArray(9)
+        Matrix().also { source.transformMatrixToGlobal(it); it.getValues(values) }
+        if (position != values.toList()) { position = values.toList(); revision++ }
+    }
+    fun release() {
+        if (node == null) return
+        node?.discardDisplayList(); node = null; position = null; revision++
+    }
+    fun consumer(): Backdrop = FolioPageBackdrop(this) { source.pageBackgroundColor }
+    fun drawContent(scope: DrawScope, coordinates: LayoutCoordinates?) {
+        revision
+        val content = node ?: return
+        if (!content.hasDisplayList() || coordinates?.isAttached != true || !source.isAttachedToWindow) return
+        val width = coordinates.size.width.toFloat()
+        val height = coordinates.size.height.toFloat()
+        if (width <= 0f || height <= 0f) return
+        // 屏幕映射已包含 Compose 的 layerBlock、页面变换与独立窗口偏移。
+        val local = floatArrayOf(0f, 0f, width, 0f, 0f, height, width, height)
+        val screen = local.copyOf()
+        for (i in 0 until 4) {
+            val point = coordinates.localToScreen(androidx.compose.ui.geometry.Offset(local[i * 2], local[i * 2 + 1]))
+            screen[i * 2] = point.x; screen[i * 2 + 1] = point.y
         }
+        if (screen.any { !it.isFinite() }) return
+        val screenToGlass = Matrix()
+        if (!screenToGlass.setPolyToPoly(screen, 0, local, 0, 4)) return
+        val sourceMatrix = Matrix().also { source.transformMatrixToGlobal(it) }
+        sourceMatrix.postConcat(screenToGlass)
+        val canvas = scope.drawContext.canvas.nativeCanvas
+        if (!canvas.isHardwareAccelerated) return
+        val saved = canvas.save()
+        try { canvas.concat(sourceMatrix); canvas.drawRenderNode(content) }
+        finally { canvas.restoreToCount(saved) }
     }
 }

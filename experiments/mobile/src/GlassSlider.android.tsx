@@ -1,3 +1,4 @@
+import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useRef, useState } from 'react';
 import type { NativeSyntheticEvent, ViewProps } from 'react-native';
@@ -34,7 +35,7 @@ export function GlassSlider({ label, value, minimum, maximum, step, valueText, t
   const lastEventCount = useRef(0);
   const validRange = Number.isFinite(value) && Number.isFinite(minimum) && Number.isFinite(maximum) && maximum > minimum;
   const enabled = validRange && control.active;
-  return <NativeSlider sourceId={control.sourceId} controlId={control.controlId} label={label} value={validRange ? clampAxisValue(value, minimum, maximum) : 0}
+  return <NativeSlider {...androidPageBackdropProps(theme)} sourceId={control.sourceId} controlId={control.controlId} label={label} value={validRange ? clampAxisValue(value, minimum, maximum) : 0}
     minimum={validRange ? minimum : 0} maximum={validRange ? maximum : 1}
     step={Number.isFinite(step) && step > 0 ? step : 0} valueText={valueText} enabled={enabled} dark={theme.dark}
     accentColor={theme.accent} trackColor={theme.border} thumbColor={theme.switchThumb} surfaceColor={theme.surface}

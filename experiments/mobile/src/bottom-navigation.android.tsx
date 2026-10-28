@@ -1,3 +1,4 @@
+import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { Dimensions, StyleSheet, useWindowDimensions, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import i18n from './i18n/instance';
@@ -79,7 +80,7 @@ export function navigationCompactBarFrame(bottomInset: number, availableWidth: n
 // 采样包含页面底色，避免透明模糊与下方清晰正文叠加。
 export function NavigationBackdrop({ theme, style, ...props }: NavigationBackdropProps) {
   return <GlassControlScope sourceId={props.sourceId} active={props.active ?? true}>
-    <BackdropSource {...props} collapsable={false} style={[style, { backgroundColor: theme.background }]} />
+    <BackdropSource {...androidPageBackdropProps(theme)} {...props} collapsable={false} style={[style, { backgroundColor: theme.background }]} />
   </GlassControlScope>;
 }
 
@@ -88,7 +89,7 @@ export function BottomNavigation({ hidden = false, collapsed = false, collapsibl
   const availableWidth = Math.max(0, width - leftInset - rightInset);
   const margin = sideMargin(availableWidth);
   // 键盘避让保持宿主挂载，避免改变原生搜索框的窗口关系。
-  return <LiquidTabs pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden}
+  return <LiquidTabs {...androidPageBackdropProps(theme)} pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden}
     importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'} sourceId={sourceId} selectedId={selectedId} dark={dark} accentColor={theme.accent} items={items}
     enabled={!hidden} collapsed={collapsed} collapsible={collapsible} expandHint={i18n.t('navigation.expandBar')}
     style={[styles.tabs, {

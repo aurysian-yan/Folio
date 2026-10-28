@@ -1,3 +1,4 @@
+import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, processColor, type NativeSyntheticEvent, type ViewProps } from 'react-native';
@@ -22,7 +23,7 @@ const PresetMenu = requireNativeView<NativePresetMenuProps>('FolioNavigation', '
 export function WebDAVPresetMenu({ theme, serverUrl, disabled, sourceId = '', onChange }: WebDAVPresetMenuProps) {
   const { t } = useTranslation();
   const { label, secondary, muted, accent, tab, border, backButtonBorder, surface: raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
-  return <PresetMenu sourceId={sourceId} selectedId={matchingWebdavPreset(serverUrl)} disabled={disabled} dark={theme.dark}
+  return <PresetMenu {...androidPageBackdropProps(theme)} sourceId={sourceId} selectedId={matchingWebdavPreset(serverUrl)} disabled={disabled} dark={theme.dark}
     colors={{ scrim: processColor(theme.scrim) as number, label, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}
     items={webdavPresets.map((preset) => ({ id: preset.id, label: t(preset.label), icon: '' }))}
     labels={{ title: t('cloud.provider'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}

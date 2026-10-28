@@ -20,6 +20,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -518,6 +520,7 @@ fun Modifier.navigationLensSourceBackground(
     pressProgressState: androidx.compose.runtime.State<Float>,
     innerShadows: NavigationInnerShadowRenderer?,
     pressOverlay: (DrawScope.() -> Unit)? = null,
+    opticalCenter: (() -> Offset)? = null,
 ): Modifier = navigationLensSourceDropShadow(shape).drawBackdrop(
     backdrop = backdrop,
     shape = shape,
@@ -526,12 +529,17 @@ fun Modifier.navigationLensSourceBackground(
         val blurProgress = press * press * (3f - 2f * press)
         vibrancy()
         blur(lerp(8f, 2f, blurProgress).dp.toPx())
-        lens(
-            24.dp.toPx() * press,
-            28.dp.toPx() * press,
-            depthEffect = press > 0.01f,
-            chromaticAberration = true,
-        )
+        val contactShape = shape() as? LiquidContactShape
+        if (contactShape != null && opticalCenter != null) {
+            navigationContainerLens(contactShape, opticalCenter(), 24.dp.toPx() * press, 28.dp.toPx() * press)
+        } else {
+            lens(
+                24.dp.toPx() * press,
+                28.dp.toPx() * press,
+                depthEffect = press > 0.01f,
+                chromaticAberration = true,
+            )
+        }
         if (!isDark && appearance.usesBackdrop) liftNavigationShadows()
     },
     highlight = {
@@ -582,6 +590,9 @@ fun Modifier.navigationGlassBackground(
     material: NavigationGlassMaterial? = null,
     materialTint: Color? = null,
     preserveBackdropColors: Boolean = false,
+    innerShadowAlpha: Float = 1f,
+    materialPaintAlpha: Float = 1f,
+    opticalCenter: (() -> Offset)? = null,
 ): Modifier {
     return this.then(
         if (dropShadow == null) {
@@ -613,12 +624,19 @@ fun Modifier.navigationGlassBackground(
                 if (!preserveBackdropColors) vibrancy()
                 blur(blurRadius.toPx())
                 if (appearance.usesRefraction && refractionHeight > 0.dp && refractionAmount > 0.dp) {
-                    lens(
-                        refractionHeight = refractionHeight.toPx(),
-                        refractionAmount = refractionAmount.toPx(),
-                        depthEffect = true,
-                        chromaticAberration = true,
-                    )
+                    val contactShape = shape() as? LiquidContactShape
+                    if (contactShape != null && opticalCenter != null) {
+                        navigationContainerLens(
+                            contactShape, opticalCenter(), refractionHeight.toPx(), refractionAmount.toPx(),
+                        )
+                    } else {
+                        lens(
+                            refractionHeight = refractionHeight.toPx(),
+                            refractionAmount = refractionAmount.toPx(),
+                            depthEffect = true,
+                            chromaticAberration = true,
+                        )
+                    }
                 }
                 if (navigationMaterial && !isDark && !preserveBackdropColors) liftNavigationShadows()
             }
@@ -647,7 +665,7 @@ fun Modifier.navigationGlassBackground(
                 surfaceOverlay()
             } else {
                 if (navigationMaterial && sampleBackdrop && appearance.usesBackdrop) {
-                    drawNavigationGlassMaterial(containerColor, isDark, containerAlphaMultiplier, material, materialTint)
+                    drawNavigationGlassMaterial(containerColor, isDark, containerAlphaMultiplier, material, materialTint, alpha = materialPaintAlpha)
                 } else {
                     drawRect(
                         containerColor.copy(
@@ -657,7 +675,7 @@ fun Modifier.navigationGlassBackground(
                 }
                 surfaceOverlay?.invoke(this)
                 if (navigationMaterial && sampleBackdrop && appearance.usesBackdrop) {
-                    innerShadows?.draw(this, shape(), isDark = isDark)
+                    innerShadows?.draw(this, shape(), isDark = isDark, alpha = innerShadowAlpha)
                 }
             }
         },
@@ -754,7 +772,7 @@ fun GlassSurface(
             },
         )
     } else null
-    val sharesContactSurface = contactMember?.connected == true
+    val sharesContactSurface = contactMember?.sharesSurface == true
     LaunchedEffect(interactiveHighlight, cancelPressFeedback) {
         if (cancelPressFeedback) interactiveHighlight.cancelPress()
     }
@@ -762,17 +780,23 @@ fun GlassSurface(
         GlassEmphasis.Regular -> colors.container
         GlassEmphasis.Prominent -> colors.prominentContainer
     }
-    val pressProgressState = remember(interactiveHighlight, pressHighlight) {
-        derivedStateOf { pressHighlight?.invoke()?.progress ?: interactiveHighlight.pressProgress }
+    // Callback identity can change when a parent recomposes without changing these pixels.
+    // Keep the material/effect nodes stable while each draw still invokes the current owner.
+    val currentPressHighlight = rememberUpdatedState(pressHighlight)
+    val currentVisualBoundsChanged = rememberUpdatedState(onVisualBoundsChanged)
+    val pressProgressState = remember(interactiveHighlight) {
+        derivedStateOf(structuralEqualityPolicy()) {
+            currentPressHighlight.value?.invoke()?.progress ?: interactiveHighlight.pressProgress
+        }
     }
     val shapeProvider = remember(shape) { { shape } }
-    val dragScaleLayerBlock: GraphicsLayerScope.() -> Unit = remember(interactiveHighlight, toolbarMember, onVisualBoundsChanged) {
+    val dragScaleLayerBlock: GraphicsLayerScope.() -> Unit = remember(interactiveHighlight, toolbarMember) {
         {
             if (toolbarMember != null) toolbarMember.applyPressTransform(this) else applyGlassDragScale(
                 pressProgress = interactiveHighlight.pressProgress,
                 offset = interactiveHighlight.offset,
             )
-            onVisualBoundsChanged?.invoke(
+            currentVisualBoundsChanged.value?.invoke(
                 Rect(
                     size.width * (1f - scaleX) / 2f + translationX,
                     size.height * (1f - scaleY) / 2f + translationY,
@@ -841,6 +865,7 @@ fun GlassSurface(
             exportedBackdrop,
             material,
             frostRadius,
+            preserveBackdropColors,
             navigationSurfaceAlphaMultiplier,
             pressProgressState,
             sampleBackdrop,
@@ -919,18 +944,22 @@ fun GlassSurface(
         usesShadowLift = navigationMaterial && !preserveBackdropColors,
         usesInnerShadows = innerShadows != null && !appearance.reduceTransparency,
     )
+    val externalHighlightModifier = remember(interactiveHighlight) {
+        interactiveHighlight.highlightModifier(
+            progressProvider = { currentPressHighlight.value?.invoke()?.progress ?: interactiveHighlight.pressProgress },
+            positionProvider = { size ->
+                currentPressHighlight.value?.invoke()?.let { Offset(size.width * it.position.x, size.height * it.position.y) }
+                    ?: interactiveHighlight.highlightPosition(size)
+            },
+        )
+    }
     val drawSurface: @Composable (Modifier) -> Unit = { surfaceModifier ->
         Box(
             modifier = surfaceModifier
                 .then(
                     if (sharesToolbarSurface || sharesContactSurface) Modifier
-                    else if (pressHighlight != null) interactiveHighlight.highlightModifier(
-                        progressProvider = { pressHighlight()?.progress ?: interactiveHighlight.pressProgress },
-                        positionProvider = { size ->
-                            pressHighlight()?.let { Offset(size.width * it.position.x, size.height * it.position.y) }
-                                ?: interactiveHighlight.highlightPosition(size)
-                        },
-                    ) else if (onClick != null && enabled) interactiveHighlight.modifier else Modifier,
+                    else if (pressHighlight != null) externalHighlightModifier
+                    else if (onClick != null && enabled) interactiveHighlight.modifier else Modifier,
                 )
                 .then(
                     if (onClick != null) {

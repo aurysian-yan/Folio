@@ -505,7 +505,7 @@ class ToolbarActionMember(
     }
 
     val sharesSurface: Boolean
-        get() = group.connectedRun(this).size > 1 || group.presentationBounds != null
+        get() = group.connectedRun(this).size > 1 || group.hasPresentationBounds
 
     fun updateCoordinates(value: LayoutCoordinates) {
         coordinates = value
@@ -564,6 +564,14 @@ class ToolbarActionGroup(
 ) {
     var presentationBounds: (() -> Rect)? by mutableStateOf(null)
     var presentationTransform: (() -> ToolbarActionTransform)? by mutableStateOf(null)
+    // Observe exact values in the phase that consumes them. Fresh owner callbacks with
+    // unchanged geometry must not invalidate run membership, layout or optical effects.
+    private val presentationBoundsPresent = derivedStateOf(structuralEqualityPolicy()) { presentationBounds != null }
+    internal val hasPresentationBounds: Boolean get() = presentationBoundsPresent.value
+    private val resolvedPresentationBounds = derivedStateOf(structuralEqualityPolicy()) { presentationBounds?.invoke() }
+    private val resolvedPresentationTransform = derivedStateOf(structuralEqualityPolicy()) {
+        presentationTransform?.invoke() ?: ToolbarActionTransform()
+    }
     internal var materialPaint: (DrawScope.(ToolbarActionMaterial, Float) -> Unit)? = null
     internal var appearance = GlassAppearance()
     internal var frostRadius: Dp = 2.dp
@@ -590,7 +598,7 @@ class ToolbarActionGroup(
         }
     }
     private val sharedRunsState = derivedStateOf(structuralEqualityPolicy()) {
-        connectedRuns.value.filter { it.size > 1 || presentationBounds != null }
+        connectedRuns.value.filter { it.size > 1 || hasPresentationBounds }
     }
 
     fun updateCoordinates(value: LayoutCoordinates) {
@@ -609,7 +617,7 @@ class ToolbarActionGroup(
             val previous = previousMember?.bounds
             val bounds = member.bounds!!
             if (previous != null && previousMember.material == member.material &&
-                (presentationBounds != null || (abs(bounds.left - previous.right - gap) <= 2f &&
+                (hasPresentationBounds || (abs(bounds.left - previous.right - gap) <= 2f &&
                 abs(bounds.center.y - previous.center.y) <= 2f && abs(bounds.height - previous.height) <= 2f))
             ) {
                 result.last().add(member)
@@ -666,7 +674,7 @@ class ToolbarActionGroup(
     }
 
     fun foregroundPortal(run: List<ToolbarActionMember>): ToolbarMenuPortal? {
-        if (run.size == 1 && presentationBounds == null) {
+        if (run.size == 1 && !hasPresentationBounds) {
             // A standalone control draws its own glass inside the Row. Transfer only
             // its live content layer, before the press transform, without replaying glass.
             val member = run.single()
@@ -726,8 +734,8 @@ class ToolbarActionGroup(
         val base = member.bounds ?: return ToolbarActionTransform()
         val run = connectedRun(member)
         val active = run.maxBy { it.highlight.pressProgress }
-        val pressed = transform(if (run.size > 1 || presentationBounds != null) bounds(run) else base, active.highlight)
-            .followedBy(presentationTransform?.invoke() ?: ToolbarActionTransform())
+        val pressed = transform(if (run.size > 1 || hasPresentationBounds) bounds(run) else base, active.highlight)
+            .followedBy(resolvedPresentationTransform.value)
         val family = runs().firstOrNull { member in it } ?: return pressed
         if (family.size < 2) return pressed
         val progress = maxOf(separationProgress.value,
@@ -759,7 +767,7 @@ class ToolbarActionGroup(
     fun bounds(run: List<ToolbarActionMember>): Rect {
         if (run.isNotEmpty() && separationProgress.value == 0f &&
             run.size == members.count { it.bounds?.isEmpty == false }
-        ) presentationBounds?.let { return it() }
+        ) resolvedPresentationBounds.value?.let { return it }
         var left = Float.POSITIVE_INFINITY
         var top = Float.POSITIVE_INFINITY
         var right = Float.NEGATIVE_INFINITY
@@ -784,7 +792,7 @@ class ToolbarActionGroup(
     }
 
     fun shape(run: List<ToolbarActionMember>, separation: Float): Shape {
-        if (presentationBounds != null && separation == 0f) {
+        if (hasPresentationBounds && separation == 0f) {
             return if (run.size == 1) CircleShape else ToolbarContinuousShape
         }
         val origin = bounds(run).topLeft
@@ -835,6 +843,18 @@ data class LiquidContactShape(
     private var baseGeometry = lazy(LazyThreadSafetyMode.NONE) {
         contactCapsulePath(first, second, contactDistance)
     }
+    private var opticalContour = lazy(LazyThreadSafetyMode.NONE) {
+        NavigationContactContour(baseGeometry.value.path.asAndroidPath().approximate(0.25f))
+    }
+    private var opticalField: NavigationContactField? = null
+    internal var refractionBand: Float = 0f
+        private set
+    internal fun refractionContour(): NavigationContactContour = opticalContour.value
+    internal fun refractionField(): NavigationContactField = opticalField ?: NavigationContactField().also { opticalField = it }
+    internal fun withRefractionField(field: NavigationContactField, band: Float): LiquidContactShape = apply {
+        opticalField = field
+        refractionBand = band
+    }
     private var cachedOutline: Outline? = null
     val isConnected: Boolean get() = !(second.bounds.left - first.bounds.right >= contactDistance ||
         min(first.bounds.bottom, second.bounds.bottom) <= maxOf(first.bounds.top, second.bounds.top))
@@ -843,10 +863,20 @@ data class LiquidContactShape(
 
     override fun copy(topStart: CornerSize, topEnd: CornerSize, bottomEnd: CornerSize, bottomStart: CornerSize): CornerBasedShape =
         LiquidContactShape(first, second, contactDistance, topStart, topEnd, bottomEnd, bottomStart,
-            outlineScale, outlineTranslation).also { it.baseGeometry = baseGeometry }
+            outlineScale, outlineTranslation).also {
+                it.baseGeometry = baseGeometry
+                it.opticalContour = opticalContour
+                it.opticalField = opticalField
+                it.refractionBand = refractionBand
+            }
 
     fun withOutlineTransform(scale: Offset, translation: Offset): LiquidContactShape =
-        copy(outlineScale = scale, outlineTranslation = translation).also { it.baseGeometry = baseGeometry }
+        copy(outlineScale = scale, outlineTranslation = translation).also {
+            it.baseGeometry = baseGeometry
+            it.opticalContour = opticalContour
+            it.opticalField = opticalField
+            it.refractionBand = refractionBand
+        }
 
     override fun createOutline(
         size: Size, topStart: Float, topEnd: Float, bottomEnd: Float, bottomStart: Float,

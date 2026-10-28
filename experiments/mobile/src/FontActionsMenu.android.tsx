@@ -1,3 +1,4 @@
+import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, processColor, type NativeSyntheticEvent, type ViewProps } from 'react-native';
@@ -26,7 +27,7 @@ export function FontActionsMenu({ theme, sourceId, favorite = false, favoritePen
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
   const { label, secondary, muted, accent, tab, border, backButtonBorder, surface: raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
-  return <ActionsMenu sourceId={sourceId} selectedId="" disabled={false} dark={theme.dark}
+  return <ActionsMenu {...androidPageBackdropProps(theme)} sourceId={sourceId} selectedId="" disabled={false} dark={theme.dark}
     triggerIcon="more" triggerSurface shadowProgress={shadowProgress}
     colors={{ scrim: processColor(theme.scrim) as number, label, secondary, muted, accent, tab, border, backButtonBorder, raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}
     labels={{ title: t('font.operations'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}

@@ -1,3 +1,4 @@
+import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
 import { Keyboard, type NativeSyntheticEvent, type ViewProps } from 'react-native';
@@ -25,7 +26,7 @@ const ChoiceMenu = requireNativeView<NativeChoiceProps>('FolioNavigation', 'Foli
 export function CharacterMapChoice({ label, options, value, onChange, theme, sourceId, triggerSize, triggerFeedback = true }: CharacterMapChoiceProps) {
   const { t } = useTranslation();
   const { label: textColor, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
-  return <ChoiceMenu sourceId={sourceId} selectedId={value || 'all'} dark={theme.dark} disabled={options.length < 2}
+  return <ChoiceMenu {...androidPageBackdropProps(theme)} sourceId={sourceId} selectedId={value || 'all'} dark={theme.dark} disabled={options.length < 2}
     triggerIcon="chevron.down" triggerSurface={false} triggerTrailing={!!triggerSize} triggerFeedback={triggerFeedback}
     style={triggerSize ?? { width: 44, height: 44 }}
     colors={{ label: textColor, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}

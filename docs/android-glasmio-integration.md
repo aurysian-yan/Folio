@@ -2,8 +2,10 @@
 
 ## 当前边界
 
-Glasmio 源码固定在 `17b13caddb64b7d396009fae71919a8a3955fe6f`，
-跟进持久标题栏及共享玻璃操作组接口。四个源码模块、原始许可和文件校验值保存在
+Glasmio 源码固定在 `b86f4a601fceb8e6ee2f4cdc817a2dbaf9159846`，
+于 2026-10-28 开始本轮迁移时重新查询上游 main。该提交包含
+`aad1605a2807cddaf5afacea131d528bc9452c9f` 的材质缓存与原生轮廓场优化，
+以及后续菜单、选择和设备检查修复。四个源码模块、原始许可和文件校验值保存在
 移动端 `vendor/glasmio/`；不引入上游 Scaffold、Preference 或示例资源。
 
 高版本已注册导航、顶栏、菜单、Slider、Switch 和背景视图，React 页面继续使用原有业务接口。
@@ -13,13 +15,41 @@ Glasmio 保留默认材质、折射和动画；顶栏按钮背景模糊按应用
 菜单触发器前景和菜单由同一 Compose 树管理，字款选择行的文字一起参与前景转移。
 原生 overlay 的实际根节点显式绑定页面的 Lifecycle、SavedState 与 ViewModel owner，
 让页面进入、返回及 RN 滚动裁切后的控件重挂载均能创建 Compose 重组器。
-本轮已在 API 37／arm64 模拟器覆盖安装开发身份的 Glasmio Release 包并启动，
-包内包含完整页面代码，无需预览服务。实际控件效果由使用者验证。
+底栏与独立搜索按钮接入同一个 `BottomNavigationContact`，分离和融合时均共用材质归属。
+在线地址栏、导航轨道及选中拨片、独立搜索按钮均使用按实际尺寸计算的 `Capsule` 轮廓，
+展开、折叠与布局过渡不沿用固定圆角值；其他面板继续使用自身的圆角约定。
+保留原有 RN 导航、业务回调和四模块边界；不导入 Scaffold、Preference、Sample、
+新增的 Adaptive／Volume 音频控件及 Apple 图片。上游 Android 渲染测试只移除两个
+依赖这些音频控件的方法，其他测试继续保留。
 
 源码的模糊参数透传补丁位于 `vendor/glasmio/patches/toolbar-frost-radius.patch`，
 保留上游默认 2 dp，只有 Folio 顶栏显式提高。菜单前景转移时沿用触发器的模糊半径。
-`upstream.json` 的 `files` 保存上游原始哈希，`patchedFiles` 和 `patches` 分别记录
-补丁后的源码与补丁文件哈希。
+`GlassSurface` 的 `frostRadius` 缓存键补丁已由上游吸收，本地不再重复维护。
+`upstream.json` 的 `files` 保存上游原始哈希（含许可和随包法律文本来源），
+`patchedFiles` 和 `patches` 分别记录补丁后的源码与补丁文件哈希。
+`exclude-audio-tests.patch` 仅排除音频控件对应的两个上游测试。
+运行 `node experiments/mobile/scripts/verify-glasmio.mjs [上游检出目录]` 校验来源、
+四模块源码边界、随包许可与补丁；提供上游目录时还会核对提交并从原始文件重放全部补丁。
+
+## 页面取样与生命周期
+
+Android 在线浏览器保留原网页视口和 `browserBottom` 避让，采样源扩展至该页面完整内容区，
+覆盖地址栏和底栏所在区域。网页成功、加载中和失败状态使用同一页面语义底色。
+
+背景源和每个玻璃消费者均显式接收当前页面的 `theme.background`，不使用卡片或控件表面色。
+消费者持有自己的底色，因此背景源停用、切换或卸载时不会借用下一页颜色。
+`FolioPageBackdrop` 在实际取样画布底层先绘制不透明页面色，再叠加可用的实时 RenderNode。
+底色覆盖整张画布（含模糊、折射扩边），不受原 RenderNode 边界或坐标可用性限制；
+随后仍经过原有 Glasmio 模糊、折射、内阴影和材质管线。源节点内部也填入同一底色，
+避免 WebView 或正文透明区域向下透出空像素。
+
+屏幕坐标映射包含 Compose 图层变换、祖先页面缩放位移及独立窗口位置；
+四点映射支持透视变换。消费者与源的位置变化只使取样失效，不重新录制未变化的正文。
+页面停用、隐藏、卸载或窗口进入后台时注销来源并丢弃 RenderNode；
+隐藏后的最后一帧不会重建图层。恢复可见后重新登记并录制实时内容，
+不永久保留旧帧。原生 overlay 的三个 lifecycle owner 绑定保持原样。
+
+根因证据、场景覆盖和未验收范围见 [本轮验证记录](android-glasmio-validation.md)。
 
 ## 构建与兼容规则
 
@@ -93,6 +123,7 @@ Slider、Switch 和云端分段通过上下文取得 `sourceId`；Slider、Switc
 
 ```sh
 pnpm --dir experiments/mobile install --frozen-lockfile
+node experiments/mobile/scripts/verify-glasmio.mjs
 pnpm --dir experiments/mobile typecheck
 pnpm --dir experiments/mobile lint
 pnpm --dir experiments/mobile test
@@ -114,3 +145,16 @@ pnpm i18n:validate
 或 `glasmioDebug`，并使用 JDK 21，避免默认 `assembleDebug` 同时构建两套版本。
 多个设备时通过 `--device <序列号>` 指定。手动打包使用 `assembleLegacyRelease` 或
 `assembleGlasmioRelease`，本机可加 `-Pfolio.android.abi=arm64|x64` 缩小构建范围。
+
+Glasmio 取样回归使用独立测试 APK，不读取应用字体库、同步账号或偏好设置：
+
+```sh
+cd experiments/mobile/android
+./gradlew :folio-native:assembleGlasmioDebugAndroidTest -PfolioBackdropTest=true -PreactNativeArchitectures=arm64-v8a
+adb install -r ../modules/folio-native/android/build/outputs/apk/androidTest/glasmio/debug/folio-native-glasmio-debug-androidTest.apk
+adb shell am instrument -w com.folio.poc.test/com.folio.poc.navigation.FolioGlasmioBackdropInstrumentation
+```
+
+测试包含原始取样像素、完整材质对照、缺源、越界、无坐标、图层变换、语义底色变化、
+重复出入与 overlay 重挂载、后台恢复，以及离线 WebView 成功／独立网络失败场景。
+该测试不是完整视觉与手感验收。

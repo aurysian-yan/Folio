@@ -19,6 +19,7 @@ class FolioNavigationModule : Module() {
         Constant("androidVariant") { "glasmio" }
 
         View(FolioHeaderActionButtonView::class) {
+            Prop("pageBackgroundColor") { view: FolioHeaderActionButtonView, value: String -> view.pageBackgroundColor = value }
             Events("onPress")
             Prop("sourceId") { view: FolioHeaderActionButtonView, value: String -> view.sourceId = value }
             Prop("controlId") { view: FolioHeaderActionButtonView, value: String -> view.controlId = value }
@@ -39,18 +40,21 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioBackdropSourceView::class) {
+            Prop("pageBackgroundColor") { view: FolioBackdropSourceView, value: String -> view.setPageBackground(value) }
             Prop("sourceId") { view: FolioBackdropSourceView, value: String -> view.sourceId = value }
             Prop("active") { view: FolioBackdropSourceView, value: Boolean -> view.active = value }
             Prop("compositingLayer") { view: FolioBackdropSourceView, value: Boolean -> view.compositingLayer = value }
         }
 
         View(FolioHeaderBackdropView::class) {
+            Prop("pageBackgroundColor") { view: FolioHeaderBackdropView, value: String -> view.pageBackgroundColor = value }
             Prop("sourceId") { view: FolioHeaderBackdropView, value: String -> view.sourceId = value }
             Prop("active") { view: FolioHeaderBackdropView, value: Boolean -> view.active = value }
             Prop("tintColor") { view: FolioHeaderBackdropView, value: String -> view.tintColor = value }
         }
 
         View(FolioPanelBackdropView::class) {
+            Prop("pageBackgroundColor") { view: FolioPanelBackdropView, value: String -> view.pageBackgroundColor = value }
             Prop("navigationGlass") { view: FolioPanelBackdropView, value: Boolean -> view.navigationGlass = value }
             Prop("dark") { view: FolioPanelBackdropView, value: Boolean -> view.dark = value }
             Prop("sourceId") { view: FolioPanelBackdropView, value: String -> view.sourceId = value }
@@ -61,6 +65,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioHeaderControlsView::class) {
+            Prop("pageBackgroundColor") { view: FolioHeaderControlsView, value: String -> view.pageBackgroundColor = value }
             Events("onModeChange", "onExpandedChange", "onImport", "onSearchTextChange", "onFilter")
             Prop("sourceId") { view: FolioHeaderControlsView, value: String -> view.sourceId = value }
             Prop("mode") { view: FolioHeaderControlsView, value: String ->
@@ -81,6 +86,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioPresetMenuView::class) {
+            Prop("pageBackgroundColor") { view: FolioPresetMenuView, value: String -> view.pageBackgroundColor = value }
             Events("onSelectionChange", "onExpandedChange")
             Prop("sourceId") { view: FolioPresetMenuView, value: String -> view.sourceId = value }
             Prop("selectedId") { view: FolioPresetMenuView, value: String -> view.selectedId = value }
@@ -97,6 +103,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioGlassSliderView::class) {
+            Prop("pageBackgroundColor") { view: FolioGlassSliderView, value: String -> view.pageBackgroundColor = value }
             Prop("sourceId") { view: FolioGlassSliderView, value: String -> view.sourceId = value }
             Prop("controlId") { view: FolioGlassSliderView, value: String -> view.controlId = value }
             Events("onValueChange", "onEditingChanged")
@@ -117,6 +124,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioGlassSwitchView::class) {
+            Prop("pageBackgroundColor") { view: FolioGlassSwitchView, value: String -> view.pageBackgroundColor = value }
             Prop("sourceId") { view: FolioGlassSwitchView, value: String -> view.sourceId = value }
             Prop("controlId") { view: FolioGlassSwitchView, value: String -> view.controlId = value }
             Events("onValueChange")
@@ -131,6 +139,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioLiquidTabsView::class) {
+            Prop("pageBackgroundColor") { view: FolioLiquidTabsView, value: String -> view.pageBackgroundColor = value }
             Events("onSelectionChange", "onExpand", "onCollapse")
             Prop("sourceId") { view: FolioLiquidTabsView, value: String -> view.sourceId = value }
             Prop("selectedId") { view: FolioLiquidTabsView, value: String -> view.selectedId = value }

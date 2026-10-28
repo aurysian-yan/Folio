@@ -10,18 +10,18 @@ Glasmio uses state-hoisted Compose APIs: pass a value and handle its change call
 | Text styles | `GlasmioTextStyles`, `glasmioTextStyles`, `rememberGlasmioTextStyles`, `IosTextStyle`, `IosTextVariant`, `IosDynamicTypeSize` |
 | Glass | `GlasmioBackdropHost`, `GlasmioBackdropProvider`, `GlassSurface`, `GlassSurfaceStyle`, `GlassEmphasis`, `rememberCrossWindowBackdrop`, `rememberSharedGlassBackdrop`, `rememberRasterizedBackdrop` |
 | Buttons | `GlasmioButton`, `GlasmioIconButton`, `GlasmioButtonSize`, `GlasmioButtonDefaults` |
-| Controls | `GlasmioSwitch`, `GlasmioSlider`, `GlasmioStepper`, `GlasmioSegmentedControl`, `GlasmioScrollableTabRow`, `GlasmioColorPicker` |
+| Controls | `GlasmioSwitch`, `GlasmioSlider`, `GlasmioVolumeSlider`, `GlasmioAdaptiveSlider`, `GlasmioStepper`, `GlasmioSegmentedControl`, `GlasmioScrollableTabRow`, `GlasmioColorPicker` |
 | Input | `GlasmioTextField`, `GlasmioSearchBar`, `GlasmioSearchToolbar`, `GlasmioEditableText` |
-| Text editing | `GlasmioTextSelectionHost`, `GlasmioTextSelectionMenu`, `GlasmioTextSelectionLabels`, `GlasmioMagnifier` |
+| Text editing | `GlasmioTextSelectionHost`, `GlasmioTextSelectionMenu`, `GlasmioTextSelectionLabels`, `GlasmioMagnifier`, `GlasmioLoupeMotion`, `GlasmioLoupeFlex`, `rememberGlasmioLoupeFollow`, `GlasmioLoupeFollowState` |
 | Lists | `GlasmioCard`, `GlasmioGroupedList`, `GlasmioListRow`, `GlasmioSectionTitle`, `GlasmioGroupedTableFooter`, `GlasmioListValuePill`, `GlasmioListSwipeActions`, `GlasmioListSwipeAction`, `GlasmioSwipeActionStyle`, `GlasmioReorderableGroup` |
 | Toolbars | `GlasmioTopBar`, `GlasmioTopBarStyle`, `GlasmioToolbarActionGroup`, `GlasmioToolbarActionStyle`, `GlasmioBottomToolbar`, `GlasmioSheetTopToolbar`, `GlasmioSheetToolbarButton`, `GlasmioSheetButton` |
 | Navigation | `GlasmioNavigationBar`, `GlasmioTabItem` |
 | Menus | `GlasmioMenu`, `GlasmioMenuItem`, `GlasmioContextMenu`, `GlasmioCascadingMenu`, `GlasmioCascadingMenuItem`, `GlasmioPopUpButton`, `rememberGlasmioMenuAnchorState`, `Modifier.glasmioMenuAnchor` |
 | Alerts | `GlasmioAlertDialog`, `GlasmioAlertButtonSpec`, `GlasmioAlertButtonRole`, `GlasmioAlertButtonLayout`, `GlasmioAlertSurface`, `GlasmioAlertButton`, `GlasmioAlertFieldGroup`, `GlasmioAlertTextField` |
 | Sheets and overlays | `GlasmioBottomSheet`, `GlasmioSheetSurface`, `GlasmioActionSheet`, `GlasmioActionSheetContent`, `GlasmioModalOverlay` |
-| Pages | `GlasmioScaffold`, `GlasmioListPage`, `GlasmioPinnedListPage`, `GlasmioPinnedPage`, `rememberGlasmioGridCollapseProgress`, `GlasmioOverscrollHost`, `Modifier.pullToRefreshRebound`, `rememberGlasmioAppBarScrollBehavior` |
+| Pages | `GlasmioNavigationScaffold`, `GlasmioPageBody`, `GlasmioPageTitle`, `GlasmioScaffold`, `GlasmioListPage`, `GlasmioPinnedListPage`, `GlasmioPinnedPage`, `rememberGlasmioGridCollapseProgress`, `GlasmioOverscrollHost`, `Modifier.pullToRefreshRebound`, `rememberGlasmioAppBarScrollBehavior` |
 | Floating search | `GlasmioFloatingSearch`, `GlasmioFloatingSearchButton` |
-| Sheet motion | `GlasmioBottomSheetState`, `rememberGlasmioBottomSheetState`, `GlasmioSheetDefaults` |
+| Sheet motion | `GlasmioSheetState`, `rememberGlasmioSheetState`, `GlasmioSheetValue`; custom player containers retain `GlasmioBottomSheetState` and `GlasmioSheetDefaults` |
 | Preferences | `GlasmioPreferenceEntry`, `GlasmioSwitchPreference`, `GlasmioEditTextPreference`, `GlasmioListPreference`, `GlasmioEnumListPreference`, `GlasmioPreferenceGroupTitle` |
 | Icons | `SfIcon`, `SfSymbol`, `SfSymbolCatalog`, `GlasmioIcon`, `GlasmioIconProvider`, `GlasmioIconResolver` |
 
@@ -67,6 +67,11 @@ fun ExampleHost(content: @Composable () -> Unit) {
 
 Values belong to the caller. `GlasmioSlider` also accepts `onValueChangeFinished` for committing a drag or accessibility adjustment. `GlasmioStepper` disables actions at the ends of its range. Search takes `TextFieldValue` so selection and composition are preserved.
 
+`GlasmioVolumeSlider` uses a normalized `0f..1f` value in a 52 dp filled capsule. It provides
+local drag feedback, a changing speaker symbol, RTL input, keyboard adjustments, and progress
+accessibility. Supply its localized accessibility name through `modifier.semantics` and use
+`onValueChangeFinished` to commit an adjustment when needed.
+
 ```kotlin
 @Composable
 fun ControlsScreen() = ExampleHost {
@@ -103,6 +108,70 @@ fun ControlsScreen() = ExampleHost {
 
 Supply localized descriptions for icon-only actions and Stepper controls. Use `enabled = false` for disabled controls. Slider values and range endpoints must be finite, with an increasing range.
 
+`GlasmioSegmentedControl` keeps its 32 dp text layout by default. Set `height` and `itemContent`
+for taller icon segments; each pair's label remains its accessibility name. The content slot is
+rendered in both the optical source and the resting surface, so icons refract with the lens.
+`selected = null` (or a value absent from `items`) shows no selected surface. Use
+`deferSelection = true` when a device must confirm a request: releasing a drag calls `onSelected`
+and returns the lens to the last external selection until `selected` changes.
+
+```kotlin
+GlasmioSegmentedControl(
+    items = listOf(0 to "Quiet", 1 to "Balanced", 2 to "Open"),
+    selected = confirmedMode,
+    onSelected = ::requestMode,
+    modifier = Modifier.fillMaxWidth(),
+    height = 50.dp,
+    enabled = !requestPending,
+    deferSelection = true,
+    itemContent = { mode, selected ->
+        SfIcon(modeSymbols[mode], contentDescription = null, modifier = Modifier.size(25.dp))
+    },
+)
+```
+
+`GlasmioAdaptiveSlider` is a 56 dp continuous slider with nullable confirmed selection. Taps and
+dragging report normalized preview values through `onValueChange`; `onValueChangeFinished` marks a
+completed adjustment. A cancelled drag restores the confirmed preview without finishing. With
+`deferSelection = true`, the renderer owns the local draft during a gesture and returns to the
+external value after release. Values such as `0.4f` remain continuous in both geometry and progress
+accessibility. `labels`, `showLabels`, and `captionOverride` provide captions.
+
+For a device capability that supports only three positions, opt in with `discrete = true`, or
+`adaptiveDiscrete = true` on the grouped overload. Interaction selects `0f` below `.31f`, `1f`
+above `.7f`, and `.5f` between those bounds; repeated movement in one position emits no duplicate
+preview. The thumb uses the native value spring. Incoming reports remain unchanged, so a reported
+`0.4f` still displays 40% until the user interacts. The default remains continuous.
+
+The grouped `GlasmioSegmentedControl` overload expands its confirmed `adaptiveItem` to three
+ordinary cell widths within the same capsule. Main-item and adaptive-value callbacks remain
+separate. A drag must start in the expanded adaptive group; entering a 20 dp outer edge zone
+requests the neighboring main mode once and ends strength updates for that gesture. Collapsed
+ordinary cells are tap targets. `hiddenItems`
+controls capabilities independently of expansion. Its `showLabels` captions follow the animated
+cell widths; a nonblank `captionOverride` replaces the caption row at the same 5 dp gap.
+
+```kotlin
+GlasmioSegmentedControl(
+    items = modes,
+    selected = confirmedMode,
+    onSelected = ::requestMode,
+    adaptiveItem = adaptiveMode,
+    adaptiveValue = confirmedStrength,
+    onAdaptiveValueChange = ::requestStrength,
+    modifier = Modifier.fillMaxWidth(),
+    deferSelection = true,
+    showLabels = true,
+)
+```
+
+Expansion, hidden-item layout, value motion, and drag scale use the recovered native spring
+response/damping pairs. The adaptive thumb uses the existing Clear material, a separate white
+resting fill, and one sharp foreground glyph. Its recording source contains the track and
+stationary content. Ordinary modes retain a separate semantic-background matched pill. Interactive motion
+preserves velocity with the native response and damping; SwiftUI's nonzero transaction blend
+duration is not emulated.
+
 ## Text editing
 
 Wrap each window's content in `GlasmioTextSelectionHost` to use the compact Edit Menu and its expanded actions panel. The host forwards Foundation's actual clipboard and selection callbacks. `additionalItems` accepts application-owned editing actions and cascading submenus. `GlasmioAlertDialog` installs its own window-local host when the activity uses one.
@@ -112,16 +181,19 @@ Wrap each window's content in `GlasmioTextSelectionHost` to use the compact Edit
 fun EditingScreen() = ExampleHost {
     var value by remember { mutableStateOf(TextFieldValue("Hello World")) }
     GlasmioTextSelectionHost {
-        Box(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
-            GlasmioEditableText(value, { value = it }, Modifier.fillMaxWidth())
+        Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(24.dp)) {
+            GlasmioEditableText(
+                value, { value = it }, Modifier.fillMaxSize(),
+                singleLine = false,
+            )
         }
     }
 }
 ```
 
-Single-line `GlasmioEditableText`, text fields, search fields and Alert fields use the Clear magnifier and 16 dp selection lollipops. Both the lens and editing menu choose an available side within status-bar, navigation-bar and IME insets, and follow position changes with damped springs. Expanded editing menus stay within the same viewport and scroll when space is limited. Foundation continues to own text input, selection recognition, transformations and IME sessions. Multiline fields retain native selection chrome and scrolling; the host still supplies their editing menu. Without a host, fields use their normal Foundation behavior.
+`GlasmioEditableText`, text fields, search fields and Alert fields use the Clear magnifier and 16 dp selection lollipops. The lens follows UIKit's glass caret loupe: `115 × 85 dp` at `1.25×`, centred `75 dp` above the finger, a `0.3` low-pass feeding a `damping 0.7 / 0.2 s` spring, the two opening passes started together, a `0.23 s` dismissal that collapses the sampled content towards `0.125×`, and acceleration-driven body deformation while tracking, as recovered in [the native loupe motion reference](ios-loupe-motion.zh-CN.md). The opening shape is the caret rect, a caret-to-selection swap replays the opening passes, and a selection widget taller than the lens body suppresses the lens. The lens and its sample stay inside status-bar, navigation-bar and IME insets, a body larger than the viewport is scaled down, and a body that would leave the container on its lift side is hidden instead of flipped. UIKit's `borderWidth 42.5 → 2` and corner-radius morph, its status-bar hiding, and its vertical-writing lens are not wired to `GlassSurface`: the border is part of the shared material. Expanded editing menus stay within the same viewport and scroll when space is limited. Foundation continues to own text input, selection recognition, transformations and IME sessions. Set `singleLine = false` to wrap text and scroll vertically while retaining the same editing chrome. Constrain the editor with a height, `fillMaxSize()`, or `maxLines`; `maxLines` limits the visible lines without truncating the document. Selection handles support cross-line dragging and vertical edge scrolling, and editing menus anchor to the visible selection. The editor owns its scroll container, so avoid wrapping it in another vertical scroller. Apply IME insets at the screen level so the viewport can shrink above the keyboard. Without a host, fields use their normal Foundation behavior.
 
-`GlasmioMagnifier` can also be used independently in a bounded overlay. Pass its source position and viewport bounds in physical pixels relative to that overlay. Its backdrop must exclude the lens itself. `backgroundColor` fills sampling beyond the source window near its edges. The lens uses Clear tint, edge and shadow layers with a local zero-frost override and preserved source colors, retaining AndroidLiquidGlass's 8/24 dp lens without navigation vibrancy or shadow lifting. `GlassSurface.frostRadius` and `preserveBackdropColors` affect only the specified surface.
+`GlasmioMagnifier` can also be used independently in a bounded overlay. Pass its source position, the shape it grows out of, and optional viewport bounds in physical pixels relative to that overlay. Its backdrop must exclude the lens itself. `lensSize`, `verticalOffset`, `orientation`, `magnification`, `collapsedMagnification` and `horizontalInset` override the recovered geometry; `motion` replaces every timing constant at once, `tracking` selects the tracking deformation spring, `identity` replays the opening passes when the attached widget changes, and `onDismissed` reports the end of the dismissal spring. `dismissalProgress` closes the lens without ending the caller's gesture; UIKit only writes that progress when `YukonMagnifiersDisabled` is set, so hosts keep it at its `0f` default. `backgroundColor` fills sampling beyond the source window near its edges. The lens uses Clear tint, edge and shadow layers with a local zero-frost override and preserved source colors, retaining AndroidLiquidGlass's 8/24 dp lens without navigation vibrancy or shadow lifting. `GlassSurface.frostRadius` and `preserveBackdropColors` affect only the specified surface. A lens with its own placement can reuse only the follower through `rememberGlasmioLoupeFollow`, which needs the same `GlasmioLoupeMotion`.
 
 ## Lists, insets, and preferences
 
@@ -208,18 +280,79 @@ fun MenuScreen() = ExampleHost {
 
 ## Alerts and sheets
 
-`GlasmioAlertButtonSpec` carries the action, role, and enabled state. Keep `GlasmioAlertDialog` in composition and drive its `visible` state so the dialog remains mounted through its closing animation. `GlasmioBottomSheet` uses Material3's `SheetState`; the separate `GlasmioBottomSheetState` in Scaffold provides anchor-based motion for custom containers.
+`GlasmioAlertButtonSpec` carries the action, role, and enabled state. Keep alerts and sheets in composition and drive their `visible` state so the window and its backdrop remain mounted through dismissal.
+
+`GlasmioBottomSheet` owns its modal window, native-style detents, drag resistance, projected release and scroll handoff. Its `GlasmioSheetState` is independent of Material3. Enable medium and large with `skipPartiallyExpanded = false`; the default has only large. Medium is resolved from available height and safe areas, then the entire platter and its content are uniformly inset. Upward scrolling expands the sheet before scrolling its content. At large, content scrolling and its fling take over; dragging down at the content's top returns control to the sheet. Set `prefersScrollingExpandsWhenScrolledToEdge = false` to reserve expansion for direct dragging or state commands.
+
+The medium background is glass; the large background uses the system background color. Crossing the native full-height threshold retargets a separate background spring. `fitContent = true` presents a short action panel with floating insets. Insets include the IME by default and can be overridden through `contentWindowInsets` and `contentNavigationBarInsets`. See the [native sheet reference](ios-sheet-motion.md) for the recovered implementation and device measurements.
+
+Inside a sheet, grouped rows inherit UIKit's material context. Medium rows transform the sheet's exported backplate with the native vibrancy matrix; Large rows use opaque semantic colors. Labels and separators follow their own native color roles. With `topBar`, the host keeps the grouped-table canvas separate from fading content. Use `contentBackground` for custom backgrounds, rather than painting a background on the foreground scroll container. Without `topBar`, apply `GlasmioTheme.colors.groupedBackground` to the table container as before. The sheet's own backing, the table canvas and its cells are separate layers.
+
+Put `GlasmioSheetTopToolbar` in the modal's `topBar` slot for a pinned progressive-blur header.
+Only the body is recorded into the header's backdrop, excluding the toolbar and grabber.
+The header uses the same untinted 10dp progressive blur and foreground opacity mask as the page navigation header;
+Reduce Transparency replaces it with a solid canvas color. With this slot, content draws
+behind the handle, header and system navigation bar. Read `LocalGlasmioSheetContentPadding`:
+apply its top value to the list's **content padding**, and its bottom value inside the footer's
+background. Padding the whole list would prevent rows from scrolling beneath the header.
+Without `topBar`, the existing automatic handle/navigation insets remain unchanged.
+Header material starts clear by default. Supply the actual scroll edge through
+`topBarBlurProgress = rememberGlasmioHeaderScrollEdge(listState)`; compact titles
+do not imply an already visible blur. The same scroll-edge default applies to page
+and shared navigation headers.
+
+Progressive blur and the title belong to each page. `GlasmioNavigationScaffold` keeps
+only the toolbar buttons shared; it does not draw a shared title or a combined blur over
+multiple navigation entries. Put `GlasmioPageTitle(entryKey)` after the page body inside
+each navigation entry's root Box, outside its content mask and blur recording. Use the
+actual entry key, including repeated instances of the same destination. The title follows
+the page's transition and its own collapse state. It reserves space from that entry's
+measured left/right button widths, so changing or merging shared actions cannot cover it.
+
+```kotlin
+NavEntry(key = entryKey, contentKey = entryKey) {
+    Box(Modifier.fillMaxSize()) {
+        GlasmioPageBody(padding, topBarBlurProgress = scrollEdge) { contentPadding ->
+            PageContent(contentPadding)
+        }
+        GlasmioPageTitle(entryKey)
+    }
+}
+```
+
+Pass the page's edge value to `GlasmioPageBody(topBarBlurProgress = edge)` inside each
+entry. The body records its own background and already-masked foreground, then overlays full progressive blur, so the blur
+follows that page during push, pop, tab changes and predictive Back. `GlasmioPinnedPage`
+uses the same page-owned implementation; its standalone toolbar is already inside the page.
+Glass controls keep their existing independent
+backdrop source; the header's recording excludes its own foreground.
+
+Normal blur preserves the sampled colors and the full spatially variable radius profile.
+The foreground opacity mask retains alpha 1 at the Reduce Transparency header block's
+bottom. Its alpha 0.25 endpoint starts at the toolbar's top, below the status bar on a
+page or below the grabber in a sheet. It rises linearly between those endpoints and
+stays at 0.25 above the toolbar. The blur's separate 34dp
+extension remains unchanged. Scroll progress blends this content fade in
+from a fully visible foreground. Background color, brush and the `GlasmioPageBody.background`
+slot stay outside the mask, so wallpaper and page canvas remain intact. Place wallpaper
+in that background slot, rather than inside the scrollable foreground.
+The two Gaussian passes sample this already-masked result. Their output has no second
+spatial opacity mask, which would mix sharp detail back in and weaken the original blur.
+No dim or tint color is added.
+Reduce Transparency still uses a solid canvas that follows the same scroll reveal.
+
+When migrating an explicit `sheetState`, replace `rememberModalBottomSheetState` with `rememberGlasmioSheetState` and Material3 `SheetValue` with `GlasmioSheetValue`. The new state's `show`, `hide`, `expand` and `partialExpand` are suspending commands. The separate `GlasmioBottomSheetState` in Scaffold retains its custom player/miniplayer contract.
 
 Alerts enter from 1.2× scale using UIKit's 404 ms critical spring and dismiss with a fade.
 The panel and dimming view share the timing; reopening during dismissal retains the current
 presentation. See the [native motion reference](alert-motion.md) for the recovered parameters.
 
 ```kotlin
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModalScreen() = ExampleHost {
     var alert by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf(false) }
+    val detailsList = rememberLazyListState()
 
     Column(Modifier.safeDrawingPadding().padding(24.dp)) {
         GlasmioButton(onClick = { alert = true }) { Text("Show alert") }
@@ -235,10 +368,27 @@ fun ModalScreen() = ExampleHost {
             GlasmioAlertButtonSpec("Save", { alert = false }),
         ),
     )
-    if (sheet) {
-        GlasmioBottomSheet(onDismissRequest = { sheet = false }) {
-            GlasmioSheetTopToolbar(title = "Details")
-            Text("Sheet content", Modifier.padding(24.dp))
+    GlasmioBottomSheet(
+        visible = sheet,
+        skipPartiallyExpanded = false,
+        onDismissRequest = { sheet = false },
+        topBar = { GlasmioSheetTopToolbar(title = "Details") },
+        topBarBlurProgress = rememberGlasmioHeaderScrollEdge(detailsList),
+    ) {
+        val safePadding = LocalGlasmioSheetContentPadding.current
+        LazyColumn(
+            Modifier.fillMaxWidth().weight(1f),
+            state = detailsList,
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp,
+                top = safePadding.calculateTopPadding() + 8.dp,
+                bottom = safePadding.calculateBottomPadding() + 16.dp),
+        ) {
+            item {
+                GlasmioGroupedList {
+                    GlasmioListRow("Notifications", showTopSeparator = false)
+                    GlasmioListRow("Privacy", subtitle = "Details")
+                }
+            }
         }
     }
 }

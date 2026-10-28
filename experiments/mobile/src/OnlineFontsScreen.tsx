@@ -229,40 +229,42 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
         {errorNode && <View style={styles.feedback}>{errorNode}</View>}
         <View style={styles.screen}>
           {/* 起始页铺满内容区域，折叠导航只移动浮层，不改变滚动视口。 */}
-          <View style={[StyleSheet.absoluteFill, { bottom: activeTab ? browserBottom : 0 }]}>
+          <View style={[StyleSheet.absoluteFill, { bottom: Platform.OS === 'android' ? 0 : activeTab ? browserBottom : 0 }]}>
             <NavigationBackdrop sourceId={active ? sourceId : ''} active={active} theme={theme} compositingLayer style={styles.screen}>
-              {tabs.map((tab) => {
-                const visible = tab.id === activeId;
-                const item = tab.provider;
-                return <NativeOnlineBrowser key={tab.id} style={[StyleSheet.absoluteFill, { opacity: visible ? 1 : 0, zIndex: visible ? 1 : 0 }]}
-                  pointerEvents={visible && !editing ? 'auto' : 'none'} accessibilityElementsHidden={!visible || editing} importantForAccessibility={visible && !editing ? 'auto' : 'no-hide-descendants'}
-                  active={active && visible && !editing && !libraryOpen && !reviewOpen} provider={JSON.stringify(item ?? {})} command={tab.command}
-                  webTheme={item ? buildWebThemeScript({ palette: webPalette, dark: theme.dark, enabled: providerThemeEnabled(preferences.onlineTheme[item.id], item.id), customCss: providerCustomCss(preferences.onlineCss[item.id], item.id) }) : ''}
-                  accentColor={theme.accent} onPageScroll={({ nativeEvent }) => {
-                    if (!active || !visible || editing || libraryOpen || reviewOpen) return;
-                    if (nativeEvent.reset) { beginNavigationScroll(nativeEvent.offset); endNavigationScroll(); }
-                    else reportNavigationScroll(nativeEvent.offset, true);
-                  }} onVisit={({ nativeEvent }) => recordVisit(tab, nativeEvent)}
-                  onBrowserState={({ nativeEvent }) => {
-                    const query = item ? extractSearchQuery(item, nativeEvent.url) : null;
-                    setTabs((values) => values.map((value) => value.id === tab.id ? { ...value, browser: nativeEvent,
-                      address: nativeEvent.url.startsWith('https://') ? nativeEvent.url : value.address,
-                      submittedQuery: query || value.submittedQuery } : value));
-                    if (tab.id === activeId && query && !nativeEvent.loading) latestQuery.current = query;
-                    if (!nativeEvent.loading && !nativeEvent.errorKey && nativeEvent.title && visited.current.get(tab.id)?.url === nativeEvent.url) {
-                      change((value) => {
-                        const entry = value.history.find((item) => item.url === nativeEvent.url);
-                        return entry && entry.title !== nativeEvent.title ? { ...value, history: value.history.map((item) => item.id === entry.id ? { ...item, title: nativeEvent.title } : item) } : value;
-                      });
-                    }
-                    if (tab.id === activeId && nativeEvent.errorKey && !isPageFailureKey(nativeEvent.errorKey)) setError(nativeEvent.errorKey);
-                  }} onDownloadIntent={({ nativeEvent }) => confirmDownload(nativeEvent)} />;
-              })}
-              {!activeTab && <NativeScrollContainer style={styles.screen} hasHeader={false} onInsetsChange={() => {}}>{startContent}</NativeScrollContainer>}
-              {activeTab && <OnlineBrowserLoading key={activeId} loading={activeTab.browser.loading} failed={failed} hint={hint}
-                active={active && !editing} revealRequest={activeTab.revealRequest} provider={activeProvider} theme={theme} />}
-              {activeTab && failed && <OnlineBrowserFailure theme={theme} provider={activeProvider} errorKey={activeTab.browser.errorKey}
-                url={activeTab.browser.url || activeTab.address} hint={hint} onRetry={() => sendTo(activeTab.id, 'navigate', activeTab.browser.url || activeTab.address)} onSwitchSource={() => activateTab('start')} />}
+              <View style={[styles.screen, Platform.OS === 'android' && { marginBottom: activeTab ? browserBottom : 0 }]}>
+                {tabs.map((tab) => {
+                  const visible = tab.id === activeId;
+                  const item = tab.provider;
+                  return <NativeOnlineBrowser key={tab.id} style={[StyleSheet.absoluteFill, { opacity: visible ? 1 : 0, zIndex: visible ? 1 : 0 }]}
+                    pointerEvents={visible && !editing ? 'auto' : 'none'} accessibilityElementsHidden={!visible || editing} importantForAccessibility={visible && !editing ? 'auto' : 'no-hide-descendants'}
+                    active={active && visible && !editing && !libraryOpen && !reviewOpen} provider={JSON.stringify(item ?? {})} command={tab.command}
+                    webTheme={item ? buildWebThemeScript({ palette: webPalette, dark: theme.dark, enabled: providerThemeEnabled(preferences.onlineTheme[item.id], item.id), customCss: providerCustomCss(preferences.onlineCss[item.id], item.id) }) : ''}
+                    accentColor={theme.accent} onPageScroll={({ nativeEvent }) => {
+                      if (!active || !visible || editing || libraryOpen || reviewOpen) return;
+                      if (nativeEvent.reset) { beginNavigationScroll(nativeEvent.offset); endNavigationScroll(); }
+                      else reportNavigationScroll(nativeEvent.offset, true);
+                    }} onVisit={({ nativeEvent }) => recordVisit(tab, nativeEvent)}
+                    onBrowserState={({ nativeEvent }) => {
+                      const query = item ? extractSearchQuery(item, nativeEvent.url) : null;
+                      setTabs((values) => values.map((value) => value.id === tab.id ? { ...value, browser: nativeEvent,
+                        address: nativeEvent.url.startsWith('https://') ? nativeEvent.url : value.address,
+                        submittedQuery: query || value.submittedQuery } : value));
+                      if (tab.id === activeId && query && !nativeEvent.loading) latestQuery.current = query;
+                      if (!nativeEvent.loading && !nativeEvent.errorKey && nativeEvent.title && visited.current.get(tab.id)?.url === nativeEvent.url) {
+                        change((value) => {
+                          const entry = value.history.find((item) => item.url === nativeEvent.url);
+                          return entry && entry.title !== nativeEvent.title ? { ...value, history: value.history.map((item) => item.id === entry.id ? { ...item, title: nativeEvent.title } : item) } : value;
+                        });
+                      }
+                      if (tab.id === activeId && nativeEvent.errorKey && !isPageFailureKey(nativeEvent.errorKey)) setError(nativeEvent.errorKey);
+                    }} onDownloadIntent={({ nativeEvent }) => confirmDownload(nativeEvent)} />;
+                })}
+                {!activeTab && <NativeScrollContainer style={styles.screen} hasHeader={false} onInsetsChange={() => {}}>{startContent}</NativeScrollContainer>}
+                {activeTab && <OnlineBrowserLoading key={activeId} loading={activeTab.browser.loading} failed={failed} hint={hint}
+                  active={active && !editing} revealRequest={activeTab.revealRequest} provider={activeProvider} theme={theme} />}
+                {activeTab && failed && <OnlineBrowserFailure theme={theme} provider={activeProvider} errorKey={activeTab.browser.errorKey}
+                  url={activeTab.browser.url || activeTab.address} hint={hint} onRetry={() => sendTo(activeTab.id, 'navigate', activeTab.browser.url || activeTab.address)} onSwitchSource={() => activateTab('start')} />}
+              </View>
             </NavigationBackdrop>
           </View>
         </View>

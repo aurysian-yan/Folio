@@ -1,6 +1,8 @@
 package com.folio.poc.navigation
 
 import android.content.Context
+import android.graphics.Matrix
+import android.view.ViewTreeObserver
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +11,7 @@ import io.github.neoruaa.glasmio.icons.LocalGlasmioIconResolver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,9 +45,19 @@ abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoVi
     var dark by mutableStateOf(false)
     var accentColor by mutableStateOf("")
     var surfaceColor by mutableStateOf("")
+    var pageBackgroundColor by mutableStateOf("")
     var controlEnabled by mutableStateOf(true)
     protected val compose = ComposeView(context)
     private var page: FolioBackdropSourceView? = null
+    private var samplingRevision by mutableIntStateOf(0)
+    private var samplingPosition: List<Float>? = null
+    private val preDraw = ViewTreeObserver.OnPreDrawListener {
+        val values = FloatArray(9)
+        Matrix().also { compose.transformMatrixToGlobal(it); it.getValues(values) }
+        val position = values.toList() + listOf(compose.width.toFloat(), compose.height.toFloat())
+        if (samplingPosition != position) { samplingPosition = position; samplingRevision++ }
+        true
+    }
 
     init {
         clipChildren = false
@@ -55,9 +68,15 @@ abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoVi
         addView(compose, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         compose.setContent {
             val source = FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)]
-            val backdrop = remember(source) { source?.consumer() ?: EmptyNavigationBackdrop }
+            val backdrop = remember(source) {
+                FolioPageBackdrop(source) {
+                    samplingRevision
+                    pageBackgroundColor.glassColor(defaultGlassColors(dark).groupedBackground)
+                }
+            }
             val defaults = defaultGlassColors(dark)
             GlasmioTheme(isDark = dark, colors = defaults.copy(
+                groupedBackground = pageBackgroundColor.glassColor(defaults.groupedBackground),
                 accent = accentColor.glassColor(defaults.accent),
                 elevatedBackground = surfaceColor.glassColor(defaults.elevatedBackground),
             )) {
@@ -87,10 +106,13 @@ abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoVi
             }
             ancestor = ancestor.parent
         }
+        viewTreeObserver.addOnPreDrawListener(preDraw)
         requestLayout()
     }
 
     override fun onDetachedFromWindow() {
+        if (viewTreeObserver.isAlive) viewTreeObserver.removeOnPreDrawListener(preDraw)
+        samplingPosition = null
         page?.detachGlass(this)
         page = null
         if (compose.parent !== this) {
