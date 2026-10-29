@@ -2,7 +2,6 @@
   "repository": "https://github.com/NEORUAA/Glasmio",
   "commit": "b86f4a601fceb8e6ee2f4cdc817a2dbaf9159846",
   "excluded": [
-    "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlasmioAdaptiveSlider.kt",
     "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlasmioVolumeSlider.kt",
     "glasmio-icons/src/main/res/"
   ],
@@ -82,18 +81,22 @@
     "docs/components.md": "6857f6d5ef6f377f4da6bf942d821f23be46d3a8304c16868f94407a05b03b6c",
     "docs/ios-header-motion.zh-CN.md": "998bc4a1117a9fb11c35611dcdb249f23a3584f65e262b48a5307c7f0a1202cb",
     "docs/backdrop.md": "664ed285c0677e261ccb2b5089755cb5ec0c320d084662458955fb974bcfb419",
-    "glasmio-ui/src/androidTest/java/io/github/neoruaa/glasmio/ui/NavigationRenderingTest.kt": "6ac7052980f675392bd9faa409b9eaa72b47471575132ef1c3f50ebbb51fa240"
+    "glasmio-ui/src/androidTest/java/io/github/neoruaa/glasmio/ui/NavigationRenderingTest.kt": "6ac7052980f675392bd9faa409b9eaa72b47471575132ef1c3f50ebbb51fa240",
+    "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlasmioAdaptiveSlider.kt": "efffc86d3e64fe75d7ba2fcf56a9a4b0052c61f7ef1bd27e4f79c84ad902f824"
   },
   "patches": {
     "patches/toolbar-frost-radius.patch": "0a110b4dd224a35b26ed56a8d42d593d0b4645f8a48b835845ac536c6049435f",
     "patches/exclude-audio-tests.patch": "f7243a05b93df9ea0cb61bf73026d531b96e9bf398f9dfdf97e1c7fcbc2211be",
-    "patches/segmented-glass-track.patch": "3e87685cc2ce390f3ffbbb6d83019926da251c73f8ed25cf54feca153f6916d3"
+    "patches/segmented-glass-track.patch": "3e87685cc2ce390f3ffbbb6d83019926da251c73f8ed25cf54feca153f6916d3",
+    "patches/adaptive-slider-glyph.patch": "79d36084b8d89d98d415b45148c2d70218278e6e05de84b7918ed5b80b2492d3",
+    "patches/appearance-reduced-motion.patch": "af2c369dd94b33033ee5f0ac903ea84e3e43cccc27d82ee49f7e4bc27cac5143"
   },
   "patchedFiles": {
     "glasmio-glass/src/main/java/io/github/neoruaa/glasmio/glass/IosToolbarActionGroup.kt": "6ebb277768fa1b73450a8345a7f5dcc83a8743459a6d8bdf0395c8d1cb4b2b97",
     "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlassButtons.kt": "62b7261d8d5ed686b80810f331239184d78c321c617d97a8d2b54d53f6b89b38",
     "glasmio-ui/src/androidTest/java/io/github/neoruaa/glasmio/ui/NavigationRenderingTest.kt": "8fbe377ace4e42d5edf940c31ab1c500139bd8cfd65b79aeb1e30367c0645770",
-    "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlassControls.kt": "412113bd33c796871266c3db916c7b414d97930619923af939c085cce5418fe3"
+    "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlassControls.kt": "f7234e96b05755e87faf1d040d15c8e84e03e490515fa843b63f581d1225dddd",
+    "glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlasmioAdaptiveSlider.kt": "c6e6386163490e6c6e8eade3ee9e2ba5d733eddd2b7caa7eb151ea7b736ec0ee"
   },
   "excludedTestMethods": [
     "adaptiveGroupKeepsAcknowledgementsAndRoutesDragOutToMainItems",

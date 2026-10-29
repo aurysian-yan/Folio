@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { wallpaperSeed } from './native';
 import { FontCard } from './FontCard';
+import { AppearanceChoiceRow } from './AppearanceChoiceRow';
 import type { FontFamily } from './library';
 import { previewScaleOptions, usePreferences, type AccentId, type LibraryMode } from './settings';
-import { SettingsChoiceRow, SettingsGroup, SettingsIcon, SettingsPage, SettingsSwitchRow, settingsLayout, settingsTypography } from './settings-ui';
+import { SettingsGroup, SettingsIcon, SettingsPage, SettingsSwitchRow, settingsLayout, settingsTypography } from './settings-ui';
 import { resolveAccentColor, type Theme } from './ui';
 
 // 主题、字体卡片与预览字号集中管理，深浅色跟随系统。
@@ -22,9 +23,9 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
       revisionId: 'settings-preview', styleName, sourcePath: null, faceIndex: 0, axes: [],
     })),
   };
-  const viewOptions: { value: LibraryMode; label: string; icon: ReactNode }[] = [
-    { value: 'grid', label: t('mobile.gridView'), icon: <SquaresFourIcon size={24} color={compact ? theme.label : theme.onAccent} /> },
-    { value: 'list', label: t('mobile.listView'), icon: <ListIcon size={24} color={compact ? theme.onAccent : theme.label} /> },
+  const viewOptions: { value: LibraryMode; label: string; icon: ReactNode; systemImage: string }[] = [
+    { value: 'grid', systemImage: 'square.grid.2x2', label: t('mobile.gridView'), icon: <SquaresFourIcon size={24} color={compact ? theme.label : theme.onAccent} /> },
+    { value: 'list', systemImage: 'list.bullet', label: t('mobile.listView'), icon: <ListIcon size={24} color={compact ? theme.onAccent : theme.label} /> },
   ];
   // 仅 Android 12 及以上可取到壁纸种子，取不到时不显示壁纸配色项。
   const [wallpaperAccent] = useState<string | null>(() => (Platform.OS === 'android' ? wallpaperSeed() : null));
@@ -83,9 +84,9 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
       </View>
     </View>
     <SettingsGroup theme={theme} title={t('settings.cards')}>
-      <SettingsChoiceRow theme={theme} title={t('settings.defaultLibraryView')} options={viewOptions}
-        value={preferences.defaultViewMode} onChange={(value) => update({ defaultViewMode: value })} />
-      <SettingsChoiceRow theme={theme} title={t('preview.size')} options={scaleOptions}
+      <AppearanceChoiceRow kind="view" disabled={!ready} theme={theme} title={t('settings.defaultLibraryView')} options={viewOptions}
+        value={preferences.defaultViewMode} onChange={(value) => { if (value === 'grid' || value === 'list') update({ defaultViewMode: value }); }} />
+      <AppearanceChoiceRow kind="size" disabled={!ready} theme={theme} title={t('preview.size')} options={scaleOptions}
         value={String(preferences.previewScale)} onChange={(value) => update({ previewScale: Number(value) })} />
       <SettingsSwitchRow theme={theme} title={t('settings.showCardMetadata')} value={preferences.showCardMetadata} disabled={!ready}
         onChange={(value) => update({ showCardMetadata: value })} />

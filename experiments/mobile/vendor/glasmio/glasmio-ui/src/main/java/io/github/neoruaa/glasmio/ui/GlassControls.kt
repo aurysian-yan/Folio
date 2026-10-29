@@ -555,6 +555,7 @@ fun <T> GlasmioSegmentedControl(
     enabled: Boolean = true,
     deferSelection: Boolean = false,
     glassTrack: Boolean = false,
+    motionEnabled: Boolean = true,
     itemContent: (@Composable BoxScope.(value: T, selected: Boolean) -> Unit)? = null,
 ) {
     require(items.isNotEmpty())
@@ -610,14 +611,14 @@ fun <T> GlasmioSegmentedControl(
             }
         }
         val interactiveHighlight = remember(scope, isLtr) { InteractiveHighlight(scope) }
-        val animation = remember(scope, items.size, isLtr, positionAnimation) {
+        val animation = remember(scope, items.size, isLtr, positionAnimation, motionEnabled) {
             DampedDragAnimation(
                 animationScope = scope,
                 initialValue = selectedIndex.coerceAtLeast(0).toFloat(),
                 valueRange = 0f..items.lastIndex.coerceAtLeast(1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
-                pressedScale = SegmentedIndicatorPressedScale,
+                pressedScale = if (motionEnabled) SegmentedIndicatorPressedScale else 1f,
                 dragCoordinateSpace = { dragCoordinateSpace.value },
                 sharedValueAnimation = positionAnimation,
                 horizontalDragOnly = true,

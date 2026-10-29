@@ -1,0 +1,92 @@
+--- a/glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlasmioAdaptiveSlider.kt
++++ b/glasmio-ui/src/main/java/io/github/neoruaa/glasmio/ui/GlasmioAdaptiveSlider.kt
+@@ -1,6 +1,5 @@
+ package io.github.neoruaa.glasmio.ui
+ 
+-import androidx.compose.foundation.Image
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.focusable
+ import androidx.compose.foundation.gestures.awaitEachGesture
+@@ -15,7 +14,6 @@
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.geometry.Offset
+ import androidx.compose.ui.graphics.Color
+-import androidx.compose.ui.graphics.ColorFilter
+ import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.ui.input.key.*
+ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+@@ -25,7 +23,6 @@
+ import androidx.compose.ui.layout.Layout
+ import androidx.compose.ui.platform.LocalDensity
+ import androidx.compose.ui.platform.LocalLayoutDirection
+-import androidx.compose.ui.res.painterResource
+ import androidx.compose.ui.semantics.*
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.unit.Constraints
+@@ -58,6 +55,7 @@
+     labels: List<String> = listOf("0%", "50%", "100%"),
+     captionOverride: String? = null,
+     discrete: Boolean = false,
++    motionEnabled: Boolean = true,
+     thumbContent: (@Composable () -> Unit)? = null,
+ ) = AdaptiveSegmentedRenderer(
+     items = listOf(Unit to ""), selected = Unit, onSelected = {}, adaptiveItem = Unit,
+@@ -66,7 +64,7 @@
+     hiddenItems = emptySet(), onAdaptiveValueChangeFinished = onValueChangeFinished,
+     backdrop = backdrop, showLabels = showLabels, captionOverride = captionOverride,
+     adaptiveLabels = labels, itemContent = null, thumbContent = thumbContent, standalone = true,
+-    discrete = discrete,
++    discrete = discrete, motionEnabled = motionEnabled,
+ )
+ 
+ /**
+@@ -171,7 +169,7 @@
+     hiddenItems: Set<T>, onAdaptiveValueChangeFinished: (() -> Unit)?, backdrop: Backdrop,
+     showLabels: Boolean, captionOverride: String?, adaptiveLabels: List<String>,
+     itemContent: (@Composable BoxScope.(T, Boolean) -> Unit)?, thumbContent: (@Composable () -> Unit)?,
+-    standalone: Boolean, discrete: Boolean,
++    standalone: Boolean, discrete: Boolean, motionEnabled: Boolean = true,
+ ) {
+     require(items.isNotEmpty() && items.map { it.first }.distinct().size == items.size)
+     require(items.any { it.first == adaptiveItem } && items.any { it.first !in hiddenItems })
+@@ -257,7 +255,8 @@
+         val tracks = listOf(expansion, ordinaryOpacity, position, child, scale, restingFill, unit) +
+             items.flatMap { (key, _) -> bounds.getValue(key).let { listOf(visibility.getValue(key), it.first, it.second) } }
+         val running = tracks.any { it.running }
+-        LaunchedEffect(running, tracks) {
++        LaunchedEffect(running, tracks, motionEnabled) {
++            if (!motionEnabled) { tracks.forEach { it.snap(it.target) }; return@LaunchedEffect }
+             if (!running) return@LaunchedEffect
+             var previous = withFrameNanos { it }
+             while (tracks.any { it.running }) {
+@@ -305,7 +304,7 @@
+         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+             Box(
+                 Modifier.fillMaxWidth().height(56.dp).alpha(if (enabled) 1f else .45f)
+-                    .pointerInput(enabled, adaptiveEnabled, ltr, adaptiveItem, discrete) {
++                    .pointerInput(enabled, adaptiveEnabled, ltr, adaptiveItem, discrete, motionEnabled) {
+                         if (!enabled) return@pointerInput
+                         fun logical(x: Float) = if (currentLtr) x else size.width - x
+                         fun indexAt(x: Float): Int {
+@@ -351,7 +350,7 @@
+                                             change.consume()
+                                             dragKind = 1
+                                             lastX = change.position.x
+-                                            scale.target(1.3f)
++                                            scale.target(if (motionEnabled) 1.3f else 1f)
+                                             val target = neighborAt(logical(change.position.x))
+                                             if (target == null) updateChild(change.position.x)
+                                             else { routedMode = target; submitMode(target) }
+@@ -577,10 +576,5 @@
+ 
+ @Composable
+ private fun AdaptiveThumbGlyph(content: (@Composable () -> Unit)?, tint: Color = GlasmioTheme.colors.content) {
+-    if (content != null) content() else Image(
+-        painterResource(io.github.neoruaa.glasmio.icons.R.drawable.glasmio_adaptive_audio),
+-        // Native 22 pt symbol metrics produce 25 pt of ink; the padded asset needs 30 dp.
+-        contentDescription = null, modifier = Modifier.size(30.dp),
+-        colorFilter = ColorFilter.tint(tint),
+-    )
+-}
++    if (content != null) content() else SfIcon("textformat.size", null, size = 30.dp, tint = tint)
++}

@@ -102,6 +102,24 @@ class FolioNavigationModule : Module() {
             Prop("items") { view: FolioPresetMenuView, value: List<FolioNavigationItem> -> view.items = value }
         }
 
+        View(FolioAppearanceControlView::class) {
+            Events("onSelectionChange")
+            Prop("pageBackgroundColor") { view: FolioAppearanceControlView, value: String -> view.pageBackgroundColor = value }
+            Prop("sourceId") { view: FolioAppearanceControlView, value: String -> view.sourceId = value }
+            Prop("controlId") { view: FolioAppearanceControlView, value: String -> view.controlId = value }
+            Prop("reduceMotion") { view: FolioAppearanceControlView, value: Boolean -> view.reduceMotion = value }
+            Prop("kind") { view: FolioAppearanceControlView, value: String -> view.kind = value }
+            Prop("label") { view: FolioAppearanceControlView, value: String -> view.label = value }
+            Prop("selectedId") { view: FolioAppearanceControlView, value: String -> view.incomingSelectedId = value }
+            Prop("items") { view: FolioAppearanceControlView, value: List<FolioNavigationItem> -> view.items = value }
+            Prop("enabled") { view: FolioAppearanceControlView, value: Boolean -> view.controlEnabled = value }
+            Prop("dark") { view: FolioAppearanceControlView, value: Boolean -> view.dark = value }
+            Prop("accentColor") { view: FolioAppearanceControlView, value: String -> view.accentColor = value }
+            Prop("surfaceColor") { view: FolioAppearanceControlView, value: String -> view.surfaceColor = value }
+            Prop("mostRecentEventCount") { view: FolioAppearanceControlView, value: Int -> view.mostRecentEventCount = value }
+            OnViewDidUpdateProps { view: FolioAppearanceControlView -> view.applyProps() }
+        }
+
         View(FolioGlassSliderView::class) {
             Prop("pageBackgroundColor") { view: FolioGlassSliderView, value: String -> view.pageBackgroundColor = value }
             Prop("sourceId") { view: FolioGlassSliderView, value: String -> view.sourceId = value }

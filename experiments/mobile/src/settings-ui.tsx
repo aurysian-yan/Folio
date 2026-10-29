@@ -156,9 +156,16 @@ export function SettingsSwitchRow({ icon, title, detail, value, theme, onChange,
   </RowShell>;
 }
 
-export function SettingsChoiceRow<T extends string>({ title, detail, options, value, theme, onChange, hideTitle = false }: {
+// 原生复合控件沿用设置搜索的滚动定位。
+export function SettingsControlFocus({ title, children }: { title: string; children: ReactNode }) {
+  const focus = useContext(SettingsScrollFocus);
+  const node = useRef<View>(null);
+  return <View ref={node} collapsable={false} onLayout={() => focus?.(title, node.current)}>{children}</View>;
+}
+
+export function SettingsChoiceRow<T extends string>({ title, detail, options, value, theme, onChange, hideTitle = false, disabled = false }: {
   title: string; detail?: string; options: { value: T; label: string; icon?: ReactNode }[];
-  value: T; theme: Theme; onChange: (value: T) => void; last?: boolean; hideTitle?: boolean;
+  value: T; theme: Theme; onChange: (value: T) => void; last?: boolean; hideTitle?: boolean; disabled?: boolean;
 }) {
   return <View style={styles.choiceRow}>
     <View style={styles.rowBody}>
@@ -168,9 +175,9 @@ export function SettingsChoiceRow<T extends string>({ title, detail, options, va
         {options.map((option) => {
           const selected = option.value === value;
           return <Pressable key={option.value} accessibilityRole="radio" accessibilityLabel={option.label}
-            accessibilityState={{ selected }} onPress={() => onChange(option.value)}
+            disabled={disabled} accessibilityState={{ selected, disabled }} onPress={() => onChange(option.value)}
             style={({ pressed }) => [styles.choice, { backgroundColor: selected ? theme.accent : theme.raised,
-              opacity: pressed ? 0.7 : 1 }]}>
+              opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}>
             {option.icon}
             <Text style={[styles.choiceLabel, { color: selected ? theme.onAccent : theme.label }]}>{option.label}</Text>
           </Pressable>;
