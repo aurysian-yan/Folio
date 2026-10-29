@@ -37,9 +37,11 @@ Volume 音频控件及 Apple 图片。上游 Android 渲染测试只移除两个
 
 ## 外观设置控件
 
-「外观与显示」的字号选择接入 `GlasmioAdaptiveSlider`，使用离散模式映射已有
-18／24／30 三档和共享的「小／中／大」语言键；默认预览视图使用 56 dp 的
+「外观与显示」的字号选择接入 `GlasmioAdaptiveSlider`，在 18 至 30 的范围内连续平滑调节，
+不吸附到原来的三档；偏好保存保留小数，「小／中／大」仅作为参考标签；默认预览视图使用 56 dp 的
 图标分段控件，标签位于轨道下方，仅包含网格与列表，不创建自适应档位。
+视图与字号控件直接放在页面背景上，仅下方的两个开关保留分组卡片。
+两组参考标签共用 RN `settingsTypography.detail`，系统放大字号时由文本正常撑高。
 两者通过 `FolioAppearanceControlView` 复用页面背景源、主题与 overlay 生命周期，
 事件计数拒绝迟到的偏好回写。偏好未加载和页面不活动时禁用，设置搜索可定位对应行。
 iOS 与 Android 兼容包继续使用现有选项控件。
@@ -50,6 +52,10 @@ Adaptive 源码从同一锁定提交补入，`adaptive-slider-glyph.patch` 将�
 `appearance-reduced-motion.patch` 为普通分段添加可选的按压形变开关，默认行为不变。
 RN 监听系统减少动态效果变化，外观控件关闭弹簧过渡与形变，同时保留点击、拖动、
 键盘及读屏调整。控件高度随系统字号增加，文案继续复用现有语言键。
+
+后续布局与连续调节检查（2026-10-29）：TypeScript、修改文件的 ESLint、
+143 项行为测试和来源校验通过。新增回归覆盖小数字号的保存与恢复、旧值兼容和非法值回退；
+拖动顺滑度与浅深色实际布局仍需设备验收。
 
 本次控件接入验证（2026-10-29）：移动端 TypeScript、ESLint、141 项既有行为测试、
 Android JS 导出、语言目录检查及 77 项来源／5 项补丁哈希校验通过。
@@ -183,3 +189,14 @@ adb shell am instrument -w com.folio.poc.test/com.folio.poc.navigation.FolioGlas
 测试包含原始取样像素、完整材质对照、缺源、越界、无坐标、图层变换、语义底色变化、
 重复出入与 overlay 重挂载、后台恢复，以及离线 WebView 成功／独立网络失败场景。
 该测试不是完整视觉与手感验收。
+
+## Android arm64 独立构建
+
+`android-arm64.yml` 仅构建 legacy、Glasmio 两个 arm64 Release APK，不运行测试、
+不生成更新日志或许可目录、不创建标签或 GitHub Release。使用已提交的许可资源；
+配置完整签名 Secrets 时沿用正式签名，否则按既有仅构建规则生成未签名 APK。
+构建序号沿用最近 Release 工作流的序号，避免独立工作流重新从 1 计数造成降级。
+产物保存为 `android-arm64-apks`，保留 14 天。
+
+推送 `build/android-arm64` 分支会自动触发，并避开仅监听 main 的 Validate；
+也保留 `workflow_dispatch` 手动入口。此构建不递增版本，不启动完整发布矩阵。

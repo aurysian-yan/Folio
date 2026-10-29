@@ -83,11 +83,14 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
         </View>
       </View>
     </View>
-    <SettingsGroup theme={theme} title={t('settings.cards')}>
+    <View style={styles.cardControls}>
+      <Text style={[styles.previewTitle, { color: theme.secondary }]}>{t('settings.cards')}</Text>
       <AppearanceChoiceRow kind="view" disabled={!ready} theme={theme} title={t('settings.defaultLibraryView')} options={viewOptions}
         value={preferences.defaultViewMode} onChange={(value) => { if (value === 'grid' || value === 'list') update({ defaultViewMode: value }); }} />
       <AppearanceChoiceRow kind="size" disabled={!ready} theme={theme} title={t('preview.size')} options={scaleOptions}
         value={String(preferences.previewScale)} onChange={(value) => update({ previewScale: Number(value) })} />
+    </View>
+    <SettingsGroup theme={theme}>
       <SettingsSwitchRow theme={theme} title={t('settings.showCardMetadata')} value={preferences.showCardMetadata} disabled={!ready}
         onChange={(value) => update({ showCardMetadata: value })} />
       <SettingsSwitchRow theme={theme} title={t('mobile.settings.showFavoriteBadge')} value={preferences.showFavoriteBadge} disabled={!ready}
@@ -103,6 +106,7 @@ const styles = StyleSheet.create({
   detail: { ...settingsTypography.detail },
   modeValue: { fontSize: 14, lineHeight: 20 },
   previewSection: { gap: 8 },
+  cardControls: { gap: 8 },
   previewTitle: { ...settingsTypography.section, ...settingsLayout.section },
   previewArea: { ...settingsLayout.card, ...settingsLayout.formControls, height: 240, alignItems: 'center', justifyContent: 'center' },
   previewCard: { width: '50%', maxWidth: 200, aspectRatio: 1 },

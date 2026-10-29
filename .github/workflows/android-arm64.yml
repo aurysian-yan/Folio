@@ -1,0 +1,81 @@
+name: Android arm64 APKs
+on:
+  workflow_dispatch:
+  push:
+    branches: [build/android-arm64]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: android-arm64-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      APP_VARIANT: production
+      FOLIO_BUILD_ONLY: '1'
+      FOLIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      FOLIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      FOLIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/toolchain
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          distribution: temurin
+          java-version: '21.0.11'
+      # 沿用最近 Release 的构建序号，避免独立工作流从 1 开始导致安装包降级。
+      - name: Read build metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          BUILD_NUMBER=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?per_page=1" --jq '.workflow_runs[0].run_number // 1')
+          echo "FOLIO_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+      - name: Prepare signing
+        env:
+          FOLIO_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          FOLIO_KEYSTORE_PATH: ${{ runner.temp }}/folio-arm64-signing/folio.jks
+        shell: bash
+        run: |
+          echo "FOLIO_KEYSTORE_PATH=$FOLIO_KEYSTORE_PATH" >> "$GITHUB_ENV"
+          node tools/releases/signing.mjs
+      - name: Prepare Android toolchain
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          set -o pipefail
+          "$SDKMANAGER" --install 'ndk;29.0.13846066' 'ndk;27.1.12297006' 'platforms;android-37' 'build-tools;36.0.0' 'cmake;3.22.1'
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/29.0.13846066" >> "$GITHUB_ENV"
+      - run: rustup target add aarch64-linux-android --toolchain 1.98.1
+      - run: pnpm --dir experiments/mobile install --frozen-lockfile
+      - run: pnpm --dir experiments/mobile bindings kotlin
+      - name: Build legacy and Glasmio arm64 APKs
+        env:
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+        run: pnpm manage expo build --platform android --abi arm64
+      - name: Collect APKs
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./experiments/mobile/package.json').version")
+          mkdir -p android-arm64
+          for TIER in legacy glasmio; do
+            mapfile -t PACKAGES < <(find "experiments/mobile/android/app/build/outputs/apk/$TIER/release" -maxdepth 1 -name '*arm64-v8a*.apk' -type f)
+            test "${#PACKAGES[@]}" -eq 1
+            cp "${PACKAGES[0]}" "android-arm64/Folio-v$VERSION-android-$TIER-arm64.apk"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: android-arm64-apks
+          path: android-arm64/*.apk
+          if-no-files-found: error
+          retention-days: 14
+      - if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/folio-arm64-signing"

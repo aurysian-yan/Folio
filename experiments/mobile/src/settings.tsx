@@ -1,4 +1,5 @@
 import { defaultDashboard, sanitizeDashboard, type DashboardSection } from './browser-dashboard';
+import { sanitizePreviewScale } from './preview-scale';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -87,9 +88,7 @@ function sanitizeCss(raw: unknown): Record<string, string> {
 function sanitize(raw: unknown): Preferences {
   if (!raw || typeof raw !== 'object') return defaultPreferences;
   const value = raw as Record<string, unknown>;
-  const scale = typeof value.previewScale === 'number' && Number.isFinite(value.previewScale)
-    ? Math.min(48, Math.max(12, Math.round(value.previewScale)))
-    : defaultPreferences.previewScale;
+  const scale = sanitizePreviewScale(value.previewScale, defaultPreferences.previewScale);
   return {
     navigationAutoCollapse: typeof value.navigationAutoCollapse === 'boolean' ? value.navigationAutoCollapse : true,
     browserShowSourceHomes: value.browserShowSourceHomes === true,
