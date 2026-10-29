@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "fingerprints": {
-    "Cargo.lock": "30333bb35fcbec471e06f853817fc57d0e6fff50b0ba4b0523e8fcb47209b5d0",
-    "apps/desktop-ui/src-tauri/Cargo.lock": "fe84cf5d028b94a0d2d10d99453bf57a7855973a2f9d8802b9d8ead82b322911",
+    "Cargo.lock": "fc0e4b9399d1681e573eef081652173ea79cd72c6732c971dd3c05487f0229cb",
+    "apps/desktop-ui/src-tauri/Cargo.lock": "1676ce26c2327f8a772738fdd96e4590f067e7c064dd83bfd1025cf028c8990a",
     "pnpm-lock.yaml": "cff8f09b990fb74d2c8645a941a1bcae4f9962ee8aa57b96c0e77119695a75b3",
     "experiments/mobile/pnpm-lock.yaml": "44c8f48e42a1a89d6e456d881146addd0438102ffcd1b69dd846a0cd60b02a54",
     "experiments/mobile/modules/folio-native/android/build.gradle": "940e66d91c8c6a9ededcc69a83a0c7725347640a8a97e365e90554ee72af0dee",
@@ -12543,9 +12543,9 @@
       "declarationOnly": false
     },
     {
-      "id": "0c64425eb0f374bf",
+      "id": "0788919a8ee82d78",
       "name": "Folio",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "license": "AGPL-3.0-only",
       "source": "https://github.com/aurysian-yan/Folio",
       "platforms": [
@@ -15946,8 +15946,8 @@
       "declarationOnly": false
     },
     {
-      "id": "13e6cf57a5e7a98b",
-      "name": "lightningcss-darwin-arm64",
+      "id": "656a4960469cdf14",
+      "name": "lightningcss-linux-x64-gnu",
       "version": "1.33.0",
       "license": "MPL-2.0",
       "source": "https://github.com/parcel-bundler/lightningcss#readme",
