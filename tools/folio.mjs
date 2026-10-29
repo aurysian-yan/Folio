@@ -17,6 +17,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { androidOutputs } from './releases/android.mjs';
 import { commitVersionGit, prepareVersionGit } from './releases/version-git.mjs';
+import { findAndroidTools, listAndroidAvds, startAndroidAvd } from './android-emulator.mjs';
 
 // 仓库根目录由脚本位置推导，保证在任意工作目录下运行结果一致。
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -700,6 +701,29 @@ function expoOpen(args) {
   openDirectory(target, `Expo ${platform} 构建产物目录`);
 }
 
+async function androidEmulator(action, args = {}, c) {
+  const tools = findAndroidTools({ mobileDir: MOBILE_DIR });
+  const avds = listAndroidAvds(tools);
+  if (action === 'list') {
+    log(avds.join('\n'));
+    return;
+  }
+  let name = args.avd;
+  if (!name && (c || (process.stdin.isTTY && process.stdout.isTTY))) {
+    c ??= await loadClack();
+    name = await choose(c, '选择要启动的 Android 模拟器', [
+      ...avds.map((value) => ({ value, label: value })),
+      { value: BACK, label: '返回' },
+    ]);
+    if (name === BACK) return;
+  }
+  if (!name && avds.length === 1) name = avds[0];
+  if (!name) fail(`请通过 --avd 指定模拟器名称。已有 AVD：${avds.join('、')}。`);
+  const result = await startAndroidAvd(tools, name);
+  if (result.alreadyRunning) log(`模拟器「${name}」已在运行（${result.serial}）。`);
+  else log(`已启动模拟器「${name}」，正在开机。日志：${result.logFile}`);
+}
+
 // ---------------------------------------------------------------------------
 // 环境自检
 // ---------------------------------------------------------------------------
@@ -729,7 +753,18 @@ function doctor() {
     add('NSIS（makensis）', commandExists('makensis'), 'macOS: brew install nsis；Ubuntu: sudo apt install nsis');
   }
 
-  add('Android SDK（ANDROID_HOME）', Boolean(process.env.ANDROID_HOME), '设置 ANDROID_HOME 指向 Android SDK');
+  try {
+    const tools = findAndroidTools({ mobileDir: MOBILE_DIR });
+    add('Android Emulator', true);
+    add('Android ADB', Boolean(tools.adb), '在 SDK Manager 中安装 Android SDK Platform-Tools');
+    try {
+      add(`Android AVD（${listAndroidAvds(tools).length} 台）`, true);
+    } catch (error) {
+      add('Android AVD', false, describeError(error));
+    }
+  } catch (error) {
+    add('Android Emulator', false, describeError(error));
+  }
   add('JDK（Java 17）', commandExists('java'), '安装 JDK 17 并加入 PATH');
 
   let failed = 0;
@@ -931,6 +966,7 @@ async function tuiExpo(c) {
     },
   ];
   if (platform === 'android') {
+    options.unshift({ value: 'emulator', label: '启动 Android 模拟器', hint: '选择已有 AVD' });
     options.push({ value: 'build-arm64', label: '构建 APK（arm64）', hint: 'arm64-v8a' });
     options.push({ value: 'build-x64', label: '构建 APK（x64）', hint: 'x86_64' });
     options.push({ value: 'aab', label: '构建 AAB' });
@@ -940,7 +976,9 @@ async function tuiExpo(c) {
 
   const action = await choose(c, `Expo · ${platform === 'ios' ? 'iOS' : 'Android'}`, options);
   if (action === BACK) return;
-  if (action === 'dev') {
+  if (action === 'emulator') {
+    await runAction(c, 'Android 模拟器', () => androidEmulator('start', {}, c));
+  } else if (action === 'dev') {
     await runAction(c, 'Expo 调试', () => expoDev({ platform }), () => expoDevNext(platform));
   } else if (action === 'build') {
     await runAction(c, 'Expo 构建', () => expoBuild({ platform }), () => expoBuildNext(platform));
@@ -1029,6 +1067,7 @@ async function tuiMain(c) {
       { value: 'swiftui', label: 'SwiftUI', hint: 'macOS 客户端' },
       { value: 'tauri', label: 'Tauri', hint: 'Windows / Linux 客户端' },
       { value: 'expo', label: 'Expo', hint: 'Android / iOS 移动端' },
+      { value: 'emulator', label: '启动 Android 模拟器', hint: '选择已有 AVD' },
       { value: 'version', label: '版本管理', hint: '查看或提高版本号' },
       { value: 'doctor', label: '环境自检', hint: '检查构建前置条件' },
     ]);
@@ -1043,6 +1082,7 @@ async function tuiMain(c) {
     if (choice === 'swiftui') await tuiSwiftui(c);
     else if (choice === 'tauri') await tuiTauri(c);
     else if (choice === 'expo') await tuiExpo(c);
+    else if (choice === 'emulator') await runAction(c, 'Android 模拟器', () => androidEmulator('start', {}, c));
     else if (choice === 'version') await tuiVersion(c);
     else if (choice === 'doctor') await runAction(c, '环境自检', () => doctor());
   }
@@ -1089,6 +1129,8 @@ function printHelp() {
                                       构建移动端（Android 默认按 ABI 拆分为两个 APK，
                                       --aab 产出 AAB，--abi 可只构建单一架构）
   expo open --platform ios|android    打开 Expo 构建产物目录
+  emulator list                       列出本机已有的 Android AVD
+  emulator start [--avd 名称]          选择并启动 Android 模拟器
   version show                        查看各文件当前版本
   version bump <major|minor|patch|x.y.z> [--build] [--dry-run] [--no-git]
                                       批量提高版本号并推送当前分支与标签
@@ -1096,11 +1138,18 @@ function printHelp() {
 
 环境变量：
   ANDROID_HOME                        Android SDK 路径
+  ANDROID_SDK_ROOT                    兼容旧版 Android SDK 路径配置
+  ANDROID_AVD_HOME                     自定义 AVD 存储目录
   ANDROID_NDK_HOME                    非默认 NDK 路径`);
 }
 
 function dispatch(group, action, rest) {
   switch (group) {
+    case 'emulator':
+      if (action === 'list' || action === 'start') {
+        return androidEmulator(action, parseArgs(rest, { values: ['avd'] }));
+      }
+      break;
     case 'swiftui':
       if (action === 'dev') return swiftuiDev();
       if (action === 'build') return swiftuiBuild(parseArgs(rest, { booleans: ['dmg'] }));

@@ -85,6 +85,33 @@ Tauri 客户端面向 Windows 与 Linux；macOS 主机允许启动本机调试�
 
 `--no-rust` 和 `--no-prebuild` 可跳过对应准备步骤，用于依赖未变化时的重复构建。
 
+### Android 模拟器（已有 AVD）
+
+主菜单和 `Expo → Android` 菜单均提供“启动 Android 模拟器”，列出本机已有的
+AVD 后选择启动；选择“返回”或按 Esc 可取消。此入口只启动模拟器，不执行
+Rust 构建、Expo prebuild 或应用安装。
+
+```sh
+pnpm manage emulator list
+pnpm manage emulator start
+pnpm manage emulator start --avd Pixel_10
+```
+
+交互式终端下，`start` 未指定名称时显示选择菜单；非交互式环境仅有一个 AVD
+时直接启动，有多个时提示使用 `--avd`。已通过 ADB 连接的同名 AVD 不会重复启动。
+模拟器在后台独立运行，管理脚本退出后窗口仍保留；输出“正在开机”后仍需等待
+Android 完成启动，再执行原有 `expo dev --platform android`。
+
+SDK 依次从 `ANDROID_HOME`、`ANDROID_SDK_ROOT`、移动端
+`android/local.properties` 的 `sdk.dir`、系统默认目录查找，最后检查 PATH 中的
+`emulator`。系统默认目录为 macOS 的 `~/Library/Android/sdk`、Windows 的
+`%LOCALAPPDATA%/Android/Sdk`、Linux 的 `~/Android/Sdk` 或 `~/Android/sdk`。
+保留 `ANDROID_AVD_HOME`、`ANDROID_USER_HOME` 等已有 AVD 配置；路径可包含空格。
+
+未安装 Emulator、没有 AVD、名称不存在或启动初期退出时会给出对应提示。
+启动日志保存在系统临时目录下的 `folio-emulator-*/emulator.log`，启动后较晚发生
+的错误可通过该日志排查；关闭模拟器窗口即可停止运行。
+
 ### 打开产物目录
 
 三个目标的操作菜单都提供“打开构建产物目录”，命令行对应各自的 `open` 动作。
