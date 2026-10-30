@@ -154,6 +154,13 @@ pub struct LibraryQueryDto {
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
+pub struct AlphabetEntryDto {
+    pub id: FamilyIdDto,
+    pub display_name: String,
+    pub group: String,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
 pub struct VariableAxisDto {
     pub tag: String,
     pub name: String,
@@ -1425,6 +1432,66 @@ impl FolioEngine {
         })
     }
 
+    // 轻量索引和卡片分页共享筛选与排序，不生成索引外的预览数据。
+    pub fn library_alphabet_index(
+        &self,
+        request: LibraryQueryDto,
+        smart_folder_id: Option<SmartFolderIdDto>,
+    ) -> Result<Vec<AlphabetEntryDto>, FolioFfiError> {
+        let mut state = self.lock()?;
+        rebuild_index(&mut state)?;
+        let mut query = alphabet_query(&state, &request, smart_folder_id)?;
+        query.offset = 0;
+        query.limit = None;
+        let allowed = alphabet_allowed_faces(&request)?;
+        let result = state
+            .index
+            .query_with_location(
+                &query,
+                allowed.as_ref(),
+                request.location_filter.as_deref().unwrap_or("all"),
+                request.file_fingerprint.as_deref(),
+            )
+            .map_err(FolioFfiError::operation)?;
+        Ok(result
+            .families
+            .iter()
+            .filter_map(|matched| {
+                state
+                    .catalog
+                    .find_family(matched.family_id)
+                    .map(|family| AlphabetEntryDto {
+                        id: family_dto(family.id),
+                        display_name: family.display_name.clone().unwrap_or_default(),
+                        group: state.index.alphabet_group(family.id).to_owned(),
+                    })
+            })
+            .collect())
+    }
+
+    pub fn query_library_alphabet(
+        &self,
+        request: LibraryQueryDto,
+        smart_folder_id: Option<SmartFolderIdDto>,
+    ) -> Result<LibraryPageDto, FolioFfiError> {
+        let mut state = self.lock()?;
+        rebuild_index(&mut state)?;
+        let query = alphabet_query(&state, &request, smart_folder_id)?;
+        let allowed = alphabet_allowed_faces(&request)?;
+        let paths = request
+            .allowed_source_paths
+            .as_ref()
+            .map(|paths| paths.iter().cloned().collect());
+        query_page(
+            &state,
+            query,
+            allowed.as_ref(),
+            paths.as_ref(),
+            request.location_filter.as_deref().unwrap_or("all"),
+            request.file_fingerprint.as_deref(),
+        )
+    }
+
     pub fn library_face_sources(&self) -> Result<Vec<LibraryFaceSourcesDto>, FolioFfiError> {
         let state = self.lock()?;
         Ok(state
@@ -1987,6 +2054,48 @@ fn snapshot(state: &mut EngineState) -> Result<LibrarySnapshotDto, FolioFfiError
                 .count() as u64,
         },
     })
+}
+
+fn alphabet_allowed_faces(
+    request: &LibraryQueryDto,
+) -> Result<Option<BTreeSet<FontFaceId>>, FolioFfiError> {
+    request
+        .allowed_face_ids
+        .as_ref()
+        .map(|ids| {
+            ids.iter()
+                .map(|id| parse_id(&id.value).map(FontFaceId::from_bytes))
+                .collect()
+        })
+        .transpose()
+}
+
+fn alphabet_query(
+    state: &EngineState,
+    request: &LibraryQueryDto,
+    smart_folder_id: Option<SmartFolderIdDto>,
+) -> Result<FontQuery, FolioFfiError> {
+    let mut query = query_from_dto(request.clone())?;
+    if let Some(id) = smart_folder_id {
+        let id = SmartFolderId::from_bytes(parse_id(&id.value)?);
+        let folder = state
+            .database
+            .list_smart_folders()
+            .map_err(FolioFfiError::operation)?
+            .into_iter()
+            .find(|folder| folder.id == id)
+            .ok_or_else(|| FolioFfiError::operation("智慧收藏夹不存在"))?;
+        let saved: SavedFontQuery =
+            serde_json::from_str(&folder.query_json).map_err(FolioFfiError::operation)?;
+        let mut saved = saved
+            .into_query(query.offset, query.limit)
+            .map_err(FolioFfiError::operation)?;
+        merge_facet_filters(&mut saved.facets, query.facets);
+        saved.text = merge_search_text(saved.text, query.text);
+        query = saved;
+    }
+    query.sort = QuerySort::Alphabet;
+    Ok(query)
 }
 
 fn query_from_dto(dto: LibraryQueryDto) -> Result<FontQuery, FolioFfiError> {
@@ -3226,6 +3335,27 @@ mod tests {
             .unwrap();
         assert_eq!(smart_page.total_matches, 1);
         assert_eq!(smart_page.families[0].display_name, "Source Serif 4");
+        let alphabet_request = LibraryQueryDto {
+            text: None,
+            scope: QueryScopeDto::All,
+            collection_id: None,
+            facets: Vec::new(),
+            allowed_face_ids: None,
+            allowed_source_paths: None,
+            location_filter: None,
+            file_fingerprint: None,
+            offset: 0,
+            limit: 40,
+        };
+        let alphabet = engine
+            .library_alphabet_index(alphabet_request.clone(), Some(id.clone()))
+            .unwrap();
+        let alphabet_page = engine
+            .query_library_alphabet(alphabet_request, Some(id.clone()))
+            .unwrap();
+        assert_eq!(alphabet.len(), 1);
+        assert_eq!(alphabet[0].group, "S");
+        assert_eq!(alphabet[0].id.value, alphabet_page.families[0].id.value);
 
         engine
             .update_smart_folder_with_style(

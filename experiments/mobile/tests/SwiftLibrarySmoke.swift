@@ -14,6 +14,11 @@ enum SwiftLibrarySmoke {
         }
         _ = try engine.refreshLibrary()
         let all = try engine.queryLibrary(query: query())
+        let alphabet = try engine.libraryAlphabetIndex(request: query(), smartFolderId: nil)
+        let alphabetPage = try FolioLibraryMapper.read(engine: engine, text: "", scope: "all", collectionId: nil,
+            smartFolderId: nil, facets: [], offset: 0, limit: 100, alphabet: true)
+        precondition(alphabet.map { $0.id.value } == alphabetPage.families.map { $0.id.value })
+        precondition(alphabet.allSatisfy { ["I", "L", "S"].contains($0.group) })
         let family = all.families.first { $0.displayName == "Lato" }!
         let regular = all.facets.first { $0.kind == .weight && $0.value == "400" }!
         let filtered = try engine.queryLibrary(query: query(text: "Lato", facets: [("weight", regular.value)]))

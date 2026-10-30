@@ -1,13 +1,14 @@
 import { locationAvailability, locationLabel, transferLabel } from "../../../shared/font-location";
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import { representativeFace, type FontFamily } from './library';
 import { NativeFontPreview, type PreviewStatus } from './native';
 import { usePreferences } from './settings';
 import { settingsLayout } from './settings-ui';
 import type { Theme } from './ui';
 import { StarIcon } from './icons';
+import { monoFont } from './mono-font';
 import { FontLocationIcons } from './FontLocationIcons';
 
 export const fontCardSurfaceStyle = { ...settingsLayout.card, padding: 10 };
@@ -64,10 +65,10 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
         </View>
         <View style={styles.details}>
           {family.isFavorite && preferences.showFavoriteBadge && <StarIcon size={12} weight="fill" color={theme.accent} />}
-          <Text style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
+          <Text style={[styles.detail, styles.metadataDetail, { color: theme.secondary }, compact && styles.listDetail]}>{t('macos.stylesCount', { count: family.faces.length })}</Text>
           {variable && <>
             <View style={[styles.separator, { backgroundColor: compact ? theme.listCardBorder : theme.border }]} />
-            <Text accessibilityLabel={t('font.variable')} style={[styles.detail, { color: theme.secondary }, compact && styles.listDetail]}>VF</Text>
+            <Text accessibilityLabel={t('font.variable')} style={[styles.detail, styles.metadataDetail, { color: theme.secondary }, compact && styles.listDetail]}>VF</Text>
           </>}
         </View>
       </View>}
@@ -93,6 +94,7 @@ const styles = StyleSheet.create({
   listName: { fontSize: 15, lineHeight: 22, textAlign: 'left' },
   details: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 16 },
   detail: { fontSize: 12, lineHeight: 16 },
-  listDetail: { lineHeight: 22, fontWeight: '500', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  metadataDetail: { ...monoFont, fontSize: 11 },
+  listDetail: { lineHeight: 22, fontWeight: '500' },
   separator: { height: 12, width: 1, marginHorizontal: 1 },
 });

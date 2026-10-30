@@ -1,6 +1,7 @@
 //! 可重建内存索引：逐面搜索和筛选，按家族返回稳定结果。
 #![forbid(unsafe_code)]
 
+mod alphabet;
 mod health;
 mod location;
 use folio_core::*;
@@ -23,6 +24,7 @@ pub enum QuerySort {
     Auto,
     Name,
     Relevance,
+    Alphabet,
     Recent,
 }
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -258,6 +260,7 @@ struct Document {
 pub struct FontQueryIndex {
     documents: Vec<Document>,
     names: BTreeMap<FontFamilyId, (Option<String>, String)>,
+    alphabet: BTreeMap<FontFamilyId, alphabet::AlphabetName>,
     identities: BTreeSet<FontIdentityId>,
     favorites: BTreeSet<FontIdentityId>,
     recent: BTreeMap<FontIdentityId, i64>,
@@ -276,6 +279,7 @@ impl FontQueryIndex {
         let mut index = Self {
             documents: Vec::new(),
             names: BTreeMap::new(),
+            alphabet: BTreeMap::new(),
             identities: BTreeSet::new(),
             favorites: BTreeSet::new(),
             recent: BTreeMap::new(),
@@ -303,6 +307,10 @@ impl FontQueryIndex {
             {
                 return Err(QueryError::DuplicateFamily(family.id));
             }
+            index.alphabet.insert(
+                family.id,
+                alphabet::AlphabetName::new(family.display_name.as_deref().unwrap_or_default()),
+            );
             for face in &family.faces {
                 if face.family_id != family.id || !face_ids.insert(face.id) {
                     return Err(QueryError::InvalidFace(face.id));
@@ -440,6 +448,13 @@ impl FontQueryIndex {
         index.update_state(state);
         Ok(index)
     }
+    pub fn alphabet_group(&self, id: FontFamilyId) -> &str {
+        self.alphabet
+            .get(&id)
+            .map(|name| name.group.as_str())
+            .unwrap_or("#")
+    }
+
     pub fn health(&self) -> &CatalogHealth {
         &self.health
     }
@@ -602,6 +617,9 @@ impl FontQueryIndex {
         };
         families.sort_by(|a, b| {
             let primary = match sort {
+                QuerySort::Alphabet => {
+                    self.alphabet[&a.family_id].cmp(&self.alphabet[&b.family_id])
+                }
                 QuerySort::Recent => b.last_accessed_at_ns.cmp(&a.last_accessed_at_ns),
                 QuerySort::Relevance => b.score.cmp(&a.score),
                 _ => std::cmp::Ordering::Equal,

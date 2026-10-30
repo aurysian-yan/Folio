@@ -16,6 +16,7 @@ struct FolioSyncProfile: Record {
 
 struct FolioQuery: Record {
     @Field var text: String = ""
+    @Field var alphabet: Bool = false
     @Field var scope: String = "all"
     @Field var collectionId: String? = nil
     @Field var smartFolderId: String? = nil
@@ -171,8 +172,18 @@ public final class FolioNativeModule: Module {
         AsyncFunction("query") { (request: FolioQuery) throws -> [String: Any] in
             let page = try FolioLibraryMapper.read(engine: self.requireEngine(), text: request.text, scope: request.scope,
                 collectionId: request.collectionId, smartFolderId: request.smartFolderId,
-                facets: request.facets.map { ($0.kind, $0.value) }, offset: request.offset, limit: request.limit,locationFilter:request.locationFilter,fileFingerprint:request.fileFingerprint)
+                facets: request.facets.map { ($0.kind, $0.value) }, offset: request.offset, limit: request.limit,locationFilter:request.locationFilter,fileFingerprint:request.fileFingerprint, alphabet: request.alphabet)
             return FolioLibraryMapper.page(page)
+        }.runOnQueue(queue)
+
+        AsyncFunction("alphabetIndex") { (input: FolioQuery) throws -> [[String: Any]] in
+            guard input.scope == "smart" ? input.smartFolderId?.isEmpty == false && input.collectionId == nil : input.smartFolderId == nil else { throw NSError(domain: "Folio", code: 1) }
+            var request = try FolioLibraryMapper.query(text: input.text, scope: input.scope == "smart" ? "all" : input.scope,
+                collectionId: input.collectionId, facets: input.facets.map { ($0.kind, $0.value) }, offset: 0, limit: 1)
+            request.locationFilter = input.locationFilter
+            request.fileFingerprint = input.fileFingerprint
+            return try self.requireEngine().libraryAlphabetIndex(request: request, smartFolderId: input.smartFolderId.map { SmartFolderIdDto(value: $0) })
+                .map { ["id": $0.id.value, "displayName": $0.displayName, "group": $0.group] }
         }.runOnQueue(queue)
 
         AsyncFunction("importFonts") { (files: [FolioImportFile]) throws -> [String: Any] in
@@ -394,6 +405,8 @@ public final class FolioNativeModule: Module {
         }
 
         View(FolioPanelBackdrop.self) {
+            Prop("blurRadius") { (view: FolioPanelBackdrop, value: Double) in view.blurRadius = value }
+            Prop("liquid") { (view: FolioPanelBackdrop, value: Bool) in view.liquid = value }
             Prop("dark") { (view: FolioPanelBackdrop, value: Bool) in view.dark = value }
             Prop("cornerRadius") { (view: FolioPanelBackdrop, value: Double) in view.cornerRadius = value }
         }

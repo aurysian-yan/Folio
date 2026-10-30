@@ -1,4 +1,4 @@
-import { androidPageBackdropProps } from './android-glass';
+import { androidPageBackdropProps, usesGlasmioControls } from './android-glass';
 import { requireNativeView } from 'expo';
 import { Dimensions, StyleSheet, useWindowDimensions, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import i18n from './i18n/instance';
@@ -68,9 +68,10 @@ export function navigationContentInset(bottomInset: number) {
   return bottomOffset(bottomInset) + containerHeight + overflow;
 }
 
-// 浮层控制条停在展开导航表面的顶边上方。
-export function navigationBarTopInset(bottomInset: number) {
-  return bottomOffset(bottomInset) + containerHeight;
+// 紧凑按钮在承载层内垂直居中，内容边界跟随实际表面顶边。
+export function navigationBarTopInset(bottomInset: number, collapsed = false) {
+  const compactHeight = usesGlasmioControls ? 44 : 48;
+  return bottomOffset(bottomInset) + containerHeight - (collapsed ? (containerHeight - compactHeight) / 2 : 0);
 }
 
 export function navigationCompactBarFrame(bottomInset: number, availableWidth: number) {

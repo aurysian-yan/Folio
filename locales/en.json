@@ -233,7 +233,8 @@
     "summaryConflict": "{{revisions}} families with multiple versions · {{conflicts}} families with metadata conflicts",
     "availableNow_one": "{{count}} family ready to use",
     "availableNow": "{{count}} families ready to use",
-    "localSummary": "Local: {{families}} families · {{variable}} variable · {{recent}} recently viewed"
+    "localSummary": "Local: {{families}} families · {{variable}} variable · {{recent}} recently viewed",
+    "noMoreFonts": "No more fonts."
   },
   "filters": {
     "title": "Filters",
@@ -979,7 +980,13 @@
       "busyHint": "Wait for sync to finish before importing fonts or changing the connection."
     },
     "swipeCloudFont": "Swipe left or open more actions to manage this cloud font",
-    "cloudFontActions": "Cloud actions for {{name}}"
+    "cloudFontActions": "Cloud actions for {{name}}",
+    "alphabetIndex": {
+      "label": "Alphabet index",
+      "hint": "Tap or drag anywhere on the index to browse fonts by letter",
+      "next": "Next letter",
+      "previous": "Previous letter"
+    }
   },
   "macos": {
     "aboutSubtitle": "Cross-device font asset manager",

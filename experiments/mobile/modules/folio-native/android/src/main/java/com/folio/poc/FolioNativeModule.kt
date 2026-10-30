@@ -36,6 +36,7 @@ class FolioSyncProfile : Record {
 
 class FolioQuery : Record {
     @Field var text: String = ""
+    @Field var alphabet: Boolean = false
     @Field var scope: String = "all"
     @Field var collectionId: String? = null
     @Field var smartFolderId: String? = null
@@ -236,7 +237,18 @@ class FolioNativeModule : Module() {
         AsyncFunction("query") { request: FolioQuery, promise: Promise ->
             perform(promise) {
                 FolioLibraryMapper.page(FolioLibraryMapper.read(requireEngine(), request.text, request.scope, request.collectionId,
-                    request.smartFolderId, request.facets.map { it.kind to it.value }, request.offset, request.limit,request.locationFilter,request.fileFingerprint))
+                    request.smartFolderId, request.facets.map { it.kind to it.value }, request.offset, request.limit,request.locationFilter,request.fileFingerprint, request.alphabet))
+            }
+        }
+
+        AsyncFunction("alphabetIndex") { input: FolioQuery, promise: Promise ->
+            perform(promise) {
+                require(if (input.scope == "smart") !input.smartFolderId.isNullOrBlank() && input.collectionId == null else input.smartFolderId == null)
+                val request = FolioLibraryMapper.query(input.text, if (input.scope == "smart") "all" else input.scope,
+                    input.collectionId, input.facets.map { it.kind to it.value }, 0, 1)
+                    .copy(locationFilter = input.locationFilter, fileFingerprint = input.fileFingerprint)
+                requireEngine().libraryAlphabetIndex(request, input.smartFolderId?.let { SmartFolderIdDto(it) })
+                    .map { mapOf("id" to it.id.value, "displayName" to it.displayName, "group" to it.group) }
             }
         }
 

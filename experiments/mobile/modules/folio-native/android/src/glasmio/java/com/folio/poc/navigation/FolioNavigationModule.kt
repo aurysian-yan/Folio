@@ -54,6 +54,9 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioPanelBackdropView::class) {
+            Prop("blurRadius") { view: FolioPanelBackdropView, value: Float -> view.blurRadius = value }
+            Prop("liquid") { view: FolioPanelBackdropView, value: Boolean -> view.liquid = value }
+            Prop("continuousCapsule") { view: FolioPanelBackdropView, value: Boolean -> view.continuousCapsule = value }
             Prop("pageBackgroundColor") { view: FolioPanelBackdropView, value: String -> view.pageBackgroundColor = value }
             Prop("navigationGlass") { view: FolioPanelBackdropView, value: Boolean -> view.navigationGlass = value }
             Prop("dark") { view: FolioPanelBackdropView, value: Boolean -> view.dark = value }

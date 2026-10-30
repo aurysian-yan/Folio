@@ -9,6 +9,7 @@ rust-version.workspace = true
 folio-core = { path = "../folio-core" }
 serde.workspace = true
 thiserror.workspace = true
+pinyin = { version = "=0.11.0", default-features = false, features = ["plain"] }
 
 [dev-dependencies]
 serde_json.workspace = true

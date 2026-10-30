@@ -15,8 +15,10 @@ import com.kyant.backdrop.drawBackdrop
 import expo.modules.kotlin.AppContext
 import io.github.neoruaa.glasmio.glass.GlassSurface
 import io.github.neoruaa.glasmio.glass.GlassSurfaceStyle
+import io.github.neoruaa.glasmio.glass.NavigationGlassMaterial
 import io.github.neoruaa.glasmio.glass.LocalGlassBackdrop
 import io.github.neoruaa.glasmio.glass.progressiveBackdropBlur
+import com.kyant.capsule.ContinuousCapsule
 import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.Capsule
 
@@ -31,11 +33,17 @@ class FolioHeaderBackdropView(context: Context, appContext: AppContext) : FolioG
 
 class FolioPanelBackdropView(context: Context, appContext: AppContext) : FolioGlassView(context, appContext) {
     var navigationGlass by mutableStateOf(false)
+    var continuousCapsule by mutableStateOf(false)
+    var blurRadius by mutableStateOf(-1f)
+    var liquid by mutableStateOf(false)
     var tintColor = ""
     var borderColor = ""
     var cornerRadius by mutableStateOf(0f)
     @Composable override fun GlassContent() {
         GlassSurface(Modifier.fillMaxSize(), style = GlassSurfaceStyle.Navigation,
-            shape = if (navigationGlass) Capsule() else ContinuousRoundedRectangle(cornerRadius.dp)) {}
+            frostRadius = blurRadius.takeIf { it >= 0f }?.dp,
+            material = if (liquid) NavigationGlassMaterial.Clear else null,
+            preserveBackdropColors = liquid,
+            shape = if (continuousCapsule) ContinuousCapsule() else if (navigationGlass) Capsule() else ContinuousRoundedRectangle(cornerRadius.dp)) {}
     }
 }

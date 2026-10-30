@@ -78,13 +78,14 @@ enum FolioLibraryMapper {
 
     // 智慧范围交给 Rust 合并保存条件和临时浏览条件。
     static func read(engine: FolioEngine, text: String, scope: String, collectionId: String?, smartFolderId: String?,
-                     facets: [(String, String)], offset: Int, limit: Int, locationFilter: String? = nil, fileFingerprint: String? = nil) throws -> LibraryPageDto {
+                     facets: [(String, String)], offset: Int, limit: Int, locationFilter: String? = nil, fileFingerprint: String? = nil, alphabet: Bool = false) throws -> LibraryPageDto {
         guard scope == "smart" ? smartFolderId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false && collectionId == nil
             : smartFolderId == nil else { throw invalidQuery() }
         var request = try query(text: text, scope: scope == "smart" ? "all" : scope,
             collectionId: collectionId, facets: facets, offset: offset, limit: limit)
         request.locationFilter = locationFilter
         request.fileFingerprint = fileFingerprint
+        if alphabet { return try engine.queryLibraryAlphabet(request: request, smartFolderId: smartFolderId.map { SmartFolderIdDto(value: $0) }) }
         if scope == "smart", let id = smartFolderId {
             return try engine.querySmartFolderWithLocation(id: SmartFolderIdDto(value: id), text: request.text,
                 facets: request.facets, offset: request.offset, limit: request.limit, locationFilter: locationFilter,fileFingerprint: fileFingerprint)

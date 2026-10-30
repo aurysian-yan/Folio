@@ -20,6 +20,10 @@ class FolioLibraryMapperTest {
             }
             engine.refreshLibrary()
             val all = engine.queryLibrary(query())
+            val alphabet = engine.libraryAlphabetIndex(query(), null)
+            val alphabetPage = FolioLibraryMapper.read(engine, "", "all", null, null, emptyList(), 0, 100, alphabet = true)
+            assertEquals(alphabet.map { it.id }, alphabetPage.families.map { it.id })
+            assertTrue(alphabet.all { it.group in listOf("I", "L", "S") })
             val family = all.families.first { it.displayName == "Lato" }
             val filtered = engine.queryLibrary(query(text = "Lato", facets = listOf("weight" to "400")))
             assertEquals(1L, filtered.totalMatches.toLong())

@@ -1,3 +1,10 @@
+import { useFonts } from 'expo-font';
+import { monoFontAsset } from './mono-font';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { alphabetAlignedOffset } from './alphabet-index';
+import { AlphabetScroller } from './AlphabetScroller';
+import { useAlphabetScrollMotion } from './useAlphabetScrollMotion';
+import { useAlphabetLibrary } from './useAlphabetLibrary';
 import { DialogProvider } from './Dialogs';
 import { AndroidCompatibilityGate } from './AndroidCompatibilityGate';
 import { NavigationScrollContext, NavigationScrollScope } from './NavigationScroll';
@@ -18,17 +25,17 @@ import * as SplashScreen from 'expo-splash-screen';
 import {
   CaretDownIcon, FunnelSimpleIcon, MagnifyingGlassIcon, PlusIcon, XIcon,
 } from './icons';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator, Animated, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
-  Text, TextInput, useColorScheme, useWindowDimensions, View,
+  Text, TextInput, useColorScheme, useWindowDimensions, View, type ViewToken,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CollectionsPanel } from './CollectionsPanel';
 import { FilterPanel } from './FilterPanel';
 import { PanelAction } from './panel-content';
-import { FontCard } from './FontCard';
+import { FontCard, fontCardSurfaceStyle } from './FontCard';
 import { FontDetails } from './FontDetails';
 import { FontNavigation } from './FontNavigation';
 import { ImportResults } from './ImportResults';
@@ -37,8 +44,8 @@ import { ViewModeMenu } from './ViewModeMenu';
 import { AndroidHeaderControls } from './HeaderControls';
 import { PageHeader, usePageHeader } from './PageHeader';
 import { HeaderScrollContext } from './HeaderButtonShadow';
-import { BottomNavigation, NavigationBackdrop, navigationContentInset, type MobileTab } from './bottom-navigation';
-import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
+import { BottomNavigation, NavigationBackdrop, navigationContentInset, navigationBarTopInset, type MobileTab } from './bottom-navigation';
+import { LibraryError, representativeFace, savedConditions, summarizeImport, targetKey, type AlphabetEntry, type FacetOption, type FacetSelection, type FontFamily, type ImportReport, type LibraryPage, type LibrarySnapshot, type LibraryTarget } from './library';
 import { cloudSync, fileState, library, materialPalette, materialWebPalette, syncSession, wallpaperSeed } from './native';
 import {
   NativeActionButton, NativeHeaderControls, NativeLibraryContent, NativeNavigation, NativeScrollContainer,
@@ -63,15 +70,17 @@ import { createTheme, IconButton, resolveAccentColor, type Theme } from './ui';
 const pageSize = 40;
 const emptyPage: LibraryPage = { totalMatches: 0, families: [], facets: [], unresolvedScopeItems: 0 };
 const emptyBrowse = { searchText: '', locationFilter: 'all', facets: [] as FacetSelection[] };
-const LibraryList = Animated.FlatList<FontFamily>;
+type LibraryItem = FontFamily | AlphabetEntry;
+const LibraryList = Animated.FlatList<LibraryItem>;
 
-function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = false, searchPage = false, target, destination = 'local',
+function LibraryScreen({ theme, bottomInset, active, navigationCollapsed = false, sourceId = '', sidebar = false, searchPage = false, target, destination = 'local',
   snapshot, libraryVersion, initialError, defaultMode, preferencesReady, showImportResults, syncBlocked,
   onSnapshotChange, onRetryInitialize, onTargetChange, onOpenFamily, syncController, onHeroAction, cloudFile }: {
   cloudFile?: import('./sync').CloudFont | null;
   theme: Theme;
   bottomInset: number;
   active: boolean;
+  navigationCollapsed?: boolean;
   sourceId?: string;
   sidebar?: boolean;
   searchPage?: boolean;
@@ -115,8 +124,11 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const [facetOptions, setFacetOptions] = useState<{ key: string; options: FacetOption[]; hideSystemFonts?: boolean }>({ key: '', options: [] });
   const [facetFailure, setFacetFailure] = useState<{ key: string; message: string } | null>(null);
   const [heroHeight, setHeroHeight] = useState(128);
-  const list = useRef<Animated.FlatList<FontFamily>>(null);
+  const list = useRef<Animated.FlatList<LibraryItem>>(null);
+  const alphabetScrollOffset = useRef(0);
+  const alphabetMotion = useAlphabetScrollMotion(active);
   const header = usePageHeader({ collapseOffset: heroHeight, sourceId,
+    onScrollOffset: (offset, event) => { alphabetScrollOffset.current = offset; alphabetMotion.onScroll(offset, event); },
     onSnap: (offset, animated) => list.current?.scrollToOffset({ offset, animated }) });
   const headerScrollOffset = header.scrollY;
   const [debouncedSearch, setDebouncedSearch] = useState({ key: scopeKey, text: '' });
@@ -159,14 +171,112 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const optionsKey = JSON.stringify([scopeKey, queryText, libraryVersion, retry]);
   const facetError = facetFailure?.key === optionsKey ? facetFailure.message : null;
   const optionsLoading = ready && facetOptions.key !== optionsKey && !facetError;
-  const shownError = initialError ?? error;
+  const alphabetEnabled = ready && !searchPage && !queryText && scope !== 'recent';
+  const alphabet = useAlphabetLibrary(alphabetEnabled, { ...target, text: queryText, facets: selectedFacets,
+    locationFilter, fileFingerprint, offset: 0, limit: pageSize }, libraryVersion);
+  const [alphabetEditing, setAlphabetEditing] = useState(false);
+  const stopAlphabetPageScroll = alphabetMotion.stop;
+  const onAlphabetEditing = useCallback((editing: boolean) => {
+    if (editing) stopAlphabetPageScroll();
+    setAlphabetEditing(editing);
+  }, [stopAlphabetPageScroll]);
+  const [visibleIndex, setVisibleIndex] = useState(0);
+  const [listViewport, setListViewport] = useState(0);
+  const [listContentHeight, setListContentHeight] = useState(0);
+  const [listHeaderHeight, setListHeaderHeight] = useState(0);
+  const pendingAlphabetTarget = useRef<{ index: number; attempts: number; measurements: number; aligned: boolean; measuring: boolean } | null>(null);
+  const alphabetRows = useRef(new Map<number, View>());
+  const alphabetAlign = useRef<() => void>(() => {});
+  const alphabetRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alphabetRuntime = useRef({ alphabet, enabled: alphabetEnabled, editing: alphabetEditing });
+  useLayoutEffect(() => { alphabetRuntime.current = { alphabet, enabled: alphabetEnabled, editing: alphabetEditing }; }, [alphabet, alphabetEnabled, alphabetEditing]);
+  const onVisibleFonts = useCallback(({ viewableItems }: { viewableItems: ViewToken<LibraryItem>[] }) => {
+    const runtime = alphabetRuntime.current;
+    if (!runtime.enabled) return;
+    const index = viewableItems.find((item) => item.isViewable && item.index !== null)?.index;
+    if (index === undefined || index === null) return;
+    const pending = pendingAlphabetTarget.current;
+    if (pending) {
+      if (viewableItems.some((item) => item.index === pending.index)) alphabetAlign.current();
+      return;
+    }
+    if (!runtime.editing) setVisibleIndex(index);
+    runtime.alphabet.ensure(index);
+    const entry = runtime.alphabet.entries[index];
+    if (entry) runtime.alphabet.setAnchor(entry.id);
+  }, []);
+  const alphabetTop = Platform.OS === 'android' ? androidContentTop : usesNativeControls ? scrollTopInset : headerHeight;
+  const alphabetTargetTop = alphabetTop + 32;
+  const alignAlphabetTarget = useCallback(function align() {
+    const pending = pendingAlphabetTarget.current;
+    if (!pending || pending.aligned || pending.measuring || pending.measurements >= 3) return;
+    const runtime = alphabetRuntime.current;
+    const entry = runtime.alphabet.entries[pending.index];
+    const row = alphabetRows.current.get(pending.index);
+    if (!row || !entry || !runtime.alphabet.cards.has(entry.id)) return;
+    pending.measurements++; pending.measuring = true;
+    row.measureInWindow((_x, rowTop, _width, rowHeight) => {
+      if (rowHeight <= 0 || pendingAlphabetTarget.current !== pending) { pending.measuring = false; return; }
+      const scroll = list.current?.getNativeScrollRef();
+      if (!scroll || !('measureInWindow' in scroll)) { pending.measuring = false; return; }
+      scroll.measureInWindow((_left, listTop) => {
+        pending.measuring = false;
+        if (pendingAlphabetTarget.current !== pending) return;
+        const offset = alphabetAlignedOffset(alphabetScrollOffset.current, rowTop, listTop, alphabetTargetTop, Math.max(0, listContentHeight - listViewport));
+        if (Math.abs(offset - alphabetScrollOffset.current) <= 1) { pending.aligned = true; return; }
+        list.current?.scrollToOffset({ offset, animated: false });
+        if (alphabetRetryTimer.current) clearTimeout(alphabetRetryTimer.current);
+        alphabetRetryTimer.current = setTimeout(align, 48);
+      });
+    });
+  }, [alphabetTargetTop, listContentHeight, listViewport]);
+  useLayoutEffect(() => { alphabetAlign.current = alignAlphabetTarget; }, [alignAlphabetTarget]);
+  useEffect(() => {
+    const pending = pendingAlphabetTarget.current;
+    if (!pending) return;
+    pending.aligned = false; pending.measurements = 0;
+    alignAlphabetTarget();
+  }, [alphabet.cards, alignAlphabetTarget]);
+  const alphabetBottom = usesNativeControls ? nativeInsets.bottom + 24 : navigationContentInset(bottomInset);
+  const libraryBottomInset = usesNativeControls ? nativeInsets.bottom : navigationBarTopInset(bottomInset, navigationCollapsed);
+  const jumpToAlphabet = useCallback((index: number) => {
+    const count = alphabetRuntime.current.alphabet.entries.length;
+    if (!count) return;
+    index = Math.max(0, Math.min(count - 1, index));
+    pendingAlphabetTarget.current = { index, attempts: 0, measurements: 0, aligned: false, measuring: false };
+    alphabetRuntime.current.alphabet.ensure(index);
+    const entry = alphabetRuntime.current.alphabet.entries[index];
+    if (entry) alphabetRuntime.current.alphabet.setAnchor(entry.id);
+    setVisibleIndex(index);
+    list.current?.scrollToIndex({ index: Math.floor(index / (mode === 'grid' ? 2 : 1)), animated: false, viewOffset: alphabetTargetTop });
+  }, [alphabetTargetTop, mode]);
+  useEffect(() => () => { if (alphabetRetryTimer.current) clearTimeout(alphabetRetryTimer.current); }, []);
+  useEffect(() => {
+    pendingAlphabetTarget.current = null;
+    if (alphabetRetryTimer.current) clearTimeout(alphabetRetryTimer.current);
+  }, [queryKey, mode, libraryVersion]);
+  const restoredAlphabetKey = useRef('');
+  useEffect(() => {
+    if (!alphabetEnabled || !alphabet.entries.length) return;
+    const key = `${alphabet.key}:${mode}:${width}`;
+    if (restoredAlphabetKey.current === key) return;
+    restoredAlphabetKey.current = key;
+    const index = alphabet.entries.findIndex((entry) => entry.id === alphabet.anchor.current);
+    if (index >= 0) jumpToAlphabet(index);
+  }, [alphabetEnabled, alphabet.entries, alphabet.key, alphabet.anchor, mode, width, jumpToAlphabet]);
+  const shownError = initialError ?? (alphabetEnabled ? alphabet.failed ? t('mobile.errorLibraryRead') : null : error);
   const hasConditions = !!queryText || selectedFacets.length > 0;
   const scopeTitle = scope === 'collection' ? snapshot?.collections.find((item) => item.id === collectionId)?.name ?? t('collection.collection')
     : scope === 'smart' ? snapshot?.smartFolders.find((item) => item.id === smartFolderId)?.name ?? t('navigation.smartCollections')
     : scope === 'favorites' ? t('mobile.starredCollections') : scope === 'recent' ? t('macos.recentVisits') : t('mobile.allFonts');
-  const loading = ready && loadedQuery.request !== requestKey;
-  const page = loadedQuery.key === queryKey ? loadedQuery.page : emptyPage;
+  const loading = alphabetEnabled ? alphabet.loading : ready && loadedQuery.request !== requestKey;
+  const page = alphabetEnabled ? { ...alphabet.page, families: Array.from(alphabet.cards.values()) } : loadedQuery.key === queryKey ? loadedQuery.page : emptyPage;
+  const selectedAlphabetGroup = alphabet.entries[visibleIndex]?.group ?? alphabet.entries[0]?.group;
   const waitingForSearch = searchText.trim() !== queryText;
+  const lastAlphabetEntry = alphabet.entries.at(-1);
+  const reachedLibraryEnd = ready && !shownError && !waitingForSearch && (alphabetEnabled
+    ? !!lastAlphabetEntry && alphabet.cards.has(lastAlphabetEntry.id)
+    : !loading && page.totalMatches > 0 && page.families.length >= page.totalMatches);
   const importCounts = importReport ? summarizeImport(importReport.items) : null;
 
   useEffect(() => {
@@ -213,7 +323,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   }, [ready, scope, collectionId, smartFolderId, queryText, optionsKey, t]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || alphabetEnabled) return;
     const controller = new AbortController();
     const queryTarget: LibraryTarget = smartFolderId ? { scope: 'smart', smartFolderId }
       : collectionId ? { scope: 'collection', collectionId } : { scope: scope as 'all' | 'favorites' | 'recent' };
@@ -249,7 +359,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
       }
     });
     return () => controller.abort();
-  }, [ready, queryText, scope, collectionId, smartFolderId, selectedFacets, locationFilter, fileFingerprint, offset, queryKey, requestKey, libraryVersion, t]);
+  }, [ready, alphabetEnabled, queryText, scope, collectionId, smartFolderId, selectedFacets, locationFilter, fileFingerprint, offset, queryKey, requestKey, libraryVersion, t]);
 
   function importFont() { setFilesOpen(true); }
 
@@ -276,6 +386,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   }
 
   function retryQuery() {
+    if (alphabetEnabled) { alphabet.retry(); return; }
     setError(null);
     setPagination({ key: queryKey, offset: 0 });
     setRetry((value) => value + 1);
@@ -283,7 +394,7 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   }
 
   function loadMore() {
-    if (loading || shownError || waitingForSearch || page.families.length === 0) return;
+    if (alphabetEnabled || loading || shownError || waitingForSearch || page.families.length === 0) return;
     if (offset + pageSize < page.totalMatches) {
       setPagination((value) => value.key === queryKey && value.offset !== offset ? value : { key: queryKey, offset: offset + pageSize });
     }
@@ -301,26 +412,78 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
   const localCountLabel = snapshot ? t('mobile.localFamilyCount', { count: snapshot.familyCount }) : t('mobile.localFonts');
   const fontList = (
       <LibraryList ref={list}
-        {...(showsHero ? header.snapScrollProps : {})} key={mode} data={page.families} keyExtractor={(family) => family.id}
+        {...(showsHero && !alphabetEditing ? header.snapScrollProps : {})} key={mode} data={alphabetEnabled ? alphabet.items : page.families} keyExtractor={(family) => family.id}
         numColumns={mode === 'grid' ? 2 : 1} columnWrapperStyle={mode === 'grid' ? styles.columns : undefined}
         contentContainerStyle={[styles.content, {
           paddingTop: Platform.OS === 'android' ? androidContentTop : usesNativeControls ? scrollTopInset : 0,
-          paddingBottom: usesNativeControls ? nativeInsets.bottom + 24 : navigationContentInset(bottomInset),
+          paddingBottom: libraryBottomInset,
         }]}
         contentInsetAdjustmentBehavior="never" automaticallyAdjustsScrollIndicatorInsets={false}
         scrollIndicatorInsets={usesNativeControls ? { top: scrollTopInset, bottom: nativeInsets.bottom } : undefined}
         keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"
         onScroll={header.onScroll} scrollEventThrottle={16}
+        showsVerticalScrollIndicator={!alphabetEnabled}
+        onScrollBeginDrag={(event) => {
+          alphabetMotion.onBeginDrag();
+          setAlphabetEditing(false);
+          pendingAlphabetTarget.current = null;
+          if (alphabetRetryTimer.current) clearTimeout(alphabetRetryTimer.current);
+          if (showsHero) header.snapScrollProps.onScrollBeginDrag(event);
+        }}
+        onScrollEndDrag={(event) => {
+          alphabetMotion.onEndDrag();
+          if (showsHero) header.snapScrollProps.onScrollEndDrag(event);
+        }}
+        onMomentumScrollEnd={(event) => {
+          alphabetMotion.stop();
+          if (showsHero) header.snapScrollProps.onMomentumScrollEnd(event);
+        }}
+        onContentSizeChange={(_width, height) => {
+          setListContentHeight(height);
+          const pending = pendingAlphabetTarget.current;
+          if (pending) { pending.aligned = false; pending.measurements = 0; alphabetAlign.current(); }
+        }}
+        onViewableItemsChanged={onVisibleFonts} viewabilityConfig={{ itemVisiblePercentThreshold: 1 }}
+        onScrollToIndexFailed={({ index, averageItemLength }) => {
+          const pending = pendingAlphabetTarget.current;
+          if (!pending) return;
+          if (pending.attempts >= 3) { pendingAlphabetTarget.current = null; return; }
+          pending.attempts++;
+          const estimate = mode === 'grid' ? (width - 32) / 2 + 12 : averageItemLength || 96;
+          list.current?.scrollToOffset({ offset: Math.max(0, listHeaderHeight + index * estimate), animated: false });
+          if (alphabetRetryTimer.current) clearTimeout(alphabetRetryTimer.current);
+          alphabetRetryTimer.current = setTimeout(() => {
+            if (pendingAlphabetTarget.current !== pending) return;
+            const attempts = pending.attempts;
+            list.current?.scrollToIndex({ index, animated: false, viewOffset: alphabetTargetTop });
+            if (pending.attempts === attempts) alphabetAlign.current();
+          }, 120);
+        }}
         initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
         onEndReached={loadMore} onEndReachedThreshold={0.4}
-        renderItem={({ item }) => (
-          <View style={mode === 'grid' ? { width: (width - 32) / 2 } : styles.listItem}>
-            <FontCard family={item} mode={mode} theme={theme}
-              onOpen={() => { Keyboard.dismiss(); onOpenFamily(item); }} />
+        renderItem={({ item, index }) => (
+          <View collapsable={false} ref={(node) => {
+            if (node) alphabetRows.current.set(index, node); else alphabetRows.current.delete(index);
+          }} onLayout={() => {
+            const pending = pendingAlphabetTarget.current;
+            if (!pending || pending.index !== index) return;
+            pending.aligned = false; pending.measurements = 0;
+            if (alphabetRetryTimer.current) clearTimeout(alphabetRetryTimer.current);
+            alphabetRetryTimer.current = setTimeout(alignAlphabetTarget, 0);
+          }} style={[mode === 'grid' ? { width: (width - 32) / 2 } : styles.listItem,
+            { opacity: alphabetEnabled && alphabetEditing && alphabet.entries[index]?.group !== selectedAlphabetGroup ? 0.5 : 1 }]}>
+            {'faces' in item ? <FontCard family={item} mode={mode} theme={theme}
+              onOpen={() => { Keyboard.dismiss(); onOpenFamily(item); }} /> : <Pressable accessible={alphabet.failed}
+              accessibilityRole={alphabet.failed ? 'button' : undefined} disabled={!alphabet.failed} onPress={alphabet.retry}
+              style={[styles.alphabetPlaceholder, mode === 'grid' ? { aspectRatio: 1 } : { minHeight: 84 }, { backgroundColor: theme.surface }]}>
+              {alphabet.failed ? <Text style={{ color: theme.accent }}>{t('common.retry')}</Text>
+                : <ActivityIndicator color={theme.accent} accessibilityLabel={t('mobile.loadingLibrary')} />}
+              <Text numberOfLines={1} style={{ color: theme.secondary }}>{item.displayName}</Text>
+            </Pressable>}
           </View>
         )}
         ListHeaderComponent={
-          <View>
+          <View onLayout={({ nativeEvent }) => setListHeaderHeight(nativeEvent.layout.height)}>
             {showsHero && (
               <LibraryHero theme={theme} presentation={cloudFile ? {kind:'normal', title:cloudFile.filename, subtitle:t('library.familyCountLabel',{total:page.totalMatches}), sync:createLibraryHero(snapshot,syncController.state,syncController.readError).sync} : createLibraryHero(snapshot, syncController.state, syncController.readError)}
                 onAction={onHeroAction} onLayout={({ nativeEvent }) => setHeroHeight(nativeEvent.layout.height)} />
@@ -375,15 +538,18 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
               </Pressable>)}
             </View>
         }
-        ListFooterComponent={loading && page.families.length > 0
-          ? <ActivityIndicator style={styles.loadingMore} color={theme.accent} accessibilityLabel={t('mobile.loadingMore')} /> : null}
+        ListFooterComponentStyle={reachedLibraryEnd ? styles.libraryEnd : undefined}
+        ListFooterComponent={reachedLibraryEnd
+          ? <Text style={[styles.libraryEndText, { color: theme.secondary }]}>{t('library.noMoreFonts')}</Text>
+          : loading && page.families.length > 0
+            ? <ActivityIndicator style={styles.loadingMore} color={theme.accent} accessibilityLabel={t('mobile.loadingMore')} /> : null}
       />
   );
   const content = (
     <NativeScrollContainer hasHeader={!sidebar}
       onInsetsChange={(event) => setNativeInsets(event.nativeEvent)}
       style={[styles.screen, { backgroundColor: theme.background }, reservesWindowControls && styles.windowControlsInset]}
-      onLayout={(event) => setContentWidth(event.nativeEvent.layout.width)}>
+      onLayout={(event) => { setContentWidth(event.nativeEvent.layout.width); setListViewport(event.nativeEvent.layout.height); }}>
       {!sidebar && <PageHeader scrollY={headerScrollOffset} theme={theme} sourceId={sourceId} active={active}
         topInset={Platform.OS === 'android' ? inset.top : usesNativeControls ? nativeInsets.top : 0}
         onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
@@ -438,8 +604,15 @@ function LibraryScreen({ theme, bottomInset, active, sourceId = '', sidebar = fa
           </IconButton>
         </View>}
       </PageHeader>}
+      <GestureHandlerRootView style={styles.screen}>
       {Platform.OS === 'android' ? <NavigationBackdrop sourceId={active ? sourceId : ''}
         active={active} theme={theme} style={styles.screen}>{fontList}</NavigationBackdrop> : fontList}
+      {alphabetEnabled && active && !filterOpen && !collectionsOpen && !filesOpen && !importDetailsOpen && alphabet.groups.length > 0 && listContentHeight > listViewport + 1 && listViewport - alphabetTop - alphabetBottom >= 96 &&
+          <AlphabetScroller groups={alphabet.groups} index={visibleIndex} pageProgress={alphabetMotion.progress} pageScrolling={alphabetMotion.scrolling}
+            top={alphabetTop} right={inset.right} height={listViewport - alphabetTop - alphabetBottom}
+            theme={theme} sourceId={sourceId} reduceMotion={header.reduceMotion}
+            onSelect={jumpToAlphabet} onEditing={onAlphabetEditing} />}
+      </GestureHandlerRootView>
       <FilterPanel locationFilter={locationFilter} onLocationChange={(locationFilter) => updateBrowse({locationFilter})} visible={filterOpen && active} theme={theme}
         options={facetOptions.key === optionsKey ? facetOptions.options : page.facets} counts={page.facets}
         selected={selectedFacets} savedHideSystemFonts={facetOptions.key === optionsKey && facetOptions.hideSystemFonts} loading={loading || optionsLoading || waitingForSearch} error={shownError ?? facetError}
@@ -678,7 +851,7 @@ function MobileApp() {
       paddingLeft: inset.left, paddingRight: inset.right }]}>
       <StatusBar style="auto" />
       <TabScenes selectedId={tab} scenes={{
-        local: <NavigationScrollScope active={tab === 'local'}><LibraryScreen cloudFile={focusedCloudFile} syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} active={tab === 'local'} onOpenFamily={openFamily}
+        local: <NavigationScrollScope active={tab === 'local'}><LibraryScreen cloudFile={focusedCloudFile} syncController={syncController} onHeroAction={onHeroAction} syncBlocked={syncController.blocked} theme={theme} sourceId={sourceId} bottomInset={inset.bottom} navigationCollapsed={navCollapsed} active={tab === 'local'} onOpenFamily={openFamily}
             target={libraryTarget} snapshot={snapshot} libraryVersion={libraryVersion} initialError={initialError}
             defaultMode={preferences.defaultViewMode} preferencesReady={preferencesReady} showImportResults={preferences.importShowResults}
             onSnapshotChange={applySnapshot} onTargetChange={selectTarget}
@@ -743,8 +916,10 @@ function MobileApp() {
 }
 
 export default function App() {
-  // 原生导航完成挂载后移除启动画面。
-  useEffect(() => { SplashScreen.hide(); }, []);
+  const [fontsLoaded, fontError] = useFonts({ FolioMono: monoFontAsset });
+  // 字体就绪后显示界面，避免数字和索引首次绘制时跳动。
+  useEffect(() => { if (fontsLoaded || fontError) SplashScreen.hide(); }, [fontsLoaded, fontError]);
+  if (!fontsLoaded && !fontError) return null;
   return <SafeAreaProvider><AndroidCompatibilityGate><PreferencesProvider><BrowserDataProvider><OnlineSessionProvider><MobileApp /></OnlineSessionProvider></BrowserDataProvider></PreferencesProvider></AndroidCompatibilityGate></SafeAreaProvider>;
 }
 
@@ -761,6 +936,10 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   search: { flex: 1, paddingHorizontal: 12, minHeight: 44, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 8 },
   searchInput: { flex: 1, minHeight: 44, fontSize: 15, paddingVertical: 8 },
+  alphabetPlaceholder: { ...fontCardSurfaceStyle, gap: 4, alignItems: 'center', justifyContent: 'center' },
+  // 结束提示占用卡片与导航之间的紧凑间隙。
+  libraryEnd: { marginTop: -12 },
+  libraryEndText: { fontSize: 11, lineHeight: 12, includeFontPadding: false, textAlign: 'center' },
   content: { paddingHorizontal: 10, gap: 12 }, columns: { gap: 12 }, listItem: { width: '100%' },
   searchSummary: { fontSize: 14, paddingHorizontal: 12, paddingVertical: 12 },
   notice: { marginVertical: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },

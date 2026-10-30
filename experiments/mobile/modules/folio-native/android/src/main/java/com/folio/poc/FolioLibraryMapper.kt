@@ -75,10 +75,11 @@ internal object FolioLibraryMapper {
 
     // 智慧范围交给 Rust 合并保存条件和临时浏览条件。
     fun read(engine: FolioEngine, text: String, scope: String, collectionId: String?, smartFolderId: String?,
-        facets: List<Pair<String, String>>, offset: Long, limit: Int, locationFilter: String? = null, fileFingerprint: String? = null): LibraryPageDto {
+        facets: List<Pair<String, String>>, offset: Long, limit: Int, locationFilter: String? = null, fileFingerprint: String? = null, alphabet: Boolean = false): LibraryPageDto {
         require(if (scope == "smart") !smartFolderId.isNullOrBlank() && collectionId == null else smartFolderId == null)
         val request = query(text, if (scope == "smart") "all" else scope, collectionId, facets, offset, limit)
         val located = request.copy(locationFilter=locationFilter,fileFingerprint=fileFingerprint)
+        if (alphabet) return engine.queryLibraryAlphabet(located, smartFolderId?.let { SmartFolderIdDto(it) })
         return if (scope == "smart") engine.querySmartFolderWithLocation(SmartFolderIdDto(requireNotNull(smartFolderId)),
             request.text, request.facets, request.offset, request.limit,locationFilter,fileFingerprint) else engine.queryLocalLibrary(located)
     }

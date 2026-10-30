@@ -20,7 +20,7 @@ export const pageTitleInset = 12;
 // 滚动标题共用安全区域、原生栏遮挡与减少动态效果设置。
 export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset, bottomTabs = true, sourceId: providedSourceId, onSnap, onScrollOffset }: {
   collapseOffset?: number; bottomTabs?: boolean; sourceId?: string;
-  onSnap: (offset: number, animated: boolean) => void; onScrollOffset?: (offset: number) => void;
+  onSnap: (offset: number, animated: boolean) => void; onScrollOffset?: (offset: number, event: NativeScrollEvent) => void;
 }) {
   const { begin: beginNavigationScroll, end: endNavigationScroll, scroll: reportNavigationScroll } = useNavigationScroll();
   const inset = useSafeAreaInsets();
@@ -92,7 +92,7 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset,
     return () => { scrollY.removeListener(listener); transition?.stop(); };
   }, [collapseOffset, reduceMotion, scrollY, titleOffset, titleScale]);
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    onScrollOffset?.(event.nativeEvent.contentOffset.y);
+    onScrollOffset?.(event.nativeEvent.contentOffset.y, event.nativeEvent);
     if (bottomTabs) reportNavigationScroll(event.nativeEvent.contentOffset.y);
   }, [bottomTabs, onScrollOffset, reportNavigationScroll]);
   const onScroll = useMemo(() => Animated.event(

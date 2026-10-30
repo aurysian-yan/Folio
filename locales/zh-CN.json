@@ -231,7 +231,8 @@
     "summaryDamaged": "{{damaged}} 个损坏字体 · {{variable}} 个可变字族 · {{recent}} 个最近访问",
     "summaryConflict": "{{revisions}} 个字族有多个版本 · {{conflicts}} 个字族有元数据冲突",
     "availableNow": "现有 {{count}} 个字族，随时可用",
-    "localSummary": "本地 {{families}} 个字族 · {{variable}} 个可变字族 · {{recent}} 个最近访问"
+    "localSummary": "本地 {{families}} 个字族 · {{variable}} 个可变字族 · {{recent}} 个最近访问",
+    "noMoreFonts": "没有更多字体了。"
   },
   "filters": {
     "title": "筛选",
@@ -965,7 +966,13 @@
       "busyHint": "同步期间暂时无法导入字体或修改连接，请在同步结束后重试。"
     },
     "swipeCloudFont": "向左侧滑或打开更多操作，管理云端字体",
-    "cloudFontActions": "{{name}} 的云端操作"
+    "cloudFontActions": "{{name}} 的云端操作",
+    "alphabetIndex": {
+      "label": "字母快速定位",
+      "hint": "点击或上下拖动，按字母定位字体",
+      "next": "下一个字母",
+      "previous": "上一个字母"
+    }
   },
   "macos": {
     "aboutSubtitle": "跨设备字体资产管理工具",

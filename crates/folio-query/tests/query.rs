@@ -768,3 +768,75 @@ fn system_font_filter_preserves_user_copies_cloud_faces_and_saved_state() {
     let legacy: SavedFontQuery = serde_json::from_str("{}").unwrap();
     assert!(!legacy.hide_system_fonts);
 }
+
+#[test]
+fn alphabet_sort_index_and_random_pages_share_filtered_order() {
+    let mut c = catalog();
+    let template = c.families[0].clone();
+    c.families.clear();
+    for i in 0u32..1043 {
+        let mut family = template.clone();
+        let mut bytes = [0u8; 16];
+        bytes[..4].copy_from_slice(&i.to_be_bytes());
+        family.id = FontFamilyId::from_bytes(bytes);
+        family.display_name = Some(format!(
+            "{} {i:04}",
+            if i < 40 {
+                "123"
+            } else if i < 1000 {
+                "阿里"
+            } else {
+                "思源"
+            }
+        ));
+        family.faces.truncate(1);
+        let face = &mut family.faces[0];
+        face.family_id = family.id;
+        face.id = FontFaceId::from_bytes(bytes);
+        face.identity_id = FontIdentityId::from_bytes(bytes);
+        c.families.push(family);
+    }
+    let mut state = LibraryStateSnapshot::default();
+    state.favorites = c
+        .families
+        .iter()
+        .step_by(2)
+        .map(|family| family.faces[0].identity_id)
+        .collect();
+    let index = FontQueryIndex::build(&c, &state).unwrap();
+    for scope in [QueryScope::All, QueryScope::Favorites] {
+        let all = index
+            .query(&FontQuery {
+                scope: scope.clone(),
+                sort: QuerySort::Alphabet,
+                ..Default::default()
+            })
+            .unwrap();
+        for offset in [0, 40, 480, 1000, 1040] {
+            let page = index
+                .query(&FontQuery {
+                    scope: scope.clone(),
+                    sort: QuerySort::Alphabet,
+                    offset,
+                    limit: Some(40),
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(page.total_matches, all.total_matches);
+            assert_eq!(
+                page.families,
+                all.families
+                    .iter()
+                    .skip(offset)
+                    .take(40)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            );
+        }
+        assert_eq!(index.alphabet_group(all.families[0].family_id), "#");
+        assert_eq!(
+            index.alphabet_group(all.families.last().unwrap().family_id),
+            "S"
+        );
+    }
+}

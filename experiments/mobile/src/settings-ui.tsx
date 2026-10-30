@@ -2,7 +2,7 @@ import { ReorderScrollContext, useReorderScroll } from './ReorderableList';
 import { CaretLeftIcon, CaretRightIcon } from './icons';
 import { createContext, useContext, useImperativeHandle, useRef, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type ScrollView, type StyleProp, type TextStyle } from 'react-native';
 import { GlassSwitch } from './GlassSwitch';
 import { NavigationBackdrop } from './bottom-navigation';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -187,15 +187,15 @@ export function SettingsChoiceRow<T extends string>({ title, detail, options, va
   </View>;
 }
 
-export function SettingsValueRow({ title, detail, value, theme, last }: {
-  title: string; detail?: string; value: string; theme: Theme; last?: boolean;
+export function SettingsValueRow({ title, detail, value, theme, last, valueStyle }: {
+  title: string; detail?: string; value: string; theme: Theme; last?: boolean; valueStyle?: StyleProp<TextStyle>;
 }) {
   return <RowShell searchTitle={title} theme={theme} last={last}>
     <View style={styles.rowBody}>
       <Text style={[styles.rowTitle, { color: theme.label }]}>{title}</Text>
       {!!detail && <Text style={[styles.rowDetail, { color: theme.secondary }]}>{detail}</Text>}
     </View>
-    <Text numberOfLines={1} style={[styles.rowValue, { color: theme.secondary }]}>{value}</Text>
+    <Text numberOfLines={1} style={[styles.rowValue, valueStyle, { color: theme.secondary }]}>{value}</Text>
   </RowShell>;
 }
 

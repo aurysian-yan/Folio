@@ -87,12 +87,15 @@ export interface LibrarySnapshot {
 
 export type LibraryQuery = LibraryTarget & {
   text: string;
+  alphabet?: boolean;
   locationFilter?: string;
   fileFingerprint?: string;
   facets?: FacetSelection[];
   offset: number;
   limit: number;
 };
+
+export interface AlphabetEntry { id: string; displayName: string; group: string }
 
 export interface LibraryPage {
   totalMatches: number;
@@ -130,6 +133,7 @@ export interface LibraryBridge {
   initialize(): Promise<LibrarySnapshot>;
   snapshot(): Promise<LibrarySnapshot>;
   query(request: LibraryQuery): Promise<LibraryPage>;
+  alphabetIndex(request: LibraryQuery): Promise<AlphabetEntry[]>;
   importFonts(files: ImportFile[]): Promise<ImportReport>;
   setFavorite(identityIds: string[], favorite: boolean): Promise<LibrarySnapshot>;
   createCollection(input: CollectionInput): Promise<LibrarySnapshot>;
@@ -195,6 +199,13 @@ export function createLibraryClient(bridge: LibraryBridge,
     convertCollectionToSmart: (id: string, input: SmartFolderInput) => mutate(() => bridge.convertCollectionToSmart(id, { ...input, query: savedConditions(input.query) })),
     convertSmartToCollection: (id: string, input: CollectionInput) => mutate(() => bridge.convertSmartToCollection(id, input)),
     recordRecent: (identityId: string) => mutate(() => bridge.recordRecent(identityId)),
+    async alphabetIndex(query: LibraryQuery, signal?: AbortSignal): Promise<AlphabetEntry[]> {
+      validateQuery(query);
+      if (signal?.aborted) throw new LibraryError('cancelled', i18n.t('mobile.errorQueryCancelled'));
+      const result = await bridge.alphabetIndex(query);
+      if (signal?.aborted) throw new LibraryError('cancelled', i18n.t('mobile.errorQueryCancelled'));
+      return result;
+    },
     query(query: LibraryQuery, signal?: AbortSignal): Promise<LibraryPage> {
       validateQuery(query);
       if (signal?.aborted) return Promise.reject(new LibraryError('cancelled', i18n.t('mobile.errorQueryCancelled')));

@@ -5,6 +5,12 @@ import android.os.Build
 import android.view.ViewTreeObserver
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.Shadow
+import com.kyant.capsule.ContinuousCapsule
 import com.kyant.backdrop.effects.blur
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +46,8 @@ class FolioPanelBackdropView(context: Context, appContext: AppContext) : ExpoVie
     var cornerRadius by mutableStateOf(32f)
     var borderColor by mutableStateOf("")
     var navigationGlass by mutableStateOf(false)
+    var blurRadius by mutableStateOf(-1f)
+    var liquid by mutableStateOf(false)
     var dark by mutableStateOf(false)
     private var sampleVersion by mutableIntStateOf(0)
     private val location = IntArray(2)
@@ -77,6 +85,19 @@ class FolioPanelBackdropView(context: Context, appContext: AppContext) : ExpoVie
                 }
             }
             val tint = Color(android.graphics.Color.parseColor(tintColor))
+            if (navigationGlass && (blurRadius >= 0 || liquid)) {
+                Box(Modifier.fillMaxSize().drawBackdrop(
+                    backdrop = backdrop, shape = { ContinuousCapsule() },
+                    effects = {
+                        if (!liquid) vibrancy()
+                        blur(blurRadius.coerceAtLeast(0f).dp.toPx())
+                        if (liquid) lens(10.dp.toPx(), 24.dp.toPx(), depthEffect = true, chromaticAberration = true)
+                    },
+                    highlight = { Highlight.Default }, shadow = { Shadow.Default },
+                    onDrawSurface = { drawRect(tint.copy(alpha = if (liquid) 0.08f else 0.6f)) },
+                ))
+                return@setContent
+            }
             if (navigationGlass) {
                 Box(Modifier.fillMaxSize().navigationGlass(backdrop = backdrop, dark = dark))
                 return@setContent

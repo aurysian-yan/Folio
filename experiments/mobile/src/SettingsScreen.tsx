@@ -1,3 +1,4 @@
+import { monoFont } from './mono-font';
 import { CloudIcon, DatabaseIcon, DownloadSimpleIcon, GlobeIcon, InfoIcon, PaintBrushIcon } from './icons';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -87,7 +88,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
         </View>
         <View style={styles.cardBody}>
           <Text style={[styles.cardDetail, { color: theme.secondary }]}>{t('storage.used')}</Text>
-          <Text style={[styles.cardMetric, { color: storageError ? theme.danger : theme.label }, !usage && styles.cardDetail]}>
+          <Text style={[styles.cardMetric, usage && !storageError && styles.storageMetric, { color: storageError ? theme.danger : theme.label }, !usage && styles.cardDetail]}>
             {storageError ? t('mobile.settings.storageError') : usage ? formatBytes(usage.total) : t('storage.measuring')}
           </Text>
           <Text style={[styles.cardDetail, { color: theme.secondary }]}>
@@ -115,6 +116,7 @@ const styles = StyleSheet.create({
   cardBody: { flexDirection: 'column', marginTop: 'auto', gap: 3 },
   cardTitle: { ...settingsTypography.body, flexShrink: 1 },
   cardMetric: { ...settingsTypography.metric },
+  storageMetric: { ...monoFont, fontSize: settingsTypography.metric.fontSize - 1 },
   cloudMetric: { fontSize: 18, lineHeight: 22, fontWeight: '500' },
   cardDetail: { ...settingsTypography.detail, lineHeight: 16 },
 });

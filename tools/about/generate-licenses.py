@@ -72,6 +72,7 @@ for manifest,platform,targets,roots in [
 put('Folio',json.loads((ROOT/'apps/desktop-ui/package.json').read_text())['version'],'AGPL-3.0-only','https://github.com/aurysian-yan/Folio',['macos','windows','linux','ios','android'],[('LICENSE',(ROOT/'LICENSE').read_text())])
 for name,licensefile,url in [('Inter','fixtures/fonts/licenses/Inter-OFL.txt','https://github.com/rsms/inter'),('Source Serif 4','fixtures/fonts/licenses/SourceSerif-OFL.txt','https://github.com/adobe-fonts/source-serif'),('JetBrains Mono','apps/desktop-ui/src/assets/fonts/JetBrainsMono-OFL.txt','https://github.com/JetBrains/JetBrainsMono')]:
     put(name,'','OFL-1.1',url,['macos','windows','linux','ios','android'],[('OFL',(ROOT/licensefile).read_text())])
+put('IBM Plex Mono Variable','1.0.0','OFL-1.1','https://github.com/IBM/plex/tree/master/packages/plex-mono-variable',['ios','android'],[('OFL',(ROOT/'experiments/mobile/assets/fonts/OFL-IBMPlexMono.txt').read_text())])
 third=ROOT/'experiments/mobile/modules/folio-native/android/third-party'
 nativeSources=[
  ('NexioSchedule','291e8b9b57c8f331d8f189c52553f41dfd0ce017','AGPL-3.0-only','https://github.com/HaoZai000/NexioSchedule/tree/291e8b9b57c8f331d8f189c52553f41dfd0ce017','NexioSchedule-LICENSE.txt'),
@@ -116,7 +117,7 @@ if coords.exists():
         source=repo+'/'.join([group.replace('.','/'),name,version,name+'-'+version+'.pom'])
         put(group+':'+name,version,label,source,['android'],docs)
         entries[next(k for k in entries if k[0]==group+':'+name and k[1]==version)]['declarationOnly']=not bool(item['documents'])
-fingerprintFiles=['Cargo.lock','apps/desktop-ui/src-tauri/Cargo.lock','pnpm-lock.yaml','experiments/mobile/pnpm-lock.yaml','experiments/mobile/modules/folio-native/android/build.gradle','experiments/mobile/modules/folio-native/ios/FolioNative.podspec','shared/about/android-dependencies.txt','shared/about/native-notices.json','shared/about/ios-notices.json']
+fingerprintFiles=['experiments/mobile/assets/fonts/IBMPlexMono-Variable.ttf','experiments/mobile/assets/fonts/OFL-IBMPlexMono.txt','Cargo.lock','apps/desktop-ui/src-tauri/Cargo.lock','pnpm-lock.yaml','experiments/mobile/pnpm-lock.yaml','experiments/mobile/modules/folio-native/android/build.gradle','experiments/mobile/modules/folio-native/ios/FolioNative.podspec','shared/about/android-dependencies.txt','shared/about/native-notices.json','shared/about/ios-notices.json']
 fingerprints={p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in fingerprintFiles}
 OUT.write_text(json.dumps({'schemaVersion':1,'fingerprints':fingerprints,'entries':sorted(entries.values(),key=lambda x:(x['name'].lower(),x['version'])),'texts':texts},ensure_ascii=False,indent=2)+'\n')
 print(str(len(entries))+' entries; '+str(len(texts))+' original documents')

@@ -23,6 +23,7 @@ function mockBridge(run: LibraryBridge['query']): LibraryBridge {
     convertSmartToCollection: async () => ({ snapshot: emptySnapshot, target: { scope: 'collection', collectionId: 'm' } }),
     recordRecent: async () => emptySnapshot,
     query: run,
+    alphabetIndex: async () => [],
   };
 }
 
@@ -234,4 +235,18 @@ test('macOS 隐藏系统字体条件可保存并在移动端编辑时保留', ()
   assert.equal(hasSmartConditions(conditions), true);
   const edited = mergeSmartConditions(conditions, { text: 'Lato', facets: [{ kind: 'weight', value: '400' }] });
   assert.ok(edited.facets.some((facet) => facet.kind === 'hideSystemFonts' && facet.value === 'true'));
+});
+
+test('字母索引透传范围和筛选，并丢弃取消后的索引结果', async () => {
+  const request = { scope: 'smart' as const, smartFolderId: 's', text: '', facets: [{ kind: 'feature' as const, value: 'variable' }], offset: 0, limit: 40 };
+  let received;
+  let finish!: (value: []) => void;
+  const bridge = mockBridge(async () => emptyPage);
+  bridge.alphabetIndex = (query) => { received = query; return new Promise((resolve) => { finish = resolve; }); };
+  const controller = new AbortController();
+  const client = createLibraryClient(bridge);
+  const pending = client.alphabetIndex(request, controller.signal);
+  assert.deepEqual(received, request);
+  controller.abort(); finish([]);
+  await assert.rejects(pending, (error) => error instanceof LibraryError && error.code === 'cancelled');
 });

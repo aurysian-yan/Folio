@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { monoFont } from './mono-font';
 import { storage } from './native';
 import type { StorageUsage } from './storage';
 import { SettingsActionRow, SettingsGroup, SettingsNote, SettingsPage, SettingsValueRow, formatBytes, settingsLayout, settingsTypography } from './settings-ui';
@@ -84,16 +85,16 @@ export function SettingsStoragePage({ theme, onClose }: { theme: Theme; onClose:
       </SettingsGroup>
 
       <SettingsGroup theme={theme} title={t('storage.usageDetails')}>
-        <SettingsValueRow theme={theme} title={t('storage.managedFonts')} detail={t('storage.managedFontsDetail')} value={formatBytes(usage.managedFontBytes)} />
-        <SettingsValueRow theme={theme} title={t('storage.libraryDatabase')} detail={t('storage.libraryDatabaseDetail')} value={formatBytes(usage.databaseBytes)} last />
+        <SettingsValueRow valueStyle={styles.numericValue} theme={theme} title={t('storage.managedFonts')} detail={t('storage.managedFontsDetail')} value={formatBytes(usage.managedFontBytes)} />
+        <SettingsValueRow valueStyle={styles.numericValue} theme={theme} title={t('storage.libraryDatabase')} detail={t('storage.libraryDatabaseDetail')} value={formatBytes(usage.databaseBytes)} last />
       </SettingsGroup>
       <SettingsGroup theme={theme} title={t('storage.clean')} footer={t('storage.cleanHint')}>
-        <SettingsValueRow theme={theme} title={t('storage.catalogCache')}
+        <SettingsValueRow valueStyle={styles.numericValue} theme={theme} title={t('storage.catalogCache')}
           detail={t('storage.catalogCacheDetail', { count: usage.catalogCacheEntries })}
           value={formatBytes(usage.catalogCacheEstimatedBytes)} />
         <SettingsActionRow theme={theme} title={t('storage.cleanCatalogCache')} busy={busy === 'catalog'} disabled={busy !== null}
           onPress={() => run('catalog', async () => t('storage.catalogCleaned', { count: await storage.clearCatalogCache() }))} />
-        <SettingsValueRow theme={theme} title={t('storage.onlinePreviewCache')} detail={t('storage.onlinePreviewCacheDetail')} value={formatBytes(previewBytes)} />
+        <SettingsValueRow valueStyle={styles.numericValue} theme={theme} title={t('storage.onlinePreviewCache')} detail={t('storage.onlinePreviewCacheDetail')} value={formatBytes(previewBytes)} />
         <SettingsActionRow theme={theme} title={t('storage.cleanPreviewCache')} busy={busy === 'preview'} disabled={busy !== null}
           onPress={() => run('preview', async () => t('storage.previewCleaned', { size: formatBytes(await storage.clearPreviewCache()) }))} last />
       </SettingsGroup>
@@ -115,11 +116,12 @@ const styles = StyleSheet.create({
   overview: { padding: settingsLayout.section.paddingHorizontal, gap: 16 },
   overviewHeader: { gap: 4 },
   overviewLabel: { ...settingsTypography.detail },
-  overviewValue: { fontSize: 36, lineHeight: 44, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  overviewValue: { ...monoFont, fontSize: 35, lineHeight: 44, fontWeight: '600', fontVariant: ['tabular-nums'] },
   bar: { height: 16, borderRadius: 8, overflow: 'hidden', flexDirection: 'row' },
-  overviewDisk: { ...settingsTypography.detail },
+  overviewDisk: { ...settingsTypography.detail, ...monoFont, fontSize: settingsTypography.detail.fontSize - 1 },
   legend: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   legendDot: { width: 8, height: 8, borderRadius: 4, borderWidth: StyleSheet.hairlineWidth },
   legendText: { ...settingsTypography.detail, flex: 1 },
-  legendValue: { fontSize: 14, lineHeight: 20, fontWeight: '500', fontVariant: ['tabular-nums'] },
+  numericValue: { ...monoFont, fontSize: 13 },
+  legendValue: { ...monoFont, fontSize: 13, lineHeight: 20, fontWeight: '500', fontVariant: ['tabular-nums'] },
 });

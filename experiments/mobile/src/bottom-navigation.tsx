@@ -42,8 +42,8 @@ export interface BottomNavigationProps {
 
 export function navigationContentInset(bottomInset: number) { return bottomInset + 96; }
 
-// 浮层控制条需要停在导航表面上方；折叠只改变宽度，视觉顶边不变。
-export function navigationBarTopInset(bottomInset: number) { return bottomInset + 8 + 64; }
+// 按展开导航或紧凑按钮的实际顶边计算内容避让。
+export function navigationBarTopInset(bottomInset: number, collapsed = false) { return bottomInset + 8 + (collapsed ? 48 : 64); }
 
 export function navigationCompactBarFrame(bottomInset: number, _availableWidth: number) {
   return { bottom: bottomInset + 8, sideInset: 84 };
