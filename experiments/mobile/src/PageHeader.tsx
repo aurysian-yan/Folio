@@ -1,3 +1,4 @@
+import { useUiTheme } from './UiTheme';
 import { GlassControlScope } from './GlassControlScope';
 import { useNavigationScroll } from './NavigationScroll';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -22,6 +23,7 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset,
   collapseOffset?: number; bottomTabs?: boolean; sourceId?: string;
   onSnap: (offset: number, animated: boolean) => void; onScrollOffset?: (offset: number, event: NativeScrollEvent) => void;
 }) {
+  const uiTheme = useUiTheme();
   const { begin: beginNavigationScroll, end: endNavigationScroll, scroll: reportNavigationScroll } = useNavigationScroll();
   const inset = useSafeAreaInsets();
   const generatedSourceId = useId();
@@ -147,7 +149,7 @@ export function usePageHeader({ collapseOffset = pageTitleMotion.collapseOffset,
     scrollY, titleOffset, titleScale, titleCollapsed, onScroll, collapsed, reduceMotion, topInset, snapScrollProps, restoreTitle,
     sourceId: providedSourceId ?? generatedSourceId,
     contentTop: Math.max(nativeInsets.contentTop, topInset + pageHeaderHeight + 16),
-    contentBottom: bottomTabs ? usesNativeControls ? nativeInsets.bottom + 32 : navigationContentInset(inset.bottom)
+    contentBottom: bottomTabs ? usesNativeControls ? nativeInsets.bottom + 32 : navigationContentInset(inset.bottom, uiTheme?.ui?.material)
       : inset.bottom + 32,
     onInsetsChange: (event: NativeSyntheticEvent<{ top: number; bottom: number; contentTop: number }>) => setNativeInsets(event.nativeEvent),
   };
@@ -190,14 +192,14 @@ export function PageHeader({ theme, scrollY, titleOffset = scrollY, titleScale, 
     </Animated.View>}
     <View collapsable={false} pointerEvents="box-none" onLayout={onLayout}
       style={[styles.header, { top: topInset,
-        backgroundColor: Platform.OS === 'ios' && Number(Platform.Version) < 26 ? theme.background : undefined }, style]}>
+        backgroundColor: theme.ui?.material || Platform.OS === 'ios' && Number(Platform.Version) < 26 ? theme.background : undefined }, style]}>
       <GlassControlScope sourceId={sourceId} active={active}><HeaderScrollContext.Provider value={scrollY}>{children ?? <>
         <View onLayout={({ nativeEvent }) => setLeadingWidth(nativeEvent.layout.width)} style={styles.leading}>{leading}</View>
         <Animated.View pointerEvents="none" accessibilityElementsHidden={!titleVisible} importantForAccessibility={titleVisible ? 'auto' : 'no-hide-descendants'}
           style={[styles.compactTitle, { left: titleInset, right: titleInset, opacity: fixed ? 1 : compact.opacity,
-            transform: [{ scale: fixed || reduceMotion ? 1 : titleScale ?? compact.scale }],
-            ...(Platform.OS === 'android' && !fixed ? { filter: [{ blur: compact.blurRadius }] } : {}) }]}>
-          <PageHeaderText title={title} theme={theme} compact scrollY={titleOffset} reduceMotion={reduceMotion || fixed} style={styles.smallTitle} />
+            transform: [{ scale: fixed || reduceMotion || theme.ui?.material ? 1 : titleScale ?? compact.scale }],
+            ...(Platform.OS === 'android' && !theme.ui?.material && !fixed ? { filter: [{ blur: compact.blurRadius }] } : {}) }]}>
+          <PageHeaderText title={title} theme={theme} compact scrollY={titleOffset} reduceMotion={reduceMotion || fixed} style={[styles.smallTitle, theme.ui?.material && { textAlign: 'left', fontSize: 22, lineHeight: 28, fontWeight: '400' }]} />
           {!!subtitle && <PageHeaderText title={subtitle} theme={theme} compact secondary scrollY={titleOffset}
             reduceMotion={reduceMotion || fixed} style={styles.smallSubtitle} />}
         </Animated.View>
@@ -220,8 +222,8 @@ export function PageTitle({ title, subtitle, theme, scrollY, titleOffset = scrol
     importantForAccessibility={titleCollapsed ? 'no-hide-descendants' : 'auto'}
     style={[styles.contentTitle, { opacity: expanded.opacity,
       transform: [{ translateY }],
-      ...(Platform.OS === 'android' ? { filter: [{ blur: expanded.blurRadius }] } : {}) }, style]}>
-    <PageHeaderText title={title} theme={theme} scrollY={titleOffset} reduceMotion={reduceMotion} style={styles.largeTitle} />
+      ...(Platform.OS === 'android' && !theme.ui?.material ? { filter: [{ blur: expanded.blurRadius }] } : {}) }, style]}>
+    <PageHeaderText title={title} theme={theme} scrollY={titleOffset} reduceMotion={reduceMotion} style={[styles.largeTitle, theme.ui?.material && { fontSize: 32, lineHeight: 40, fontWeight: '400' }]} />
     {!!subtitle && <PageHeaderText title={subtitle} theme={theme} secondary scrollY={titleOffset}
       reduceMotion={reduceMotion} style={styles.largeSubtitle} />}
   </Animated.View>;

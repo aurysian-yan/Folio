@@ -1,3 +1,4 @@
+import { useUiEventGuard } from './UiTheme';
 import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useRef, useState } from 'react';
@@ -30,6 +31,7 @@ const NativeSlider = requireNativeView<NativeSliderProps>('FolioNavigation', 'Fo
 
 // 事件计数阻止迟到的受控值覆盖当前拖动位置。
 export function GlassSlider({ label, value, minimum, maximum, step, valueText, theme, onChange, onEditingChanged, sourceId }: GlassSliderProps) {
+  const accept = useUiEventGuard(theme);
   const control = useGlassControl(sourceId);
   const [eventCount, setEventCount] = useState(0);
   const lastEventCount = useRef(0);
@@ -39,9 +41,10 @@ export function GlassSlider({ label, value, minimum, maximum, step, valueText, t
     minimum={validRange ? minimum : 0} maximum={validRange ? maximum : 1}
     step={Number.isFinite(step) && step > 0 ? step : 0} valueText={valueText} enabled={enabled} dark={theme.dark}
     accentColor={theme.accent} trackColor={theme.border} thumbColor={theme.switchThumb} surfaceColor={theme.surface}
-    mostRecentEventCount={eventCount} style={{ width: '100%', height: 44, opacity: enabled ? 1 : 0.4 }}
-    onEditingChanged={({ nativeEvent }) => onEditingChanged?.(nativeEvent.isEditing)}
+    mostRecentEventCount={eventCount} style={{ width: '100%', height: theme.ui?.material ? 48 : 44, opacity: enabled ? 1 : 0.4 }}
+    onEditingChanged={({ nativeEvent }) => { if (accept(nativeEvent)) onEditingChanged?.(nativeEvent.isEditing); }}
     onValueChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return;
       if (!Number.isFinite(nativeEvent.value) || !Number.isSafeInteger(nativeEvent.eventCount) || nativeEvent.eventCount <= lastEventCount.current) return;
       lastEventCount.current = nativeEvent.eventCount;
       setEventCount(nativeEvent.eventCount);

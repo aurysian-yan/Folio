@@ -1,5 +1,9 @@
 # 安卓 Material3 配色主题
 
+> 非 legacy 构建的独立开关已由 UI 主题管理：M3E 强制开启、Glasmio 强制关闭。
+> legacy 构建继续使用原开关。运行时主题与验收记录见 `android-m3e.md`。
+> 下文的独立开关及旧偏好说明适用于原实现和 legacy 构建。
+
 ## 目标
 
 安卓端在外观页提供独立的「Material3 配色主题」开关，开启后使用 Material3

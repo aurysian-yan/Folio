@@ -1,6 +1,7 @@
 package com.folio.poc.navigation
 
 import android.content.Context
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -24,6 +25,9 @@ import com.kyant.shapes.Capsule
 
 class FolioHeaderBackdropView(context: Context, appContext: AppContext) : FolioGlassView(context, appContext) {
     var tintColor by mutableStateOf("")
+    @Composable override fun MaterialContent() {
+        Box(Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.surface))
+    }
     @Composable override fun GlassContent() {
         Box(Modifier.fillMaxSize().drawBackdrop(LocalGlassBackdrop.current, shape = { RectangleShape },
             effects = { progressiveBackdropBlur(24.dp.toPx(), tintColor.glassColor(Color.Transparent), 0.5f) },
@@ -39,6 +43,11 @@ class FolioPanelBackdropView(context: Context, appContext: AppContext) : FolioGl
     var tintColor = ""
     var borderColor = ""
     var cornerRadius by mutableStateOf(0f)
+    @Composable override fun MaterialContent() {
+        androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize(),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius.dp),
+            color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer) {}
+    }
     @Composable override fun GlassContent() {
         GlassSurface(Modifier.fillMaxSize(), style = GlassSurfaceStyle.Navigation,
             frostRadius = blurRadius.takeIf { it >= 0f }?.dp,

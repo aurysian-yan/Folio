@@ -139,7 +139,7 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
       theme={theme} primary systemImage="checkmark" disabled={busy || !editor.input.name.trim()} busy={busy}
       onPress={() => { void save(); }}><CheckIcon size={20} color={theme.onAccent} /></IconButton> : undefined}>
     {confirming || deleting ? <FilterScrollView contentContainerStyle={panelStyles.content}>
-      <View style={[panelStyles.card, styles.confirmation, { backgroundColor: theme.surface }]}>
+      <View style={[panelStyles.card, styles.confirmation, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]}>
         <CollectionSymbol icon={editor.input.icon} color={collectionColorValue(editor.input.color)} />
         <Text style={[styles.confirmTitle, { color: theme.label }]}>{deleting ? t('collection.deleteConfirmTitle', { name: editor.input.name }) : editor.input.name}</Text>
         <Text style={[panelStyles.detail, { color: theme.secondary }]}>{deleting ? t('collection.deleteConfirmMessage')
@@ -155,11 +155,11 @@ export function CollectionsPanel({ visible, theme, target, snapshot, currentCond
       {Platform.OS !== 'android' && editorTabs}
       <FilterScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={panelStyles.content}>
         {tab === 'general' ? <View>
-          <View style={[panelStyles.card, { backgroundColor: theme.surface }]}>
+          <View style={[panelStyles.card, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]}>
             <Text style={[panelStyles.section, { color: theme.secondary }]}>{t('collection.name')}</Text>
             <FilterTextInput accessibilityLabel={t('collection.name')} value={editor.input.name} editable={!busy}
               placeholder={t('collection.namePlaceholder')} placeholderTextColor={theme.muted} autoCorrect={false}
-              style={[panelStyles.input, { color: theme.label, borderColor: theme.border, backgroundColor: theme.raised }]}
+              style={[panelStyles.input, { color: theme.label, borderColor: theme.border, backgroundColor: theme.raised, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.field, minHeight: 56 } : {}) }]}
               onChangeText={(name) => updateInput({ name })} returnKeyType="done" onSubmitEditing={() => { if (editor.input.name.trim()) void save(); }} />
           </View>
           <PanelSection title={t('common.icon')} theme={theme}>
@@ -336,7 +336,7 @@ export function FamilyCollectionsPanel({ visible, family, snapshot, collectionId
       {message && <Text accessibilityLiveRegion="polite" style={[panelStyles.section, { color: theme.secondary }]}>{message}</Text>}
       {error && <Text accessibilityRole="alert" style={[panelStyles.section, { color: theme.danger }]}>{error}</Text>}
       <PanelSection title={t('collection.collections')} theme={theme}>
-        {snapshot?.collections.map((collection) => <View key={collection.id} style={[styles.scopeCard, { backgroundColor: theme.raised }]}>
+        {snapshot?.collections.map((collection) => <View key={collection.id} style={[styles.scopeCard, { backgroundColor: theme.raised, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.field, minHeight: 56 } : {}) }]}>
           <CollectionSymbol icon={collection.icon} color={collectionColorValue(collection.color)} />
           <Text style={[panelStyles.label, { color: theme.label }]}>{collection.name}</Text>
           <PanelAction label={t('collection.add')} theme={theme} systemImage="plus" disabled={busy} onPress={() => { void change(collection, true); }} />

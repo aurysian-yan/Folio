@@ -1,4 +1,4 @@
-import BottomSheet, { BottomSheetHandle, BottomSheetScrollView, type BottomSheetBackgroundProps, type BottomSheetHandleProps, type BottomSheetScrollViewMethods } from '@gorhom/bottom-sheet';
+import BottomSheet, { useBottomSheetTimingConfigs, BottomSheetHandle, BottomSheetScrollView, type BottomSheetBackgroundProps, type BottomSheetHandleProps, type BottomSheetScrollViewMethods } from '@gorhom/bottom-sheet';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppState, Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -17,6 +17,7 @@ export function CharacterInspectorSheet({ summary, controls, theme, sourceId, he
   const { t } = useTranslation();
   const inset = useSafeAreaInsets();
   const sheet = useRef<BottomSheet>(null);
+  const materialTiming = useBottomSheetTimingConfigs({ duration: theme.ui?.motion.duration ?? 250 });
   const scroll = useRef<BottomSheetScrollViewMethods>(null);
   const [summaryHeight, setSummaryHeight] = useState(168);
   const [controlsHeight, setControlsHeight] = useState(128);
@@ -51,7 +52,7 @@ export function CharacterInspectorSheet({ summary, controls, theme, sourceId, he
   const background = useCallback((props: BottomSheetBackgroundProps) =>
     <Motion.View pointerEvents="none" style={[props.style, styles.background, backgroundStyle,
       Platform.OS === 'android' && { boxShadow: [{ offsetX: 0, offsetY: 4, blurRadius: 12, color: headerShadowColor(theme, 0.5) }] }]}>
-      <PanelBackdrop style={StyleSheet.absoluteFill} theme={theme} sourceId={sourceId} cornerRadius={32} />
+      <PanelBackdrop style={StyleSheet.absoluteFill} theme={theme} sourceId={sourceId} cornerRadius={theme.ui?.shapes.sheet ?? 32} />
     </Motion.View>, [theme, sourceId, backgroundStyle]);
   const handle = useCallback((props: BottomSheetHandleProps) => <Pressable accessibilityRole="button" hitSlop={10}
     disabled={layout.snapPoints.length === 1}
@@ -64,7 +65,7 @@ export function CharacterInspectorSheet({ summary, controls, theme, sourceId, he
     }}>
     <BottomSheetHandle {...props} indicatorStyle={{ backgroundColor: theme.secondary }} />
   </Pressable>, [index, layout.snapPoints.length, t, theme.secondary]);
-  return <BottomSheet key={sheetRevision} ref={sheet} index={Math.min(initialIndex, layout.snapPoints.length - 1)} snapPoints={layout.snapPoints} enableDynamicSizing={false}
+  return <BottomSheet animationConfigs={theme.ui?.material ? materialTiming : undefined} key={sheetRevision} ref={sheet} index={Math.min(initialIndex, layout.snapPoints.length - 1)} snapPoints={layout.snapPoints} enableDynamicSizing={false}
     detached bottomInset={bottom} topInset={topInset} style={styles.sheet} animatedPosition={position} backgroundComponent={background}
     handleComponent={handle} enablePanDownToClose={false} animateOnMount={false}
     activeOffsetY={[-8, 8]} failOffsetX={[-12, 12]}
@@ -85,7 +86,7 @@ export function CharacterInspectorSheet({ summary, controls, theme, sourceId, he
         if (index > 0) setScrollRevision((value) => value + 1);
       }
     }} accessible={false}>
-    <Motion.View style={[styles.clip, contentStyle]}><BottomSheetScrollView key={scrollRevision} ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <Motion.View style={[styles.clip, theme.ui?.material && { borderRadius: 28 }, contentStyle]}><BottomSheetScrollView key={scrollRevision} ref={scroll} style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View onLayout={({ nativeEvent }) => setSummaryHeight(nativeEvent.layout.height)}>{summary}</View>
       <View onLayout={({ nativeEvent }) => setControlsHeight(nativeEvent.layout.height)}
         pointerEvents={index === 0 && layout.snapPoints.length > 1 ? 'none' : 'auto'}

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Animated, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View, type ViewToken } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { TextInput } from './UiTextInput';
+import { Animated, FlatList, Platform, Pressable, StyleSheet, Text, View, type ViewToken } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';

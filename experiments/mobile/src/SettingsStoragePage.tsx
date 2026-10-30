@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { StyleSheet, Text, View } from 'react-native';
 import { monoFont } from './mono-font';
 import { storage } from './native';
 import type { StorageUsage } from './storage';

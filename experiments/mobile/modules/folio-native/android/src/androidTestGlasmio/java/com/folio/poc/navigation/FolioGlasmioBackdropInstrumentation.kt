@@ -198,6 +198,32 @@ class FolioGlasmioBackdropInstrumentation : Instrumentation() {
                 rawEquals("return$index", AndroidColor.GREEN) { page.source.active = true; page.raw.translationY = 0f }
                 runOnMainSync { page.source.removeView(page.embedded); page.source.addView(page.embedded); page.stage.requestLayout() }
             }
+            // 同一页面原地切换主题，验证实体宿主、采样释放与玻璃恢复。
+            val embedded = page.embedded
+            val children = page.source.childCount
+            repeat(4) { index ->
+                val surface = if (index % 2 == 0) "#ECE6F0" else "#211F26"
+                runOnMainSync {
+                    page.source.samplingEnabled = false
+                    val theme = mapOf("style" to "material3-expressive", "revision" to "material$index",
+                        "dark" to (index % 2 != 0).toString(), "primary" to "#6750A4", "surfaceContainer" to surface)
+                    page.panel.applyUiTheme(theme)
+                    page.embedded.applyUiTheme(theme)
+                }
+                waitForIdleSync()
+                SystemClock.sleep(300)
+                check(!page.source.backdrop.hasRecording) { "M3E 仍保留背景录制" }
+                check(page.source.childCount == children && page.embedded === embedded) { "切换主题重建了业务页面" }
+                check(page.embedded.childCount == 1) { "M3E 控件没有回到本地宿主" }
+                check(sample(page.panel) == AndroidColor.parseColor(surface)) { "实体面板未应用快照色板" }
+                runOnMainSync {
+                    page.panel.applyUiTheme(mapOf("style" to "glasmio", "revision" to "glass$index"))
+                    page.embedded.applyUiTheme(mapOf("style" to "glasmio", "revision" to "glass$index"))
+                    page.source.samplingEnabled = true
+                }
+                rawEquals("materialReturn$index", AndroidColor.GREEN) {}
+                check(page.embedded.childCount == 0) { "Glasmio 控件没有恢复到覆盖层" }
+            }
             sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_HOME)
             val hiddenDeadline = SystemClock.uptimeMillis() + 5000
             while (page.source.windowVisibility == View.VISIBLE && SystemClock.uptimeMillis() < hiddenDeadline) SystemClock.sleep(50)

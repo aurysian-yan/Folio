@@ -64,7 +64,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
     <PageTitle {...header} title={t('navigation.settings')} theme={theme} style={settingsLayout.pageTitle} />
     <View style={styles.overviewCards}>
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('sync')}
-        style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
+        style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}), opacity: pressed ? 0.7 : 1 }]}>
         <View style={styles.cardHeader}>
           <SettingsIcon><CloudIcon size={22} color={theme.label} /></SettingsIcon>
           <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.cloud')}</Text>
@@ -81,7 +81,7 @@ export function SettingsScreen({ theme, active, sourceId, controller, onOpenPage
         </View>
       </Pressable>
       <Pressable accessibilityRole="button" onPress={() => onOpenPage('storage')}
-        style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, opacity: pressed ? 0.7 : 1 }]}>
+        style={({ pressed }) => [styles.overviewCard, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}), opacity: pressed ? 0.7 : 1 }]}>
         <View style={styles.cardHeader}>
           <SettingsIcon><DatabaseIcon size={22} color={theme.label} /></SettingsIcon>
           <Text style={[styles.cardTitle, { color: theme.label }]}>{t('settings.storage')}</Text>

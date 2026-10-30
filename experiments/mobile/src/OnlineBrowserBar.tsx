@@ -53,7 +53,7 @@ export function OnlineBrowserBar({ theme, provider, browser, address, bottom, so
   }]}>
     {Platform.OS === 'android' && <PanelBackdrop navigationGlass sourceId={sourceId} theme={theme} style={StyleSheet.absoluteFill} />}
     <Pressable accessibilityRole="button" accessibilityLabel={`${start ? t('browser.searchOrAddress') : title}，${t('browser.pageTools')}${badge ? `，${t('browser.downloading', { count: badge })}` : attention ? `，${t('browser.needsAttention')}` : ''}`}
-      onPress={onEdit} style={({ pressed }) => [styles.bar, { opacity: pressed ? 0.7 : 1 }, Platform.OS !== 'android' && { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: StyleSheet.hairlineWidth }]}>
+      onPress={onEdit} style={({ pressed }) => [styles.bar, { opacity: pressed ? 0.7 : 1, borderRadius: theme.ui?.material ? 16 : 28 }, Platform.OS !== 'android' && { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: StyleSheet.hairlineWidth }]}>
       <View style={styles.titleRow}>
         {start ? <MagnifyingGlassIcon size={20} color={theme.secondary} /> : <OnlineSourceIcon provider={provider} theme={theme} size={20} />}
         <Text numberOfLines={1} style={[styles.title, { color: start ? theme.secondary : theme.label, fontWeight: start ? '400' : '600' }]}>{start ? t('browser.searchOrAddress') : title}</Text>

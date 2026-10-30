@@ -64,7 +64,28 @@ class FolioLiquidTabsView(context: Context, appContext: AppContext) : FolioGlass
         }
         selectedId = id
         if (id != "search") primaryId = id
-        onSelectionChange(mapOf("id" to id))
+        onSelectionChange(payload("id" to id))
+    }
+
+    @Composable override fun MaterialContent() {
+        if (items.isEmpty()) return
+        if (segmented) {
+            androidx.compose.material3.SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                items.forEachIndexed { index, item ->
+                    androidx.compose.material3.SegmentedButton(selected = item.id == selectedId, onClick = { select(item.id) },
+                        enabled = controlEnabled && !item.disabled,
+                        shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(index, items.size)) {
+                        if (iconOnly) FolioMaterialIcon(item.icon) else Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        } else androidx.compose.material3.NavigationBar(Modifier.fillMaxWidth(), windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) {
+            items.forEach { item ->
+                androidx.compose.material3.NavigationBarItem(selected = item.id == selectedId, onClick = { select(item.id) },
+                    enabled = controlEnabled && !item.disabled, icon = { FolioMaterialIcon(item.icon) },
+                    label = { Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis) })
+            }
+        }
     }
 
     @Composable override fun GlassContent() {

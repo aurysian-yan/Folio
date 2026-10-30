@@ -1,3 +1,4 @@
+import { useUiEventGuard } from './UiTheme';
 import { androidPageBackdropProps, usesGlasmioControls } from './android-glass';
 import { requireNativeView } from 'expo';
 import { Dimensions, StyleSheet, useWindowDimensions, type NativeSyntheticEvent, type ViewProps } from 'react-native';
@@ -64,12 +65,14 @@ function marginReduction() {
 // 左右外边距沿用 8% 比例，再应用同一缩减量，保持导航与屏幕圆角协调。
 const sideMargin = (availableWidth: number) => navigationSideMargin(availableWidth, marginReduction());
 
-export function navigationContentInset(bottomInset: number) {
+export function navigationContentInset(bottomInset: number, material = false) {
+  if (material) return bottomInset + 80 + 16;
   return bottomOffset(bottomInset) + containerHeight + overflow;
 }
 
 // 紧凑按钮在承载层内垂直居中，内容边界跟随实际表面顶边。
-export function navigationBarTopInset(bottomInset: number, collapsed = false) {
+export function navigationBarTopInset(bottomInset: number, collapsed = false, material = false) {
+  if (material) return bottomInset + 80;
   const compactHeight = usesGlasmioControls ? 44 : 48;
   return bottomOffset(bottomInset) + containerHeight - (collapsed ? (containerHeight - compactHeight) / 2 : 0);
 }
@@ -86,22 +89,26 @@ export function NavigationBackdrop({ theme, style, ...props }: NavigationBackdro
 }
 
 export function BottomNavigation({ hidden = false, collapsed = false, collapsible = false, sourceId, selectedId, dark, theme, bottomInset, leftInset, rightInset, onSelectionChange, onExpand, onCollapse }: BottomNavigationProps) {
+  const accept = useUiEventGuard(theme);
   const { width } = useWindowDimensions();
   const availableWidth = Math.max(0, width - leftInset - rightInset);
+  const material = theme.ui?.material;
   const margin = sideMargin(availableWidth);
   // 键盘避让保持宿主挂载，避免改变原生搜索框的窗口关系。
   return <LiquidTabs {...androidPageBackdropProps(theme)} pointerEvents={hidden ? 'none' : 'auto'} accessibilityElementsHidden={hidden}
     importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'} sourceId={sourceId} selectedId={selectedId} dark={dark} accentColor={theme.accent} items={items}
-    enabled={!hidden} collapsed={collapsed} collapsible={collapsible} expandHint={i18n.t('navigation.expandBar')}
+    enabled={!hidden} collapsed={material ? false : collapsed} collapsible={material ? false : collapsible} expandHint={i18n.t('navigation.expandBar')}
     style={[styles.tabs, {
       opacity: hidden ? 0 : 1,
-      width: availableWidth - margin * 2,
-      left: leftInset + margin,
-      bottom: bottomOffset(bottomInset) - overflow,
+      width: material ? availableWidth : availableWidth - margin * 2,
+      height: material ? 80 : pressedHeight,
+      left: material ? leftInset : leftInset + margin,
+      bottom: material ? bottomInset : bottomOffset(bottomInset) - overflow,
     }]}
     onExpand={() => onExpand?.()}
     onCollapse={() => onCollapse?.()}
     onSelectionChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return;
       if (items.some(({ id }) => id === nativeEvent.id)) onSelectionChange(nativeEvent.id);
     }} />;
 }

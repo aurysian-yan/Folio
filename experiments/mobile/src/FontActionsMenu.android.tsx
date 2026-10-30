@@ -1,3 +1,4 @@
+import { useUiEventGuard } from './UiTheme';
 import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +25,7 @@ const ActionsMenu = requireNativeView<NativeActionsMenuProps>('FolioNavigation',
 
 // 安卓复用主页菜单的材质、锚点与拖动回弹。
 export function FontActionsMenu({ theme, sourceId, favorite = false, favoritePending = false, onFavorite, onAddToCollection, onReset, resetDisabled = false }: FontActionsMenuProps) {
+  const accept = useUiEventGuard(theme);
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
   const { label, secondary, muted, accent, tab, border, backButtonBorder, surface: raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
@@ -36,8 +38,10 @@ export function FontActionsMenu({ theme, sourceId, favorite = false, favoritePen
       ...(onAddToCollection ? [{ id: 'collection', label: t('collection.addTo'), icon: 'folder-plus' }] : []),
       ...(onReset ? [{ id: 'reset', label: t('common.reset'), icon: 'reset', disabled: resetDisabled }] : []),
     ]} style={{ width: 64, height: 44 }}
-    onExpandedChange={({ nativeEvent }) => { if (nativeEvent.expanded) Keyboard.dismiss(); }}
+    onExpandedChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return; if (nativeEvent.expanded) Keyboard.dismiss(); }}
     onSelectionChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return;
       if (nativeEvent.id === 'favorite' && !favoritePending) onFavorite?.();
       else if (nativeEvent.id === 'collection') onAddToCollection?.();
       else if (nativeEvent.id === 'reset' && !resetDisabled) onReset?.();

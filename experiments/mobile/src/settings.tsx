@@ -1,7 +1,9 @@
 import { defaultDashboard, sanitizeDashboard, type DashboardSection } from './browser-dashboard';
 import { sanitizePreviewScale } from './preview-scale';
+import { resolveAndroidAppearance, type AndroidUiStyle } from './ui-style';
+import { supportsM3e } from './android-ui-capability';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 // 移动端偏好：外观、字体卡片与导入行为，统一持久化到设备本地。
 export type AppearanceMode = 'system';
@@ -14,6 +16,7 @@ export interface Preferences {
   browserDashboard: DashboardSection[];
   appearance: AppearanceMode;
   accent: AccentId;
+  androidUiStyle: AndroidUiStyle;
   materialTheme: boolean;
   previewScale: number;
   showCardMetadata: boolean;
@@ -39,6 +42,7 @@ export const defaultPreferences: Preferences = {
   browserDashboard: defaultDashboard,
   appearance: 'system',
   accent: 'folio',
+  androidUiStyle: 'glasmio',
   materialTheme: false,
   previewScale: 24,
   showCardMetadata: true,
@@ -96,7 +100,7 @@ function sanitize(raw: unknown): Preferences {
     // 兼容旧偏好，深浅色统一跟随系统。
     appearance: 'system',
     accent: pick(accentValues, value.accent, defaultPreferences.accent),
-    materialTheme: typeof value.materialTheme === 'boolean' ? value.materialTheme : defaultPreferences.materialTheme,
+    ...resolveAndroidAppearance(value, supportsM3e),
     previewScale: scale,
     showCardMetadata: typeof value.showCardMetadata === 'boolean' ? value.showCardMetadata : defaultPreferences.showCardMetadata,
     showFavoriteBadge: typeof value.showFavoriteBadge === 'boolean' ? value.showFavoriteBadge : defaultPreferences.showFavoriteBadge,
@@ -113,15 +117,19 @@ function sanitize(raw: unknown): Preferences {
 }
 
 let preferencesQueue = Promise.resolve();
-function persist(next: Preferences) {
+function persist(next: Preferences): Promise<void> {
   // 写入失败不影响当前会话内的偏好使用。
   const raw = JSON.stringify(next);
-  preferencesQueue = preferencesQueue.catch(() => {}).then(() => AsyncStorage.setItem(storageKey, raw)).catch(() => {});
+  const write = preferencesQueue.catch(() => {}).then(() => AsyncStorage.setItem(storageKey, raw));
+  preferencesQueue = write.catch(() => {});
+  return write;
 }
 
 export interface PreferencesValue {
   preferences: Preferences;
   ready: boolean;
+  saveError: boolean;
+  retrySave: () => void;
   update: (patch: Partial<Preferences>) => void;
   reset: () => void;
 }
@@ -132,6 +140,16 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
   const [ready, setReady] = useState(false);
   const loaded = useRef(false);
+  const [saveError, setSaveError] = useState(false);
+  const latest = useRef(preferences);
+  useLayoutEffect(() => { latest.current = preferences; }, [preferences]);
+  const saveVersion = useRef(0);
+  const save = (next: Preferences) => {
+    const version = ++saveVersion.current;
+    void persist(next).then(
+      () => { if (saveVersion.current === version) setSaveError(false); },
+      () => { if (saveVersion.current === version) setSaveError(true); });
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -148,16 +166,18 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PreferencesValue>(() => ({
     preferences,
     ready,
+    saveError,
+    retrySave: () => save(latest.current),
     update: (patch) => setPreferences((current) => {
       const next = sanitize({ ...current, ...patch });
-      if (loaded.current) persist(next);
+      if (loaded.current) save(next);
       return next;
     }),
     reset: () => {
-      if (loaded.current) persist(defaultPreferences);
+      if (loaded.current) save(defaultPreferences);
       setPreferences(defaultPreferences);
     },
-  }), [preferences, ready]);
+  }), [preferences, ready, saveError]);
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }

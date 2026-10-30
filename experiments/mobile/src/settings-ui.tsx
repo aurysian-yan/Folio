@@ -1,8 +1,10 @@
+import { CloudPanelTabs } from './CloudPanelTabs';
 import { ReorderScrollContext, useReorderScroll } from './ReorderableList';
 import { CaretLeftIcon, CaretRightIcon } from './icons';
 import { createContext, useContext, useImperativeHandle, useRef, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type ScrollView, type StyleProp, type TextStyle } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { Animated, Pressable, StyleSheet, Text, View, type ScrollView, type StyleProp, type TextStyle } from 'react-native';
 import { GlassSwitch } from './GlassSwitch';
 import { NavigationBackdrop } from './bottom-navigation';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -101,9 +103,9 @@ function SettingsPageContent({ pageRef, title, theme, onClose, children, backgro
 export function SettingsGroup({ theme, title, footer, children, animateLayout = false, backgroundColor }: {
   theme: Theme; title?: string; footer?: string; children: ReactNode; animateLayout?: boolean; backgroundColor?: string;
 }) {
-  const cardStyle = [styles.groupCard, { backgroundColor: backgroundColor ?? theme.surface }];
+  const cardStyle = [styles.groupCard, { backgroundColor: backgroundColor ?? theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }];
   const content = <>
-    {!!title && <Text style={[styles.groupTitle, { color: theme.secondary }]}>{title}</Text>}
+    {!!title && <Text style={[styles.groupTitle, { color: theme.ui?.material ? theme.accent : theme.secondary, fontSize: theme.ui?.material ? 14 : undefined }]}>{title}</Text>}
     {animateLayout ? <Motion.View layout={settingsTransition.layout} collapsable={false} style={cardStyle}>{children}</Motion.View>
       : <View style={cardStyle}>{children}</View>}
     {!!footer && <Text style={[styles.groupFooter, { color: theme.secondary }]}>{footer}</Text>}
@@ -118,7 +120,7 @@ function RowShell({ theme, children, onPress, accessibilityLabel, accessibilityS
 }) {
   const focus = useContext(SettingsScrollFocus);
   const node = useRef<View>(null);
-  const body = <View style={styles.row}>{children}</View>;
+  const body = <View style={[styles.row, theme.ui?.material && { minHeight: 64 }]}>{children}</View>;
   return <View ref={node} collapsable={false} onLayout={() => { if (searchTitle) focus?.(searchTitle, node.current); }}>
     {onPress ? <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={accessibilityState}
       disabled={accessibilityState?.disabled} onPress={onPress}
@@ -171,7 +173,9 @@ export function SettingsChoiceRow<T extends string>({ title, detail, options, va
     <View style={styles.rowBody}>
       {!hideTitle && <Text style={[styles.rowTitle, styles.choiceHeading, { color: theme.label }]}>{title}</Text>}
       {!!detail && <Text style={[styles.rowDetail, styles.choiceHeading, { color: theme.secondary }]}>{detail}</Text>}
-      <View accessibilityRole="radiogroup" accessibilityLabel={title} style={[styles.choices, !hideTitle && styles.choicesWithTitle]}>
+      {theme.ui?.material ? <CloudPanelTabs label={title} theme={theme} disabled={false} value={value}
+        options={options.map((option) => ({ ...option, systemImage: '' }))} onChange={(next) => onChange(next as T)} />
+        : <View accessibilityRole="radiogroup" accessibilityLabel={title} style={[styles.choices, !hideTitle && styles.choicesWithTitle]}>
         {options.map((option) => {
           const selected = option.value === value;
           return <Pressable key={option.value} accessibilityRole="radio" accessibilityLabel={option.label}
@@ -182,7 +186,7 @@ export function SettingsChoiceRow<T extends string>({ title, detail, options, va
             <Text style={[styles.choiceLabel, { color: selected ? theme.onAccent : theme.label }]}>{option.label}</Text>
           </Pressable>;
         })}
-      </View>
+      </View>}
     </View>
   </View>;
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { Animated, Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CaretLeftIcon, CheckIcon } from './icons';
 import { NativeFontPreview, online } from './native';

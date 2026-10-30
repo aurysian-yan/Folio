@@ -1,7 +1,8 @@
 import { CaretLeftIcon, EqualsIcon } from './icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Animated, KeyboardAvoidingView, PanResponder, PixelRatio, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { Animated, KeyboardAvoidingView, PanResponder, PixelRatio, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { representativeFace, type FontFace, type FontFamily, type LibrarySnapshot } from './library';
 import { PanelAction } from './panel-content';

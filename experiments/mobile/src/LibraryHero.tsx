@@ -20,7 +20,7 @@ export function LibraryHero({ presentation, theme, onAction, onLayout }: {
   const SyncIcon = ['checking', 'running'].includes(presentation.sync.state) ? ArrowClockwiseIcon
     : presentation.sync.state === 'error' ? WarningIcon : presentation.sync.state === 'synced' ? CloudCheckIcon : CloudIcon;
   const action = presentation.action === 'fontHealth' ? undefined : presentation.action;
-  const title = <Text accessibilityRole="header" style={[styles.title, { color: theme.label }]}>{presentation.title}</Text>;
+  const title = <Text accessibilityRole="header" style={[styles.title, { color: theme.label, ...(theme.ui?.material ? { fontSize: 32, lineHeight: 40, fontWeight: '500' as const } : {}) }]}>{presentation.title}</Text>;
   const heading = action ? <Pressable accessibilityRole="button" accessibilityLabel={`${presentation.title}，${presentation.actionLabel}`}
     onPress={() => onAction(action)} style={styles.titleAction}>
     {title}<CaretRightIcon size={16} color={theme.muted} />
@@ -29,7 +29,7 @@ export function LibraryHero({ presentation, theme, onAction, onLayout }: {
     weight={['pending', 'error'].includes(presentation.sync.state) ? 'fill' : 'regular'}
     color={['pending', 'error'].includes(presentation.sync.state) ? theme.heroCloud : theme.secondary} /></View>
     <Text style={[styles.syncText, { color: theme.secondary }]}>{presentation.sync.text}</Text></>;
-  return <View style={styles.hero} onLayout={onLayout}>
+  return <View style={[styles.hero, theme.ui?.material && { backgroundColor: theme.activeTab, borderRadius: 28, padding: 20, marginBottom: 12 }]} onLayout={onLayout}>
     {standaloneIcon ? <><Icon size={32} color={color} weight={iconWeight} /><View style={styles.heading}>{heading}</View></>
       : <View style={styles.headingRow}><Icon size={24} color={color} weight={iconWeight} />{heading}</View>}
     <Text style={[styles.subtitle, { color: theme.secondary }]}>{presentation.subtitle}</Text>

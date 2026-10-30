@@ -42,10 +42,37 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : FolioGlass
     private val onSelectionChange by EventDispatcher()
     private val onExpandedChange by EventDispatcher()
 
+    override fun onUiStyleChanged() { updateExpanded(false) }
+
     private fun updateExpanded(value: Boolean) {
         if (expanded == value) return
         expanded = value
-        onExpandedChange(mapOf("expanded" to value))
+        onExpandedChange(payload("expanded" to value))
+    }
+
+    @Composable override fun MaterialContent() {
+        val text = labels ?: return
+        LaunchedEffect(disabled) { if (disabled) updateExpanded(false) }
+        androidx.compose.foundation.layout.Box {
+            if (triggerTrailing) {
+                Row(Modifier.fillMaxSize().clickable(enabled = !disabled) { updateExpanded(true) }.padding(horizontal = 16.dp)
+                    .semantics { contentDescription = listOf(text.title, text.value).filter { it.isNotBlank() }.joinToString(" · ") },
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(text.title, Modifier.weight(1f), maxLines = 1)
+                    Text(text.value, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    FolioMaterialIcon("caret")
+                }
+            } else androidx.compose.material3.IconButton(onClick = { updateExpanded(true) }, enabled = !disabled,
+                modifier = Modifier.semantics { contentDescription = text.title }) { FolioMaterialIcon(triggerIcon) }
+            androidx.compose.material3.DropdownMenu(expanded = expanded && !disabled, onDismissRequest = { updateExpanded(false) }) {
+                items.forEach { item ->
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(item.label) }, enabled = !item.disabled,
+                        onClick = { if (expanded && !disabled && !item.disabled) { updateExpanded(false); onSelectionChange(payload("id" to item.id)) } },
+                        leadingIcon = item.icon.takeIf { it.isNotBlank() }?.let { { FolioMaterialIcon(it) } },
+                        trailingIcon = if (item.id == selectedId) ({ FolioMaterialIcon("check") }) else null)
+                }
+            }
+        }
     }
 
     @Composable override fun GlassContent() {
@@ -71,7 +98,7 @@ class FolioPresetMenuView(context: Context, appContext: AppContext) : FolioGlass
                 items.forEach { item ->
                     GlasmioMenuItem(item.label, {
                         if (!disabled && !item.disabled) {
-                            onSelectionChange(mapOf("id" to item.id))
+                            onSelectionChange(payload("id" to item.id))
                             close()
                         }
                     }, enabled = !item.disabled, backdrop = backdrop,

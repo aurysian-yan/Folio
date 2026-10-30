@@ -21,10 +21,17 @@ object FolioMaterialColors {
 
     fun scheme(context: Context, seed: String, dark: Boolean, followWallpaper: Boolean): Map<String, String> {
         if (followWallpaper && !dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            return systemLightScheme(context)
+            return systemLightWebPalette(context) + systemLightScheme(context)
         }
         val scheme = SchemeTonalSpot(Hct.fromInt(parseHex(seed)), dark, 0.0)
         return mapOf(
+            "onPrimaryContainer" to toHex(scheme.onPrimaryContainer),
+            "secondary" to toHex(scheme.secondary), "onSecondary" to toHex(scheme.onSecondary),
+            "secondaryContainer" to toHex(scheme.secondaryContainer), "onSecondaryContainer" to toHex(scheme.onSecondaryContainer),
+            "tertiary" to toHex(scheme.tertiary), "onTertiary" to toHex(scheme.onTertiary),
+            "tertiaryContainer" to toHex(scheme.tertiaryContainer), "onTertiaryContainer" to toHex(scheme.onTertiaryContainer),
+            "outline" to toHex(scheme.outline), "onError" to toHex(scheme.onError),
+            "errorContainer" to toHex(scheme.errorContainer), "onErrorContainer" to toHex(scheme.onErrorContainer),
             "primary" to toHex(scheme.primary),
             "onPrimary" to toHex(scheme.onPrimary),
             "primaryContainer" to toHex(scheme.primaryContainer),

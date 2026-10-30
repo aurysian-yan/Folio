@@ -43,7 +43,32 @@ class FolioAppearanceControlView(context: Context, appContext: AppContext) : Fol
         } else if (items.none { it.id == id && !it.disabled }) return
         selectedId = id
         eventCount++
-        onSelectionChange(mapOf("id" to id, "eventCount" to eventCount))
+        onSelectionChange(payload("id" to id, "eventCount" to eventCount))
+    }
+
+    @Composable override fun MaterialContent() {
+        val modifier = Modifier.fillMaxWidth().semantics {
+            contentDescription = label
+            stateDescription = items.firstOrNull { it.id == selectedId }?.label ?: selectedId
+        }
+        if (kind == "size" && items.size == 3) {
+            val lower = items.first().id.toFloatOrNull() ?: return
+            val upper = items.last().id.toFloatOrNull() ?: return
+            val value = selectedId.toFloatOrNull() ?: return
+            if (!value.isFinite() || !lower.isFinite() || !upper.isFinite() || upper <= lower) return
+            androidx.compose.material3.Slider(value = ((value - lower) / (upper - lower)).coerceIn(0f, 1f),
+                onValueChange = { fraction -> if (fraction.isFinite()) select((lower + fraction.coerceIn(0f, 1f) * (upper - lower)).toString()) },
+                modifier = modifier, enabled = controlEnabled)
+        } else if (kind == "view" && items.size == 2) {
+            androidx.compose.material3.SingleChoiceSegmentedButtonRow(modifier) {
+                items.forEachIndexed { index, item ->
+                    androidx.compose.material3.SegmentedButton(selected = item.id == selectedId,
+                        onClick = { select(item.id) }, enabled = controlEnabled && !item.disabled,
+                        shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(index, items.size),
+                        label = { FolioMaterialIcon(item.icon) })
+                }
+            }
+        }
     }
 
     @Composable override fun GlassContent() {

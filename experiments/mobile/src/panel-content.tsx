@@ -6,6 +6,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import type { SharedValue } from 'react-native-reanimated';
 import { NativeActionButton, usesNativeControls } from './native-controls';
+import { MaterialButton } from './MaterialControls';
 import { IconButton, type Theme } from './ui';
 
 const actionIcons: Record<string, typeof CheckIcon> = { checkmark: CheckIcon, xmark: XIcon, plus: PlusIcon,
@@ -34,6 +35,8 @@ export function PanelAction({ label, theme, onPress, disabled, destructive = fal
 }) {
   const color = destructive ? theme.danger : theme.accent;
   const Icon = systemImage ? actionIcons[systemImage] : undefined;
+  if (theme.ui?.material) return <MaterialButton label={label} systemImage={systemImage} theme={theme} onPress={onPress} disabled={disabled}
+    primary={primary} destructive={destructive} fullWidth={fullWidth} />;
   return usesNativeControls ? <NativeActionButton label={label} systemImage={systemImage} color={color} onPress={onPress}
     disabled={disabled} prominent={primary} minimumWidth={80} fullWidth={fullWidth} cornerRadius={cornerRadius} />
     : <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled}
@@ -65,7 +68,7 @@ export function PanelSection({ title, theme, children, action, initiallyExpanded
   title: string; theme: Theme; children: ReactNode; action?: ReactNode; initiallyExpanded?: boolean;
 }) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
-  return <View style={[panelStyles.card, { backgroundColor: theme.surface }]}>
+  return <View style={[panelStyles.card, { backgroundColor: theme.surface, borderRadius: theme.ui?.shapes.card ?? 24 }]}>
     <PanelSectionHeader title={title} theme={theme} expanded={expanded} onToggle={() => setExpanded(!expanded)} action={action} />
     {expanded && <View style={panelStyles.cardContent}>{children}</View>}
   </View>;

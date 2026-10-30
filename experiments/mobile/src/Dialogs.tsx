@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text } from 'react-native';
+import { MaterialDialog } from './MaterialControls';
 import { FilterDrawer, FilterScrollView } from './FilterDrawer';
 import { NavigationScrollContext } from './NavigationScroll';
 import { PanelAction } from './panel-content';
@@ -28,9 +29,11 @@ export function DialogProvider({ children, theme }: { children: ReactNode; theme
   };
   return <DialogContext.Provider value={{ alert }}><NavigationScrollContext.Provider value={{ ...navigation, enabled: navigation.enabled && !dialog }}>
     {children}
-    <FilterDrawer visible={visible} title={dialog?.title ?? ''} theme={theme} onClose={() => close()} onDismissed={finish}>
+    {theme.ui?.material ? <MaterialDialog theme={theme} dialog={dialog} visible={visible}
+      onDismiss={() => close()} onSelect={(index) => { const button = dialog?.buttons[index]; if (button) close(button.onPress); }} />
+      : <FilterDrawer visible={visible} title={dialog?.title ?? ''} theme={theme} onClose={() => close()} onDismissed={finish}>
       {dialog && <DialogContent dialog={dialog} theme={theme} onSelect={(button) => close(button.onPress)} />}
-    </FilterDrawer>
+    </FilterDrawer>}
   </NavigationScrollContext.Provider></DialogContext.Provider>;
 }
 export function useDialogs() { return useContext(DialogContext); }

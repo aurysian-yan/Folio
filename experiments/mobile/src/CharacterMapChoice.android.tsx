@@ -1,3 +1,4 @@
+import { useUiEventGuard } from './UiTheme';
 import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +25,7 @@ const ChoiceMenu = requireNativeView<NativeChoiceProps>('FolioNavigation', 'Foli
 
 // 字款、来源和脚本复用现有玻璃菜单的材质、锚点与拖动回弹。
 export function CharacterMapChoice({ label, options, value, onChange, theme, sourceId, triggerSize, triggerFeedback = true }: CharacterMapChoiceProps) {
+  const accept = useUiEventGuard(theme);
   const { t } = useTranslation();
   const { label: textColor, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
   return <ChoiceMenu {...androidPageBackdropProps(theme)} sourceId={sourceId} selectedId={value || 'all'} dark={theme.dark} disabled={options.length < 2}
@@ -32,8 +34,10 @@ export function CharacterMapChoice({ label, options, value, onChange, theme, sou
     colors={{ label: textColor, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}
     items={options.map((option) => ({ id: option.value || 'all', label: option.label, icon: '' }))}
     labels={{ title: label, value: options.find((option) => option.value === value)?.label ?? '', expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
-    onExpandedChange={({ nativeEvent }) => { if (nativeEvent.expanded) Keyboard.dismiss(); }}
+    onExpandedChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return; if (nativeEvent.expanded) Keyboard.dismiss(); }}
     onSelectionChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return;
       const option = options.find((item) => (item.value || 'all') === nativeEvent.id);
       if (option) onChange(option.value);
     }} />;

@@ -40,10 +40,10 @@ export interface BottomNavigationProps {
   onCollapse?: () => void;
 }
 
-export function navigationContentInset(bottomInset: number) { return bottomInset + 96; }
+export function navigationContentInset(bottomInset: number, _material = false) { return bottomInset + 96; }
 
 // 按展开导航或紧凑按钮的实际顶边计算内容避让。
-export function navigationBarTopInset(bottomInset: number, collapsed = false) { return bottomInset + 8 + (collapsed ? 48 : 64); }
+export function navigationBarTopInset(bottomInset: number, collapsed = false, _material = false) { return bottomInset + 8 + (collapsed ? 48 : 64); }
 
 export function navigationCompactBarFrame(bottomInset: number, _availableWidth: number) {
   return { bottom: bottomInset + 8, sideInset: 84 };

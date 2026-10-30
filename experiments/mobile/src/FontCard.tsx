@@ -36,7 +36,7 @@ export const FontCard = memo(function FontCard({ family, mode, theme, onOpen, sa
     <Pressable accessibilityRole={onOpen ? 'button' : undefined} accessible={!!onOpen}
       accessibilityLabel={onOpen ? [family.isFavorite ? t('mobile.viewDetailsFavorite', { name: family.displayName }) : `${family.displayName} · ${t('mobile.viewDetails')}`, locationText, ...transfers.map((item) => item.text)].join(' · ') : undefined}
       disabled={!onOpen} onPress={onOpen} style={[styles.card, compact ? styles.listCard : styles.gridCard,
-        { backgroundColor: compact ? theme.listCardSurface : theme.surface }]}>
+        { backgroundColor: compact ? theme.listCardSurface : theme.surface, borderRadius: theme.ui?.shapes.card ?? 24 }]}>
       <View pointerEvents="none" style={[styles.preview, compact && styles.listPreview]}>
         {sampleText !== undefined ? (
           <Text adjustsFontSizeToFit={!compact} style={[styles.sample, {

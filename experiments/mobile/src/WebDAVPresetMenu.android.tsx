@@ -1,3 +1,4 @@
+import { useUiEventGuard } from './UiTheme';
 import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +22,7 @@ const PresetMenu = requireNativeView<NativePresetMenuProps>('FolioNavigation', '
 
 // 安卓地址菜单复用主页视图菜单的原生玻璃弹层。
 export function WebDAVPresetMenu({ theme, serverUrl, disabled, sourceId = '', onChange }: WebDAVPresetMenuProps) {
+  const accept = useUiEventGuard(theme);
   const { t } = useTranslation();
   const { label, secondary, muted, accent, tab, border, backButtonBorder, surface: raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
   return <PresetMenu {...androidPageBackdropProps(theme)} sourceId={sourceId} selectedId={matchingWebdavPreset(serverUrl)} disabled={disabled} dark={theme.dark}
@@ -28,8 +30,10 @@ export function WebDAVPresetMenu({ theme, serverUrl, disabled, sourceId = '', on
     items={webdavPresets.map((preset) => ({ id: preset.id, label: t(preset.label), icon: '' }))}
     labels={{ title: t('cloud.provider'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
     style={{ width: 44, height: 44 }}
-    onExpandedChange={({ nativeEvent }) => { if (nativeEvent.expanded) Keyboard.dismiss(); }}
+    onExpandedChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return; if (nativeEvent.expanded) Keyboard.dismiss(); }}
     onSelectionChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return;
       const preset = webdavPresets.find((item) => item.id === nativeEvent.id);
       if (preset && !disabled) onChange(preset.url);
     }} />;

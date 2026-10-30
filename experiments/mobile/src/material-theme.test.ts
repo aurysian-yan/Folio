@@ -3,6 +3,10 @@ import test from 'node:test';
 import { materialThemeOverrides, type MaterialRoles } from './material-theme.ts';
 
 const roles: MaterialRoles = {
+  onPrimaryContainer: '#21005D', secondary: '#625B71', onSecondary: '#FFFFFF',
+  secondaryContainer: '#E8DEF8', onSecondaryContainer: '#1D192B',
+  tertiary: '#7D5260', onTertiary: '#FFFFFF', tertiaryContainer: '#FFD8E4', onTertiaryContainer: '#31111D',
+  outline: '#79747E', errorContainer: '#F9DEDC', onError: '#FFFFFF', onErrorContainer: '#410E0B',
   primary: '#6750A4', onPrimary: '#FFFFFF', primaryContainer: '#EADDFF',
   surface: '#FEF7FF', surfaceContainer: '#F3EDF7', surfaceContainerHigh: '#ECE6F0', surfaceContainerHighest: '#E6E0E9',
   onSurface: '#1D1B20', onSurfaceVariant: '#49454F', outlineVariant: '#CAC4D0', error: '#B3261E',

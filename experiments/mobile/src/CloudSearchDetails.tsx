@@ -1,7 +1,8 @@
 import { FilterScrollView } from './FilterDrawer';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Text } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { Text } from 'react-native';
 import { LibraryPanel } from './LibraryPanel';
 import { PanelAction } from './panel-content';
 import { cloudSync, library } from './native';

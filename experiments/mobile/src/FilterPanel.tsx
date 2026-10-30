@@ -1,7 +1,8 @@
 import { locationFilters } from "../../../shared/font-location";
 import { CheckIcon } from './icons';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { facetTitles, mergeFacetOptions, normalizeFacets, type FacetKind, type FacetOption, type FacetSelection } from './library';
 import { FilterDrawer, FilterList } from './FilterDrawer';
 import { PanelAction, PanelSection, panelStyles } from './panel-content';

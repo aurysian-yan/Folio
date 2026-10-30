@@ -1,3 +1,4 @@
+import { useUiEventGuard } from './UiTheme';
 import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
@@ -22,8 +23,8 @@ interface NativeAndroidHeaderProps extends ViewProps {
   colors: Pick<AndroidHeaderProps['theme'], 'label' | 'secondary' | 'muted' | 'accent' | 'tab' | 'border' | 'backButtonBorder' | 'raised' | 'shadow' | 'buttonSurface' | 'buttonSurfaceOpacity' | 'buttonPressed' | 'buttonPressedLabel'> & { scrim: number };
   onModeChange: (event: NativeSyntheticEvent<{ mode: 'grid' | 'list' }>) => void;
   onExpandedChange: (event: NativeSyntheticEvent<{ expanded: boolean }>) => void;
-  onImport: () => void;
-  onFilter: () => void;
+  onImport: (event: NativeSyntheticEvent<{ themeRevision?: string }>) => void;
+  onFilter: (event: NativeSyntheticEvent<{ themeRevision?: string }>) => void;
   onSearchTextChange: (event: NativeSyntheticEvent<{ text: string }>) => void;
 }
 
@@ -45,6 +46,7 @@ export function AndroidHeaderBackdrop({ theme, ...props }: AndroidHeaderBackdrop
 // 安卓操作区使用原生控件与共享语言目录。
 export function AndroidHeaderControls({ sourceId, theme, mode, active, width, ready, importing, importBlocked = false,
   searchOpen, autoFocusSearch = false, searchText, filterCount, onFilter, onModeChange, onImport, onSearchTextChange }: AndroidHeaderProps) {
+  const accept = useUiEventGuard(theme);
   const { t } = useTranslation();
   const shadowProgress = useHeaderShadowProgress();
   // 搜索框、顶栏图标与菜单面板统一使用当前主题色，覆盖 Material3 配色。
@@ -55,11 +57,13 @@ export function AndroidHeaderControls({ sourceId, theme, mode, active, width, re
       filter: filterCount ? t('mobile.filtersSelected', { count: filterCount }) : t('library.filterFonts'),
       importFonts: t('import.importFonts'), loadingImport: t('mobile.loadingImport'), viewOptions: t('libraryView.viewOptions'), viewMode: t('mobile.viewMode'),
       gridView: t('mobile.gridView'), listView: t('mobile.listView'), expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
-    colors={{ scrim: processColor(theme.scrim) as number, label, secondary, muted, accent, tab, border, backButtonBorder, raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }} shadowProgress={shadowProgress} style={[styles.header, { width }]}
-    onImport={onImport} onFilter={onFilter} filterCount={filterCount}
-    onSearchTextChange={({ nativeEvent }) => onSearchTextChange(nativeEvent.text)}
-    onExpandedChange={({ nativeEvent }) => { if (nativeEvent.expanded) Keyboard.dismiss(); }}
+    colors={{ scrim: processColor(theme.scrim) as number, label, secondary, muted, accent, tab, border, backButtonBorder, raised, shadow, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }} shadowProgress={shadowProgress} style={[styles.header, { width, height: theme.ui?.material ? 56 : 44 }]}
+    onImport={({ nativeEvent }) => { if (accept(nativeEvent)) onImport(); }} onFilter={({ nativeEvent }) => { if (accept(nativeEvent)) onFilter(); }} filterCount={filterCount}
+    onSearchTextChange={({ nativeEvent }) => { if (accept(nativeEvent)) onSearchTextChange(nativeEvent.text); }}
+    onExpandedChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return; if (nativeEvent.expanded) Keyboard.dismiss(); }}
     onModeChange={({ nativeEvent }) => {
+      if (!accept(nativeEvent)) return;
       if (nativeEvent.mode === 'grid' || nativeEvent.mode === 'list') onModeChange(nativeEvent.mode);
     }} />;
 }

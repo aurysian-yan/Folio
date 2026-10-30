@@ -1,3 +1,4 @@
+import { ActivityIndicator } from './UiActivityIndicator';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
@@ -76,7 +77,7 @@ export function OnlineBrowserLoading({ loading, failed, active, revealRequest, p
   }, [active, failed, finishReveal, loading, reduceMotion, reveal, revealRequest, size.height, size.width, visible]);
 
   useEffect(() => {
-    if (visible && loading && active && !reduceMotion) {
+    if (!theme.ui?.material && visible && loading && active && !reduceMotion) {
       rotation.set(0);
       rotation.set(withRepeat(withTiming(1, {
         duration: 1800, easing: Easing.linear, reduceMotion: ReduceMotion.System,
@@ -85,7 +86,7 @@ export function OnlineBrowserLoading({ loading, failed, active, revealRequest, p
       cancelAnimation(rotation);
     }
     return () => { cancelAnimation(rotation); };
-  }, [active, loading, reduceMotion, rotation, visible]);
+  }, [active, loading, reduceMotion, rotation, visible, theme.ui?.material]);
 
   const ring = useAnimatedProps(() => {
     const length = circumference * (0.12 + 0.58 * (1 - Math.cos(rotation.value * Math.PI * 2)) / 2);
@@ -110,14 +111,14 @@ export function OnlineBrowserLoading({ loading, failed, active, revealRequest, p
       <AnimatedPath fill={theme.background} fillRule="evenodd" animatedProps={cover} />
     </Svg> : <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background }]} />}
     <Motion.View pointerEvents="none" style={[styles.emblem, { left: centerX - ringSize / 2, top: centerY - ringSize / 2 }, foreground]}>
-      <Svg width={ringSize} height={ringSize} style={StyleSheet.absoluteFill}>
+      {theme.ui?.material ? <ActivityIndicator size={64} color={theme.accent} /> : <><Svg width={ringSize} height={ringSize} style={StyleSheet.absoluteFill}>
         <Circle cx={ringSize / 2} cy={ringSize / 2} r={ringRadius} stroke={theme.border} strokeWidth={ringStrokeWidth} fill="none" />
         <AnimatedCircle cx={ringSize / 2} cy={ringSize / 2} r={ringRadius} stroke={theme.accent}
           strokeWidth={ringStrokeWidth} strokeLinecap="round" fill="none" animatedProps={ring} />
       </Svg>
       <View style={[styles.iconBackground, { backgroundColor: theme.surface }]}>
         <OnlineSourceIcon provider={provider} theme={theme} size={38} />
-      </View>
+      </View></>}
     </Motion.View>
     <Motion.View pointerEvents="none" style={[styles.title, { top: centerY + ringSize / 2 + 24 }, foreground]}>
       <Text numberOfLines={2} style={[styles.name, { color: theme.label }]}>{provider?.name || t('online.title')}</Text>

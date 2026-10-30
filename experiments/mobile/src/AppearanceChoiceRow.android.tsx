@@ -1,3 +1,4 @@
+import { useUiEventGuard } from './UiTheme';
 import { requireNativeView } from 'expo';
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View, type NativeSyntheticEvent, type ViewProps } from 'react-native';
@@ -23,6 +24,7 @@ export function AppearanceChoiceRow(props: AppearanceChoiceRowProps) {
 
 function GlasmioChoiceRow({ kind, title, options, value, theme, disabled, onChange }: AppearanceChoiceRowProps) {
   const control = useGlassControl();
+  const accept = useUiEventGuard(theme);
   const [reduceMotion, setReduceMotion] = useState(true);
   useEffect(() => {
     let mounted = true;
@@ -42,6 +44,7 @@ function GlasmioChoiceRow({ kind, title, options, value, theme, disabled, onChan
       items={options.map((option) => ({ id: option.value, label: option.label, icon: option.systemImage ?? '' }))}
       style={{ width: '100%', height: 80 }}
       onSelectionChange={({ nativeEvent }) => {
+        if (!accept(nativeEvent)) return;
         if (!Number.isSafeInteger(nativeEvent.eventCount) || nativeEvent.eventCount <= lastEventCount.current) return;
         lastEventCount.current = nativeEvent.eventCount;
         setEventCount(nativeEvent.eventCount);

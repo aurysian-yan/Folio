@@ -1,3 +1,4 @@
+import { useUiEventGuard } from './UiTheme';
 import { androidPageBackdropProps } from './android-glass';
 import { requireNativeView } from 'expo';
 import { useTranslation } from 'react-i18next';
@@ -14,12 +15,13 @@ const NativeMenu = requireNativeView<ViewProps & {
 
 // 安卓沿用主页的玻璃菜单与拖动反馈。
 export function ReleaseMirrorMenu({ theme, sourceId, selectedId, disabled, title, items, onSelect, onExpandedChange }: ReleaseMirrorMenuProps) {
+  const accept = useUiEventGuard(theme);
   const { t } = useTranslation();
   const { label, secondary, muted, accent, tab, border, backButtonBorder, surface: raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel } = theme;
   return <NativeMenu {...androidPageBackdropProps(theme)} style={{ width: 44, height: 44 }} sourceId={sourceId} selectedId={selectedId} disabled={disabled} dark={theme.dark}
     colors={{ scrim: processColor(theme.scrim) as number, label, secondary, muted, accent, tab, border, backButtonBorder, raised, buttonSurface, buttonSurfaceOpacity, buttonPressed, buttonPressedLabel }}
     labels={{ title, expanded: t('inspector.expanded'), collapsed: t('inspector.collapsed') }}
     items={items.map((item) => ({ ...item, icon: '' }))}
-    onSelectionChange={({ nativeEvent }) => onSelect(nativeEvent.id)}
-    onExpandedChange={({ nativeEvent }) => onExpandedChange(nativeEvent.expanded)} />;
+    onSelectionChange={({ nativeEvent }) => { if (accept(nativeEvent)) onSelect(nativeEvent.id); }}
+    onExpandedChange={({ nativeEvent }) => { if (accept(nativeEvent)) onExpandedChange(nativeEvent.expanded); }} />;
 }

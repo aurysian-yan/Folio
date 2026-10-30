@@ -1,7 +1,8 @@
 import { useDialogs } from './Dialogs';
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Animated, Pressable, StyleSheet, Text, TextInput, View, type FlatList, type ScrollView } from 'react-native';
+import { TextInput } from './UiTextInput';
+import { Animated, Pressable, StyleSheet, Text, View, type FlatList, type ScrollView } from 'react-native';
 import { DotsThreeIcon } from './icons';
 import { BrowserLibrarySection, useBrowserLibraryScroll } from './BrowserLibrarySection';
 import { PanelAction } from './panel-content';

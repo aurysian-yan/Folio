@@ -63,7 +63,7 @@ export function BrowserDashboard({ theme, providers, jobs, active, bottomInset, 
           return <View style={styles.section}>
             <View style={styles.sectionHeader}>{handle}<Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.label }]}>{title(section)}</Text>
               {editing && <PanelAction theme={theme} label={t('common.remove')} onPress={() => update({ browserDashboard: sections.filter((item) => item.id !== section.id) })} />}</View>
-            {editing && <View style={[styles.configuration, { backgroundColor: theme.surface }]}>
+            {editing && <View style={[styles.configuration, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]}>
               <SettingsChoiceRow theme={theme} title={t('browser.cardStyle')} value={section.style}
                 options={(['normal', 'detailed', 'list'] as const).map((value) => ({ value, label: t(`browser.styles.${value}`) }))}
                 onChange={(style) => patch(section.id, { style })} />
@@ -80,7 +80,7 @@ export function BrowserDashboard({ theme, providers, jobs, active, bottomInset, 
               return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={job ? `${item.title}，${t(`online.browser.states.${job.state}`)}` : item.title}
                 disabled={editing} onPress={() => job ? onDownloads() : onOpen(item.url, item.providerId)}
                 onLongPress={item.bookmark && !editing ? () => onEditBookmark(item.bookmark!) : undefined}
-                style={({ pressed }) => [styles.card, { width: cardWidth, opacity: pressed ? 0.7 : 1 }, section.style === 'normal' ? styles.normalCard : [styles.surfaceCard, { backgroundColor: theme.surface }], isList && styles.list]}>
+                style={({ pressed }) => [styles.card, { width: cardWidth, opacity: pressed ? 0.7 : 1 }, section.style === 'normal' ? styles.normalCard : [styles.surfaceCard, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }], isList && styles.list]}>
                 {section.style === 'detailed' ? <BookmarkPreview active={active && !editing} url={item.url} title={item.title} provider={provider} theme={theme} afterTitle={job && <DownloadStatus job={job} theme={theme} />} /> : <>
                   <View style={[styles.iconSlot, isList ? styles.listIcon : { width: normalIconSize, height: normalIconSize }]}>
                     <View style={[styles.iconCard, {
@@ -97,11 +97,11 @@ export function BrowserDashboard({ theme, providers, jobs, active, bottomInset, 
                 </>}
               </Pressable>;
             })}</View>}
-            {!items.length && <View style={[styles.empty, { backgroundColor: theme.surface }]}><Text style={{ color: theme.secondary }}>{t(section.id === 'downloads' ? 'online.browser.noDownloads' : section.id === 'recent' ? 'browser.noHistory' : section.id === 'personal' ? 'browser.noPersonal' : 'browser.noBookmarks')}</Text></View>}
+            {!items.length && <View style={[styles.empty, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]}><Text style={{ color: theme.secondary }}>{t(section.id === 'downloads' ? 'online.browser.noDownloads' : section.id === 'recent' ? 'browser.noHistory' : section.id === 'personal' ? 'browser.noPersonal' : 'browser.noBookmarks')}</Text></View>}
             {overflow && <PanelAction theme={theme} label={t(expanded[section.id] ? 'common.collapse' : 'common.expand')} onPress={() => { navigation.end(); setExpanded((value) => ({ ...value, [section.id]: !value[section.id] })); }} />}
           </View>;
         }} />
-      {editing && <View style={[styles.configuration, { backgroundColor: theme.surface }]}>
+      {editing && <View style={[styles.configuration, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]}>
         <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.label }]}>{t('browser.addSection')}</Text>
         {choices.filter((choice) => !sections.some((section) => section.id === choice.id)).map((choice) => <PanelAction key={choice.id} theme={theme} label={choice.title}
           onPress={() => update({ browserDashboard: [...sections, { id: choice.id, rows: 2, style: 'normal' }] })} />)}

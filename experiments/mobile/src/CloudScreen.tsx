@@ -1,8 +1,10 @@
+import { MaterialButton } from './MaterialControls';
 import { useDialogs } from './Dialogs';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { CloudIcon, CaretRightIcon } from './icons';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { NavigationBackdrop } from './bottom-navigation';
@@ -101,7 +103,14 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
             </Text>
           </>}
         </View>
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: syncDisabled, busy }} disabled={syncDisabled}
+        {theme.ui?.material ? <View style={{ marginHorizontal: 16, marginBottom: 16 }}><MaterialButton theme={theme} fullWidth
+          primary={!status?.isRunning} disabled={syncDisabled}
+          label={t(readError ? 'common.retry' : !state?.profile ? 'cloud.connectTitle' : status?.isRunning ? 'cloud.cancelSync' : 'cloud.syncNow')}
+          onPress={() => {
+            if (readError) { void controller.refresh().catch(() => undefined); }
+            else if (!state?.profile) onConfigure();
+            else { void (status?.isRunning ? controller.cancel() : controller.start()); }
+          }} /></View> : <Pressable accessibilityRole="button" accessibilityState={{ disabled: syncDisabled, busy }} disabled={syncDisabled}
           style={({ pressed }) => [styles.syncButton, { backgroundColor: status?.isRunning ? theme.raised : theme.accent,
             opacity: syncDisabled ? 0.4 : pressed ? 0.7 : 1 }]} onPress={() => {
             if (readError) { void controller.refresh().catch(() => undefined); }
@@ -112,7 +121,7 @@ export function CloudScreen({ theme, active, sourceId, controller, snapshot, onC
           <Text style={[styles.syncButtonLabel, { color: status?.isRunning ? theme.accent : theme.onAccent }]}>
             {t(readError ? 'common.retry' : !state?.profile ? 'cloud.connectTitle' : status?.isRunning ? 'cloud.cancelSync' : 'cloud.syncNow')}
           </Text>
-        </Pressable>
+        </Pressable>}
       </SettingsGroup>
       {status?.phase === '同步失败' && <SettingsNote theme={theme}>{t(status.errorMessage?.includes('认证失败') ? 'mobile.sync.authenticationError' : 'cloud.syncIncomplete')}</SettingsNote>}
       {!!state?.credentialError && <SettingsNote theme={theme}>{t('mobile.sync.credentialsError')}</SettingsNote>}

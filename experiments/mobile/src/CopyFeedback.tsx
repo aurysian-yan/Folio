@@ -19,8 +19,8 @@ export function CopyFeedback({ copied, label, theme }: CopyFeedbackProps) {
   useEffect(() => {
     progress.set(withTiming(copied ? 1 : 0, { duration: 220, easing: Easing.inOut(Easing.ease), reduceMotion: ReduceMotion.System }));
   }, [copied, progress]);
-  const normal = useAnimatedStyle(() => ({ opacity: 1 - progress.value, filter: [{ blur: 8 * progress.value }] }));
-  const success = useAnimatedStyle(() => ({ opacity: progress.value, filter: [{ blur: 8 * (1 - progress.value) }] }));
+  const normal = useAnimatedStyle(() => ({ opacity: 1 - progress.value, filter: [{ blur: theme.ui?.material ? 0 : 8 * progress.value }] }));
+  const success = useAnimatedStyle(() => ({ opacity: progress.value, filter: [{ blur: theme.ui?.material ? 0 : 8 * (1 - progress.value) }] }));
   const color = label ? theme.label : theme.secondary;
   const textStyle = [label ? settingsTypography.body : settingsTypography.detail, styles.text, { color }];
   const row = [styles.row, !label && styles.trailing];

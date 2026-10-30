@@ -1,6 +1,8 @@
+import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, BackHandler, Platform, Pressable, Text, View, useColorScheme } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { BackHandler, Platform, Pressable, Text, View, useColorScheme } from 'react-native';
 import { getAboutInfo } from './native';
 import { SettingsUpdatePage } from './SettingsUpdatePage';
 import { createTheme } from './ui';
@@ -21,6 +23,9 @@ export function AndroidCompatibilityGate({ children }: { children: ReactNode }) 
     }).catch(() => { if (active) setStatus('failed'); });
     return () => { active = false; };
   }, [attempt]);
+  useEffect(() => {
+    if (status === 'required' || status === 'failed') void SplashScreen.hideAsync();
+  }, [status]);
   if (status === 'ready') return children;
   if (status === 'required') return <SettingsUpdatePage required theme={theme} onClose={BackHandler.exitApp} backLabel={t('common.exit')} />;
   return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>

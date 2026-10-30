@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Text, TextInput, View } from 'react-native';
+import { TextInput } from './UiTextInput';
+import { Text, View } from 'react-native';
 import { FilterGroup } from './FilterPanel';
 import { facetTitles, mergeFacetOptions, normalizeFacets, type FacetKind, type LibraryPage, type SmartConditions } from './library';
 import { library } from './native';
@@ -32,14 +33,14 @@ export function SmartConditionsEditor({ value, theme, version, disabled, onChang
   const loading = result?.key !== key && failure !== key;
   const available = mergeFacetOptions(result?.options ?? [], result?.page.facets ?? [], value.facets);
   return <View pointerEvents={disabled ? 'none' : 'auto'} accessibilityElementsHidden={disabled}>
-    <View style={[panelStyles.card, { backgroundColor: theme.surface }]}>
+    <View style={[panelStyles.card, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]}>
       <SettingsSwitchRow theme={theme} title={t('filters.hideSystemFonts')} detail={t('filters.macosOnly')}
         value={value.facets.some((facet) => facet.kind === 'hideSystemFonts' && facet.value === 'true')}
         disabled onChange={() => {}} />
       <Text style={[panelStyles.section, { color: theme.secondary }]}>{t('filters.keyword')}</Text>
       <TextInput accessibilityLabel={t('filters.keyword')} placeholder={t('filters.inputKeyword')}
         placeholderTextColor={theme.muted} value={value.text} editable={!disabled} autoCorrect={false} autoCapitalize="none"
-        style={[panelStyles.input, { color: theme.label, borderColor: theme.border, backgroundColor: theme.raised }]}
+        style={[panelStyles.input, { color: theme.label, borderColor: theme.border, backgroundColor: theme.raised, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.field, minHeight: 56 } : {}) }]}
         onChangeText={(text) => onChange({ ...value, text })} />
       <Text style={[panelStyles.detail, { color: theme.secondary, paddingTop: 12 }]}>{t('filters.smartHint')}</Text>
     </View>

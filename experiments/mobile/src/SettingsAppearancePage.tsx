@@ -1,19 +1,27 @@
+import { GlassSlider } from './GlassSlider';
+import { GlassSwitch } from './GlassSwitch';
+import { PanelAction } from './panel-content';
+import { useDialogs } from './Dialogs';
 import { CheckIcon, CircleHalfIcon, ListIcon, SquaresFourIcon } from './icons';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { supportsM3e } from './android-ui-capability';
 import { wallpaperSeed } from './native';
 import { FontCard } from './FontCard';
 import { AppearanceChoiceRow } from './AppearanceChoiceRow';
 import type { FontFamily } from './library';
 import { previewScaleOptions, usePreferences, type AccentId, type LibraryMode } from './settings';
-import { SettingsGroup, SettingsIcon, SettingsPage, SettingsSwitchRow, settingsLayout, settingsTypography } from './settings-ui';
+import { SettingsGroup, SettingsIcon, SettingsPage, SettingsSwitchRow, SettingsValueRow, SettingsActionRow, SettingsNote, settingsLayout, settingsTypography } from './settings-ui';
 import { resolveAccentColor, type Theme } from './ui';
 
 // 主题、字体卡片与预览字号集中管理，深浅色跟随系统。
 export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClose: () => void }) {
   const { t } = useTranslation();
-  const { preferences, ready, update } = usePreferences();
+  const { preferences, ready, update, saveError, retrySave } = usePreferences();
+  const [sampleSwitch, setSampleSwitch] = useState(true);
+  const [sampleSlider, setSampleSlider] = useState(50);
+  const { alert } = useDialogs();
   const compact = preferences.defaultViewMode === 'list';
   const sampleFamily: FontFamily = {
     id: 'settings-card-preview', displayName: t('mobile.settings.systemFont'), isFavorite: true,
@@ -46,6 +54,20 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
   ];
 
   return <SettingsPage title={t('mobile.settings.appearanceAndDisplay')} theme={theme} onClose={onClose}>
+    {supportsM3e && __DEV__ && <SettingsGroup theme={theme} title={t('mobile.settings.uiStyle')}>
+      {(['glasmio', 'material3-expressive'] as const).map((value) => <Pressable key={value} disabled={!ready}
+        accessibilityRole="radio" accessibilityState={{ selected: preferences.androidUiStyle === value, disabled: !ready }}
+        accessibilityLabel={t(value === 'glasmio' ? 'mobile.settings.uiGlasmio' : 'mobile.settings.uiM3e')}
+        onPress={() => update({ androidUiStyle: value })}
+        style={[styles.themeCard, { backgroundColor: preferences.androidUiStyle === value ? theme.activeTab : theme.surface, borderColor: theme.border }]}>
+        <View style={styles.themePreview}><View style={{ width: 48, height: 24, borderRadius: value === 'glasmio' ? 12 : 8, backgroundColor: theme.accent }} />
+          <View style={{ flex: 1, height: 32, borderRadius: value === 'glasmio' ? 16 : 8, backgroundColor: theme.raised }} />
+          <CheckIcon size={24} color={preferences.androidUiStyle === value ? theme.accent : theme.muted} /></View>
+        <Text style={[styles.title, { color: theme.label }]}>{t(value === 'glasmio' ? 'mobile.settings.uiGlasmio' : 'mobile.settings.uiM3e')}</Text>
+      </Pressable>)}
+    </SettingsGroup>}
+    {saveError && <SettingsGroup theme={theme}><SettingsNote theme={theme}>{t('mobile.settings.saveFailed')}</SettingsNote>
+      <SettingsActionRow theme={theme} title={t('common.retry')} onPress={retrySave} /></SettingsGroup>}
     <SettingsGroup theme={theme} title={t('settings.appearance')}>
       <View style={styles.systemTheme}>
         <SettingsIcon><CircleHalfIcon size={22} color={theme.label} /></SettingsIcon>
@@ -71,9 +93,23 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
           </Pressable>;
         })}
       </View>
-      {android && <SettingsSwitchRow theme={theme} title={t('mobile.settings.materialTheme')} detail={t('mobile.settings.materialThemeDetail')}
-        value={preferences.materialTheme} disabled={!ready} onChange={(value) => update({ materialTheme: value })} last />}
+      {android && (supportsM3e ? <SettingsValueRow theme={theme} title={t('mobile.settings.materialTheme')}
+        detail={t('mobile.settings.materialManaged')} value={t(preferences.materialTheme ? 'mobile.settings.materialEnabled' : 'mobile.settings.materialDisabled')} last />
+        : <SettingsSwitchRow theme={theme} title={t('mobile.settings.materialTheme')} detail={t('mobile.settings.materialThemeDetail')}
+          value={preferences.materialTheme} disabled={!ready} onChange={(value) => update({ materialTheme: value })} last />)}
     </SettingsGroup>
+    {supportsM3e && __DEV__ && <SettingsGroup theme={theme} title={t('mobile.settings.componentPreview')}>
+      <View style={{ padding: 16, gap: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={{ color: theme.label }}>{t('mobile.settings.previewSwitch')}</Text>
+          <GlassSwitch theme={theme} label={t('mobile.settings.previewSwitch')} value={sampleSwitch} onChange={setSampleSwitch} />
+        </View>
+        <GlassSlider theme={theme} label={t('preview.size')} value={sampleSlider} minimum={0} maximum={100} step={1}
+          valueText={String(sampleSlider)} onChange={setSampleSlider} />
+        <PanelAction theme={theme} label={t('mobile.settings.previewDialog')} primary fullWidth onPress={() => alert(
+          t('mobile.settings.componentPreview'), t('mobile.settings.previewDialogMessage'), [{ text: t('common.close'), style: 'cancel' }])} />
+      </View>
+    </SettingsGroup>}
     <View style={styles.previewSection}>
       <Text style={[styles.previewTitle, { color: theme.secondary }]}>{t('mobile.settings.cardPreview')}</Text>
       <View style={styles.previewArea}>
@@ -100,6 +136,8 @@ export function SettingsAppearancePage({ theme, onClose }: { theme: Theme; onClo
 }
 
 const styles = StyleSheet.create({
+  themeCard: { margin: 8, padding: 16, borderRadius: 20, borderWidth: 1, gap: 12 },
+  themePreview: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   systemTheme: { minHeight: 64, ...settingsLayout.row, flexDirection: 'row', alignItems: 'center', gap: 12 },
   systemBody: { flex: 1, gap: 4 },
   title: { ...settingsTypography.body },

@@ -8,6 +8,6 @@ const Backdrop = requireNativeView<ViewProps & { sourceId: string; active: boole
   'FolioNavigation', 'FolioPanelBackdropView');
 
 export function PanelBackdrop({ theme, cornerRadius = settingsLayout.card.borderRadius, navigationGlass = false, continuousCapsule = false, blurRadius = -1, liquid = false, ...props }: PanelBackdropProps) {
-  return <Backdrop {...androidPageBackdropProps(theme)} {...props} active tintColor={theme.surface} borderColor={theme.border} cornerRadius={cornerRadius}
+  return <Backdrop {...androidPageBackdropProps(theme)} {...props} active tintColor={theme.surface} borderColor={theme.border} cornerRadius={theme.ui?.material ? navigationGlass ? 16 : theme.ui.shapes.sheet : cornerRadius}
     blurRadius={blurRadius} liquid={liquid} navigationGlass={navigationGlass} {...(usesGlasmioControls ? { continuousCapsule } : {})} dark={theme.dark} pointerEvents="none" />;
 }

@@ -35,6 +35,10 @@ class FolioGlassSliderView(context: Context, appContext: AppContext) : FolioGlas
     private val onValueChange by EventDispatcher()
     private val onEditingChanged by EventDispatcher()
 
+    override fun onUiStyleChanged() {
+        if (editing) { editing = false; onEditingChanged(payload("isEditing" to false)) }
+    }
+
     fun applyProps() {
         currentValue = snapSliderValue(if (mostRecentEventCount >= eventCount) incomingValue else currentValue,
             minimum, maximum, 0.0)
@@ -45,14 +49,26 @@ class FolioGlassSliderView(context: Context, appContext: AppContext) : FolioGlas
         if (!final && next == currentValue) return
         currentValue = next
         eventCount++
-        onValueChange(mapOf("value" to next, "eventCount" to eventCount))
+        onValueChange(payload("value" to next, "eventCount" to eventCount))
     }
 
     private fun finishEditing() {
         if (!editing) return
         commit(currentValue, final = true)
         editing = false
-        onEditingChanged(mapOf("isEditing" to false))
+        onEditingChanged(payload("isEditing" to false))
+    }
+
+    @Composable override fun MaterialContent() {
+        val valid = minimum.isFinite() && maximum.isFinite() && maximum > minimum
+        val fraction = if (valid) ((currentValue - minimum) / (maximum - minimum)).toFloat().coerceIn(0f, 1f) else 0f
+        androidx.compose.material3.Slider(value = fraction, onValueChange = {
+            if (controlEnabled && valid) {
+                if (!editing) { editing = true; onEditingChanged(payload("isEditing" to true)) }
+                commit(minimum + it * (maximum - minimum))
+            }
+        }, onValueChangeFinished = ::finishEditing, enabled = controlEnabled && valid,
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label; stateDescription = valueText })
     }
 
     @Composable override fun GlassContent() {
@@ -71,7 +87,7 @@ class FolioGlassSliderView(context: Context, appContext: AppContext) : FolioGlas
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     editing = true
-                    onEditingChanged(mapOf("isEditing" to true))
+                    onEditingChanged(payload("isEditing" to true))
                     try {
                         do { val event = awaitPointerEvent(PointerEventPass.Final) }
                         while (event.changes.any { it.pressed })

@@ -1,8 +1,10 @@
+import { MaterialDialog } from './MaterialControls';
 import { DialogContent, usePanelDialog } from './Dialogs';
 import { FilterScrollView } from './FilterDrawer';
 // 文件操作、外部授权和可恢复结果复用现有面板。
 import { useEffect, useState, useRef } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { cancelFileWorkflow, fileWorkflow, fileState, removeExternalSource, syncSession } from './native';
 import { LibraryPanel } from './LibraryPanel';
@@ -126,10 +128,12 @@ export function FileWorkflowPanel({ visible, theme, onClose, onCollect, onChange
         }
     }
     function remove(id: string) { alert(t('common.remove'), t('workflow.sources'), [{ text: t('common.cancel'), style: 'cancel' }, { text: t('common.remove'), style: 'destructive', onPress: () => { setBusy(true); void removeExternalSource(id).then(() => fileState()).then((value) => { setState(JSON.parse(value) as FileState); onChanged(); }).catch(() => setError(t('workflow.error.operationFailed'))).finally(() => setBusy(false)); } }]); }
-  if (dialog) return <LibraryPanel visible={visible} title={dialog.title} theme={theme} backButton onBack={dismiss} onClose={() => { dismiss(); onClose(); }}>
+  if (dialog && !theme.ui?.material) return <LibraryPanel visible={visible} title={dialog.title} theme={theme} backButton onBack={dismiss} onClose={() => { dismiss(); onClose(); }}>
     <DialogContent dialog={dialog} theme={theme} onSelect={(button) => { dismiss(); button.onPress?.(); }} />
   </LibraryPanel>;
     return <LibraryPanel visible={visible} theme={theme} title={t('workflow.filesTitle')} onClose={onClose} busy={busy}>
+    {theme.ui?.material && <MaterialDialog theme={theme} visible={visible && !!dialog} dialog={dialog}
+      onDismiss={dismiss} onSelect={(index) => { const button = dialog?.buttons[index]; if (button) { dismiss(); button.onPress?.(); } }} />}
     <FilterScrollView contentContainerStyle={styles.content}>
       {busy && <><ActivityIndicator color={theme.accent}/><PanelAction label={t('common.cancel')} theme={theme} onPress={() => { void cancelFileWorkflow(activeRequest.current); }}/></>}
       {error && <Text accessibilityRole="alert" style={{ color: theme.danger }}>{error}</Text>}

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { Keyboard, StyleSheet, Text, TextInput, View, type ScrollViewProps } from 'react-native';
+import { TextInput } from './UiTextInput';
+import { Keyboard, StyleSheet, Text, View, type ScrollViewProps } from 'react-native';
 import { settingsTypography } from './settings-ui';
 import type { Theme } from './ui';
 

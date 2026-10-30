@@ -1,6 +1,8 @@
+import { MaterialButton } from './MaterialControls';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { locationLabel, transferLabel, type FontFileLocation } from '../../../shared/font-location';
 import type { FontFace, FontFamily } from './library';
 import { HardDriveIcon } from './icons';
@@ -64,7 +66,9 @@ function FileLocation({ file, theme, onAction }: {
     <View style={styles.actions}><PanelAction label={t("workflow.filesTitle")} theme={theme} onPress={() => setFilesOpen(true)} /></View>
     <FileWorkflowPanel visible={filesOpen} theme={theme} onClose={() => setFilesOpen(false)} ids={[`${local ? "local" : "cloud"}/${file.fingerprint}`]} onChanged={() => {}} />
     {actions.length > 0 && <View style={styles.actions}>
-      {actions.map(({ action, label, primary }) => <Pressable key={action} accessibilityRole="button"
+      {actions.map(({ action, label, primary }) => theme.ui?.material
+        ? <MaterialButton key={action} theme={theme} label={label} primary={primary} disabled={pending !== null} onPress={() => { void run(action); }} fullWidth />
+        : <Pressable key={action} accessibilityRole="button"
         accessibilityState={{ disabled: pending !== null, busy: pending === action }} disabled={pending !== null}
         onPress={() => { void run(action); }} style={({ pressed }) => [styles.button,
           { backgroundColor: primary ? theme.accent : theme.raised, opacity: pending && pending !== action ? 0.4 : pressed ? 0.7 : 1 }]}>

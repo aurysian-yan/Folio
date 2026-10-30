@@ -48,6 +48,16 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
     internal val backdrop = FolioViewBackdrop(this)
     var sourceId: String = ""
         set(value) { unregister(); field = value; register() }
+    var samplingEnabled = true
+        set(value) {
+            if (field == value) return
+            field = value
+            if (viewTreeObserver.isAlive) viewTreeObserver.removeOnPreDrawListener(preDraw)
+            if (value && isAttachedToWindow) { viewTreeObserver.addOnPreDrawListener(preDraw); register() }
+            else { unregister(); backdrop.release() }
+            contentDirty = true
+            invalidate()
+        }
     var active = true
         set(value) {
             if (field == value) return
@@ -135,7 +145,7 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
     }
 
     override fun draw(canvas: Canvas) {
-        if (!active || windowVisibility != VISIBLE || !isShown || !canvas.isHardwareAccelerated || width <= 0 || height <= 0) { super.draw(canvas); return }
+        if (!samplingEnabled || !active || windowVisibility != VISIBLE || !isShown || !canvas.isHardwareAccelerated || width <= 0 || height <= 0) { super.draw(canvas); return }
         val node = backdrop.obtainNode(compositingLayer || containsWebView(this))
         if (contentDirty || !node.hasDisplayList()) {
         contentDirty = false
@@ -230,7 +240,7 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
             host.setViewTreeSavedStateRegistryOwner(savedStateOwner)
             host.setViewTreeViewModelStoreOwner(viewModelOwner)
         }
-        viewTreeObserver.addOnPreDrawListener(preDraw)
+        if (samplingEnabled) viewTreeObserver.addOnPreDrawListener(preDraw)
         register()
     }
     override fun onDetachedFromWindow() {
@@ -250,7 +260,7 @@ class FolioBackdropSourceView(context: Context, appContext: AppContext) : ExpoVi
         if (isVisible) { register(); invalidate() } else { unregister(); backdrop.release() }
     }
     private fun register() {
-        if (active && windowVisibility == VISIBLE && isShown && isAttachedToWindow && sourceId.isNotEmpty()) FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] = backdrop
+        if (samplingEnabled && active && windowVisibility == VISIBLE && isShown && isAttachedToWindow && sourceId.isNotEmpty()) FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)] = backdrop
     }
     private fun unregister() {
         val key = FolioBackdropSources.key(appContext, sourceId)

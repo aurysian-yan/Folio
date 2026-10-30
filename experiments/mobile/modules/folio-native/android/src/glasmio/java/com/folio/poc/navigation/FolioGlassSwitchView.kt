@@ -19,11 +19,17 @@ class FolioGlassSwitchView(context: Context, appContext: AppContext) : FolioGlas
     var thumbColor = ""
     private val onValueChange by EventDispatcher()
 
+    @Composable override fun MaterialContent() {
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = { value ->
+            if (controlEnabled) { checked = value; onValueChange(payload("value" to value)) }
+        }, enabled = controlEnabled, modifier = Modifier.semantics { contentDescription = label })
+    }
+
     @Composable override fun GlassContent() {
         GlasmioSwitch(checked, { value ->
             if (controlEnabled) {
                 checked = value
-                onValueChange(mapOf("value" to value))
+                onValueChange(payload("value" to value))
             }
         }, enabled = controlEnabled, modifier = Modifier.semantics { contentDescription = label })
     }

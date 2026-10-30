@@ -4,6 +4,7 @@ import { AccessibilityInfo, Animated, PanResponder, Platform, PlatformColor, Pre
 import Motion, { cancelAnimation, interpolateColor, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { NativeActionButton, usesNativeControls } from './native-controls';
 import type { AccentId } from './settings';
+import { uiTokens, type AndroidUiStyle } from './ui-style';
 import { materialThemeOverrides, type MaterialRoles } from './material-theme';
 import { headerShadowColor, useHeaderShadowProgress } from './HeaderButtonShadow';
 import { pageTitleMotion } from './page-header-motion';
@@ -43,7 +44,7 @@ export const themes = {
   },
 };
 
-export type Theme = typeof themes.light;
+export type Theme = typeof themes.light & { ui?: ReturnType<typeof uiTokens>; materialRoles?: MaterialRoles; revision?: string };
 
 // 安卓浅色使用灰底白卡，深色使用黑底灰卡。
 const androidColors = {
@@ -84,6 +85,7 @@ export function resolveAccentColor(accent: AccentId, dark: boolean, wallpaperAcc
 }
 
 export interface ThemeOptions {
+  uiStyle?: AndroidUiStyle;
   /** Material3 语义色角色，仅安卓开启配色主题时提供。 */
   materialRoles?: MaterialRoles;
   /** 壁纸派生的强调色，仅在安卓且选用壁纸主题色时提供。 */
@@ -96,7 +98,12 @@ export function createTheme(dark: boolean, accent: AccentId, options: ThemeOptio
   const accentValue = resolveAccentColor(accent, dark, options.wallpaperAccent);
   const themed: Theme = { ...base, ...(Platform.OS === 'android' ? androidColors[dark ? 'dark' : 'light'] : {}),
     accent: accentValue, selection: withAlpha(accentValue, dark ? 0.25 : 0.2) };
-  return options.materialRoles ? { ...themed, ...materialThemeOverrides(options.materialRoles, dark) } : themed;
+  const ui = uiTokens(options.uiStyle ?? 'glasmio');
+  const revision = JSON.stringify([ui.style, dark, accentValue, options.materialRoles]);
+  return { ...themed, ...(options.materialRoles ? materialThemeOverrides(options.materialRoles, dark) : {}),
+    ui, materialRoles: options.materialRoles, revision,
+    ...(ui.material ? { buttonSurfaceOpacity: 1, scrim: 'rgba(0, 0, 0, 0.32)', navigationDimOpacity: 0 } : {}) };
+
 }
 
 export function IconButton(props: AndroidGlassButtonProps) {

@@ -1,5 +1,5 @@
 import { useNavigationPanel } from './NavigationScroll';
-import BottomSheet, { BottomSheetFlatList, BottomSheetHandle, BottomSheetScrollView, BottomSheetTextInput,
+import BottomSheet, { useBottomSheetTimingConfigs, BottomSheetFlatList, BottomSheetHandle, BottomSheetScrollView, BottomSheetTextInput,
   type BottomSheetHandleProps } from '@gorhom/bottom-sheet';
 import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -34,6 +34,7 @@ export function FilterList<T>(props: FlatListProps<T>) {
 export function FilterDrawer(props: LibraryPanelProps) {
   useNavigationPanel(props.visible);
   const sheet = useRef<BottomSheet>(null);
+  const materialTiming = useBottomSheetTimingConfigs({ duration: props.theme.ui?.motion.duration ?? 250 });
   const inset = useSafeAreaInsets();
   const { t } = useTranslation();
   const ownIndex = useSharedValue(-1);
@@ -59,7 +60,7 @@ export function FilterDrawer(props: LibraryPanelProps) {
       <SafeAreaView edges={['left', 'right']}><PanelHeader {...props} onClose={close} />{props.headerAccessory}</SafeAreaView>
     </>, [close, props, t]);
   if (!props.visible) return null;
-  const borderRadius = Math.min(42, Math.max(settingsLayout.card.borderRadius + 8, screenCornerRadius()));
+  const borderRadius = props.theme.ui?.material ? 28 : Math.min(42, Math.max(settingsLayout.card.borderRadius + 8, screenCornerRadius()));
 
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent
     onRequestClose={props.onBack ?? close}>
@@ -71,13 +72,13 @@ export function FilterDrawer(props: LibraryPanelProps) {
             accessibilityHint={t('mobile.closeReturnsLibrary')} disabled={props.busy} />
         </Motion.View>
         <Motion.View pointerEvents="box-none" style={[styles.screen, { transformOrigin: ['50%', inset.top, 0] }, stackStyle]}>
-          <BottomSheet ref={sheet} index={0} snapPoints={snapPoints} topInset={inset.top + (props.nested ? 24 : 0)}
+          <BottomSheet animationConfigs={props.theme.ui?.material ? materialTiming : undefined} ref={sheet} index={0} snapPoints={snapPoints} topInset={inset.top + (props.nested ? 24 : 0)}
             animatedIndex={animatedIndex}
             keyboardBehavior="extend" keyboardBlurBehavior="restore" enableBlurKeyboardOnGesture android_keyboardInputMode="adjustResize"
             enableDynamicSizing={false} enablePanDownToClose={!props.busy}
             enableContentPanningGesture={!props.busy} enableHandlePanningGesture={!props.busy}
             handleComponent={handle} onClose={props.onClose} accessible={false}
-            backgroundStyle={{ backgroundColor: props.theme.background, borderTopLeftRadius: borderRadius, borderTopRightRadius: borderRadius }}>
+            backgroundStyle={{ backgroundColor: props.theme.ui?.material ? props.theme.surface : props.theme.background, borderTopLeftRadius: borderRadius, borderTopRightRadius: borderRadius }}>
             {props.children}
           </BottomSheet>
         </Motion.View>

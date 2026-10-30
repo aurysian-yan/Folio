@@ -28,6 +28,20 @@ class FolioHeaderActionButtonView(context: Context, appContext: AppContext) : Fo
     var primary by mutableStateOf(false)
     private val onPress by EventDispatcher()
 
+    @Composable override fun MaterialContent() {
+        val colors = androidx.compose.material3.MaterialTheme.colorScheme
+        val foreground = if (primary) colors.onPrimary else if (controlSelected) colors.onSecondaryContainer else colors.onSurfaceVariant
+        androidx.compose.material3.FilledTonalIconButton(onClick = { if (controlEnabled && !busy) onPress(payload()) },
+            colors = androidx.compose.material3.IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = if (primary) colors.primary else if (controlSelected) colors.secondaryContainer else colors.surfaceContainerHigh,
+                contentColor = foreground),
+            enabled = controlEnabled && !busy, modifier = Modifier.semantics {
+                contentDescription = label; selected = controlSelected
+            }) {
+            if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = foreground) else FolioMaterialIcon(systemImage)
+        }
+    }
+
     @Composable override fun GlassContent() {
         GlasmioToolbarActionGroup(frostRadius = FolioHeaderFrostRadius) {
             GlasmioIconButton({ if (controlEnabled && !busy) onPress(emptyMap<String, Any>()) },

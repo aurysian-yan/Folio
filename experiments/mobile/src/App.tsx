@@ -20,6 +20,7 @@ import { OnlineFontsScreen } from './OnlineFontsScreen';
 import { webPaletteFromTheme } from './online';
 import { getDocumentAsync } from 'expo-document-picker';
 import { Image } from 'expo-image';
+import { UiThemeProvider } from './UiTheme';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import {
@@ -27,10 +28,9 @@ import {
 } from './icons';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  ActivityIndicator, Animated, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
-  Text, TextInput, useColorScheme, useWindowDimensions, View, type ViewToken,
-} from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { TextInput } from './UiTextInput';
+import { Animated, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, useColorScheme, useWindowDimensions, View, type ViewToken } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CollectionsPanel } from './CollectionsPanel';
 import { FilterPanel } from './FilterPanel';
@@ -153,7 +153,7 @@ function LibraryScreen({ theme, bottomInset, active, navigationCollapsed = false
   }, [ready, active, scope]);
   const [mode, setMode] = useState<'grid' | 'list'>(defaultMode);
   const modeInitialized = useRef(false);
-  const searchInput = useRef<TextInput>(null);
+  const searchInput = useRef<import('react-native').TextInput>(null);
   const inset = useSafeAreaInsets();
   const [nativeInsets, setNativeInsets] = useState<{ top: number; bottom: number; contentTop?: number }>({
     top: sidebar ? 0 : inset.top, bottom: 0,
@@ -237,8 +237,8 @@ function LibraryScreen({ theme, bottomInset, active, navigationCollapsed = false
     pending.aligned = false; pending.measurements = 0;
     alignAlphabetTarget();
   }, [alphabet.cards, alignAlphabetTarget]);
-  const alphabetBottom = usesNativeControls ? nativeInsets.bottom + 24 : navigationContentInset(bottomInset);
-  const libraryBottomInset = usesNativeControls ? nativeInsets.bottom : navigationBarTopInset(bottomInset, navigationCollapsed);
+  const alphabetBottom = usesNativeControls ? nativeInsets.bottom + 24 : navigationContentInset(bottomInset, theme.ui?.material);
+  const libraryBottomInset = usesNativeControls ? nativeInsets.bottom : navigationBarTopInset(bottomInset, navigationCollapsed, theme.ui?.material);
   const jumpToAlphabet = useCallback((index: number) => {
     const count = alphabetRuntime.current.alphabet.entries.length;
     if (!count) return;
@@ -658,6 +658,7 @@ function MobileApp() {
   const { t } = useTranslation();
   const { preferences, ready: preferencesReady } = usePreferences();
   const dark = useColorScheme() === 'dark';
+  useEffect(() => { if (preferencesReady) void SplashScreen.hideAsync(); }, [preferencesReady]);
   const [wallpaperAccent, setWallpaperAccent] = useState<string | null>(() => (Platform.OS === 'android' ? wallpaperSeed() : null));
   // 壁纸更换后进入前台重新读取，确保配色生效。
   useEffect(() => {
@@ -674,8 +675,8 @@ function MobileApp() {
   [dark, materialSeed, preferences.accent, preferences.materialTheme]);
   const theme = useMemo(() => {
     if (Platform.OS !== 'android') return createTheme(dark, preferences.accent);
-    return createTheme(dark, preferences.accent, { materialRoles, wallpaperAccent: wallpaperAccent ?? undefined });
-  }, [dark, materialRoles, preferences.accent, wallpaperAccent]);
+    return createTheme(dark, preferences.accent, { materialRoles, wallpaperAccent: wallpaperAccent ?? undefined, uiStyle: preferences.androidUiStyle });
+  }, [dark, materialRoles, preferences.accent, preferences.androidUiStyle, wallpaperAccent]);
   // 站内配色优先使用完整 Material3 角色；非 Android 或无 Monet 时回退到当前语义主题。
   const webPalette = useMemo(() => Platform.OS === 'android' && materialRoles
     ? materialWebPalette(materialSeed, dark, preferences.accent === 'wallpaper')
@@ -816,7 +817,7 @@ function MobileApp() {
     active={(usesNativeControls ? nativeDestination === 'cloud' : tab === 'cloud') && !settingsPageVisible}
     snapshot={snapshot} controller={syncController} onConfigure={() => openSettingsPage('sync')} /></NavigationScrollScope>;
   const onlineContent = <NavigationScrollScope active={(usesNativeControls ? nativeDestination : tab) === 'online'}><OnlineFontsScreen theme={theme} active={onlineActive && !settingsPageVisible && !fontPageVisible && !libraryOpen}
-    sourceId={sourceId} navigationCollapsed={navCollapsed}
+    sourceId={sourceId} navigationCollapsed={!theme.ui?.material && navCollapsed}
     webPalette={webPalette} onOpenSettings={() => openSettingsPage('online')}
     openRequest={onlineRequest} onRequestConsumed={(id) => setOnlineRequest((current) => current?.id === id ? null : current)}
     urlRequest={urlRequest} onUrlConsumed={(id) => setUrlRequest((current) => current?.id === id ? null : current)} /></NavigationScrollScope>;
@@ -863,7 +864,7 @@ function MobileApp() {
       }} />
       <BottomNavigation sourceId={sourceId} selectedId={tab} dark={dark} theme={theme} hidden={keyboardVisible}
         bottomInset={inset.bottom} leftInset={inset.left} rightInset={inset.right}
-        collapsed={navCollapsed} collapsible={preferences.navigationAutoCollapse} onExpand={() => setNavMinimized(false)} onCollapse={() => setNavMinimized(true)}
+        collapsed={theme.ui?.material ? false : navCollapsed} collapsible={!theme.ui?.material && preferences.navigationAutoCollapse} onExpand={() => setNavMinimized(false)} onCollapse={() => setNavMinimized(true)}
         onSelectionChange={(id) => { navigate(id); setTab(id); }} />
     </KeyboardAvoidingView>
   );
@@ -899,7 +900,8 @@ function MobileApp() {
       setUrlRequest({ id: browserId(), url }); navigate('online'); setTab('online');
     }
   }
-  return <NavigationScrollContext.Provider value={{ enabled: preferences.navigationAutoCollapse && navigationPanels.length === 0 && !keyboardVisible && !fontPageVisible && !settingsPageVisible && !libraryOpen && !reviewOpen && !cloudInspection, onCollapse: setNavMinimized, setPanelActive: setNavigationPanelActive }}>
+  if (!preferencesReady) return <View style={[styles.app, { backgroundColor: theme.background }]} />;
+  return <UiThemeProvider theme={theme}><NavigationScrollContext.Provider value={{ enabled: !theme.ui?.material && preferences.navigationAutoCollapse && navigationPanels.length === 0 && !keyboardVisible && !fontPageVisible && !settingsPageVisible && !libraryOpen && !reviewOpen && !cloudInspection, onCollapse: setNavMinimized, setPanelActive: setNavigationPanelActive }}>
     <DialogProvider theme={theme}><View style={styles.app}>
       <FontNavigation visible={reviewOpen} theme={theme} detail={reviewDetail} onDismissed={dismissReview}>
       <FontNavigation visible={libraryOpen} theme={theme} detail={browserDetail} onDismissed={libraryDismissed}>
@@ -911,14 +913,12 @@ function MobileApp() {
       </FontNavigation>
       </FontNavigation>
     </View></DialogProvider>
-  </NavigationScrollContext.Provider>;
+  </NavigationScrollContext.Provider></UiThemeProvider>;
 
 }
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ FolioMono: monoFontAsset });
-  // 字体就绪后显示界面，避免数字和索引首次绘制时跳动。
-  useEffect(() => { if (fontsLoaded || fontError) SplashScreen.hide(); }, [fontsLoaded, fontError]);
   if (!fontsLoaded && !fontError) return null;
   return <SafeAreaProvider><AndroidCompatibilityGate><PreferencesProvider><BrowserDataProvider><OnlineSessionProvider><MobileApp /></OnlineSessionProvider></BrowserDataProvider></PreferencesProvider></AndroidCompatibilityGate></SafeAreaProvider>;
 }

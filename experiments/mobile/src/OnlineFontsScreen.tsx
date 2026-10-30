@@ -3,7 +3,8 @@ import { useNavigationScroll } from './NavigationScroll';
 import { FilterScrollView, FilterTextInput } from './FilterDrawer';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, BackHandler, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { Alert, BackHandler, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeOnlineBrowser, online } from './native';
 import { buildWebThemeScript, downloadDisplayName, extractSearchQuery, isPageFailureKey, onlineErrorKey, providerCustomCss, providerThemeEnabled, type BrowserState, type BrowserVisit, type OnlineProvider, type WebPalette } from './online';
@@ -205,7 +206,7 @@ export function OnlineFontsScreen({ theme, active, webPalette, sourceId = '', na
   function openLibrary(tab: 'bookmarks' | 'history', bookmark: BookmarkDraft | null = null) {
     closeAddressThen(() => showLibrary(tab, bookmark));
   }
-  const barBottom = usesNativeSidebar && width >= 600 ? inset.bottom + 8 : navigationBarTopInset(inset.bottom) + 8;
+  const barBottom = usesNativeSidebar && width >= 600 ? inset.bottom + 8 : navigationBarTopInset(inset.bottom, navigationCollapsed, theme.ui?.material) + 8;
   const browserBottom = Platform.OS === 'ios' && !usesNativeSidebar && Number(Platform.Version) >= 26 ? 0 : Platform.OS === 'android' && navigationCollapsed ? navigationCompactBarFrame(inset.bottom, width - inset.left - inset.right).bottom + 64 : barBottom + 64;
   const address = browserAddress(draft);
   const restricted = activeProvider && providerRegionRisk(activeProvider) && preferences.onlineRegionHints;

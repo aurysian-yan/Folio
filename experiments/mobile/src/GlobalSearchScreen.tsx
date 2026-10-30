@@ -1,7 +1,9 @@
 import { useNavigationScroll } from './NavigationScroll';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { TextInput } from './UiTextInput';
+import { FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MagnifyingGlassIcon, XIcon } from './icons';
 import { FontCard } from './FontCard';
@@ -62,7 +64,7 @@ export function GlobalSearchScreen({ initialError, onRetryInitialize, active, th
   const [optionsFor, setOptionsFor] = useState('');
   const [savedHideSystemFonts, setSavedHideSystemFonts] = useState(false);
   const list = useRef<FlatList<Row>>(null);
-  const input = useRef<TextInput>(null);
+  const input = useRef<import('react-native').TextInput>(null);
   const focusedOnce = useRef(false);
   const positions = useRef<Partial<Record<SearchScope, number>>>({});
   const restorePending = useRef(false);
@@ -171,7 +173,7 @@ export function GlobalSearchScreen({ initialError, onRetryInitialize, active, th
   }
   return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.screen, { backgroundColor: theme.background }]}>
     <View style={styles.header}>
-      <View style={[styles.search, { backgroundColor: theme.surface }]}><MagnifyingGlassIcon size={20} color={theme.secondary} />
+      <View style={[styles.search, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]}><MagnifyingGlassIcon size={20} color={theme.secondary} />
         <TextInput ref={input} style={[styles.input, { color: theme.label }]} value={text} onChangeText={updateText} autoCapitalize="none" autoCorrect={false}
           placeholder={t('globalSearch.placeholder')} placeholderTextColor={theme.muted} accessibilityLabel={t('globalSearch.placeholder')} returnKeyType="search" onSubmitEditing={record} />
         {!!text && <Pressable accessibilityRole="button" accessibilityLabel={t('mobile.clearSearch')} onPress={() => { updateText(''); input.current?.focus(); }} style={styles.clear}><XIcon size={20} color={theme.secondary} /></Pressable>}
@@ -183,7 +185,7 @@ export function GlobalSearchScreen({ initialError, onRetryInitialize, active, th
     </View>
     <NativeScrollContainer style={styles.screen} hasHeader={false} onInsetsChange={() => {}}>
     <FlatList ref={list} data={rows} keyExtractor={(item) => item.id} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
-      contentContainerStyle={[styles.content, { paddingBottom: navigationContentInset(inset.bottom) }]}
+      contentContainerStyle={[styles.content, { paddingBottom: navigationContentInset(inset.bottom, theme.ui?.material) }]}
       onScrollBeginDrag={({ nativeEvent }) => navigationScroll.begin(nativeEvent.contentOffset.y)} onMomentumScrollEnd={navigationScroll.end} onScrollEndDrag={({ nativeEvent }) => { if (Math.abs(nativeEvent.velocity?.y ?? 0) < 0.05) navigationScroll.end(); }}
       onScroll={({ nativeEvent }) => { positions.current[scope] = nativeEvent.contentOffset.y; navigationScroll.scroll(nativeEvent.contentOffset.y); }} scrollEventThrottle={16}
       onContentSizeChange={() => { if (restorePending.current) { restorePending.current = false; list.current?.scrollToOffset({ offset: positions.current[scope] ?? 0, animated: false }); } }}
@@ -200,9 +202,9 @@ export function GlobalSearchScreen({ initialError, onRetryInitialize, active, th
           case 'header': return <View style={styles.section}><Text accessibilityRole="header" accessibilityLiveRegion="polite" style={[styles.heading, { color: theme.label }]}>{t(`globalSearch.scope.${item.scope}`)}{item.count !== undefined ? ` · ${item.count}` : ''}</Text>
             {item.more && <PanelAction theme={theme} label={t('browser.viewAll')} onPress={() => changeScope(item.scope)} />}</View>;
           case 'font': return <FontCard theme={theme} family={item.font} mode="list" onOpen={() => { record(); onOpenFont(item.font, scope === 'local' ? target : { scope: 'all' }); }} />;
-          case 'cloud': return <Pressable accessibilityRole="button" style={[styles.result, { backgroundColor: theme.surface }]} onPress={() => { record(); onOpenCloud(item.font); }}><Text style={{ color: theme.label }}>{item.font.displayName || item.font.filename}</Text><Text style={{ color: theme.secondary }}>{item.font.filename} · {formatBytes(item.font.fileSize)} · {t(item.font.localAvailable ? 'globalSearch.downloaded' : 'fontLocation.cloudOnly')}</Text></Pressable>;
-          case 'online': return <Pressable accessibilityRole="button" style={[styles.result, { backgroundColor: theme.surface }]} onPress={() => { record(); onOpenOnline(item.provider.id, query); }}><Text style={{ color: theme.label }}>{t('browser.searchIn', { name: item.provider.name, query })}</Text></Pressable>;
-          case 'setting': return <Pressable accessibilityRole="button" style={[styles.result, { backgroundColor: theme.surface }]} onPress={() => { record(); onOpenSettings(item.entry); }}><Text style={{ color: theme.label }}>{t(item.entry.titleKey)}</Text><Text style={{ color: theme.secondary }}>{t(item.entry.pageKey)}</Text></Pressable>;
+          case 'cloud': return <Pressable accessibilityRole="button" style={[styles.result, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]} onPress={() => { record(); onOpenCloud(item.font); }}><Text style={{ color: theme.label }}>{item.font.displayName || item.font.filename}</Text><Text style={{ color: theme.secondary }}>{item.font.filename} · {formatBytes(item.font.fileSize)} · {t(item.font.localAvailable ? 'globalSearch.downloaded' : 'fontLocation.cloudOnly')}</Text></Pressable>;
+          case 'online': return <Pressable accessibilityRole="button" style={[styles.result, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]} onPress={() => { record(); onOpenOnline(item.provider.id, query); }}><Text style={{ color: theme.label }}>{t('browser.searchIn', { name: item.provider.name, query })}</Text></Pressable>;
+          case 'setting': return <Pressable accessibilityRole="button" style={[styles.result, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]} onPress={() => { record(); onOpenSettings(item.entry); }}><Text style={{ color: theme.label }}>{t(item.entry.titleKey)}</Text><Text style={{ color: theme.secondary }}>{t(item.entry.pageKey)}</Text></Pressable>;
           case 'message': return <View style={styles.result}><Text accessibilityLiveRegion="polite" style={{ color: theme.secondary }}>{item.text}</Text>{item.retry && <PanelAction theme={theme} label={t(item.id.startsWith('cloud-') && item.id !== 'cloud-error' ? 'common.openSettings' : 'common.retry')} onPress={item.retry} />}</View>;
         }
       }} />

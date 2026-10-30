@@ -45,6 +45,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         updatePresentation()
     }
 
+    var materialStyle = false
     var dimAmount = 0.2f
         set(value) {
             field = value.coerceIn(0f, 1f)
@@ -263,7 +264,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
     private fun applyTranslation(page: View, translation: Float) {
         page.translationX = translation
         val fraction = (translation / width.coerceAtLeast(1)).coerceIn(0f, 1f)
-        root?.translationX = -width / 3f * (1f - fraction)
+        root?.translationX = if (materialStyle) 0f else -width / 3f * (1f - fraction)
         backgroundDim = dimAmount * (1f - fraction)
         invalidate()
     }
@@ -316,7 +317,7 @@ class FolioFontStackView(context: Context, appContext: AppContext) : ExpoView(co
         }
         update(0f)
         animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = resources.getInteger(android.R.integer.config_mediumAnimTime).toLong()
+            duration = if (materialStyle) 250L else resources.getInteger(android.R.integer.config_mediumAnimTime).toLong()
             interpolator = AnimationUtils.loadInterpolator(context, android.R.interpolator.fast_out_slow_in)
             addUpdateListener { update(it.animatedValue as Float) }
             addListener(object : AnimatorListenerAdapter() {

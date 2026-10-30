@@ -1,7 +1,11 @@
 import type { Theme } from './ui';
 
-// 原生 Material3 色彩角色，仅保留映射到 Folio 语义色所需的项。
+// 原生 Material3 色彩角色，由 RN 与 Compose 共用同一份快照。
 export interface MaterialRoles {
+  onPrimaryContainer: string;
+  secondary: string; onSecondary: string; secondaryContainer: string; onSecondaryContainer: string;
+  tertiary: string; onTertiary: string; tertiaryContainer: string; onTertiaryContainer: string;
+  outline: string; errorContainer: string; onError: string; onErrorContainer: string;
   primary: string;
   onPrimary: string;
   primaryContainer: string;

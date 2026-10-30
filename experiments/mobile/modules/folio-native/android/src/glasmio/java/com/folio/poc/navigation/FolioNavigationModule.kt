@@ -18,7 +18,30 @@ class FolioNavigationModule : Module() {
         Name("FolioNavigation")
         Constant("androidVariant") { "glasmio" }
 
+        View(FolioMaterialProgressView::class) {
+            Prop("uiTheme") { view: FolioMaterialProgressView, value: Map<String, String> -> view.applyUiTheme(value) }
+            Prop("indicatorColor") { view: FolioMaterialProgressView, value: String -> view.indicatorColor = value }
+        }
+        View(FolioMaterialDialogView::class) {
+            Prop("uiTheme") { view: FolioMaterialDialogView, value: Map<String, String> -> view.applyUiTheme(value) }
+            Prop("visible") { view: FolioMaterialDialogView, value: Boolean -> view.visible = value }
+            Prop("title") { view: FolioMaterialDialogView, value: String -> view.title = value }
+            Prop("message") { view: FolioMaterialDialogView, value: String -> view.message = value }
+            Prop("actions") { view: FolioMaterialDialogView, value: List<FolioDialogAction> -> view.actions = value }
+            Events("onSelect", "onDismiss")
+        }
+        View(FolioMaterialButtonView::class) {
+            Prop("uiTheme") { view: FolioMaterialButtonView, value: Map<String, String> -> view.applyUiTheme(value) }
+            Prop("label") { view: FolioMaterialButtonView, value: String -> view.label = value }
+            Prop("systemImage") { view: FolioMaterialButtonView, value: String -> view.systemImage = value }
+            Prop("primary") { view: FolioMaterialButtonView, value: Boolean -> view.primary = value }
+            Prop("destructive") { view: FolioMaterialButtonView, value: Boolean -> view.destructive = value }
+            Prop("enabled") { view: FolioMaterialButtonView, value: Boolean -> view.controlEnabled = value }
+            Events("onPress")
+        }
+
         View(FolioHeaderActionButtonView::class) {
+            Prop("uiTheme") { view: FolioHeaderActionButtonView, value: Map<String, String> -> view.applyUiTheme(value) }
             Prop("pageBackgroundColor") { view: FolioHeaderActionButtonView, value: String -> view.pageBackgroundColor = value }
             Events("onPress")
             Prop("sourceId") { view: FolioHeaderActionButtonView, value: String -> view.sourceId = value }
@@ -34,12 +57,14 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioFontStackView::class) {
+            Prop("uiTheme") { view: FolioFontStackView, value: Map<String, String> -> view.materialStyle = value["style"] == "material3-expressive" }
             Events("onDismissed")
             Prop("visible") { view: FolioFontStackView, value: Boolean -> view.visible = value }
             Prop("dimAmount") { view: FolioFontStackView, value: Float -> view.dimAmount = value }
         }
 
         View(FolioBackdropSourceView::class) {
+            Prop("uiTheme") { view: FolioBackdropSourceView, value: Map<String, String> -> view.samplingEnabled = value["style"] != "material3-expressive" }
             Prop("pageBackgroundColor") { view: FolioBackdropSourceView, value: String -> view.setPageBackground(value) }
             Prop("sourceId") { view: FolioBackdropSourceView, value: String -> view.sourceId = value }
             Prop("active") { view: FolioBackdropSourceView, value: Boolean -> view.active = value }
@@ -47,6 +72,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioHeaderBackdropView::class) {
+            Prop("uiTheme") { view: FolioHeaderBackdropView, value: Map<String, String> -> view.applyUiTheme(value) }
             Prop("pageBackgroundColor") { view: FolioHeaderBackdropView, value: String -> view.pageBackgroundColor = value }
             Prop("sourceId") { view: FolioHeaderBackdropView, value: String -> view.sourceId = value }
             Prop("active") { view: FolioHeaderBackdropView, value: Boolean -> view.active = value }
@@ -57,6 +83,7 @@ class FolioNavigationModule : Module() {
             Prop("blurRadius") { view: FolioPanelBackdropView, value: Float -> view.blurRadius = value }
             Prop("liquid") { view: FolioPanelBackdropView, value: Boolean -> view.liquid = value }
             Prop("continuousCapsule") { view: FolioPanelBackdropView, value: Boolean -> view.continuousCapsule = value }
+            Prop("uiTheme") { view: FolioPanelBackdropView, value: Map<String, String> -> view.applyUiTheme(value) }
             Prop("pageBackgroundColor") { view: FolioPanelBackdropView, value: String -> view.pageBackgroundColor = value }
             Prop("navigationGlass") { view: FolioPanelBackdropView, value: Boolean -> view.navigationGlass = value }
             Prop("dark") { view: FolioPanelBackdropView, value: Boolean -> view.dark = value }
@@ -68,6 +95,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioHeaderControlsView::class) {
+            Prop("uiTheme") { view: FolioHeaderControlsView, value: Map<String, String> -> view.applyUiTheme(value) }
             Prop("pageBackgroundColor") { view: FolioHeaderControlsView, value: String -> view.pageBackgroundColor = value }
             Events("onModeChange", "onExpandedChange", "onImport", "onSearchTextChange", "onFilter")
             Prop("sourceId") { view: FolioHeaderControlsView, value: String -> view.sourceId = value }
@@ -89,6 +117,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioPresetMenuView::class) {
+            Prop("uiTheme") { view: FolioPresetMenuView, value: Map<String, String> -> view.applyUiTheme(value) }
             Prop("pageBackgroundColor") { view: FolioPresetMenuView, value: String -> view.pageBackgroundColor = value }
             Events("onSelectionChange", "onExpandedChange")
             Prop("sourceId") { view: FolioPresetMenuView, value: String -> view.sourceId = value }
@@ -106,6 +135,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioAppearanceControlView::class) {
+            Prop("uiTheme") { view: FolioAppearanceControlView, value: Map<String, String> -> view.applyUiTheme(value) }
             Events("onSelectionChange")
             Prop("pageBackgroundColor") { view: FolioAppearanceControlView, value: String -> view.pageBackgroundColor = value }
             Prop("sourceId") { view: FolioAppearanceControlView, value: String -> view.sourceId = value }
@@ -124,6 +154,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioGlassSliderView::class) {
+            Prop("uiTheme") { view: FolioGlassSliderView, value: Map<String, String> -> view.applyUiTheme(value) }
             Prop("pageBackgroundColor") { view: FolioGlassSliderView, value: String -> view.pageBackgroundColor = value }
             Prop("sourceId") { view: FolioGlassSliderView, value: String -> view.sourceId = value }
             Prop("controlId") { view: FolioGlassSliderView, value: String -> view.controlId = value }
@@ -145,6 +176,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioGlassSwitchView::class) {
+            Prop("uiTheme") { view: FolioGlassSwitchView, value: Map<String, String> -> view.applyUiTheme(value) }
             Prop("pageBackgroundColor") { view: FolioGlassSwitchView, value: String -> view.pageBackgroundColor = value }
             Prop("sourceId") { view: FolioGlassSwitchView, value: String -> view.sourceId = value }
             Prop("controlId") { view: FolioGlassSwitchView, value: String -> view.controlId = value }
@@ -160,6 +192,7 @@ class FolioNavigationModule : Module() {
         }
 
         View(FolioLiquidTabsView::class) {
+            Prop("uiTheme") { view: FolioLiquidTabsView, value: Map<String, String> -> view.applyUiTheme(value) }
             Prop("pageBackgroundColor") { view: FolioLiquidTabsView, value: String -> view.pageBackgroundColor = value }
             Events("onSelectionChange", "onExpand", "onCollapse")
             Prop("sourceId") { view: FolioLiquidTabsView, value: String -> view.sourceId = value }

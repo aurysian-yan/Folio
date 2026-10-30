@@ -1,6 +1,8 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { TextInput } from './UiTextInput';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Motion, { Easing, ReduceMotion, withTiming } from 'react-native-reanimated';
 import { CaretRightIcon, CaretUpIcon, CloudIcon, EyeIcon, EyeSlashIcon, FolderIcon, UserCircleIcon } from './icons';
 import { cloudSync } from './native';
@@ -23,8 +25,8 @@ export function SettingsSyncPage({ theme, onClose, controller }: { theme: Theme;
   const { t } = useTranslation();
   const sourceId = useId();
   const page = useRef<SettingsPageHandle>(null);
-  const passwordInput = useRef<TextInput>(null);
-  const directoryInput = useRef<TextInput>(null);
+  const passwordInput = useRef<import('react-native').TextInput>(null);
+  const directoryInput = useRef<import('react-native').TextInput>(null);
   const actionInFlight = useRef(false);
   const [stepDirection, setStepDirection] = useState(1);
   const stepTransition = useMemo(() => {

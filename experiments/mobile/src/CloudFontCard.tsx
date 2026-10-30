@@ -47,7 +47,7 @@ export function CloudFontCard({ font, status, theme, disabled, onAction, onOpen,
             disabled={actionDisabled} onPress={() => execute(action)} />;
         })}
       </View>}>
-    <View style={[styles.card, { backgroundColor: theme.surface }]}>
+    <View style={[styles.card, { backgroundColor: theme.surface, ...(theme.ui?.material ? { borderRadius: theme.ui.shapes.card } : {}) }]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${name}, ${t(font.deleted ? 'cloud.recentlyDeleted' : font.localAvailable ? 'fontLocation.both' : 'fontLocation.cloudOnly')}, ${formatBytes(font.fileSize)}, ${status}`}
         accessibilityHint={t('mobile.swipeCloudFont')} accessibilityState={{ disabled: font.deleted }} disabled={font.deleted}
         accessibilityActions={actions.filter(({action}) => !disabled || (action === 'download' && canDownload)).map(({ action, label }) => ({ name: action, label }))}

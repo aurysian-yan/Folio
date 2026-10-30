@@ -1,6 +1,8 @@
 package com.folio.poc.navigation
 
 import android.content.Context
+import androidx.compose.material3.*
+import androidx.compose.runtime.key
 import android.graphics.Matrix
 import android.view.ViewTreeObserver
 import android.view.ViewGroup
@@ -37,9 +39,40 @@ internal fun String.glassColor(fallback: Color = Color.Unspecified): Color =
 internal val FolioHeaderFrostRadius = 24.dp
 
 // 原生控件只在页面采样树之外绘制玻璃，布局锚点仍由 Yoga 管理。
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     override val shouldUseAndroidLayout = true
     var sourceId by mutableStateOf("")
+    var uiTheme by mutableStateOf(emptyMap<String, String>())
+        private set
+    val material: Boolean get() = uiTheme["style"] == "material3-expressive"
+    val themeRevision: String get() = uiTheme["revision"].orEmpty()
+    fun payload(vararg values: Pair<String, Any>): Map<String, Any> = mapOf(*values) + ("themeRevision" to themeRevision)
+    fun applyUiTheme(value: Map<String, String>) {
+        val changed = material != (value["style"] == "material3-expressive")
+        uiTheme = value
+        if (changed) {
+            onUiStyleChanged()
+            if (isAttachedToWindow) syncRenderHost()
+        }
+    }
+    private fun materialColors(): ColorScheme {
+        val base = if (uiTheme["dark"] == "true") darkColorScheme() else lightColorScheme()
+        fun color(name: String, fallback: Color) = uiTheme[name]?.glassColor(fallback) ?: fallback
+        return base.copy(
+            primary = color("primary", base.primary), onPrimary = color("onPrimary", base.onPrimary),
+            primaryContainer = color("primaryContainer", base.primaryContainer), onPrimaryContainer = color("onPrimaryContainer", base.onPrimaryContainer),
+            secondary = color("secondary", base.secondary), onSecondary = color("onSecondary", base.onSecondary),
+            secondaryContainer = color("secondaryContainer", base.secondaryContainer), onSecondaryContainer = color("onSecondaryContainer", base.onSecondaryContainer),
+            tertiary = color("tertiary", base.tertiary), onTertiary = color("onTertiary", base.onTertiary),
+            tertiaryContainer = color("tertiaryContainer", base.tertiaryContainer), onTertiaryContainer = color("onTertiaryContainer", base.onTertiaryContainer),
+            surface = color("surface", base.surface), onSurface = color("onSurface", base.onSurface),
+            surfaceContainer = color("surfaceContainer", base.surfaceContainer), surfaceContainerHigh = color("surfaceContainerHigh", base.surfaceContainerHigh),
+            surfaceContainerHighest = color("surfaceContainerHighest", base.surfaceContainerHighest),
+            onSurfaceVariant = color("onSurfaceVariant", base.onSurfaceVariant), outline = color("outline", base.outline),
+            outlineVariant = color("outlineVariant", base.outlineVariant), error = color("error", base.error),
+            onError = color("onError", base.onError), errorContainer = color("errorContainer", base.errorContainer), onErrorContainer = color("onErrorContainer", base.onErrorContainer))
+    }
     var controlId: String = ""
     var active by mutableStateOf(true)
     var dark by mutableStateOf(false)
@@ -67,6 +100,15 @@ abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoVi
         compose.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
         addView(compose, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         compose.setContent {
+            if (material) {
+                MaterialExpressiveTheme(colorScheme = materialColors(), motionScheme = MotionScheme.expressive()) {
+                    key(uiTheme["style"]) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { if (active) MaterialContent() } }
+                }
+            } else GlassComposition()
+        }
+    }
+
+    @Composable private fun GlassComposition() {
             val source = FolioBackdropSources.sources[FolioBackdropSources.key(appContext, sourceId)]
             val backdrop = remember(source) {
                 FolioPageBackdrop(source) {
@@ -86,9 +128,10 @@ abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoVi
                     }
                 }
             }
-        }
     }
 
+    protected open fun onUiStyleChanged() = Unit
+    @Composable protected abstract fun MaterialContent()
     @Composable protected abstract fun GlassContent()
 
     override fun onAttachedToWindow() {
@@ -96,6 +139,18 @@ abstract class FolioGlassView(context: Context, appContext: AppContext) : ExpoVi
         (activity as? LifecycleOwner)?.let { setViewTreeLifecycleOwner(it); compose.setViewTreeLifecycleOwner(it) }
         (activity as? SavedStateRegistryOwner)?.let { setViewTreeSavedStateRegistryOwner(it); compose.setViewTreeSavedStateRegistryOwner(it) }
         super.onAttachedToWindow()
+        syncRenderHost()
+    }
+
+    private fun syncRenderHost() {
+        if (viewTreeObserver.isAlive) viewTreeObserver.removeOnPreDrawListener(preDraw)
+        page?.detachGlass(this)
+        page = null
+        if (compose.parent !== this) {
+            (compose.parent as? ViewGroup)?.removeView(compose)
+            addView(compose, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        }
+        if (material) { samplingPosition = null; requestLayout(); return }
         var ancestor = parent
         while (ancestor is android.view.View) {
             if (ancestor is FolioBackdropSourceView) {

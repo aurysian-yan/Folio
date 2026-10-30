@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, AppState, Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator } from './UiActivityIndicator';
+import { AppState, Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { isReleaseUrl, type AppInfo } from '../../../shared/about/update';
 import type { MobileUpdateResult } from '../../../shared/about/android-release';
 import { getAboutInfo, updates } from './native';
